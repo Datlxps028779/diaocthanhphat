@@ -1,0 +1,319 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Heart, Trash2, Building2, Image as ImageIcon, HardDrive, Upload, Search, FolderOpen } from 'lucide-react';
+import { type UserFavorite, type UserMedia } from '../lib/supabase';
+import { getUserFavorites, toggleUserFavorite, getUserMedia, deleteUserMedia, getUserMediaUsage, uploadImage } from '../lib/api';
+import { type Page, scrollTop } from '../lib/router';
+import { Breadcrumb } from '../components/Layout';
+import { PropertyCard } from '../LandingPage';
+
+interface AccountPageProps {
+  onNavigate: (p: Page) => void;
+}
+
+type Tab = 'favorites' | 'media';
+
+export function AccountPage({ onNavigate }: AccountPageProps) {
+  const [tab, setTab] = useState<Tab>('favorites');
+  const [favorites, setFavorites] = useState<UserFavorite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await getUserFavorites();
+      setFavorites(data);
+    } catch {
+      setFavorites([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleRemoveFavorite = async (propertyId: string) => {
+    setRemoving(propertyId);
+    try {
+      await toggleUserFavorite(propertyId);
+      setFavorites(prev => prev.filter(f => f.property_id !== propertyId));
+    } catch { /* silent */ }
+    setRemoving(null);
+  };
+
+  const favoritesWithProps = favorites.filter(f => f.properties);
+
+  return (
+    <div className="min-h-screen bg-gray-50 pt-14">
+      <div className="bg-white border-b border-gray-100 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-4">
+          <Breadcrumb items={[
+            { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
+            { label: 'Tài khoản' },
+          ]} />
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-black text-xl text-gray-900">Tài khoản của tôi</h1>
+              <p className="text-gray-500 text-xs mt-0.5">Quản lý BĐS yêu thích và thư viện ảnh</p>
+            </div>
+          </div>
+          {/* Tabs */}
+          <div className="flex gap-1 mt-4 -mb-4">
+            <button
+              onClick={() => setTab('favorites')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+                tab === 'favorites' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Heart className="w-4 h-4" />
+              BĐS yêu thích
+              {favoritesWithProps.length > 0 && (
+                <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded-full">{favoritesWithProps.length}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setTab('media')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+                tab === 'media' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              Thư viện ảnh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 py-5">
+        {tab === 'favorites' ? (
+          <FavoritesTab
+            loading={loading}
+            favoritesWithProps={favoritesWithProps}
+            removing={removing}
+            onRemove={handleRemoveFavorite}
+            onNavigate={onNavigate}
+          />
+        ) : (
+          <MediaTab />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Favorites Tab ────────────────────────────────────────────────────────────
+function FavoritesTab({ loading, favoritesWithProps, removing, onRemove, onNavigate }: {
+  loading: boolean;
+  favoritesWithProps: UserFavorite[];
+  removing: string | null;
+  onRemove: (id: string) => void;
+  onNavigate: (p: Page) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl h-64 animate-pulse border border-gray-100" />
+        ))}
+      </div>
+    );
+  }
+  if (favoritesWithProps.length === 0) {
+    return (
+      <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+        <Building2 className="w-14 h-14 text-gray-200 mx-auto mb-3" />
+        <p className="text-gray-600 font-semibold">Chưa có BĐS yêu thích nào</p>
+        <p className="text-gray-400 text-sm mt-1">Hãy lưu những BĐS mà bạn quan tâm để xem sau</p>
+        <button onClick={() => { onNavigate({ name: 'listings' }); scrollTop(); }}
+          className="mt-4 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition-colors">
+          Xem danh sách BĐS
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {favoritesWithProps.map(({ properties: p }) => p && (
+        <div key={p.id} className="relative">
+          <PropertyCard
+            property={p}
+            onView={() => onNavigate({ name: 'property', id: p.id })}
+            onContact={() => {}}
+            isFavorited={true}
+            onToggleFavorite={() => onRemove(p.id)}
+          />
+          <button
+            onClick={() => onRemove(p.id)}
+            disabled={removing === p.id}
+            className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-red-50 transition-colors"
+            title="Xóa khỏi yêu thích"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-500" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Media Library Tab ────────────────────────────────────────────────────────
+function MediaTab() {
+  const [medias, setMedias] = useState<UserMedia[]>([]);
+  const [usage, setUsage] = useState({ used: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [data, usageData] = await Promise.all([getUserMedia(), getUserMediaUsage()]);
+      setMedias(data);
+      setUsage(usageData);
+    } catch {
+      setMedias([]);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await uploadImage(file, 'properties', false);
+      }
+      await load();
+    } catch { /* silent */ }
+    setUploading(false);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteUserMedia(id);
+      setMedias(prev => prev.filter(m => m.id !== id));
+    } catch { /* silent */ }
+    setConfirmDelete(null);
+  };
+
+  const filtered = search.trim()
+    ? medias.filter(m => m.filename.toLowerCase().includes(search.toLowerCase()))
+    : medias;
+
+  const formatSize = (bytes: number | null): string => {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const usagePercent = usage.total > 0 ? Math.round((usage.used / usage.total) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Usage bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
+            <HardDrive className="w-5 h-5 text-red-500" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold text-gray-700">Dung lượng đã dùng</span>
+              <span className="text-xs text-gray-500">{formatSize(usage.used)} / {formatSize(usage.total)}</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-red-500 rounded-full transition-all" style={{ width: `${Math.min(usagePercent, 100)}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Tìm ảnh theo tên file..."
+            className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
+          />
+        </div>
+        <label className="cursor-pointer flex items-center gap-1.5 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors">
+          {uploading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Upload className="w-4 h-4" />
+          )}
+          {uploading ? 'Đang tải...' : 'Tải ảnh lên'}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleUpload}
+          />
+        </label>
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="aspect-square bg-gray-100 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+          <FolderOpen className="w-14 h-14 text-gray-200 mx-auto mb-3" />
+          <p className="text-gray-600 font-semibold">{search ? 'Không tìm thấy ảnh phù hợp' : 'Thư viện ảnh trống'}</p>
+          <p className="text-gray-400 text-sm mt-1">{search ? 'Thử từ khóa khác' : 'Tải ảnh lên để bắt đầu sử dụng'}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+          {filtered.map(media => {
+            const isDeleting = confirmDelete === media.id;
+            return (
+              <div key={media.id} className="relative group bg-white rounded-xl overflow-hidden border border-gray-100">
+                <div className="aspect-square overflow-hidden">
+                  <img
+                    src={media.url}
+                    alt={media.filename}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-[10px] text-white truncate">{media.filename}</p>
+                  <p className="text-[9px] text-white/70">{formatSize(media.size_bytes)}</p>
+                </div>
+                {isDeleting ? (
+                  <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-2">
+                    <p className="text-xs font-medium text-gray-700">Xóa ảnh này?</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleDelete(media.id)} className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg">Xóa</button>
+                      <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 bg-gray-200 text-gray-600 text-xs rounded-lg">Hủy</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(media.id)}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-white" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
