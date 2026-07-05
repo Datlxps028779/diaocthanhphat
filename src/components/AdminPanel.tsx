@@ -322,7 +322,13 @@ function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
       else if (editing) await updateProperty(editing.id, data);
       await load(); onStatsRefresh?.();
       setEditing(null); setCreating(false);
-    } catch (e) { console.error("[AdminPanel]", e); } finally { setSaving(false); }
+    } catch (e) {
+      console.error("[AdminPanel] Lưu BĐS thất bại:", e);
+      const err = e as { message?: string; code?: string; details?: string };
+      const msg = err?.message ?? 'Lỗi không xác định';
+      const code = err?.code ? ` [${err.code}]` : '';
+      alert('Lưu thất bại: ' + msg + code + (err?.details ? '\n' + err.details : ''));
+    } finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
