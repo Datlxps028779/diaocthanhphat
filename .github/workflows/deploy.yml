@@ -24,13 +24,13 @@ jobs:
     steps:
       # 1. Checkout mã nguồn
       - name: 📥 Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      # 2. Cài Node.js 20
+      # 2. Cài Node.js 22
       - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       # 3. Cài dependencies (npm ci dùng package-lock.json)
@@ -53,7 +53,29 @@ jobs:
           fi
           echo "✅ Build OK, sẵn sàng deploy."
 
-      # 6. Deploy lên hosting qua FTP (dùng GitHub Secrets)
+      # 6. Kiểm tra GitHub Secrets có tồn tại (chỉ in độ dài, không in giá trị)
+      - name: 🔍 Debug secrets
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_TARGET_PATH: ${{ secrets.FTP_TARGET_PATH }}
+        run: |
+          echo "Kiểm tra độ dài từng secret (phải > 0):"
+          echo "FTP_HOST length        = ${#FTP_HOST}"
+          echo "FTP_USERNAME length    = ${#FTP_USERNAME}"
+          echo "FTP_PASSWORD length    = ${#FTP_PASSWORD}"
+          echo "FTP_TARGET_PATH length = ${#FTP_TARGET_PATH}"
+          if [ -z "$FTP_HOST" ] || [ -z "$FTP_USERNAME" ] || [ -z "$FTP_PASSWORD" ] || [ -z "$FTP_TARGET_PATH" ]; then
+            echo "❌ Một hoặc nhiều secret đang RỖNG!"
+            echo "→ Vào Settings → Secrets and variables → Actions → Repository secrets"
+            echo "→ Đảm bảo tạo ở mục 'Repository secrets' (KHÔNG phải Environment secrets)"
+            echo "→ Tên phải chính xác: FTP_HOST, FTP_USERNAME, FTP_PASSWORD, FTP_TARGET_PATH"
+            exit 1
+          fi
+          echo "✅ Tất cả secret đã có giá trị, tiếp tục deploy."
+
+      # 7. Deploy lên hosting qua FTP (dùng GitHub Secrets)
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
