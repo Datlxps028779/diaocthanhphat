@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS properties (
   tags              text[] DEFAULT '{}',
   meta_title        text,
   meta_description  text,
+  focus_keywords    text,
+  schema_markup     jsonb,
+  slug              text UNIQUE,
   created_at        timestamptz DEFAULT now(),
   updated_at        timestamptz DEFAULT now()
 );
@@ -224,6 +227,11 @@ CREATE TABLE IF NOT EXISTS user_listings (
   vr_tour_url      text,
   video_url        text,
   tags             text[] DEFAULT '{}',
+  slug             text UNIQUE,
+  meta_title       text,
+  meta_description text,
+  focus_keywords   text,
+  schema_markup    jsonb,
   created_at       timestamptz DEFAULT now(),
   updated_at       timestamptz DEFAULT now()
 );
