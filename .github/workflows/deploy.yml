@@ -130,7 +130,8 @@ jobs:
 #   3. FTP_HOST        = 153.92.8.242
 #   4. FTP_USERNAME    = u492475896.diaocthanhphat.com
 #   5. FTP_PASSWORD    = R6b@gB;1G$KM;@2D
-#   6. FTP_TARGET_PATH = /public_html/
+#   6. FTP_TARGET_PATH = /
+#      (Lưu ý: FTP user đã chroot vào /public_html, nên server-dir là /)
 #
 # Sau khi push code lên branch main, workflow sẽ tự động:
 #   - Tạo .env từ secrets
