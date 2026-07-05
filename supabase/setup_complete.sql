@@ -1614,11 +1614,11 @@ CREATE POLICY "user_uploads_update"
   TO authenticated
   USING (
     bucket_id = 'user-uploads'
-    AND (storage.owner(id) = auth.uid())
+    AND owner = auth.uid()
   )
   WITH CHECK (
     bucket_id = 'user-uploads'
-    AND (storage.owner(id) = auth.uid())
+    AND owner = auth.uid()
   );
 
 CREATE POLICY "user_uploads_delete"
@@ -1626,7 +1626,7 @@ CREATE POLICY "user_uploads_delete"
   TO authenticated
   USING (
     bucket_id = 'user-uploads'
-    AND (storage.owner(id) = auth.uid())
+    AND owner = auth.uid()
   );
 
 -- ─── BƯỚC 3: Thêm cấu hình bucket prefix ────────────────────────────────────
