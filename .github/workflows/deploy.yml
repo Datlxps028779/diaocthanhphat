@@ -37,12 +37,29 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      # 4. Build production (output ra thư mục dist/)
+      # 4. Tạo file .env từ GitHub Secrets (bắt buộc vì .env bị .gitignore)
+      # Vite cần VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY khi build
+      - name: 🔑 Create .env from secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "❌ Thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong GitHub Secrets!"
+            echo "→ Vào Settings → Secrets and variables → Actions → Repository secrets"
+            echo "→ Thêm: VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env
+          echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
+          echo "✅ Đã tạo .env từ secrets (giá trị đã ẩn)"
+
+      # 5. Build production (output ra thư mục dist/)
       # Vite tự copy public/.htaccess và public/robots.txt vào dist/
       - name: 🏗️ Build production
         run: npm run build
 
-      # 5. (Tuỳ chọn) Kiểm tra thư mục dist đã tạo
+      # 6. Kiểm tra thư mục dist đã tạo + verify env vars đã được inject
       - name: ✅ Verify build output
         run: |
           echo "Danh sách file trong dist/:"
@@ -51,9 +68,16 @@ jobs:
             echo "❌ Không tìm thấy dist/index.html — build thất bại!"
             exit 1
           fi
-          echo "✅ Build OK, sẵn sàng deploy."
+          echo "✅ Build OK."
+          # Kiểm tra Supabase URL đã được inject vào JS (chống trắng trang)
+          if ! grep -rq 'supabase.co' dist/assets/*.js 2>/dev/null; then
+            echo "❌ CẢNH BÁO: Không tìm thấy Supabase URL trong JS build!"
+            echo "→ .env có thể chưa được tạo đúng. Kiểm tra lại secrets VITE_SUPABASE_URL."
+            exit 1
+          fi
+          echo "✅ Supabase URL đã được inject vào JS — sẵn sàng deploy."
 
-      # 6. Kiểm tra GitHub Secrets có tồn tại (chỉ in độ dài, không in giá trị)
+      # 7. Kiểm tra FTP GitHub Secrets có tồn tại (chỉ in độ dài, không in giá trị)
       - name: 🔍 Debug secrets
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
@@ -75,7 +99,7 @@ jobs:
           fi
           echo "✅ Tất cả secret đã có giá trị, tiếp tục deploy."
 
-      # 7. Deploy lên hosting qua FTP (dùng GitHub Secrets)
+      # 8. Deploy lên hosting qua FTP (dùng GitHub Secrets)
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -96,15 +120,21 @@ jobs:
 # HƯỚNG DẪN CẤU HÌNH GITHUB SECRETS (BẮT BUỘC)
 # ============================================================
 # Vào repo GitHub → Settings → Secrets and variables → Actions
-# → New repository secret, thêm 4 biến sau:
+# → New repository secret, thêm 6 biến sau:
 #
-#   1. FTP_HOST        = 153.92.8.242
-#   2. FTP_USERNAME    = u492475896.diaocthanhphat.com
-#   3. FTP_PASSWORD    = R6b@gB;1G$KM;@2D
-#   4. FTP_TARGET_PATH = /public_html/
+#   --- Supabase (bắt buộc, nếu thiếu sẽ trắng trang) ---
+#   1. VITE_SUPABASE_URL      = https://tcmpswlabzeqtuwdjjfe.supabase.co
+#   2. VITE_SUPABASE_ANON_KEY = (anon key từ Supabase Dashboard)
+#
+#   --- FTP hosting ---
+#   3. FTP_HOST        = 153.92.8.242
+#   4. FTP_USERNAME    = u492475896.diaocthanhphat.com
+#   5. FTP_PASSWORD    = R6b@gB;1G$KM;@2D
+#   6. FTP_TARGET_PATH = /public_html/
 #
 # Sau khi push code lên branch main, workflow sẽ tự động:
-#   - Build production
+#   - Tạo .env từ secrets
+#   - Build production (verify Supabase URL đã inject)
 #   - Upload dist/ lên /public_html/ của hosting qua FTP
 #
 # Xem log chạy: tab Actions trên GitHub repo.

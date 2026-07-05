@@ -3,7 +3,26 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Fail-fast: nếu thiếu env vars, throw lỗi rõ ràng thay vì trắng trang thầm lặng
+if (!supabaseUrl || !supabaseAnonKey) {
+  const missing: string[] = [];
+  if (!supabaseUrl) missing.push('VITE_SUPABASE_URL');
+  if (!supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
+  const msg = `[Supabase] Thiếu env vars: ${missing.join(', ')}. ` +
+    `Kiểm tra file .env (local) hoặc GitHub Secrets (CI/CD).`;
+  console.error(msg);
+  // Render lỗi ra #root để user thấy thay vì trắng trang
+  if (typeof document !== 'undefined') {
+    const root = document.getElementById('root');
+    if (root) {
+      root.innerHTML = `<div style="padding:2rem;font-family:sans-serif;color:#b91c1c">` +
+        `<h2>Lỗi cấu hình</h2><p>${msg}</p></div>`;
+    }
+  }
+  // Không throw để app vẫn render lỗi thay vì crash toàn bộ
+}
+
+export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '');
 
 export type Area = {
   id: string; name: string; description: string | null;
