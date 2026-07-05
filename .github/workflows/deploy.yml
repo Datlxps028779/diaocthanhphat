@@ -53,38 +53,37 @@ jobs:
           fi
           echo "✅ Build OK, sẵn sàng deploy."
 
-      # 6. Deploy lên hosting qua FTP
-      # Yêu cầu cấu hình GitHub Secrets (xem phần "Cấu hình Secrets" bên dưới)
+      # 6. Deploy lên hosting qua FTP (dùng GitHub Secrets)
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.FTP_SERVER }}        # FTP host, vd: ftp.diaocthanhphat.com
-          username: ${{ secrets.FTP_USERNAME }}    # Tài khoản FTP
-          password: ${{ secrets.FTP_PASSWORD }}    # Mật khẩu FTP
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
           port: 21
           local-dir: ./dist/                       # Thư mục build ở local
-          server-dir: ./public_html/               # Thư mục đích trên hosting
+          server-dir: ${{ secrets.FTP_TARGET_PATH }}  # vd: /public_html/
           exclude: |
             **/.git*
             **/.gitignore*
           # Không xóa file cũ trên server ngoài những file không còn trong dist
           # (đặt true nếu muốn đồng bộ hoàn toàn — cẩn thận sẽ xoá file khác)
           dangerous-clean-slate: false
-          security-strict: false
 
 # ============================================================
-# HƯỚNG DẪN CẤU HÌNH GITHUB SECRETS
+# HƯỚNG DẪN CẤU HÌNH GITHUB SECRETS (BẮT BUỘC)
 # ============================================================
 # Vào repo GitHub → Settings → Secrets and variables → Actions
-# → New repository secret, thêm 3 biến:
+# → New repository secret, thêm 4 biến sau:
 #
-#   1. FTP_SERVER   = ftp.diaocthanhphat.com   (hoặc IP hosting)
-#   2. FTP_USERNAME = <tài khoản FTP Hostinger>
-#   3. FTP_PASSWORD = <mật khẩu FTP>
+#   1. FTP_HOST        = 153.92.8.242
+#   2. FTP_USERNAME    = u492475896.diaocthanhphat.com
+#   3. FTP_PASSWORD    = R6b@gB;1G$KM;@2D
+#   4. FTP_TARGET_PATH = /public_html/
 #
 # Sau khi push code lên branch main, workflow sẽ tự động:
 #   - Build production
-#   - Upload dist/ lên public_html/ của hosting qua FTP
+#   - Upload dist/ lên /public_html/ của hosting qua FTP
 #
 # Xem log chạy: tab Actions trên GitHub repo.
 # ============================================================
