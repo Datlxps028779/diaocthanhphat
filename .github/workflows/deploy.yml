@@ -1,0 +1,90 @@
+# ============================================================
+# Workflow Deploy Frontend diaocthanhphat.com
+# Build Vite + React + TypeScript và deploy lên hosting qua FTP
+# ============================================================
+name: Deploy Frontend
+
+on:
+  # Tự động chạy khi push lên branch main
+  push:
+    branches: [main]
+  # Cho phép chạy thủ công từ tab Actions
+  workflow_dispatch:
+
+# Chỉ 1 workflow chạy cùng lúc tránh ghi đè file trên hosting
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout mã nguồn
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Cài Node.js 20
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Cài dependencies (npm ci dùng package-lock.json)
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # 4. Build production (output ra thư mục dist/)
+      # Vite tự copy public/.htaccess và public/robots.txt vào dist/
+      - name: 🏗️ Build production
+        run: npm run build
+
+      # 5. (Tuỳ chọn) Kiểm tra thư mục dist đã tạo
+      - name: ✅ Verify build output
+        run: |
+          echo "Danh sách file trong dist/:"
+          ls -la dist/
+          if [ ! -f dist/index.html ]; then
+            echo "❌ Không tìm thấy dist/index.html — build thất bại!"
+            exit 1
+          fi
+          echo "✅ Build OK, sẵn sàng deploy."
+
+      # 6. Deploy lên hosting qua FTP
+      # Yêu cầu cấu hình GitHub Secrets (xem phần "Cấu hình Secrets" bên dưới)
+      - name: 🚀 Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}        # FTP host, vd: ftp.diaocthanhphat.com
+          username: ${{ secrets.FTP_USERNAME }}    # Tài khoản FTP
+          password: ${{ secrets.FTP_PASSWORD }}    # Mật khẩu FTP
+          port: 21
+          local-dir: ./dist/                       # Thư mục build ở local
+          server-dir: ./public_html/               # Thư mục đích trên hosting
+          exclude: |
+            **/.git*
+            **/.gitignore*
+          # Không xóa file cũ trên server ngoài những file không còn trong dist
+          # (đặt true nếu muốn đồng bộ hoàn toàn — cẩn thận sẽ xoá file khác)
+          dangerous-clean-slate: false
+          security-strict: false
+
+# ============================================================
+# HƯỚNG DẪN CẤU HÌNH GITHUB SECRETS
+# ============================================================
+# Vào repo GitHub → Settings → Secrets and variables → Actions
+# → New repository secret, thêm 3 biến:
+#
+#   1. FTP_SERVER   = ftp.diaocthanhphat.com   (hoặc IP hosting)
+#   2. FTP_USERNAME = <tài khoản FTP Hostinger>
+#   3. FTP_PASSWORD = <mật khẩu FTP>
+#
+# Sau khi push code lên branch main, workflow sẽ tự động:
+#   - Build production
+#   - Upload dist/ lên public_html/ của hosting qua FTP
+#
+# Xem log chạy: tab Actions trên GitHub repo.
+# ============================================================
