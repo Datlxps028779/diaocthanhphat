@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, MapPin, Building2, Home, TrendingUp, Shield, Phone,
   Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight,
   CheckCircle, Newspaper, Users, Clock, Play
 } from 'lucide-react';
-import { type Property, type Area, type PropertyType, type Testimonial, type NewsArticle, type FeaturedSection, type PageSection } from './lib/supabase';
+import { type Property } from './lib/supabase';
 import {
-  getAreas, getPropertyTypes, getTestimonials, getNews, getBanners,
+  getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
   getPageLayout,
 } from './lib/api';
+import { useAreas, usePropertyTypes } from './lib/hooks/useTaxonomy';
+import { qk } from './lib/queryKeys';
 import { type Page } from './lib/router';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
@@ -44,14 +47,7 @@ const LISTING_TYPE_TABS = [
 ] as const;
 
 export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPageProps) {
-  const [sections, setSections] = useState<{ section: FeaturedSection; properties: Property[] }[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const [pageLayout, setPageLayout] = useState<PageSection[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [types, setTypes] = useState<PropertyType[]>([]);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [news, setNews] = useState<NewsArticle[]>([]);
-  const [heroBg, setHeroBg] = useState('https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg');
+  const queryClient = useQueryClient();
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchAreaId, setSearchAreaId] = useState('');
@@ -59,6 +55,31 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
+
+  // Taxonomy + dữ liệu trang chủ qua React Query (cache/dedup)
+  const { data: areas = [] } = useAreas();
+  const { data: types = [] } = usePropertyTypes();
+  const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
+  const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 6), queryFn: () => getNews(undefined, 6) });
+  const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
+  const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
+  const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
+
+  const { data: featuredSections = [] } = useQuery({ queryKey: qk.featuredSections(), queryFn: getFeaturedSections });
+
+  // Per-section properties: 1 query mỗi section, chạy khi featuredSections có
+  const sectionQueries = useQueries({
+    queries: featuredSections.map((s) => ({
+      queryKey: qk.sectionProperties(s.id),
+      queryFn: () => getPropertiesForSection(s),
+    })),
+  });
+  const sections = featuredSections
+    .map((section, i) => ({ section, properties: (sectionQueries[i]?.data ?? []) as Property[] }))
+    .filter((r) => r.properties.length > 0);
+
+  const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
+  const favoriteIds = useMemo(() => new Set(favIds), [favIds]);
 
   // Helper: get settings for a section by id, with string fallback
   const sec = (id: string) => {
@@ -72,31 +93,14 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
     return typeof settings[key] === 'number' ? (settings[key] as number) : def;
   };
 
-  useEffect(() => {
-    Promise.all([
-      getAreas(), getPropertyTypes(), getTestimonials(), getNews(undefined, 6),
-      getBanners('hero'), getFeaturedSections(), getFavoriteIds(), getPageLayout(),
-    ]).then(([a, t, test, n, banners, featuredSections, favIds, layout]) => {
-      setAreas(a); setTypes(t); setTestimonials(test); setNews(n);
-      setFavoriteIds(new Set(favIds));
-      setPageLayout(layout);
-      if (banners[0]?.image_url) setHeroBg(banners[0].image_url);
-      if (featuredSections.length > 0) {
-        Promise.all(
-          featuredSections.map(s => getPropertiesForSection(s).then(props => ({ section: s, properties: props })))
-        ).then(results => setSections(results.filter(r => r.properties.length > 0)));
-      }
-    });
-  }, []);
+  const favoriteMutation = useMutation({
+    mutationFn: (propertyId: string) => toggleFavorite(propertyId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+  });
 
-  const handleToggleFavorite = async (propertyId: string) => {
+  const handleToggleFavorite = (propertyId: string) => {
     if (!user) { onShowAuth('login'); return; }
-    const isNowFav = await toggleFavorite(propertyId);
-    setFavoriteIds(prev => {
-      const next = new Set(prev);
-      if (isNowFav) next.add(propertyId); else next.delete(propertyId);
-      return next;
-    });
+    favoriteMutation.mutate(propertyId);
   };
 
   const handleSearch = () => {
