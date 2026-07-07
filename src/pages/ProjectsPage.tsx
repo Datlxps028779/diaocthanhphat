@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Building2, MapPin, Users, CheckCircle, Phone, ArrowRight } from 'lucide-react';
-import { type Project, type Area } from '../lib/supabase';
-import { getProjects, getAreas } from '../lib/api';
+import { type Project } from '../lib/supabase';
+import { getProjects } from '../lib/api';
+import { useAreas } from '../lib/hooks/useTaxonomy';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
@@ -134,22 +136,20 @@ function ProjectCard({
 }
 
 export function ProjectsPage({ onNavigate, initialPhase }: { onNavigate: (p: Page) => void; initialPhase?: string }) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedArea, setSelectedArea] = useState<string>('all');
   const [selectedPhase, setSelectedPhase] = useState<string>(initialPhase ?? 'Tất cả');
   const [contactProject, setContactProject] = useState<Project | null>(null);
   const phone = useSetting('phone_hotline', '0901 234 567');
 
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => getProjects(),
+  });
+  const { data: areas = [] } = useAreas();
+  const loading = projectsLoading;
+
   useEffect(() => {
     scrollTop();
-    Promise.all([getProjects(), getAreas()])
-      .then(([proj, ar]) => {
-        setProjects(proj);
-        setAreas(ar);
-      })
-      .finally(() => setLoading(false));
   }, []);
 
   const filtered = projects.filter((p) => {

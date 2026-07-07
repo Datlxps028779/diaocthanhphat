@@ -123,15 +123,19 @@ jobs:
 # → New repository secret, thêm 6 biến sau:
 #
 #   --- Supabase (bắt buộc, nếu thiếu sẽ trắng trang) ---
-#   1. VITE_SUPABASE_URL      = https://tcmpswlabzeqtuwdjjfe.supabase.co
-#   2. VITE_SUPABASE_ANON_KEY = (anon key từ Supabase Dashboard)
+#   1. VITE_SUPABASE_URL      = <URL project Supabase>
+#   2. VITE_SUPABASE_ANON_KEY = <anon key từ Supabase Dashboard>
 #
 #   --- FTP hosting ---
-#   3. FTP_HOST        = 153.92.8.242
-#   4. FTP_USERNAME    = u492475896.diaocthanhphat.com
-#   5. FTP_PASSWORD    = R6b@gB;1G$KM;@2D
+#   3. FTP_HOST        = <IP/host FTP>
+#   4. FTP_USERNAME    = <username FTP>
+#   5. FTP_PASSWORD    = <password FTP — KHÔNG bao giờ ghi giá trị thật vào file này>
 #   6. FTP_TARGET_PATH = /
-#      (Lưu ý: FTP user đã chroot vào /public_html, nên server-dir là /)
+#      (Lưu ý: nếu FTP user đã chroot vào /public_html thì server-dir là /)
+#
+# ⚠️ BẢO MẬT: file này nằm trong git. TUYỆT ĐỐI không dán giá trị secret thật vào đây.
+#    Chỉ đặt secret trong GitHub Settings → Secrets. Nếu từng lỡ commit secret,
+#    phải ĐỔI secret đó ngay vì lịch sử git vẫn còn lưu.
 #
 # Sau khi push code lên branch main, workflow sẽ tự động:
 #   - Tạo .env từ secrets
