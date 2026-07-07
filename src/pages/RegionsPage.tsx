@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MapPin, TrendingUp, Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
-import { type Area, type Property } from '../lib/supabase';
-import { getAreas, getAllPropertiesForMap, getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { type Area } from '../lib/supabase';
+import { getAllPropertiesForMap, getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { useAreas } from '../lib/hooks/useTaxonomy';
+import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { PropertyMap } from '../components/PropertyMap';
@@ -151,37 +154,37 @@ function ComparisonTable({ areas }: { areas: Area[] }) {
 }
 
 export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: string; onNavigate: (p: Page) => void }) {
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [allMapProps, setAllMapProps] = useState<Property[]>([]);
-  const [areaProperties, setAreaProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
-  const [cms, setCms] = useState<Record<string, Record<string, string>>>({});
 
-  useEffect(() => {
-    getPageBlocks('regions').then(b => setCms(pageBlocksToMap(b)));
-  }, []);
-
+  const { data: cms = {} } = useQuery({
+    queryKey: qk.pageBlocks('regions'),
+    queryFn: () => getPageBlocks('regions'),
+    select: pageBlocksToMap,
+  });
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
-  useEffect(() => {
-    scrollTop();
-    Promise.all([getAreas(), getAllPropertiesForMap()])
-      .then(([fetchedAreas, mapProps]) => {
-        setAreas(fetchedAreas);
-        setAllMapProps(mapProps);
-        if (initialAreaId) {
-          const found = fetchedAreas.find((a) => a.id === initialAreaId || a.slug === initialAreaId);
-          if (found) setSelectedArea(found);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [initialAreaId]);
+  const { data: areas = [], isLoading: areasLoading } = useAreas();
+  const { data: allMapProps = [], isLoading: mapLoading } = useQuery({
+    queryKey: qk.propertiesMap(),
+    queryFn: () => getAllPropertiesForMap(),
+  });
+  const loading = areasLoading || mapLoading;
 
+  const { data: areaProperties = [] } = useQuery({
+    queryKey: qk.areaProperties(selectedArea?.id),
+    queryFn: () => getAllProperties({ areaId: selectedArea!.id, limit: 6 }).then(r => r.data),
+    enabled: !!selectedArea,
+  });
+
+  useEffect(() => { scrollTop(); }, []);
+
+  // Đồng bộ selectedArea từ initialAreaId khi areas đã load
   useEffect(() => {
-    if (!selectedArea) { setAreaProperties([]); return; }
-    getAllProperties({ areaId: selectedArea.id, limit: 6 }).then(r => setAreaProperties(r.data));
-  }, [selectedArea]);
+    if (initialAreaId && areas.length > 0) {
+      const found = areas.find((a) => a.id === initialAreaId || a.slug === initialAreaId);
+      if (found) setSelectedArea(found);
+    }
+  }, [initialAreaId, areas]);
 
   const mapProps = selectedArea
     ? allMapProps.filter(p => p.area_id === selectedArea.id)

@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
 import { type NewsArticle } from '../lib/supabase';
-import { getNews, getNewsById, subscribe, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { getNews, getNewsById, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { type Page } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
@@ -272,49 +274,53 @@ function ArticleDetail({
 
 /* ────────────────── NewsPage ────────────────── */
 export function NewsPage({ onNavigate, articleId: initialArticleId }: { onNavigate: (p: Page) => void; articleId?: string }) {
-  const [articles, setArticles] = useState<NewsArticle[]>([]);
-  const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('Tất cả');
-  const [activeArticle, setActiveArticle] = useState<NewsArticle | null>(null);
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
-  const [newsletterLoading, setNewsletterLoading] = useState(false);
-  const [cms, setCms] = useState<Record<string, Record<string, string>>>({});
 
-  useEffect(() => {
-    getPageBlocks('news').then(b => setCms(pageBlocksToMap(b)));
-  }, []);
-
+  const { data: cms = {} } = useQuery({
+    queryKey: qk.pageBlocks('news'),
+    queryFn: () => getPageBlocks('news'),
+    select: pageBlocksToMap,
+  });
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
-  const handleNewsletterSubmit = async () => {
-    if (!newsletterEmail.trim() || !newsletterEmail.includes('@')) return;
-    setNewsletterLoading(true);
-    try {
-      await subscribe(newsletterEmail.trim(), undefined, 'Tin tức');
-      setNewsletterSent(true);
-      setNewsletterEmail('');
-    } catch { /* silent — already subscribed or network error */ setNewsletterSent(true); }
-    setNewsletterLoading(false);
-  };
+  const newsCategory = category === 'Tất cả' ? undefined : category;
+  const { data: articles = [], isLoading: loading } = useQuery({
+    queryKey: qk.news(newsCategory),
+    queryFn: () => getNews(newsCategory),
+  });
 
-  // Load list
-  useEffect(() => {
-    setLoading(true);
-    getNews(category === 'Tất cả' ? undefined : category)
-      .then(setArticles)
-      .finally(() => setLoading(false));
-  }, [category]);
+  // activeArticle derive từ detail query — set articleId để mở, undefined để đóng
+  const { data: activeArticle = null } = useQuery({
+    queryKey: qk.newsArticle(articleId ?? ''),
+    queryFn: () => getNewsById(articleId!),
+    enabled: !!articleId,
+  });
 
-  // Load detail from prop
+  // Tăng view 1 lần mỗi articleId, độc lập cache/refetch
+  const viewedRef = useRef<string | null>(null);
+  const viewMutation = useMutation({ mutationFn: (id: string) => incrementNewsView(id) });
   useEffect(() => {
-    if (articleId) {
-      getNewsById(articleId).then((a) => {
-        if (a) setActiveArticle(a);
-      });
+    if (articleId && viewedRef.current !== articleId) {
+      viewedRef.current = articleId;
+      viewMutation.mutate(articleId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleId]);
+
+  const newsletterMutation = useMutation({
+    mutationFn: (email: string) => subscribe(email, undefined, 'Tin tức'),
+    onSuccess: () => { setNewsletterSent(true); setNewsletterEmail(''); },
+    onError: () => setNewsletterSent(true), // đã đăng ký hoặc lỗi mạng — vẫn báo thành công
+  });
+  const newsletterLoading = newsletterMutation.isPending;
+
+  const handleNewsletterSubmit = () => {
+    if (!newsletterEmail.trim() || !newsletterEmail.includes('@')) return;
+    newsletterMutation.mutate(newsletterEmail.trim());
+  };
 
   const handleArticleClick = (id: string) => {
     setArticleId(id);
@@ -322,7 +328,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId }: { onNaviga
   };
 
   const handleBack = () => {
-    setActiveArticle(null);
     setArticleId(undefined);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

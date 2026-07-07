@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   MapPin, Phone, CheckCircle, Heart, Share2, Shield,
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
@@ -6,8 +7,8 @@ import {
   ChevronLeft, ChevronRight as ChevRight, MessageCircle,
   Navigation, ExternalLink, Play
 } from 'lucide-react';
-import { type Property, type Testimonial } from '../lib/supabase';
-import { getPropertyById, getRelatedProperties, getTestimonials, submitLead } from '../lib/api';
+import { getPropertyById, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
@@ -23,62 +24,79 @@ interface PropertyDetailPageProps {
 }
 
 export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPageProps) {
-  const [property, setProperty] = useState<Property | null>(null);
-  const [related, setRelated] = useState<Property[]>([]);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
 
+  const { data: property = null, isLoading: loading } = useQuery({
+    queryKey: qk.property(propertyId),
+    queryFn: () => getPropertyById(propertyId),
+    enabled: !!propertyId,
+  });
+
+  const { data: testimonialsRaw = [] } = useQuery({
+    queryKey: qk.testimonials(),
+    queryFn: getTestimonials,
+  });
+  const testimonials = testimonialsRaw.slice(0, 2);
+
+  const { data: related = [] } = useQuery({
+    queryKey: qk.relatedProperties(propertyId),
+    queryFn: () => getRelatedProperties(property!),
+    enabled: !!property,
+  });
+
+  // Tăng view tách khỏi fetcher: bắn đúng 1 lần mỗi lần mở trang, không phụ thuộc
+  // cache/refetch của React Query (tránh double/undercount).
+  const viewedRef = useRef<string | null>(null);
+  const viewMutation = useMutation({ mutationFn: (id: string) => incrementPropertyView(id) });
   useEffect(() => {
-    Promise.all([
-      getPropertyById(propertyId),
-      getTestimonials(),
-    ]).then(([p, t]) => {
-      setProperty(p);
-      setTestimonials(t.slice(0, 2));
-      if (p) {
-        getRelatedProperties(p).then(setRelated);
-        // Áp dụng SEO chuẩn: meta_title, meta_description, focus_keywords, schema_markup, canonical
-        applyPropertySeo({
-          title: p.title,
-          description: p.description ?? undefined,
-          price: p.price,
-          priceUnit: p.price_unit,
-          image_url: p.image_url ?? undefined,
-          city: p.city,
-          district: p.district ?? undefined,
-          slug: p.slug ?? undefined,
-          meta_title: p.meta_title,
-          meta_description: p.meta_description,
-          focus_keywords: p.focus_keywords,
-          schema_markup: p.schema_markup,
-        });
-      }
-      setLoading(false);
-    });
+    if (propertyId && viewedRef.current !== propertyId) {
+      viewedRef.current = propertyId;
+      viewMutation.mutate(propertyId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId]);
 
-  const handleContact = async (e: React.FormEvent) => {
+  // Áp dụng SEO khi property đã load
+  useEffect(() => {
+    if (!property) return;
+    applyPropertySeo({
+      title: property.title,
+      description: property.description ?? undefined,
+      price: property.price,
+      priceUnit: property.price_unit,
+      image_url: property.image_url ?? undefined,
+      city: property.city,
+      district: property.district ?? undefined,
+      slug: property.slug ?? undefined,
+      meta_title: property.meta_title,
+      meta_description: property.meta_description,
+      focus_keywords: property.focus_keywords,
+      schema_markup: property.schema_markup,
+    });
+  }, [property]);
+
+  const submitMutation = useMutation({
+    mutationFn: () => submitLead({
+      full_name: form.name,
+      phone: form.phone,
+      message: form.message,
+      property_id: propertyId,
+      property_title: property?.title,
+      budget: form.budget || undefined,
+    }),
+    onSuccess: () => setFormSent(true),
+  });
+  const formLoading = submitMutation.isPending;
+
+  const handleContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.phone) return;
-    setFormLoading(true);
-    try {
-      await submitLead({
-        full_name: form.name,
-        phone: form.phone,
-        message: form.message,
-        property_id: propertyId,
-        property_title: property?.title,
-        budget: form.budget || undefined,
-      });
-      setFormSent(true);
-    } catch { /* silent */ } finally { setFormLoading(false); }
+    submitMutation.mutate();
   };
 
   if (loading) return (
