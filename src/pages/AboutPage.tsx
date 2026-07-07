@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Users, Award, Shield, TrendingUp, Phone, Mail, MapPin,
   CheckCircle, Star, Building2, Target, Heart
@@ -6,6 +7,7 @@ import {
 import { type Page } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
 
 interface AboutPageProps { onNavigate: (p: Page) => void; }
@@ -13,25 +15,28 @@ interface AboutPageProps { onNavigate: (p: Page) => void; }
 export function AboutPage({ onNavigate }: AboutPageProps) {
   const [form, setForm] = useState({ full_name: '', phone: '', message: '' });
   const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [cms, setCms] = useState<Record<string, Record<string, string>>>({});
   const sitePhone = useSetting('phone_hotline', '0901 234 567');
   const siteEmail = useSetting('email', 'info@bdsbinhduong.vn');
   const siteAddress = useSetting('address', '123 Đường số 1, P. Hiệp Thành, TP. Thủ Dầu Một, Bình Dương');
 
-  useEffect(() => {
-    getPageBlocks('about').then(blocks => setCms(pageBlocksToMap(blocks)));
-  }, []);
+  const { data: cms = {} } = useQuery({
+    queryKey: qk.pageBlocks('about'),
+    queryFn: () => getPageBlocks('about'),
+    select: pageBlocksToMap,
+  });
 
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submitMutation = useMutation({
+    mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung' }),
+    onSuccess: () => setSent(true),
+  });
+  const loading = submitMutation.isPending;
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.full_name || !form.phone) return;
-    setLoading(true);
-    try { await submitLead({ ...form, area_interest: 'Liên hệ chung' }); setSent(true); }
-    catch { /* silent */ }
-    setLoading(false);
+    submitMutation.mutate(form);
   };
 
   const stats = [

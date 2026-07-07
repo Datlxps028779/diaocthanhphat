@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Heart, Trash2, Building2 } from 'lucide-react';
 import { type UserFavorite } from '../lib/supabase';
 import { getUserFavorites, toggleUserFavorite } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { PropertyCard } from '../LandingPage';
@@ -11,31 +13,35 @@ interface AccountPageProps {
 }
 
 export function AccountPage({ onNavigate }: AccountPageProps) {
-  const [favorites, setFavorites] = useState<UserFavorite[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await getUserFavorites();
-      setFavorites(data);
-    } catch {
-      setFavorites([]);
-    }
-    setLoading(false);
-  };
+  const { data: favorites = [], isLoading: loading } = useQuery({
+    queryKey: qk.userFavorites(),
+    queryFn: getUserFavorites,
+  });
 
-  useEffect(() => { load(); }, []);
+  const removeMutation = useMutation({
+    mutationFn: (propertyId: string) => toggleUserFavorite(propertyId),
+    onMutate: (propertyId) => {
+      setRemoving(propertyId);
+      // Optimistic: xóa ngay khỏi cache để UX instant-remove như cũ
+      const prev = queryClient.getQueryData<UserFavorite[]>(qk.userFavorites());
+      queryClient.setQueryData<UserFavorite[]>(qk.userFavorites(),
+        (old) => (old ?? []).filter(f => f.property_id !== propertyId));
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      // Rollback nếu lỗi
+      if (ctx?.prev) queryClient.setQueryData(qk.userFavorites(), ctx.prev);
+    },
+    onSettled: () => {
+      setRemoving(null);
+      queryClient.invalidateQueries({ queryKey: qk.userFavorites() });
+    },
+  });
 
-  const handleRemoveFavorite = async (propertyId: string) => {
-    setRemoving(propertyId);
-    try {
-      await toggleUserFavorite(propertyId);
-      setFavorites(prev => prev.filter(f => f.property_id !== propertyId));
-    } catch { /* silent */ }
-    setRemoving(null);
-  };
+  const handleRemoveFavorite = (propertyId: string) => removeMutation.mutate(propertyId);
 
   const favoritesWithProps = favorites.filter(f => f.properties);
 
