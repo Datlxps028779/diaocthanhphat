@@ -70,3 +70,26 @@ export async function rejectUserListing(id: string, reason: string): Promise<voi
   const { error } = await supabase.from('user_listings').update({ status: 'rejected', reject_reason: reason }).eq('id', id);
   if (error) throw error;
 }
+
+// ─── Bulk operations ──────────────────────────────────────────────────────────
+// Duyệt hàng loạt KHÔNG gộp được thành 1 câu: mỗi tin phải insert sang properties
+// + bắn AI autotag, nên lặp approveUserListing và chịu lỗi cục bộ (allSettled).
+// Trả số tin duyệt thành công.
+export async function bulkApproveUserListings(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const results = await Promise.allSettled(ids.map(id => approveUserListing(id)));
+  const ok = results.filter(r => r.status === 'fulfilled').length;
+  if (ok < ids.length) console.error(`[api] bulkApprove: ${ids.length - ok}/${ids.length} tin thất bại`);
+  return ok;
+}
+
+// Từ chối hàng loạt là update thuần → gộp 1 câu .in().
+export async function bulkRejectUserListings(ids: string[], reason: string): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('user_listings')
+    .update({ status: 'rejected', reject_reason: reason }, { count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
