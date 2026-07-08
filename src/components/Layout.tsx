@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';

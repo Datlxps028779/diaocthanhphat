@@ -7,8 +7,8 @@ export async function submitLead(lead: { full_name: string; phone: string; area_
     area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
   });
   if (error) throw error;
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   fetch(`${supabaseUrl}/functions/v1/crm-webhook`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },

@@ -1,25 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Fail-fast: nếu thiếu env vars, throw lỗi rõ ràng thay vì trắng trang thầm lặng
+// Fail-fast: nếu thiếu env vars, log rõ ràng (Next chạy cả server lẫn client nên
+// không đụng DOM ở đây — lỗi hiển thị qua error boundary/log).
 if (!supabaseUrl || !supabaseAnonKey) {
   const missing: string[] = [];
-  if (!supabaseUrl) missing.push('VITE_SUPABASE_URL');
-  if (!supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
-  const msg = `[Supabase] Thiếu env vars: ${missing.join(', ')}. ` +
-    `Kiểm tra file .env (local) hoặc GitHub Secrets (CI/CD).`;
-  console.error(msg);
-  // Render lỗi ra #root để user thấy thay vì trắng trang
-  if (typeof document !== 'undefined') {
-    const root = document.getElementById('root');
-    if (root) {
-      root.innerHTML = `<div style="padding:2rem;font-family:sans-serif;color:#b91c1c">` +
-        `<h2>Lỗi cấu hình</h2><p>${msg}</p></div>`;
-    }
-  }
-  // Không throw để app vẫn render lỗi thay vì crash toàn bộ
+  if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+  if (!supabaseAnonKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  console.error(`[Supabase] Thiếu env vars: ${missing.join(', ')}. ` +
+    `Kiểm tra .env.local (local) hoặc Vercel Environment Variables.`);
 }
 
 export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '');

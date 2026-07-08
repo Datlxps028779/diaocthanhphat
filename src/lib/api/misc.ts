@@ -87,8 +87,8 @@ async function getDashboardStatsFallback(): Promise<DashboardStats> {
 
 // ─── AI Description ──────────────────────────────────────────────────────────
 export async function generateAIDescription(params: { keywords: string; listingType?: string; area?: string; price?: string }): Promise<string> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-description`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
@@ -114,8 +114,8 @@ export async function analyzeSeo(params: {
   areaName?: string;
   price?: string;
 }): Promise<SeoAnalysisResult> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-analytics`, {
     method: 'POST',
@@ -177,8 +177,8 @@ export async function adminGetSubscribers(): Promise<Subscriber[]> {
 
 // ─── AI Analytics ─────────────────────────────────────────────────────────────
 export async function callAiAnalytics(): Promise<{ analysis: string; stats: Record<string, unknown> }> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-analytics`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },

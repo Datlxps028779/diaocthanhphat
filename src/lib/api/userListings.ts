@@ -47,8 +47,8 @@ export async function approveUserListing(id: string): Promise<void> {
 
   // Fire-and-forget AI auto-tagging
   if (inserted?.id) {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
