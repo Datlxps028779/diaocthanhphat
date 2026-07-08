@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import {
   Home, MapPin, Phone,
   CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search
 } from 'lucide-react';
-import { type Area, type District, type PropertyType, type ListingType } from '../lib/supabase';
-import { getAreas, getPropertyTypes, getDistricts, submitUserListing } from '../lib/api';
+import { type ListingType } from '../lib/supabase';
+import { submitUserListing } from '../lib/api';
+import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import { type Page, scrollTop } from '../lib/router';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
@@ -31,11 +33,9 @@ const isRental = (t: ListingType) => t === 'cho_thue';
 
 export function PostListingPage({ onNavigate }: PostListingPageProps) {
   const [step, setStep] = useState(0);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [types, setTypes] = useState<PropertyType[]>([]);
-  const [districts, setDistricts] = useState<District[]>([]);
+  const { data: areas = [] } = useAreas();
+  const { data: types = [] } = usePropertyTypes();
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [mapSearchQuery, setMapSearchQuery] = useState('');
 
@@ -54,11 +54,10 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
     meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '',
   });
 
-  useEffect(() => {
-    Promise.all([getAreas(), getPropertyTypes()]).then(([a, t]) => { setAreas(a); setTypes(t); });
-  }, []);
-
   const set = (k: string, v: string | string[] | ListingType) => setForm(f => ({ ...f, [k]: v }));
+
+  // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query
+  const { data: districts = [] } = useDistricts(form.area_id || undefined);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -89,11 +88,11 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
   useEffect(() => { setForm(f => ({ ...f, schema_markup: seo.schemaMarkup })); }, [seo.schemaMarkup]);
 
+  // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
+  // form + reset district đã chọn + đồng bộ map search.
   const setArea = useCallback((areaId: string, areaName: string) => {
     setForm(f => ({ ...f, area_id: areaId, city: areaName, district: '' }));
     if (areaName) setMapSearchQuery(areaName);
-    if (areaId) getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
-    else setDistricts([]);
   }, []);
 
   const setDistrict = useCallback((district: string) => {
@@ -149,10 +148,8 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
   const next = () => { if (validateStep()) setStep(s => s + 1); };
   const prev = () => setStep(s => s - 1);
 
-  const handleSubmit = async () => {
-    if (!validateStep()) return;
-    setSubmitting(true);
-    try {
+  const submitMutation = useMutation({
+    mutationFn: async () => {
       // Lọc bỏ các phần tử rỗng/falsy để đảm bảo mảng ảnh chỉ chứa URL hợp lệ
       const cleanImages = form.images.filter((url): url is string => !!url);
       const coverId = cleanImages[0] ?? (form.image_url || null);
@@ -191,10 +188,15 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
         video_url: form.video_url || null,
         contact_zalo: null,
       });
-      setSubmitted(true);
-    } catch (err) {
-      setErrors({ submit: err instanceof Error ? err.message : 'Có lỗi xảy ra' });
-    } finally { setSubmitting(false); }
+    },
+    onSuccess: () => setSubmitted(true),
+    onError: (err) => setErrors({ submit: err instanceof Error ? err.message : 'Có lỗi xảy ra' }),
+  });
+  const submitting = submitMutation.isPending;
+
+  const handleSubmit = () => {
+    if (!validateStep()) return;
+    submitMutation.mutate();
   };
 
   if (submitted) {

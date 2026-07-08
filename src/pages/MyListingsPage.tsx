@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw } from 'lucide-react';
 import { type UserListing } from '../lib/supabase';
 import { getMyListings, deleteMyListing, submitUserListing } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 
@@ -16,39 +18,41 @@ const STATUS_MAP = {
 };
 
 export function MyListingsPage({ onNavigate }: MyListingsPageProps) {
-  const [listings, setListings] = useState<UserListing[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [resubmitting, setResubmitting] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    try { const data = await getMyListings(); setListings(data); } catch { setListings([]); }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
+  const { data: listings = [], isLoading: loading } = useQuery({
+    queryKey: qk.myListings(),
+    queryFn: getMyListings,
+  });
 
   const filtered = tab === 'all' ? listings : listings.filter(l => l.status === tab);
 
-  const handleDelete = async (id: string) => {
-    await deleteMyListing(id);
-    setConfirmDelete(null);
-    await load();
-  };
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteMyListing(id),
+    onSuccess: () => {
+      setConfirmDelete(null);
+      queryClient.invalidateQueries({ queryKey: qk.myListings() });
+    },
+  });
+  const handleDelete = (id: string) => deleteMutation.mutate(id);
 
-  const handleResubmit = async (listing: UserListing) => {
-    setResubmitting(listing.id);
-    try {
-      // Delete the rejected one and submit fresh
+  const resubmitMutation = useMutation({
+    mutationFn: async (listing: UserListing) => {
+      // Xóa tin bị từ chối rồi đăng lại mới
       await deleteMyListing(listing.id);
       const { id, user_id, status, reject_reason, created_at, updated_at, areas, property_types, profiles, ...rest } = listing;
       await submitUserListing(rest);
-      await load();
-    } catch { /* silent */ }
-    setResubmitting(null);
-  };
+    },
+    onMutate: (listing) => setResubmitting(listing.id),
+    onSettled: () => {
+      setResubmitting(null);
+      queryClient.invalidateQueries({ queryKey: qk.myListings() });
+    },
+  });
+  const handleResubmit = (listing: UserListing) => resubmitMutation.mutate(listing);
 
   const counts = {
     all: listings.length,

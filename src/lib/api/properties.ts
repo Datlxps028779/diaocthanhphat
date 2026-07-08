@@ -85,17 +85,23 @@ export async function getRecentProperties(limit = 8): Promise<Property[]> {
 }
 
 export async function getPropertyById(id: string): Promise<Property | null> {
+  // Pure read — KHÔNG tăng view ở đây. Tăng view được tách ra incrementPropertyView
+  // và bắn 1 lần khi mount ở tầng UI, để không phụ thuộc cache/refetch của React Query.
   const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
     .eq('id', id).maybeSingle();
-  if (data) {
-    // Tăng view atomic (col = col + 1) tránh race. Nếu RPC chưa có trên DB
-    // (migration chưa áp) thì fallback read-modify-write cũ.
-    const { error: rpcErr } = await supabase.rpc('increment_property_views', { row_id: id });
-    if (rpcErr) await supabase.from('properties').update({ views: (data.views ?? 0) + 1 }).eq('id', id);
-  }
   return data as Property | null;
+}
+
+// Tăng view atomic (col = col + 1) tránh race. Fallback read-modify-write nếu RPC
+// chưa có trên DB. Gọi 1 lần mỗi lượt xem trang (xem PropertyDetailPage).
+export async function incrementPropertyView(id: string): Promise<void> {
+  const { error: rpcErr } = await supabase.rpc('increment_property_views', { row_id: id });
+  if (rpcErr) {
+    const { data } = await supabase.from('properties').select('views').eq('id', id).maybeSingle();
+    await supabase.from('properties').update({ views: (data?.views ?? 0) + 1 }).eq('id', id);
+  }
 }
 
 export async function getRelatedProperties(property: Property, limit = 6): Promise<Property[]> {

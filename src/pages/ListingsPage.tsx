@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
   List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
 } from 'lucide-react';
-import { type Property, type Area, type PropertyType, type District } from '../lib/supabase';
-import { getAllProperties, getAllPropertiesForMap, getAreas, getPropertyTypes, getBanners, getDistricts } from '../lib/api';
+import { type Property } from '../lib/supabase';
+import { getAllProperties, getAllPropertiesForMap, getBanners } from '../lib/api';
+import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
+import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { PropertyMap, type MapBounds } from '../components/PropertyMap';
-import { type Banner } from '../lib/supabase';
 
 interface ListingsPageProps {
   initialFilters?: Partial<{
@@ -74,19 +76,13 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 }
 
 export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) {
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [mapProperties, setMapProperties] = useState<Property[]>([]);
   const [viewportProps, setViewportProps] = useState<Property[]>([]);
   const mapBoundsRef = useRef<MapBounds | null>(null);
-  const [total, setTotal] = useState(0);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [types, setTypes] = useState<PropertyType[]>([]);
-  const [districts, setDistricts] = useState<District[]>([]);
   const [district, setDistrict] = useState('');
-  const [loading, setLoading] = useState(true);
 
   const [listingType, setListingType] = useState<ListingTypeKey>((initialFilters?.listingType ?? '') as ListingTypeKey);
   const [keyword, setKeyword] = useState(initialFilters?.keyword ?? '');
+  const [debouncedKeyword, setDebouncedKeyword] = useState(keyword);
   const [areaId, setAreaId] = useState(initialFilters?.areaId ?? '');
   const [typeId, setTypeId] = useState(initialFilters?.typeId ?? '');
   const [priceIdx, setPriceIdx] = useState(0);
@@ -101,55 +97,55 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
   const [page, setPage] = useState(1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
-  const [sidebarBanners, setSidebarBanners] = useState<Banner[]>([]);
-  const [topBanners, setTopBanners] = useState<Banner[]>([]);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
 
-  const fetchProperties = useCallback(async () => {
-    setLoading(true);
-    try {
-      const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
-      const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
-      const { data, total: t } = await getAllProperties({
-        listingType: listingType || undefined,
-        keyword: keyword || undefined, areaId: areaId || undefined, typeId: typeId || undefined,
-        district: district || undefined,
-        minPrice: pr.min, maxPrice: pr.max, minArea: ar.min, maxArea: ar.max,
-        bedrooms: bedrooms || undefined, direction: direction || undefined, legal: legal || undefined,
-        isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
-        sort, page, limit: PER_PAGE,
-      });
-      setProperties(data); setTotal(t);
-    } finally { setLoading(false); }
-  }, [listingType, keyword, areaId, typeId, district, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, initialFilters?.isFeatured, initialFilters?.isHot, PRICE_RANGES]);
+  // Debounce keyword 300ms → tránh request mỗi lần gõ phím; reset về trang 1
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedKeyword(keyword); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
 
-  useEffect(() => { fetchProperties(); }, [fetchProperties]);
-  useEffect(() => {
-    Promise.all([getAreas(), getPropertyTypes()]).then(([a, t]) => { setAreas(a); setTypes(t); });
-    Promise.all([getBanners('sidebar'), getBanners('listings_top')]).then(([sb, tb]) => {
-      setSidebarBanners(sb); setTopBanners(tb);
-    });
-  }, []);
+  // Taxonomy + districts qua React Query (dedup/cache). Reset district tách riêng.
+  const { data: areas = [] } = useAreas();
+  const { data: types = [] } = usePropertyTypes();
+  const { data: districts = [] } = useDistricts(areaId || undefined);
+  useEffect(() => { setDistrict(''); }, [areaId]);
 
-  // Fetch districts khi chọn area
+  const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
+  const { data: topBanners = [] } = useQuery({ queryKey: qk.banners('listings_top'), queryFn: () => getBanners('listings_top') });
+
+  // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
+  const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
+  const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
+  const filters = {
+    listingType: listingType || undefined,
+    keyword: debouncedKeyword || undefined, areaId: areaId || undefined, typeId: typeId || undefined,
+    district: district || undefined,
+    minPrice: pr.min, maxPrice: pr.max, minArea: ar.min, maxArea: ar.max,
+    bedrooms: bedrooms || undefined, direction: direction || undefined, legal: legal || undefined,
+    isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
+    sort, page, limit: PER_PAGE,
+  };
+  const { data: result, isFetching: loading } = useQuery({
+    queryKey: qk.properties(filters),
+    queryFn: () => getAllProperties(filters),
+    placeholderData: keepPreviousData, // giữ grid khi đổi trang, không nháy
+  });
+  const properties = result?.data ?? [];
+  const total = result?.total ?? 0;
+
+  // Map view: chỉ fetch khi ở chế độ bản đồ
+  const { data: mapProperties = [] } = useQuery({
+    queryKey: qk.propertiesMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
+    queryFn: () => getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
+    enabled: viewMode === 'map',
+  });
+  // Đồng bộ viewport khi dữ liệu map đổi (giữ bounds hiện tại)
   useEffect(() => {
-    if (areaId) {
-      getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
-    } else {
-      setDistricts([]);
-    }
-    setDistrict('');
-  }, [areaId]);
-  useEffect(() => {
-    if (viewMode === 'map') {
-      getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }).then(all => {
-        setMapProperties(all);
-        setViewportProps(filterByBounds(all, mapBoundsRef.current));
-      });
-    }
-  }, [viewMode, areaId, typeId]);
+    setViewportProps(filterByBounds(mapProperties, mapBoundsRef.current));
+  }, [mapProperties]);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     mapBoundsRef.current = bounds;
@@ -340,7 +336,7 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input value={keyword} onChange={e => { setKeyword(e.target.value); setPage(1); }}
-                  onKeyDown={e => e.key === 'Enter' && fetchProperties()}
+                  onKeyDown={e => { if (e.key === 'Enter') { setDebouncedKeyword(keyword); setPage(1); } }}
                   placeholder="Tìm theo tên, địa chỉ, khu vực..."
                   className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 {keyword && <button onClick={() => { setKeyword(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="w-3.5 h-3.5" /></button>}

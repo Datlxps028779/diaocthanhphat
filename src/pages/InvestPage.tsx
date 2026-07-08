@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { TrendingUp, Calculator, Shield, BarChart3, CheckCircle, ArrowRight, Building2, Target, Users } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
 
 /* ─────────────────── Static data ─────────────────── */
@@ -219,26 +221,24 @@ function ConsultationForm() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submitMutation = useMutation({
+    mutationFn: () => submitLead({ full_name: name, phone, message: notes, area_interest: 'Tư vấn đầu tư' }),
+    onSuccess: () => { setError(''); setSent(true); },
+    onError: () => setError('Có lỗi xảy ra, vui lòng thử lại sau.'),
+  });
+  const loading = submitMutation.isPending;
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) {
       setError('Vui lòng điền đầy đủ họ tên và số điện thoại.');
       return;
     }
     setError('');
-    setLoading(true);
-    try {
-      await submitLead({ full_name: name, phone, message: notes, area_interest: 'Tư vấn đầu tư' });
-      setSent(true);
-    } catch {
-      setError('Có lỗi xảy ra, vui lòng thử lại sau.');
-    } finally {
-      setLoading(false);
-    }
+    submitMutation.mutate();
   };
 
   if (sent) {
@@ -298,8 +298,11 @@ function ConsultationForm() {
 /* ─────────────────── InvestPage ─────────────────── */
 export function InvestPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const phone = useSetting('phone_hotline', '0901 234 567');
-  const [cms, setCms] = useState<Record<string, Record<string, string>>>({});
-  useState(() => { getPageBlocks('invest').then(b => setCms(pageBlocksToMap(b))); });
+  const { data: cms = {} } = useQuery({
+    queryKey: qk.pageBlocks('invest'),
+    queryFn: () => getPageBlocks('invest'),
+    select: pageBlocksToMap,
+  });
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   return (

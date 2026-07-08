@@ -8,13 +8,18 @@ export async function getNews(category?: string, limit = 20): Promise<NewsArticl
   return (data ?? []) as NewsArticle[];
 }
 export async function getNewsById(id: string): Promise<NewsArticle | null> {
+  // Pure read — tăng view tách ra incrementNewsView, bắn 1 lần khi mount ở tầng UI.
   const { data } = await supabase.from('news').select('*').eq('id', id).maybeSingle();
-  if (data) {
-    // Tăng view atomic; fallback read-modify-write nếu RPC chưa có trên DB.
-    const { error: rpcErr } = await supabase.rpc('increment_news_views', { row_id: id });
-    if (rpcErr) await supabase.from('news').update({ views: (data.views ?? 0) + 1 }).eq('id', id);
-  }
   return data as NewsArticle | null;
+}
+
+// Tăng view atomic; fallback read-modify-write nếu RPC chưa có trên DB.
+export async function incrementNewsView(id: string): Promise<void> {
+  const { error: rpcErr } = await supabase.rpc('increment_news_views', { row_id: id });
+  if (rpcErr) {
+    const { data } = await supabase.from('news').select('views').eq('id', id).maybeSingle();
+    await supabase.from('news').update({ views: (data?.views ?? 0) + 1 }).eq('id', id);
+  }
 }
 export async function adminGetAllNews(): Promise<NewsArticle[]> {
   const { data } = await supabase.from('news').select('*').order('created_at', { ascending: false });
