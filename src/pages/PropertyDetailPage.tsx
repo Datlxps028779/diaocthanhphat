@@ -64,9 +64,8 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
 
-  // Nâng cấp URL lên dạng /bat-dong-san/{slug}-{id} chuẩn SEO khi property đã load.
-  // Dùng replaceState (không đẩy history) để UUID trần hoặc URL thiếu slug không lộ
-  // ra thanh địa chỉ.
+  // Nâng cấp URL lên dạng /bat-dong-san/{slug} chuẩn SEO khi property đã load.
+  // Dùng replaceState (không đẩy history) để UUID trần không lộ ra thanh địa chỉ.
   useEffect(() => {
     if (!property) return;
     const canonicalPath = buildPropertyPath(property);
@@ -113,8 +112,8 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     submitMutation.mutate();
   };
 
-  // Link chia sẻ dạng /bat-dong-san/{slug}-{id} chuẩn SEO. Web Share API trên
-  // mobile, fallback copy clipboard trên desktop.
+  // Link chia sẻ dạng /bat-dong-san/{slug} chuẩn SEO. Web Share API trên mobile,
+  // fallback copy clipboard trên desktop.
   const handleShare = async () => {
     if (!property) return;
     const shareUrl = `${window.location.origin}${buildPropertyPath(property)}`;

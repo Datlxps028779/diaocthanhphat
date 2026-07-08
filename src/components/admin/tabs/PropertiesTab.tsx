@@ -452,8 +452,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     const cs = (v: string) => v?.trim() || null;
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
     onSave({
+      // Để trống → createProperty tự sinh slug duy nhất; có nhập → dùng nguyên
+      slug: cs(form.slug),
       title: form.title,
-      slug: cs(form.slug) ?? generateSlug(form.title),
       description: cs(form.description),
       listing_type: form.listing_type,
       price: Number(form.price) || 0,
@@ -739,9 +740,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                   <input value={form.slug} placeholder={generateSlug(form.title) || 'tu-dong-tao-tu-tieu-de'}
                     onChange={e => setField('slug', generateSlug(e.target.value))}
                     className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-                  <span className="text-xs text-gray-400 flex-shrink-0">-{'{id}'}</span>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">Để trống sẽ tự tạo từ tiêu đề. URL cuối: /bat-dong-san/{form.slug || generateSlug(form.title) || 'slug'}-{'{id}'}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Để trống sẽ tự tạo từ tiêu đề (kèm mã ngắn đảm bảo duy nhất). URL: /bat-dong-san/{form.slug || (generateSlug(form.title) ? generateSlug(form.title) + '-xxxx' : 'slug')}</p>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>

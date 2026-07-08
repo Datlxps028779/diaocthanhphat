@@ -8,14 +8,13 @@
 -- và backfill slug cho bản ghi cũ. Chạy được độc lập dù migration trước có chạy hay không.
 
 -- ─── properties: thêm cột SEO ────────────────────────────────────────────────
--- slug KHÔNG UNIQUE: URL dạng /bat-dong-san/{slug}-{id}, id đã đảm bảo duy nhất,
--- nên admin được tự do đặt slug trùng mà không vỡ ràng buộc.
+-- slug UNIQUE: URL dạng /bat-dong-san/{slug} (không kèm id) nên slug phải duy nhất.
+-- Trigger/backfill thêm hậu tố ngắn để tránh trùng.
 ALTER TABLE properties ADD COLUMN IF NOT EXISTS slug text;
 ALTER TABLE properties ADD COLUMN IF NOT EXISTS focus_keywords text;
 ALTER TABLE properties ADD COLUMN IF NOT EXISTS schema_markup jsonb;
-CREATE INDEX IF NOT EXISTS idx_properties_slug ON properties(slug);
 
--- news: đảm bảo có slug (URL /tin-tuc/{slug} nên giữ UNIQUE)
+-- news: đảm bảo có slug (URL /tin-tuc/{slug})
 ALTER TABLE news ADD COLUMN IF NOT EXISTS slug text;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_news_slug ON news(slug);
 
@@ -40,12 +39,12 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- ─── Trigger insert: set slug khi rỗng ───────────────────────────────────────
--- properties: KHÔNG cần hậu tố (id trong URL đảm bảo duy nhất)
+-- properties: slug UNIQUE → thêm hậu tố ngắn đảm bảo duy nhất
 CREATE OR REPLACE FUNCTION set_property_slug()
 RETURNS trigger AS $$
 BEGIN
   IF NEW.slug IS NULL OR NEW.slug = '' THEN
-    NEW.slug := generate_slug(NEW.title);
+    NEW.slug := generate_slug(NEW.title) || '-' || substring(gen_random_uuid()::text, 1, 4);
   END IF;
   RETURN NEW;
 END;
@@ -73,10 +72,14 @@ CREATE TRIGGER trg_news_slug
   FOR EACH ROW EXECUTE FUNCTION set_news_slug();
 
 -- ─── Backfill bản ghi cũ còn NULL/rỗng slug ──────────────────────────────────
+-- Thêm hậu tố ngắn để đảm bảo duy nhất trước khi tạo UNIQUE index.
 UPDATE properties
-SET slug = generate_slug(title)
+SET slug = generate_slug(title) || '-' || substring(gen_random_uuid()::text, 1, 4)
 WHERE slug IS NULL OR slug = '';
 
 UPDATE news
 SET slug = generate_slug(title) || '-' || substring(gen_random_uuid()::text, 1, 6)
 WHERE slug IS NULL OR slug = '';
+
+-- UNIQUE index tạo SAU backfill để không vỡ ràng buộc khi đang điền dữ liệu.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_slug ON properties(slug);

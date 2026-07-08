@@ -94,19 +94,15 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   return data as Property | null;
 }
 
-// URL sản phẩm dạng /bat-dong-san/{slug}-{id}. slug lấy từ tiêu đề (không lưu DB),
-// id (UUID) nằm cuối để tra cứu chính xác. Tách UUID ở cuối segment để query theo id.
-const TRAILING_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function extractPropertyId(segment: string): string {
-  const m = segment.match(TRAILING_UUID_RE);
-  return m ? m[0] : segment;
-}
+// Tra cứu theo id (link UUID cũ vẫn còn lưu hành) HOẶC slug (URL mới chuẩn SEO).
+// Segment khớp UUID → query theo id; còn lại → theo slug.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property | null> {
-  const id = extractPropertyId(idOrSlug);
+  const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
   const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq('id', id).maybeSingle();
+    .eq(col, idOrSlug).maybeSingle();
   return data as Property | null;
 }
 
@@ -139,8 +135,7 @@ export async function adminGetAllProperties(): Promise<Property[]> {
   return (data ?? []) as Property[];
 }
 
-// Slug SEO từ tiêu đề tiếng Việt (bỏ dấu). KHÔNG cần hậu tố duy nhất vì URL luôn
-// kèm id ở cuối (/bat-dong-san/{slug}-{id}) — id mới là khóa tra cứu.
+// Slug gốc SEO từ tiêu đề tiếng Việt (bỏ dấu, không hậu tố).
 export function buildPropertySlug(title: string): string {
   return (title ?? '')
     .toLowerCase()
@@ -153,16 +148,21 @@ export function buildPropertySlug(title: string): string {
     .substring(0, 80) || 'bat-dong-san';
 }
 
-// URL chuẩn SEO: /bat-dong-san/{slug}-{id}. Ưu tiên slug lưu trong DB, fallback
-// sinh từ tiêu đề nếu tin cũ chưa có slug. id luôn ở cuối để tra cứu chính xác.
-export function buildPropertyPath(p: { id: string; slug?: string | null; title?: string }): string {
-  const slug = (p.slug && p.slug.trim()) || (p.title ? buildPropertySlug(p.title) : '');
-  return slug ? `/bat-dong-san/${slug}-${p.id}` : `/bat-dong-san/${p.id}`;
+// Slug SEO kèm hậu tố ngắn để đảm bảo duy nhất mà không cần kiểm tra trùng.
+export function buildUniquePropertySlug(title: string): string {
+  return `${buildPropertySlug(title)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// URL chuẩn SEO: /bat-dong-san/{slug}. Dùng slug lưu trong DB; fallback UUID chỉ
+// khi tin cũ chưa có slug (getPropertyByIdOrSlug resolve được cả hai).
+export function buildPropertyPath(p: { id: string; slug?: string | null }): string {
+  const slug = p.slug && p.slug.trim();
+  return `/bat-dong-san/${slug || p.id}`;
 }
 
 export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {
-  const payload = p.slug ? p : { ...p, slug: buildPropertySlug(p.title) };
-  const { data, error } = await supabase.from('properties').insert(payload).select().single();
+  const slug = (p.slug && p.slug.trim()) || buildUniquePropertySlug(p.title);
+  const { data, error } = await supabase.from('properties').insert({ ...p, slug }).select().single();
   if (error) throw error;
   return data as Property;
 }

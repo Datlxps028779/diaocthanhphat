@@ -1,4 +1,32 @@
+# Cho phép mọi search engine crawl toàn site
 User-agent: *
 Allow: /
+Disallow: /quantrihethong
 
-Sitemap: /sitemap.xml
+# AI crawler — cho phép rõ ràng để nội dung xuất hiện trong câu trả lời AI (SEO AI)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# Sitemap phải là URL tuyệt đối theo chuẩn robots.txt
+Sitemap: https://diaocthanhphat.com/sitemap.xml
