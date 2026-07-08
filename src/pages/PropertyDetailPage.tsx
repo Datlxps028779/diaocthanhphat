@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight as ChevRight, MessageCircle,
   Navigation, ExternalLink, Play
 } from 'lucide-react';
-import { getPropertyById, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
@@ -29,11 +29,12 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
   const [activeImg, setActiveImg] = useState(0);
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
 
   const { data: property = null, isLoading: loading } = useQuery({
     queryKey: qk.property(propertyId),
-    queryFn: () => getPropertyById(propertyId),
+    queryFn: () => getPropertyByIdOrSlug(propertyId),
     enabled: !!propertyId,
   });
 
@@ -51,15 +52,17 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
 
   // Tăng view tách khỏi fetcher: bắn đúng 1 lần mỗi lần mở trang, không phụ thuộc
   // cache/refetch của React Query (tránh double/undercount).
+  // Tăng view theo UUID thật (property.id), KHÔNG theo propertyId — propertyId có thể
+  // là slug khi mở từ link chia sẻ /bat-dong-san/{slug}.
   const viewedRef = useRef<string | null>(null);
   const viewMutation = useMutation({ mutationFn: (id: string) => incrementPropertyView(id) });
   useEffect(() => {
-    if (propertyId && viewedRef.current !== propertyId) {
-      viewedRef.current = propertyId;
-      viewMutation.mutate(propertyId);
+    if (property?.id && viewedRef.current !== property.id) {
+      viewedRef.current = property.id;
+      viewMutation.mutate(property.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propertyId]);
+  }, [property?.id]);
 
   // Áp dụng SEO khi property đã load
   useEffect(() => {
@@ -85,7 +88,7 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
       full_name: form.name,
       phone: form.phone,
       message: form.message,
-      property_id: propertyId,
+      property_id: property?.id,
       property_title: property?.title,
       budget: form.budget || undefined,
     }),
@@ -97,6 +100,28 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     e.preventDefault();
     if (!form.name || !form.phone) return;
     submitMutation.mutate();
+  };
+
+  // Link chia sẻ: ưu tiên slug đẹp, fallback UUID nếu tin chưa có slug
+  // (getPropertyByIdOrSlug xử lý được cả hai). Dùng Web Share API trên mobile,
+  // fallback copy clipboard trên desktop.
+  const handleShare = async () => {
+    if (!property) return;
+    const shareUrl = `${window.location.origin}/bat-dong-san/${property.slug ?? property.id}`;
+    const shareData = { title: property.title, text: property.title, url: shareUrl };
+    try {
+      if (navigator.share && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+        return;
+      }
+    } catch { /* user hủy share → rơi xuống copy */ }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      window.prompt('Sao chép link để chia sẻ:', shareUrl);
+    }
   };
 
   if (loading) return (
@@ -190,8 +215,14 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
                     className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
                     <Heart className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
                   </button>
-                  <button className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-                    <Share2 className="w-4 h-4 text-gray-500" />
+                  <button onClick={handleShare} title="Chia sẻ" aria-label="Chia sẻ"
+                    className="relative w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
+                    {shareCopied ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4 text-gray-500" />}
+                    {shareCopied && (
+                      <span className="absolute top-full mt-1 right-0 whitespace-nowrap bg-gray-900 text-white text-[10px] font-medium px-2 py-1 rounded shadow">
+                        Đã sao chép link
+                      </span>
+                    )}
                   </button>
                 </div>
                 <div className="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded">

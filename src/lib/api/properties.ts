@@ -94,6 +94,18 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   return data as Property | null;
 }
 
+// Tra cứu theo id (UUID) HOẶC slug — dùng cho deep-link chia sẻ /bat-dong-san/{slug}.
+// Cột id là UUID nên .eq('id', <slug>) sẽ lỗi kiểu; phải phân biệt trước khi query.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property | null> {
+  const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
+  const { data } = await supabase
+    .from('properties')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .eq(col, idOrSlug).maybeSingle();
+  return data as Property | null;
+}
+
 // Tăng view atomic (col = col + 1) tránh race. Fallback read-modify-write nếu RPC
 // chưa có trên DB. Gọi 1 lần mỗi lượt xem trang (xem PropertyDetailPage).
 export async function incrementPropertyView(id: string): Promise<void> {
