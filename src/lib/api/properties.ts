@@ -135,8 +135,26 @@ export async function adminGetAllProperties(): Promise<Property[]> {
   return (data ?? []) as Property[];
 }
 
+// Slug SEO từ tiêu đề tiếng Việt + hậu tố ngắn để đảm bảo duy nhất (cột slug UNIQUE).
+// Sinh ở client vì DB trigger set_property_slug từng dùng hàm generate_slug lỗi →
+// nhiều tin cũ bị null slug. Xem migration 20260708_fix_slug_backfill.sql.
+export function buildPropertySlug(title: string): string {
+  const base = (title ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[đ]/g, 'd')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 80) || 'bat-dong-san';
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${base}-${suffix}`;
+}
+
 export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {
-  const { data, error } = await supabase.from('properties').insert(p).select().single();
+  const payload = p.slug ? p : { ...p, slug: buildPropertySlug(p.title) };
+  const { data, error } = await supabase.from('properties').insert(payload).select().single();
   if (error) throw error;
   return data as Property;
 }

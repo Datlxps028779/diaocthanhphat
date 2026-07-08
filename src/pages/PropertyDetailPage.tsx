@@ -64,6 +64,17 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
 
+  // Nâng cấp URL lên dạng slug chuẩn SEO khi property đã load. Dùng replaceState
+  // (không đẩy history) để /bat-dong-san/{uuid} — hoặc URL rỗng khi điều hướng nội
+  // bộ thiếu slug — không lộ ra thanh địa chỉ.
+  useEffect(() => {
+    if (!property) return;
+    const canonicalPath = `/bat-dong-san/${property.slug ?? property.id}`;
+    if (window.location.pathname !== canonicalPath) {
+      window.history.replaceState(null, '', canonicalPath);
+    }
+  }, [property]);
+
   // Áp dụng SEO khi property đã load
   useEffect(() => {
     if (!property) return;

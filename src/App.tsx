@@ -76,8 +76,10 @@ function pushUrl(page: Page) {
   }
   // Deep-link URL cho từng trang
   let target = '/';
-  if (page.name === 'property' && page.slug) {
-    target = `/bat-dong-san/${page.slug}`;
+  if (page.name === 'property') {
+    // Ưu tiên slug đẹp; fallback UUID nếu tin chưa có slug — getPropertyByIdOrSlug
+    // load được cả hai, nên URL luôn hiển thị & chia sẻ được.
+    target = `/bat-dong-san/${page.slug ?? page.id}`;
   } else if (page.name === 'news' && page.slug) {
     target = `/tin-tuc/${page.slug}`;
   } else if (page.name === 'listings') {
