@@ -37,3 +37,29 @@ export async function deleteNews(id: string): Promise<void> {
   const { error } = await supabase.from('news').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ─── Bulk operations ──────────────────────────────────────────────────────────
+// Cập nhật/xóa nhiều bài trong 1 câu (.in) thay vì lặp N request. Trả số dòng ảnh
+// hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field.
+export async function bulkUpdateNews(
+  ids: string[],
+  patch: Partial<Pick<NewsArticle, 'is_published'>>,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('news')
+    .update({ ...patch, updated_at: new Date().toISOString() }, { count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
+
+export async function bulkDeleteNews(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('news')
+    .delete({ count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}

@@ -24,3 +24,28 @@ export async function deleteProject(id: string): Promise<void> {
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ─── Bulk operations ──────────────────────────────────────────────────────────
+// Cập nhật/xóa nhiều dự án trong 1 câu (.in). Trả số dòng ảnh hưởng để UI báo lại.
+export async function bulkUpdateProjects(
+  ids: string[],
+  patch: Partial<Pick<Project, 'is_active'>>,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('projects')
+    .update({ ...patch, updated_at: new Date().toISOString() }, { count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
+
+export async function bulkDeleteProjects(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('projects')
+    .delete({ count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
