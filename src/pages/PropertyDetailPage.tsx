@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight as ChevRight, MessageCircle,
   Navigation, ExternalLink, Play
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
@@ -64,12 +64,12 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
 
-  // Nâng cấp URL lên dạng slug chuẩn SEO khi property đã load. Dùng replaceState
-  // (không đẩy history) để /bat-dong-san/{uuid} — hoặc URL rỗng khi điều hướng nội
-  // bộ thiếu slug — không lộ ra thanh địa chỉ.
+  // Nâng cấp URL lên dạng /bat-dong-san/{slug}-{id} chuẩn SEO khi property đã load.
+  // Dùng replaceState (không đẩy history) để UUID trần hoặc URL thiếu slug không lộ
+  // ra thanh địa chỉ.
   useEffect(() => {
     if (!property) return;
-    const canonicalPath = `/bat-dong-san/${property.slug ?? property.id}`;
+    const canonicalPath = buildPropertyPath(property);
     if (window.location.pathname !== canonicalPath) {
       window.history.replaceState(null, '', canonicalPath);
     }
@@ -113,12 +113,11 @@ export function PropertyDetailPage({ propertyId, onNavigate }: PropertyDetailPag
     submitMutation.mutate();
   };
 
-  // Link chia sẻ: ưu tiên slug đẹp, fallback UUID nếu tin chưa có slug
-  // (getPropertyByIdOrSlug xử lý được cả hai). Dùng Web Share API trên mobile,
-  // fallback copy clipboard trên desktop.
+  // Link chia sẻ dạng /bat-dong-san/{slug}-{id} chuẩn SEO. Web Share API trên
+  // mobile, fallback copy clipboard trên desktop.
   const handleShare = async () => {
     if (!property) return;
-    const shareUrl = `${window.location.origin}/bat-dong-san/${property.slug ?? property.id}`;
+    const shareUrl = `${window.location.origin}${buildPropertyPath(property)}`;
     const shareData = { title: property.title, text: property.title, url: shareUrl };
     try {
       if (navigator.share && navigator.canShare?.(shareData)) {

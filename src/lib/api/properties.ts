@@ -94,15 +94,19 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   return data as Property | null;
 }
 
-// Tra cứu theo id (UUID) HOẶC slug — dùng cho deep-link chia sẻ /bat-dong-san/{slug}.
-// Cột id là UUID nên .eq('id', <slug>) sẽ lỗi kiểu; phải phân biệt trước khi query.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// URL sản phẩm dạng /bat-dong-san/{slug}-{id}. slug lấy từ tiêu đề (không lưu DB),
+// id (UUID) nằm cuối để tra cứu chính xác. Tách UUID ở cuối segment để query theo id.
+const TRAILING_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function extractPropertyId(segment: string): string {
+  const m = segment.match(TRAILING_UUID_RE);
+  return m ? m[0] : segment;
+}
 export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property | null> {
-  const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
+  const id = extractPropertyId(idOrSlug);
   const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq(col, idOrSlug).maybeSingle();
+    .eq('id', id).maybeSingle();
   return data as Property | null;
 }
 
@@ -135,11 +139,10 @@ export async function adminGetAllProperties(): Promise<Property[]> {
   return (data ?? []) as Property[];
 }
 
-// Slug SEO từ tiêu đề tiếng Việt + hậu tố ngắn để đảm bảo duy nhất (cột slug UNIQUE).
-// Sinh ở client vì DB trigger set_property_slug từng dùng hàm generate_slug lỗi →
-// nhiều tin cũ bị null slug. Xem migration 20260708_fix_slug_backfill.sql.
+// Slug SEO từ tiêu đề tiếng Việt (bỏ dấu). KHÔNG cần hậu tố duy nhất vì URL luôn
+// kèm id ở cuối (/bat-dong-san/{slug}-{id}) — id mới là khóa tra cứu.
 export function buildPropertySlug(title: string): string {
-  const base = (title ?? '')
+  return (title ?? '')
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[đ]/g, 'd')
@@ -148,8 +151,13 @@ export function buildPropertySlug(title: string): string {
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
     .substring(0, 80) || 'bat-dong-san';
-  const suffix = Math.random().toString(36).slice(2, 8);
-  return `${base}-${suffix}`;
+}
+
+// URL chuẩn SEO: /bat-dong-san/{slug}-{id}. Ưu tiên slug lưu trong DB, fallback
+// sinh từ tiêu đề nếu tin cũ chưa có slug. id luôn ở cuối để tra cứu chính xác.
+export function buildPropertyPath(p: { id: string; slug?: string | null; title?: string }): string {
+  const slug = (p.slug && p.slug.trim()) || (p.title ? buildPropertySlug(p.title) : '');
+  return slug ? `/bat-dong-san/${slug}-${p.id}` : `/bat-dong-san/${p.id}`;
 }
 
 export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {

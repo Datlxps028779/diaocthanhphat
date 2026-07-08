@@ -342,6 +342,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 }) {
   const [form, setForm] = useState({
     title: property?.title ?? '',
+    slug: property?.slug ?? '',
     description: property?.description ?? '',
     listing_type: property?.listing_type ?? 'mua_ban',
     price: property?.price ?? 0,
@@ -452,6 +453,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
     onSave({
       title: form.title,
+      slug: cs(form.slug) ?? generateSlug(form.title),
       description: cs(form.description),
       listing_type: form.listing_type,
       price: Number(form.price) || 0,
@@ -734,9 +736,12 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">URL thân thiện (Slug)</label>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 flex-shrink-0">/bat-dong-san/</span>
-                  <input value={generateSlug(form.title)} readOnly
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-600" />
+                  <input value={form.slug} placeholder={generateSlug(form.title) || 'tu-dong-tao-tu-tieu-de'}
+                    onChange={e => setField('slug', generateSlug(e.target.value))}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  <span className="text-xs text-gray-400 flex-shrink-0">-{'{id}'}</span>
                 </div>
+                <p className="text-[10px] text-gray-400 mt-1">Để trống sẽ tự tạo từ tiêu đề. URL cuối: /bat-dong-san/{form.slug || generateSlug(form.title) || 'slug'}-{'{id}'}</p>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>

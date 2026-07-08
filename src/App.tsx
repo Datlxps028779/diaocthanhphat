@@ -20,7 +20,7 @@ import { AboutPage } from './pages/AboutPage';
 import { PostListingPage } from './pages/PostListingPage';
 import { MyListingsPage } from './pages/MyListingsPage';
 import { AccountPage } from './pages/AccountPage';
-import { getAreas, getAdminRole } from './lib/api';
+import { getAreas, getAdminRole, extractPropertyId, buildPropertyPath } from './lib/api';
 import { type Area } from './lib/supabase';
 
 const ADMIN_PATH = '/quantrihethong';
@@ -42,10 +42,14 @@ function getInitialPage(): Page {
   if (path === ADMIN_PATH) {
     return { name: 'quantri-login' };
   }
-  // Deep-link: /bat-dong-san/{slug} → property detail
+  // Deep-link: /bat-dong-san/{slug}-{id} → property detail. Tách UUID ở cuối segment
+  // làm id tra cứu; phần trước là slug (chỉ để đẹp URL).
   const bdsMatch = path.match(/^\/bat-dong-san\/(.+)$/);
   if (bdsMatch) {
-    return { name: 'property', id: bdsMatch[1], slug: bdsMatch[1] };
+    const seg = bdsMatch[1];
+    const id = extractPropertyId(seg);
+    const slug = seg.endsWith(`-${id}`) ? seg.slice(0, -(id.length + 1)) : undefined;
+    return { name: 'property', id, slug };
   }
   // Deep-link: /tin-tuc/{slug} → news article
   const newsMatch = path.match(/^\/tin-tuc\/(.+)$/);
@@ -77,9 +81,9 @@ function pushUrl(page: Page) {
   // Deep-link URL cho từng trang
   let target = '/';
   if (page.name === 'property') {
-    // Ưu tiên slug đẹp; fallback UUID nếu tin chưa có slug — getPropertyByIdOrSlug
-    // load được cả hai, nên URL luôn hiển thị & chia sẻ được.
-    target = `/bat-dong-san/${page.slug ?? page.id}`;
+    // URL /bat-dong-san/{slug}-{id}. Có slug thì đẹp, không có vẫn ra {id} — id ở
+    // cuối là khóa tra cứu nên URL luôn hiển thị & chia sẻ được.
+    target = buildPropertyPath(page);
   } else if (page.name === 'news' && page.slug) {
     target = `/tin-tuc/${page.slug}`;
   } else if (page.name === 'listings') {
