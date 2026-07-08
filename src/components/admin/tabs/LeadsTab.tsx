@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, deleteLead } from '../../../lib/api';
+import { getLeads, updateLeadStatus, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ─── Leads Tab ────────────────────────────────────────────────────────────────
@@ -10,6 +10,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const load = async () => { setLoading(true); const data = await getLeads(statusFilter); setLeads(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
@@ -19,6 +22,30 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   };
   const handleDelete = async (id: string) => {
     await deleteLead(id); setConfirmDelete(null); await load(); onRefreshStats();
+  };
+
+  // ─── Bulk helpers ─────────────────────────────────────────────────────────
+  const toggleOne = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const allIds = leads.map(l => l.id);
+  const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
+  const clearSelection = () => setSelected(new Set());
+  const selectedIds = () => Array.from(selected);
+  const runBulk = async (fn: () => Promise<number>, label: string) => {
+    setBulkBusy(true);
+    try {
+      const n = await fn();
+      clearSelection();
+      await load(); onRefreshStats();
+      console.info(`[AdminPanel] Bulk ${label}: ${n} lead`);
+    } catch (e) {
+      console.error(`[AdminPanel] Bulk ${label} thất bại:`, e);
+      alert(`Thao tác hàng loạt thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
+    } finally { setBulkBusy(false); }
   };
 
   const STATUS_CONFIG = {
@@ -36,10 +63,34 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
             {s === 'all' ? 'Tất cả' : STATUS_CONFIG[s].label}
           </button>
         ))}
-        <button onClick={load} className="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
+        {leads.length > 0 && (
+          <label className="ml-auto flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll}
+              aria-label="Chọn tất cả" className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
+            Chọn tất cả
+          </label>
+        )}
+        <button onClick={load} className={`${leads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
           <RefreshCw className="w-3.5 h-3.5" />Làm mới
         </button>
       </div>
+
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
+          <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'contacted'), 'đã liên hệ')}
+            className="text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đã liên hệ</button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'closed'), 'hoàn thành')}
+            className="text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Hoàn thành</button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'new'), 'đánh dấu mới')}
+            className="text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đánh dấu mới</button>
+          <button disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}
+            className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />Xóa
+          </button>
+          <button onClick={clearSelection} className="ml-auto text-xs text-gray-300 hover:text-white transition-colors">Bỏ chọn</button>
+        </div>
+      )}
 
       {loading ? <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
         : leads.length === 0 ? (
@@ -50,9 +101,12 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         ) : (
           <div className="space-y-3">
             {leads.map(lead => (
-              <div key={lead.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+              <div key={lead.id} className={`bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow ${selected.has(lead.id) ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-200'}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleOne(lead.id)}
+                      aria-label={`Chọn ${lead.full_name}`} className="mt-1 w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-gray-900 text-sm">{lead.full_name}</h4>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_CONFIG[lead.status].color}`}>
@@ -67,6 +121,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     </div>
                     {lead.message && <p className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 italic">"{lead.message}"</p>}
                     {lead.properties && <p className="mt-1 text-xs text-blue-600">BĐS: {lead.properties.title}</p>}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <a href={`tel:${lead.phone}`} className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
@@ -97,6 +152,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
 
       {confirmDelete && (
         <ConfirmDialog message="Xóa khách hàng này khỏi danh sách?" onConfirm={() => handleDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      )}
+      {confirmBulkDelete && (
+        <ConfirmDialog message={`Xóa ${selected.size} khách hàng đã chọn? Thao tác không thể hoàn tác.`}
+          onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteLeads(selectedIds()), 'xóa'); }}
+          onCancel={() => setConfirmBulkDelete(false)} />
       )}
     </div>
   );

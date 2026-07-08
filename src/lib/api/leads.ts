@@ -33,3 +33,25 @@ export async function deleteLead(id: string): Promise<void> {
   const { error } = await supabase.from('leads').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ─── Bulk operations ──────────────────────────────────────────────────────────
+// Đổi trạng thái/xóa nhiều lead trong 1 câu (.in). Trả số dòng ảnh hưởng.
+export async function bulkUpdateLeadStatus(ids: string[], status: Lead['status']): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('leads')
+    .update({ status }, { count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
+
+export async function bulkDeleteLeads(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('leads')
+    .delete({ count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
