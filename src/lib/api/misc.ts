@@ -1,7 +1,44 @@
 import { supabase, type Subscriber } from '../supabase';
 
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
-export async function getDashboardStats() {
+export interface DashboardStats {
+  totalProperties: number;
+  activeProperties: number;
+  featuredProperties: number;
+  hotProperties: number;
+  saleProperties: number;
+  rentProperties: number;
+  totalLeads: number;
+  newLeads: number;
+  pendingListings: number;
+  totalViews: number;
+  monthLeads: number;
+  lastMonthLeads: number;
+  leadGrowth: number;
+  monthProperties: number;
+  totalNews: number;
+}
+
+const EMPTY_STATS: DashboardStats = {
+  totalProperties: 0, activeProperties: 0, featuredProperties: 0, hotProperties: 0,
+  saleProperties: 0, rentProperties: 0, totalLeads: 0, newLeads: 0, pendingListings: 0,
+  totalViews: 0, monthLeads: 0, lastMonthLeads: 0, leadGrowth: 0, monthProperties: 0, totalNews: 0,
+};
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  // Ưu tiên RPC phía DB (đếm + SUM(views) trong 1 call, không kéo dữ liệu thô về
+  // client). Fallback cách cũ nếu RPC chưa áp lên DB — tránh sập admin khi lệch
+  // nhịp deploy (xem supabase/migrations/20260708010000_dashboard_stats_rpc.sql).
+  const { data, error } = await supabase.rpc('get_dashboard_stats');
+  if (!error && data) {
+    return { ...EMPTY_STATS, ...(data as Partial<DashboardStats>) };
+  }
+  return getDashboardStatsFallback();
+}
+
+// Fallback: cách cũ (11 round-trip + reduce views phía client). Chỉ dùng khi RPC
+// get_dashboard_stats chưa tồn tại trên DB.
+async function getDashboardStatsFallback(): Promise<DashboardStats> {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
@@ -47,8 +84,6 @@ export async function getDashboardStats() {
     totalNews: newsTotalRes.count ?? 0,
   };
 }
-
-export type DashboardStats = Awaited<ReturnType<typeof getDashboardStats>>;
 
 // ─── AI Description ──────────────────────────────────────────────────────────
 export async function generateAIDescription(params: { keywords: string; listingType?: string; area?: string; price?: string }): Promise<string> {
