@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star } from 'lucide-react';
 import type { District, Property, Area, PropertyType } from '../../../lib/supabase';
-import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts } from '../../../lib/api';
+import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -18,6 +18,10 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Bulk selection (Sprint 3c)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -31,6 +35,38 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
     (!search || p.title.toLowerCase().includes(search.toLowerCase()) || p.city.toLowerCase().includes(search.toLowerCase())) &&
     (!filterType || p.listing_type === filterType)
   );
+
+  // ─── Bulk helpers ─────────────────────────────────────────────────────────
+  const toggleOne = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const filteredIds = filtered.map(p => p.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id));
+  const toggleAll = () => setSelected(prev => {
+    if (allFilteredSelected) {
+      const next = new Set(prev);
+      filteredIds.forEach(id => next.delete(id));
+      return next;
+    }
+    return new Set([...prev, ...filteredIds]);
+  });
+  const clearSelection = () => setSelected(new Set());
+
+  const runBulk = async (fn: () => Promise<number>, label: string) => {
+    setBulkBusy(true);
+    try {
+      const n = await fn();
+      clearSelection();
+      await load(); onStatsRefresh?.();
+      console.info(`[AdminPanel] Bulk ${label}: ${n} BĐS`);
+    } catch (e) {
+      console.error(`[AdminPanel] Bulk ${label} thất bại:`, e);
+      alert(`Thao tác hàng loạt thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
+    } finally { setBulkBusy(false); }
+  };
+  const selectedIds = () => Array.from(selected);
 
   const handleSave = async (data: Partial<Property>) => {
     setSaving(true);
@@ -88,6 +124,34 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
         </button>
       </div>
 
+      {/* Bulk action bar (Sprint 3c) — hiện khi có chọn */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
+          <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_active: true }), 'hiện')}
+            className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <CheckCircle className="w-3.5 h-3.5" />Hiện
+          </button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_active: false }), 'ẩn')}
+            className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <XCircle className="w-3.5 h-3.5" />Ẩn
+          </button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_hot: true }), 'gắn HOT')}
+            className="flex items-center gap-1 text-xs font-medium bg-red-600 hover:bg-red-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <Flame className="w-3.5 h-3.5" />HOT
+          </button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_featured: true }), 'gắn nổi bật')}
+            className="flex items-center gap-1 text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <Star className="w-3.5 h-3.5" />Nổi bật
+          </button>
+          <button disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}
+            className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />Xóa
+          </button>
+          <button onClick={clearSelection} className="ml-auto text-xs text-gray-300 hover:text-white transition-colors">Bỏ chọn</button>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
       ) : (
@@ -96,6 +160,10 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll}
+                      aria-label="Chọn tất cả" className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
+                  </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Tiêu đề</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden md:table-cell">Loại</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden md:table-cell">Khu vực</th>
@@ -107,7 +175,11 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={p.id} className={`transition-colors ${selected.has(p.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
+                        aria-label={`Chọn ${p.title}`} className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt="" className="w-12 h-10 object-cover rounded-lg flex-shrink-0" />
@@ -163,6 +235,12 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
       {confirmDelete && (
         <ConfirmDialog message="Bạn có chắc chắn muốn xóa bất động sản này?"
           onConfirm={() => handleDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      )}
+
+      {confirmBulkDelete && (
+        <ConfirmDialog message={`Xóa ${selected.size} bất động sản đã chọn? Thao tác không thể hoàn tác.`}
+          onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteProperties(selectedIds()), 'xóa'); }}
+          onCancel={() => setConfirmBulkDelete(false)} />
       )}
     </div>
   );
