@@ -22,12 +22,15 @@ export async function getPropertiesForSection(section: FeaturedSection): Promise
       .filter((p): p is Property => p != null);
   }
 
-  // Đọc từ materialized view mv_active_properties (đã pre-join + lọc is_active).
-  // MV trả cột PHẲNG (area_name/area_slug/type_name/type_slug) — không dựng lại
-  // nested areas{}/property_types{} vì không component trang chủ nào đọc field nested.
+  // NOTE: Tạm đọc trực tiếp bảng `properties` (join areas + property_types).
+  // MV mv_active_properties đã tạo trong DB (8 dòng, quyền anon OK) nhưng PostgREST
+  // schema cache không nhận diện được (404 PGRST205) dù đã NOTIFY / restart / COMMENT.
+  // Rollback về base table để trang chủ chạy ổn định; sẽ bật lại MV sau qua RPC
+  // (function luôn được PostgREST expose ổn định, tránh lỗi cache view).
   let q = supabase
-    .from('mv_active_properties')
-    .select('*');
+    .from('properties')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .eq('is_active', true);
 
   if (section.filter_area_id) q = q.eq('area_id', section.filter_area_id);
   if (section.filter_listing_type && section.filter_listing_type !== '') q = q.eq('listing_type', section.filter_listing_type);
