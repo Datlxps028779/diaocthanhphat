@@ -136,3 +136,29 @@ export async function deleteProperty(id: string): Promise<void> {
   const { error } = await supabase.from('properties').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ─── Bulk operations (Sprint 3c) ──────────────────────────────────────────────
+// Cập nhật/xóa nhiều BĐS trong 1 câu (.in) thay vì lặp N request. Trả số dòng ảnh
+// hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field nhạy cảm.
+export async function bulkUpdateProperties(
+  ids: string[],
+  patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('properties')
+    .update({ ...patch, updated_at: new Date().toISOString() }, { count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
+
+export async function bulkDeleteProperties(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('properties')
+    .delete({ count: 'exact' })
+    .in('id', ids);
+  if (error) throw error;
+  return count ?? ids.length;
+}
