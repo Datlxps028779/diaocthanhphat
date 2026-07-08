@@ -1,0 +1,115 @@
+# ============================================================
+# Workflow Deploy lên Cloudflare Pages (CDN) — CHẠY SONG SONG
+# ------------------------------------------------------------
+# Đây là pipeline THAY THẾ cho FTP, nhưng CỐ Ý chỉ chạy thủ công
+# (workflow_dispatch) để KHÔNG ảnh hưởng deploy FTP đang hoạt động.
+# Khi đã xác nhận CDN chạy ổn, đổi `on:` sang push branches [main]
+# và tắt workflow FTP (deploy.yml).
+#
+# Vì sao nên chuyển sang CDN (xem RUNBOOK ở cuối file):
+#   • Deploy atomic + rollback 1 click (hết cảnh trắng trang giữa chừng)
+#   • CDN toàn cầu, cache assets/ảnh, chịu tải ×5 dễ hơn shared hosting
+#   • SSL tự động, không còn quản lý FTP secret dễ rò rỉ
+# ============================================================
+name: Deploy CDN (Cloudflare Pages)
+
+on:
+  # CỐ Ý chỉ chạy thủ công trong giai đoạn chuyển đổi.
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cdn
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # Vite cần env vars khi build (như pipeline FTP). Dùng chung secrets.
+      - name: 🔑 Create .env from secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "❌ Thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong GitHub Secrets!"
+            exit 1
+          fi
+          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" > .env
+          echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
+          echo "✅ Đã tạo .env từ secrets."
+
+      - name: 🏗️ Build production
+        run: npm run build
+
+      - name: ✅ Verify build output
+        run: |
+          test -f dist/index.html || { echo "❌ Thiếu dist/index.html"; exit 1; }
+          grep -rq 'supabase.co' dist/assets/*.js || { echo "❌ Supabase URL chưa inject vào JS"; exit 1; }
+          echo "✅ Build OK, Supabase URL đã inject."
+
+      # Deploy bằng Wrangler. Cần 3 secrets mới (xem RUNBOOK):
+      #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, và tên project Pages.
+      - name: 🚀 Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=main
+
+# ============================================================
+# RUNBOOK — CHUYỂN TỪ FTP SANG CLOUDFLARE PAGES
+# ============================================================
+# BƯỚC 1 — Tạo project Cloudflare Pages
+#   • Dashboard Cloudflare → Workers & Pages → Create → Pages
+#   • Chọn "Direct Upload" (CI sẽ đẩy bằng Wrangler), đặt tên project.
+#     Ghi lại tên này → dùng cho secret CLOUDFLARE_PAGES_PROJECT.
+#
+# BƯỚC 2 — Tạo API token
+#   • My Profile → API Tokens → Create Token
+#   • Template "Edit Cloudflare Workers" HOẶC custom với quyền:
+#       Account › Cloudflare Pages › Edit
+#   • Lấy Account ID ở trang tổng quan Dashboard.
+#
+# BƯỚC 3 — Thêm GitHub Secrets (Settings → Secrets and variables → Actions)
+#   CLOUDFLARE_API_TOKEN      = <token vừa tạo>
+#   CLOUDFLARE_ACCOUNT_ID     = <account id>
+#   CLOUDFLARE_PAGES_PROJECT  = <tên project Pages>
+#   (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY đã có sẵn, dùng lại)
+#
+# BƯỚC 4 — Chạy thử
+#   • Tab Actions → "Deploy CDN (Cloudflare Pages)" → Run workflow.
+#   • Kiểm tra bản deploy ở URL *.pages.dev mà Cloudflare cấp.
+#   • SPA routing: file public/_redirects đã lo fallback về index.html.
+#
+# BƯỚC 5 — Trỏ domain + cắt chuyển
+#   • Trong project Pages → Custom domains → thêm diaocthanhphat.com
+#     (Cloudflare tự cấp SSL). Cập nhật DNS theo hướng dẫn.
+#   • Khi xác nhận ổn: đổi `on:` của workflow NÀY sang:
+#         on:
+#           push:
+#             branches: [main]
+#           workflow_dispatch:
+#     và VÔ HIỆU workflow FTP (deploy.yml) — đổi tên thành .yml.disabled
+#     hoặc xóa. Chỉ nên có MỘT pipeline auto-deploy để tránh ghi đè.
+#
+# ROLLBACK: Cloudflare Pages giữ mọi bản deploy — vào project → Deployments
+# → chọn bản cũ → "Rollback to this deployment". Tức thì, không cần build lại.
+# ============================================================

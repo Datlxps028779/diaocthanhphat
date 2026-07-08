@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { type Page, scrollTop } from './lib/router';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -6,7 +6,8 @@ import { CmsProvider, useCms } from './lib/cms';
 import { applySeoMeta } from './lib/seo';
 import { LandingPage } from './LandingPage';
 import { AdminLogin } from './components/AdminLogin';
-import { AdminPanel } from './components/AdminPanel';
+// AdminPanel (~193KB) chỉ dùng ở trang quản trị — lazy-load để không đưa vào bundle của khách vãng lai
+const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
 import { UserAuthModal } from './components/UserAuthModal';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { ListingsPage } from './pages/ListingsPage';
@@ -177,7 +178,15 @@ function AppInner() {
     if (!user || !isAdmin) {
       return <AdminLogin onSuccess={() => navigate({ name: 'quantri' })} />;
     }
-    return <AdminPanel onLogout={() => { supabase.auth.signOut(); navigate({ name: 'quantri-login' }); }} initialTab={page.tab} />;
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <AdminPanel onLogout={() => { supabase.auth.signOut(); navigate({ name: 'quantri-login' }); }} initialTab={page.tab} />
+      </Suspense>
+    );
   }
 
   // ── Home page (has its own Header/Footer/FloatingButtons)
