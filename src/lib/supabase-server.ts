@@ -1,13 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Property, NewsArticle } from './supabase';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
 // Tạo MỚI mỗi lần gọi, KHÔNG singleton và KHÔNG persist session — tránh chia sẻ
-// state giữa các request. Chỉ đọc dữ liệu public bằng anon key (đúng RLS).
+// state giữa các request. Đọc env qua helper (chấp nhận cả NEXT_PUBLIC_* lẫn VITE_*).
 function serverClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-  return createClient(url, key, {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

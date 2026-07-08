@@ -1,19 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Fail-fast: nếu thiếu env vars, log rõ ràng (Next chạy cả server lẫn client nên
-// không đụng DOM ở đây — lỗi hiển thị qua error boundary/log).
-if (!supabaseUrl || !supabaseAnonKey) {
-  const missing: string[] = [];
-  if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-  if (!supabaseAnonKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  console.error(`[Supabase] Thiếu env vars: ${missing.join(', ')}. ` +
-    `Kiểm tra .env.local (local) hoặc Vercel Environment Variables.`);
+// Client browser. LƯU Ý: trong bundle client, Next chỉ inline biến NEXT_PUBLIC_*
+// (fallback VITE_* trong env.ts chỉ hiệu lực ở server). Nếu Vercel đặt sai tên
+// (VITE_* thay vì NEXT_PUBLIC_*) thì client sẽ rỗng — phải sửa tên trên Vercel.
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('[Supabase] Thiếu NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY ' +
+    'lúc build. Kiểm tra Vercel → Settings → Environment Variables rồi Redeploy.');
 }
 
-export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '');
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export type Area = {
   id: string; name: string; description: string | null;
