@@ -45,13 +45,15 @@ export async function approveUserListing(id: string): Promise<void> {
   if (propErr) throw propErr;
   await supabase.from('user_listings').update({ status: 'approved' }).eq('id', id);
 
-  // Fire-and-forget AI auto-tagging
+  // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
+  // Edge Function ai-autotag xác thực admin — anon key sẽ bị từ chối 401.
   if (inserted?.id) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         propertyId: inserted.id,
         title: listing.title,

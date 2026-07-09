@@ -1,5 +1,12 @@
 import { supabase, type Subscriber } from '../supabase';
 
+// Lấy Bearer token của session hiện tại để gọi Edge Function yêu cầu admin. Nếu
+// chưa đăng nhập, fallback anon key (function sẽ tự trả 401 khi cần admin).
+async function authBearer(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+}
+
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 export interface DashboardStats {
   totalProperties: number;
@@ -115,11 +122,11 @@ export async function analyzeSeo(params: {
   price?: string;
 }): Promise<SeoAnalysisResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const token = await authBearer();
 
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-analytics`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({
       action: 'analyze-seo',
       ...params,
@@ -178,10 +185,10 @@ export async function adminGetSubscribers(): Promise<Subscriber[]> {
 // ─── AI Analytics ─────────────────────────────────────────────────────────────
 export async function callAiAnalytics(): Promise<{ analysis: string; stats: Record<string, unknown> }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const token = await authBearer();
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-analytics`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
   });
   if (!response.ok) throw new Error(`AI Analytics request failed (${response.status})`);
   return response.json();

@@ -1,22 +1,30 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders } from "../_shared/cors.ts";
+
+// Form công khai gọi (gửi lead) → KHÔNG yêu cầu admin. Chỉ siết CORS allowlist +
+// validate/giới hạn độ dài input để chống payload lạm dụng.
+const cap = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : "");
 
 Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response(null, { status: 200, headers: cors });
   }
 
   try {
     const body = await req.json();
-    const { full_name, phone, property_id, property_title, message, budget } = body;
+    const full_name = cap(body.full_name, 120);
+    const phone = cap(body.phone, 20);
+    const property_id = cap(body.property_id, 64);
+    const property_title = cap(body.property_title, 300);
+    const message = cap(body.message, 2000);
+    const budget = cap(body.budget, 100);
 
-    if (!full_name || !phone) {
+    // SĐT VN cơ bản: 8-15 chữ số (cho phép +, khoảng trắng khi nhập)
+    const phoneDigits = phone.replace(/[^\d]/g, "");
+    if (!full_name || phoneDigits.length < 8 || phoneDigits.length > 15) {
       return new Response(
-        JSON.stringify({ error: "full_name and phone are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "full_name và phone hợp lệ là bắt buộc" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
@@ -62,12 +70,12 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ success: true, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { headers: { ...cors, "Content-Type": "application/json" } },
     );
   } catch (err) {
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
     );
   }
 });

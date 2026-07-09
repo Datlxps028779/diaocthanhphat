@@ -1,22 +1,25 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders, verifyAdmin } from "../_shared/cors.ts";
 
 Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response(null, { status: 200, headers: cors });
+  }
+
+  // Dùng service_role để update tags/meta của BẤT KỲ property → chỉ admin.
+  const adminId = await verifyAdmin(req, createClient);
+  if (!adminId) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
   }
 
   try {
     const { propertyId, title, description, city, district, listingType, price, priceUnit, areaSqm } = await req.json();
     if (!propertyId || !title) {
       return new Response(JSON.stringify({ error: "propertyId and title are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -107,9 +110,9 @@ Trả về đúng JSON format sau (không có markdown):
     }).eq("id", propertyId);
 
     return new Response(JSON.stringify({ tags, metaTitle, metaDescription }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
 });
