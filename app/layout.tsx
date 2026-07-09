@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '@/index.css';
+import { serializeJsonLd } from '@/lib/seo';
 import { Providers } from './providers';
 
 const inter = Inter({
@@ -32,8 +33,34 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // JSON-LD Organization + WebSite ở mọi trang — giúp Google Knowledge Graph và
+  // AI crawler nhận diện thương hiệu + hỗ trợ sitelinks search box.
+  const orgJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateAgent',
+    name: SITE_NAME,
+    url: SITE_URL,
+    areaServed: 'Bình Dương, Việt Nam',
+    description: 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
+  };
+  const siteJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    url: SITE_URL,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${SITE_URL}/danh-sach?keyword={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+  };
+
   return (
     <html lang="vi" className={inter.variable}>
+      <head>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>
