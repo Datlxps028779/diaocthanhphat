@@ -1,4 +1,5 @@
 import { supabase, type NewsArticle } from '../supabase';
+import { buildUniqueSlug } from '../slug';
 
 // ─── News ─────────────────────────────────────────────────────────────────────
 export async function getNews(category?: string, limit = 20): Promise<NewsArticle[]> {
@@ -26,7 +27,10 @@ export async function adminGetAllNews(): Promise<NewsArticle[]> {
   return (data ?? []) as NewsArticle[];
 }
 export async function createNews(n: Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>): Promise<void> {
-  const { error } = await supabase.from('news').insert(n);
+  // Slug auto từ tiêu đề (+ hậu tố chống trùng). Chỉ dùng slug nhập tay khi admin
+  // chủ động điền — còn lại luôn sinh tự động để đảm bảo chuẩn SEO.
+  const slug = (n.slug && n.slug.trim()) || buildUniqueSlug(n.title);
+  const { error } = await supabase.from('news').insert({ ...n, slug });
   if (error) throw error;
 }
 export async function updateNews(id: string, n: Partial<NewsArticle>): Promise<void> {

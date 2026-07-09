@@ -51,7 +51,7 @@ export function NewsTab() {
         title={a ? 'Sửa bài viết' : 'Viết bài mới'}
         fields={[
           { name: 'title', label: 'Tiêu đề *', value: a?.title ?? '', required: true },
-          { name: 'slug', label: 'Slug URL *', value: a?.slug ?? '', required: true },
+          { name: 'slug', label: 'Slug URL (để trống sẽ tự sinh từ tiêu đề)', value: a?.slug ?? '' },
           { name: 'category', label: 'Danh mục', value: a?.category ?? 'Thị trường', type: 'select', options: CATEGORIES },
           { name: 'author', label: 'Tác giả', value: a?.author ?? 'Ban biên tập' },
           { name: 'image_url', label: 'URL ảnh bìa', value: a?.image_url ?? '' },

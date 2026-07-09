@@ -1,4 +1,5 @@
 import { supabase, type Property } from '../supabase';
+import { buildSlug, buildUniqueSlug } from '../slug';
 
 // ─── Properties (public) ──────────────────────────────────────────────────────
 export async function getAllProperties(filters?: {
@@ -141,21 +142,15 @@ export async function adminGetAllProperties(): Promise<Property[]> {
 }
 
 // Slug gốc SEO từ tiêu đề tiếng Việt (bỏ dấu, không hậu tố).
+// Slug BĐS: delegate về nguồn chung src/lib/slug.ts (một nguồn chân lý duy nhất).
+// Giữ tên export cũ để không vỡ import hiện có.
 export function buildPropertySlug(title: string): string {
-  return (title ?? '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[đ]/g, 'd')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 80) || 'bat-dong-san';
+  return buildSlug(title);
 }
 
 // Slug SEO kèm hậu tố ngắn để đảm bảo duy nhất mà không cần kiểm tra trùng.
 export function buildUniquePropertySlug(title: string): string {
-  return `${buildPropertySlug(title)}-${Math.random().toString(36).slice(2, 6)}`;
+  return buildUniqueSlug(title);
 }
 
 // URL chuẩn SEO: /bat-dong-san/{slug}. Dùng slug lưu trong DB; fallback UUID chỉ
