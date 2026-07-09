@@ -76,6 +76,10 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
   );
 }
 
+// Mảng rỗng ổn định (stable reference) — tránh tạo `[]` mới mỗi render gây vòng lặp
+// re-render vô hạn khi dùng làm default cho useQuery bị disable.
+const EMPTY_PROPS: Property[] = [];
+
 export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) {
   const [viewportProps, setViewportProps] = useState<Property[]>([]);
   const mapBoundsRef = useRef<MapBounds | null>(null);
@@ -138,15 +142,18 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
   const total = result?.total ?? 0;
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
-  const { data: mapProperties = [] } = useQuery({
+  const { data: mapProperties = EMPTY_PROPS } = useQuery({
     queryKey: qk.propertiesMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
     queryFn: () => getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
     enabled: viewMode === 'map',
   });
-  // Đồng bộ viewport khi dữ liệu map đổi (giữ bounds hiện tại)
+  // Đồng bộ viewport khi dữ liệu map đổi — CHỈ khi đang ở chế độ map. Trước đây effect
+  // chạy mỗi render (default `[]` tạo ref mới → setState → re-render → lặp vô hạn),
+  // chiếm main thread khiến click điều hướng không kịp chạy router.push.
   useEffect(() => {
+    if (viewMode !== 'map') return;
     setViewportProps(filterByBounds(mapProperties, mapBoundsRef.current));
-  }, [mapProperties]);
+  }, [mapProperties, viewMode]);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     mapBoundsRef.current = bounds;
