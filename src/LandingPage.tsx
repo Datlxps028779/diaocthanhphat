@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, MapPin, Building2, Home, TrendingUp, Shield, Phone,
@@ -10,7 +11,7 @@ import { type Property } from './lib/supabase';
 import {
   getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
-  getPageLayout,
+  getPageLayout, buildPropertyPath,
 } from './lib/api';
 import { useAreas, usePropertyTypes } from './lib/hooks/useTaxonomy';
 import { qk } from './lib/queryKeys';
@@ -532,7 +533,12 @@ export function PropertyCard({ property: p, onView, onContact, isFavorited = fal
         </div>
       </div>
       <div className="p-3.5 flex flex-col flex-1">
-        <h3 onClick={onView} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 cursor-pointer hover:text-red-600 transition-colors mb-1.5">{p.title}</h3>
+        <h3 className="mb-1.5">
+          <Link href={buildPropertyPath(p)}
+            className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">
+            {p.title}
+          </Link>
+        </h3>
         <p className="text-red-600 font-black text-base">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
