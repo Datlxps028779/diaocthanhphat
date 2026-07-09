@@ -125,3 +125,18 @@ export function buildArticleJsonLd(a: NewsArticle): Record<string, unknown> {
     url,
   };
 }
+
+// BreadcrumbList JSON-LD — Google hiển thị đường dẫn phân cấp trong kết quả tìm
+// kiếm thay vì URL trần, tăng CTR. items: [{name, path}] theo thứ tự gốc → hiện tại.
+export function buildBreadcrumbJsonLd(items: { name: string; path: string }[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((it, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: it.name,
+      item: `${SITE_URL}${it.path}`,
+    })),
+  };
+}

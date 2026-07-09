@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { serverGetPropertyByIdOrSlug } from '@/lib/supabase-server';
-import { buildPropertyMetadata, buildPropertyJsonLd, serializeJsonLd } from '@/lib/seo';
+import { buildPropertyMetadata, buildPropertyJsonLd, buildBreadcrumbJsonLd, serializeJsonLd } from '@/lib/seo';
 import { PropertyDetailClient } from './PropertyDetailClient';
 
 // ISR: render lại tối đa mỗi giờ (cân tốc độ vs độ tươi). Tin sửa xong crawler thấy
@@ -22,6 +22,12 @@ export default async function PropertyPage({ params }: Params) {
   if (!property) notFound();
 
   const jsonLd = buildPropertyJsonLd(property);
+  const listingHref = property.listing_type === 'cho_thue' ? '/cho-thue' : '/mua-ban';
+  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+    { name: 'Trang chủ', path: '/' },
+    { name: property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán', path: listingHref },
+    { name: property.title, path: `/bat-dong-san/${(property.slug && property.slug.trim()) || property.id}` },
+  ]);
 
   return (
     <>
@@ -29,6 +35,10 @@ export default async function PropertyPage({ params }: Params) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
       />
       <PropertyDetailClient propertyId={slug} initialData={property} />
     </>
