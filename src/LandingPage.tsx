@@ -505,7 +505,8 @@ export function PropertyCard({ property: p, onView, onContact, isFavorited = fal
 }) {
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-      <div className="relative cursor-pointer overflow-hidden" onClick={onView}>
+      <div className="relative overflow-hidden">
+        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <img
           src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
           alt={p.title}
@@ -523,7 +524,7 @@ export function PropertyCard({ property: p, onView, onContact, isFavorited = fal
           <span className="absolute top-2 right-8 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">Cho thuê</span>
         )}
         <button onClick={e => { e.stopPropagation(); onToggleFavorite?.(); }}
-          className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
+          className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
           <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
