@@ -1,0 +1,27 @@
+# HỆ THỐNG KỸ NĂNG (MATT POCOCK SKILLS)
+Trong dự án này, bạn có quyền truy cập vào bộ kỹ năng chuẩn của Matt Pocock được lưu trữ trong thư mục `.matt-skills`. 
+
+Bạn KHÔNG ĐƯỢC tự ý code ngay lập tức. Tùy thuộc vào yêu cầu của tôi, bạn PHẢI tự động đọc nội dung của file skill tương ứng trước khi hành động:
+
+1. Khi tôi yêu cầu phân tích một issue hoặc lên kế hoạch cho một task mới:
+👉 BẮT BUỘC đọc và tuân thủ: `@.matt-skills/skills/engineering/triage/SKILL.md`
+
+2. Khi tôi yêu cầu viết code logic, function, hoặc API:
+👉 BẮT BUỘC đọc và tuân thủ TDD: `@.matt-skills/skills/engineering/tdd/SKILL.md`
+
+3. Khi tôi yêu cầu kiểm tra lại code, tái cấu trúc hoặc tìm lỗi kiến trúc:
+👉 BẮT BUỘC đọc và tuân thủ: `@.matt-skills/skills/engineering/improve-codebase-architecture/SKILL.md`
+
+4. Khi tôi yêu cầu bạn bàn giao công việc để kết thúc phiên làm việc:
+👉 BẮT BUỘC đọc và tuân thủ: `@.matt-skills/skills/productivity/handoff/SKILL.md`
+
+5. Khi tôi yêu cầu review code / PR / thay đổi:
+👉 BẮT BUỘC đọc và tuân thủ: `@.matt-skills/skills/engineering/code-review/SKILL.md`
+
+6. Khi tôi yêu cầu tìm/chẩn đoán bug:
+👉 BẮT BUỘC đọc và tuân thủ: `@.matt-skills/skills/engineering/diagnosing-bugs/SKILL.md`
+
+## QUY TẮC THỰC THI
+Trước khi bắt đầu bất kỳ câu trả lời nào, hãy in ra dòng chữ: 
+`[SYSTEM] Đã kích hoạt kỹ năng: <Tên-kỹ-năng-bạn-vừa-đọc>`
+Sau đó mới bắt đầu xử lý công việc theo đúng quy trình trong file đó.

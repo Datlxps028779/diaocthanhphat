@@ -27,3 +27,6 @@ tsconfig.tsbuildinfo
 *.sw?
 .env
 scripts/deploy-ftp.sh
+
+# Matt Pocock skills (dev tool cục bộ, clone riêng, không đẩy lên Vercel)
+.matt-skills
