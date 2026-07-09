@@ -1,4 +1,0 @@
-# SPA fallback cho Cloudflare Pages / Netlify:
-# mọi route đều trả index.html (router phía client tự xử lý), giữ status 200.
-# Apache (hosting FTP hiện tại) bỏ qua file này — đã có .htaccess lo phần đó.
-/*    /index.html   200
