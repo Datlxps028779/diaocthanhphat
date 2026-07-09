@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { serverGetNewsByIdOrSlug } from '@/lib/supabase-server';
-import { buildNewsMetadata, buildArticleJsonLd } from '@/lib/seo';
+import { buildNewsMetadata, buildArticleJsonLd, serializeJsonLd } from '@/lib/seo';
 import { NewsDetailClient } from './NewsDetailClient';
 
 export const revalidate = 3600;
@@ -24,7 +24,7 @@ export default async function NewsArticlePage({ params }: Params) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       {/* NewsPage tra chi tiết theo id (UUID) — truyền article.id đã resolve từ slug */}
       <NewsDetailClient articleId={article.id} />

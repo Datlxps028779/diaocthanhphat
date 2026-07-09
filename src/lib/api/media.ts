@@ -1,6 +1,23 @@
 import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia } from '../supabase';
 
 // ─── Image Upload ─────────────────────────────────────────────────────────────
+// Chỉ cho phép ảnh raster an toàn. Chặn SVG/HTML — chúng có thể chứa <script> →
+// stored XSS khi mở trực tiếp URL public. Kiểm cả MIME lẫn đuôi file.
+const ALLOWED_IMAGE_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+]);
+const ALLOWED_IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']);
+
+function assertSafeImage(file: File) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const mimeOk = ALLOWED_IMAGE_MIME.has(file.type);
+  const extOk = ALLOWED_IMAGE_EXT.has(ext);
+  if (!mimeOk || !extOk) {
+    throw new Error(`Định dạng "${file.type || ext || 'không rõ'}" không được phép. ` +
+      `Chỉ chấp nhận ảnh JPG, PNG, WEBP, GIF, AVIF.`);
+  }
+}
+
 // Đọc cấu hình dung lượng file tối đa từ site_settings
 export async function getMaxFileSize(): Promise<number> {
   const { data } = await supabase.from('site_settings').select('value').eq('key', 'max_file_size').maybeSingle();
@@ -10,6 +27,7 @@ export async function getMaxFileSize(): Promise<number> {
 
 // Upload ảnh với bucket phân tách: admin-uploads hoặc user-uploads
 export async function uploadImage(file: File, folder = 'properties', isAdmin = false): Promise<string> {
+  assertSafeImage(file);
   // Kiểm tra dung lượng file
   const maxSize = await getMaxFileSize();
   const maxSizeBytes = maxSize * 1024 * 1024; // Chuyển MB sang bytes
@@ -24,7 +42,8 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
   const ext = file.name.split('.').pop();
   const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: true });
+  // upsert:false — tên đã random nên không đụng độ; tránh ghi đè file người khác.
+  const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
   if (error) throw error;
 
   const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
@@ -54,6 +73,7 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   const maxSizeBytes = maxSize * 1024 * 1024;
 
   for (const file of files) {
+    assertSafeImage(file);
     if (file.size > maxSizeBytes) {
       throw new Error(`File "${file.name}" vượt quá dung lượng cho phép (${maxSize}MB).`);
     }
@@ -66,7 +86,7 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   for (const file of files) {
     const ext = file.name.split('.').pop();
     const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: true });
+    const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
     if (error) throw error;
     const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
     const publicUrl = data.publicUrl;

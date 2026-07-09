@@ -20,7 +20,12 @@ export async function getAllProperties(filters?: {
   if (filters?.typeId) q = q.eq('property_type_id', filters.typeId);
   if (filters?.city) q = q.eq('city', filters.city);
   if (filters?.district) q = q.eq('district', filters.district);
-  if (filters?.keyword) q = q.or(`title.ilike.%${filters.keyword}%,address.ilike.%${filters.keyword}%,city.ilike.%${filters.keyword}%,district.ilike.%${filters.keyword}%`);
+  if (filters?.keyword) {
+    // Sanitize: loại ký tự cấu trúc của PostgREST filter (, ( ) \) để keyword không
+    // phá cú pháp .or() và chèn điều kiện lạ (vd lộ tin is_active=false).
+    const kw = filters.keyword.replace(/[,()\\%]/g, ' ').trim();
+    if (kw) q = q.or(`title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`);
+  }
   if (filters?.minPrice !== undefined) q = q.gte('price', filters.minPrice);
   if (filters?.maxPrice !== undefined) q = q.lte('price', filters.maxPrice);
   if (filters?.minArea !== undefined) q = q.gte('area_sqm', filters.minArea);

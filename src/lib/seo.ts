@@ -4,6 +4,16 @@ import type { Property, NewsArticle } from './supabase';
 const SITE_URL = process.env.SITE_URL || 'https://diaocthanhphat.com';
 const SITE_NAME = 'BĐS Bình Dương';
 
+// Serialize JSON-LD an toàn cho <script>. JSON.stringify KHÔNG escape '<' '>' '&'
+// nên chuỗi từ dữ liệu người dùng (vd description có "</script><script>...") sẽ
+// thoát khỏi thẻ script → stored XSS. Escape sang \uXXXX để vô hại trong HTML.
+export function serializeJsonLd(obj: Record<string, unknown>): string {
+  return JSON.stringify(obj)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
 // ─── Property → Metadata (Next.js Metadata API) ───────────────────────────────
 // Thay cho applyPropertySeo cũ (vốn thao tác DOM). Ưu tiên meta_title/description
 // nhập tay, fallback tự sinh. Canonical dùng SITE_URL (server-safe, không window).
