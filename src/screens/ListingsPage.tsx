@@ -6,8 +6,10 @@ import {
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
   List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
 } from 'lucide-react';
+import Link from 'next/link';
 import { type Property } from '../lib/supabase';
 import { getAllProperties, getAllPropertiesForMap, getBanners } from '../lib/api';
+import { buildPropertyPath } from '../lib/api/properties';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
@@ -500,7 +502,6 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {properties.map(p => (
                     <GridCard key={p.id} property={p}
-                      onView={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -516,7 +517,6 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
                 <div className="space-y-3">
                   {properties.map(p => (
                     <ListCard key={p.id} property={p}
-                      onView={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -597,14 +597,15 @@ function EmptyState({ onReset, listingType }: { onReset: () => void; listingType
   );
 }
 
-function GridCard({ property: p, onView, onContact }: { property: Property; onView: () => void; onContact: () => void }) {
+function GridCard({ property: p, onContact }: { property: Property; onContact: () => void }) {
   const [saved, setSaved] = useState(false);
   const pricePerSqm = p.area_sqm && p.price
     ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
     : null;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-      <div className="relative cursor-pointer overflow-hidden" onClick={onView}>
+      <div className="relative overflow-hidden">
+        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
           alt={p.title} className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
@@ -619,7 +620,7 @@ function GridCard({ property: p, onView, onContact }: { property: Property; onVi
           <span className="absolute bottom-8 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}
         <button onClick={e => { e.stopPropagation(); setSaved(!saved); }}
-          className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
+          className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
           <svg className={`w-3.5 h-3.5 ${saved ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
@@ -629,7 +630,7 @@ function GridCard({ property: p, onView, onContact }: { property: Property; onVi
         </div>
       </div>
       <div className="p-3.5 flex flex-col flex-1">
-        <h3 onClick={onView} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 cursor-pointer hover:text-red-600 transition-colors mb-1.5">{p.title}</h3>
+        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
         <p className="text-red-600 font-black text-base">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
@@ -642,7 +643,7 @@ function GridCard({ property: p, onView, onContact }: { property: Property; onVi
           <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
         </div>
         <div className="flex gap-2 mt-auto">
-          <button onClick={onView} className="flex-1 border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</button>
+          <Link href={buildPropertyPath(p)} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
           <button onClick={onContact} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
             <Phone className="w-3 h-3" />Liên hệ
           </button>
@@ -652,20 +653,21 @@ function GridCard({ property: p, onView, onContact }: { property: Property; onVi
   );
 }
 
-function ListCard({ property: p, onView, onContact }: { property: Property; onView: () => void; onContact: () => void }) {
+function ListCard({ property: p, onContact }: { property: Property; onContact: () => void }) {
   const [saved, setSaved] = useState(false);
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
-      <div className="relative w-48 flex-shrink-0 cursor-pointer overflow-hidden" onClick={onView}>
+      <div className="relative w-48 flex-shrink-0 overflow-hidden">
+        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <img src={p.image_url ?? ''} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         {p.listing_type === 'cho_thue' && (
-          <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
+          <span className="absolute top-2 left-2 z-[2] bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}
-        {p.badge && <span className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">{p.badge}</span>}
+        {p.badge && <span className="absolute top-2 left-2 z-[2] bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">{p.badge}</span>}
       </div>
       <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
         <div>
-          <h3 onClick={onView} className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 cursor-pointer hover:text-red-600 transition-colors line-clamp-2">{p.title}</h3>
+          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
           <p className="text-red-600 font-black text-lg mb-1">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
           <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5 flex-wrap">
             {p.area_sqm && <span className="flex items-center gap-0.5"><Building2 className="w-3 h-3" />{p.area_sqm} m²</span>}
@@ -690,7 +692,7 @@ function ListCard({ property: p, onView, onContact }: { property: Property; onVi
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>
-            <button onClick={onView} className="border border-red-400 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</button>
+            <Link href={buildPropertyPath(p)} className="inline-flex items-center border border-red-400 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
             <button onClick={onContact} className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
               <Phone className="w-3 h-3" />Liên hệ
             </button>

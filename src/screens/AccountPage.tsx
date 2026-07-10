@@ -89,9 +89,8 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {favoritesWithProps.map(({ properties: p }) => p && (
               <div key={p.id} className="relative">
-                <PropertyCard 
-                  property={p} 
-                  onView={() => onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined })}
+                <PropertyCard
+                  property={p}
                   onContact={() => {}}
                   isFavorited={true}
                   onToggleFavorite={() => handleRemoveFavorite(p.id)}

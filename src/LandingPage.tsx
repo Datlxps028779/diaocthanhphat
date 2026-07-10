@@ -15,7 +15,7 @@ import {
 } from './lib/api';
 import { useAreas, usePropertyTypes } from './lib/hooks/useTaxonomy';
 import { qk } from './lib/queryKeys';
-import { type Page } from './lib/router';
+import { type Page, pageToHref } from './lib/router';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
 import { Header, Footer, FloatingButtons } from './components/Layout';
@@ -185,7 +185,6 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
                         <PropertyCard property={p}
                           isFavorited={favoriteIds.has(p.id)}
                           onToggleFavorite={() => handleToggleFavorite(p.id)}
-                          onView={() => onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined })}
                           onContact={() => setContactProp(p)} />
                       </div>
                     ))}
@@ -196,7 +195,6 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
                       <PropertyCard key={p.id} property={p}
                         isFavorited={favoriteIds.has(p.id)}
                         onToggleFavorite={() => handleToggleFavorite(p.id)}
-                        onView={() => onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined })}
                         onContact={() => setContactProp(p)} />
                     ))}
                   </div>
@@ -301,14 +299,14 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
                 </div>
                 <h2 className="inline-block text-xl font-black text-gray-900">{sec('news')('title', 'Tin tức thị trường')}</h2>
               </div>
-              <button onClick={() => onNavigate({ name: 'news' })} className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
+              <Link href={pageToHref({ name: 'news' })} className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
                 {sec('news')('btn_view_all', 'Xem tất cả')}<ChevronRight className="w-4 h-4" />
-              </button>
+              </Link>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {news.slice(0, secNum('news', 'max_count', 3)).map(a => (
-                <button key={a.id} onClick={() => onNavigate({ name: 'news', articleId: a.id })}
-                  className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group">
+                <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
+                  className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
                   {a.image_url && (
                     <div className="overflow-hidden h-44">
                       <img src={a.image_url} alt={a.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -323,7 +321,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
                       <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{a.views}</span>
                     </div>
                   </div>
-                </button>
+                </Link>
               ))}
             </div>
           </div>
@@ -499,8 +497,8 @@ export function SectionTitle({ title, subtitle }: { title: string; subtitle?: st
   );
 }
 
-export function PropertyCard({ property: p, onView, onContact, isFavorited = false, onToggleFavorite }: {
-  property: Property; onView: () => void; onContact: () => void;
+export function PropertyCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: {
+  property: Property; onContact: () => void;
   isFavorited?: boolean; onToggleFavorite?: () => void;
 }) {
   return (
@@ -551,7 +549,7 @@ export function PropertyCard({ property: p, onView, onContact, isFavorited = fal
           <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
         </div>
         <div className="flex gap-2 mt-auto">
-          <button onClick={onView} className="flex-1 border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</button>
+          <Link href={buildPropertyPath(p)} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
           <button onClick={onContact} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
             <Phone className="w-3 h-3" />Liên hệ
           </button>

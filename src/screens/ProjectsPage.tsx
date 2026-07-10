@@ -5,7 +5,8 @@ import { Building2, MapPin, Users, CheckCircle, Phone, ArrowRight } from 'lucide
 import { type Project } from '../lib/supabase';
 import { getProjects } from '../lib/api';
 import { useAreas } from '../lib/hooks/useTaxonomy';
-import { type Page, scrollTop } from '../lib/router';
+import Link from 'next/link';
+import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { useSetting } from '../lib/cms';
@@ -284,12 +285,12 @@ export function ProjectsPage({ onNavigate, initialPhase }: { onNavigate: (p: Pag
               <Building2 className="w-12 h-12 text-gray-300 mb-4" />
               <p className="text-lg font-semibold text-gray-400">Dữ liệu đang cập nhật...</p>
               <p className="text-sm text-gray-400 mt-1">Vui lòng quay lại sau hoặc liên hệ trực tiếp để được tư vấn.</p>
-              <button
-                onClick={() => onNavigate({ name: 'listings' })}
-                className="mt-4 px-5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+              <Link
+                href={pageToHref({ name: 'listings' })}
+                className="mt-4 inline-block px-5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
               >
                 Liên hệ ngay
-              </button>
+              </Link>
             </div>
           </div>
         ) : (

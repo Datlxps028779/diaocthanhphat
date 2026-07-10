@@ -11,7 +11,8 @@ import {
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath } from '../lib/api';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
-import { type Page, scrollTop } from '../lib/router';
+import Link from 'next/link';
+import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { LoanCalculator } from '../components/LoanCalculator';
@@ -117,9 +118,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     <div className="min-h-screen pt-[52px] flex flex-col items-center justify-center gap-4">
       <Building2 className="w-16 h-16 text-gray-200" />
       <p className="text-gray-500 font-medium">Không tìm thấy bất động sản này.</p>
-      <button onClick={() => onNavigate({ name: 'listings' })} className="text-red-600 hover:underline text-sm font-medium flex items-center gap-1">
+      <Link href={pageToHref({ name: 'listings' })} className="text-red-600 hover:underline text-sm font-medium flex items-center gap-1">
         <ArrowLeft className="w-4 h-4" />Quay lại danh sách
-      </button>
+      </Link>
     </div>
   );
 
@@ -497,10 +498,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                       </button>
                     ))}
                   </div>
-                  <button onClick={() => onNavigate({ name: 'listings' })}
-                    className="mt-3 w-full text-center text-red-600 text-xs font-semibold hover:underline">
+                  <Link href={pageToHref({ name: 'listings' })}
+                    className="mt-3 block w-full text-center text-red-600 text-xs font-semibold hover:underline">
                     Xem thêm BĐS tương tự →
-                  </button>
+                  </Link>
                 </div>
               )}
             </div>
@@ -517,10 +518,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                 </h2>
                 <p className="text-gray-500 text-sm mt-0.5">Khám phá thêm lựa chọn phù hợp trong cùng khu vực</p>
               </div>
-              <button onClick={() => onNavigate({ name: 'listings', areaId: property.area_id ?? undefined })}
+              <Link href={pageToHref({ name: 'listings', areaId: property.area_id ?? undefined })}
                 className="text-red-600 text-sm font-semibold flex items-center gap-1 hover:underline">
                 Xem tất cả <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              </Link>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {related.map(r => (

@@ -8,7 +8,8 @@ import {
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing } from '../lib/api';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
-import { type Page, scrollTop } from '../lib/router';
+import Link from 'next/link';
+import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
@@ -211,10 +212,10 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
           <p className="text-gray-500 text-sm mb-2">Tin đăng của bạn đang chờ quản trị viên duyệt.</p>
           <p className="text-gray-400 text-xs mb-6">Thông thường trong vòng 1–2 giờ làm việc.</p>
           <div className="flex gap-3">
-            <button onClick={() => onNavigate({ name: 'my-listings' })}
-              className="flex-1 border border-red-500 text-red-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-red-50 transition-colors">
+            <Link href={pageToHref({ name: 'my-listings' })}
+              className="flex-1 text-center border border-red-500 text-red-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-red-50 transition-colors">
               Tin của tôi
-            </button>
+            </Link>
             <button onClick={() => { onNavigate({ name: 'home' }); scrollTop(); }}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
               Về trang chủ
