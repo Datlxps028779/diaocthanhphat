@@ -16,6 +16,8 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { LoanCalculator } from '../components/LoanCalculator';
+import { RecentlyViewed } from '../components/RecentlyViewed';
+import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { VrTourSection } from '../components/VrTourSection';
 import { SocialProofToast } from '../components/SocialProofToast';
 import { useSetting } from '../lib/cms';
@@ -64,6 +66,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     if (property?.id && viewedRef.current !== property.id) {
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
+      recordRecentlyViewed(property);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
@@ -538,6 +541,8 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
             </div>
           </div>
         )}
+
+        <RecentlyViewed excludeId={property.id} />
       </div>
 
       <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />
