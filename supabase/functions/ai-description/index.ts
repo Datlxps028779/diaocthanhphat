@@ -1,17 +1,27 @@
 import { corsHeaders } from "../_shared/cors.ts";
+import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
 
-// Form đăng tin công khai gọi → chỉ siết CORS allowlist.
+// Form đăng tin công khai gọi → siết CORS allowlist + rate-limit theo IP để chống
+// spam / đốt ngân sách LLM (không thể bắt đăng nhập vì form mở cho khách).
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: cors });
   }
 
+  // Gọi LLM tốn tiền → hạn mức chặt: tối đa 6 request/phút mỗi IP.
+  if (isRateLimited(`ai-desc:${clientIp(req)}`, 6, 60_000)) {
+    return new Response(
+      JSON.stringify({ error: "Quá nhiều yêu cầu, vui lòng thử lại sau ít phút." }),
+      { status: 429, headers: { ...cors, "Content-Type": "application/json" } },
+    );
+  }
+
   try {
     const { keywords, listingType, area, price } = await req.json();
-    if (!keywords) {
+    if (!keywords || typeof keywords !== "string" || keywords.length > 500) {
       return new Response(
-        JSON.stringify({ error: "keywords is required" }),
+        JSON.stringify({ error: "keywords is required (chuỗi, tối đa 500 ký tự)" }),
         { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }

@@ -263,14 +263,6 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at   timestamptz DEFAULT now()
 );
 
--- Saved/bookmarked listings (session-based, no auth required)
-CREATE TABLE IF NOT EXISTS saved_listings (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  text NOT NULL,
-  property_id uuid REFERENCES properties(id) ON DELETE CASCADE,
-  created_at  timestamptz DEFAULT now()
-);
-
 -- RLS for news
 ALTER TABLE news ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "news_select_public" ON news FOR SELECT TO anon, authenticated USING (is_published = true);
@@ -284,12 +276,6 @@ CREATE POLICY "projects_select_public" ON projects FOR SELECT TO anon, authentic
 CREATE POLICY "projects_insert_admin"  ON projects FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "projects_update_admin"  ON projects FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "projects_delete_admin"  ON projects FOR DELETE TO authenticated USING (true);
-
--- RLS for saved_listings
-ALTER TABLE saved_listings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "saved_select" ON saved_listings FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "saved_insert" ON saved_listings FOR INSERT TO anon, authenticated WITH CHECK (true);
-CREATE POLICY "saved_delete" ON saved_listings FOR DELETE TO anon, authenticated USING (true);
 
 -- Seed sample news articles
 INSERT INTO news (title, slug, excerpt, content, image_url, category, author) VALUES

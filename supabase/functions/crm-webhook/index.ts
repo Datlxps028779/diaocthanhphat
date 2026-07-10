@@ -1,13 +1,22 @@
 import { corsHeaders } from "../_shared/cors.ts";
+import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
 
-// Form công khai gọi (gửi lead) → KHÔNG yêu cầu admin. Chỉ siết CORS allowlist +
-// validate/giới hạn độ dài input để chống payload lạm dụng.
+// Form công khai gọi (gửi lead) → KHÔNG yêu cầu admin. Siết CORS allowlist +
+// validate/giới hạn độ dài input + rate-limit theo IP để chống spam lead.
 const cap = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : "");
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: cors });
+  }
+
+  // Lead thật cũng đi qua đây → hạn mức thoáng hơn: 12 request/phút mỗi IP.
+  if (isRateLimited(`crm:${clientIp(req)}`, 12, 60_000)) {
+    return new Response(
+      JSON.stringify({ error: "Quá nhiều yêu cầu, vui lòng thử lại sau ít phút." }),
+      { status: 429, headers: { ...cors, "Content-Type": "application/json" } },
+    );
   }
 
   try {
