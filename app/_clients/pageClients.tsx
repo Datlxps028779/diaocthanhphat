@@ -7,6 +7,7 @@ import { InvestPage } from '@/screens/InvestPage';
 import { RegionsPage } from '@/screens/RegionsPage';
 import { NewsPage } from '@/screens/NewsPage';
 import { AboutPage } from '@/screens/AboutPage';
+import { ValuationPage } from '@/screens/ValuationPage';
 import { PostListingPage } from '@/screens/PostListingPage';
 import { MyListingsPage } from '@/screens/MyListingsPage';
 import { AccountPage } from '@/screens/AccountPage';
@@ -65,6 +66,15 @@ export function AboutClient() {
   return (
     <SiteChrome currentPage={{ name: 'about' }}>
       <AboutPage onNavigate={navigate} />
+    </SiteChrome>
+  );
+}
+
+export function ValuationClient() {
+  const navigate = useNavigate();
+  return (
+    <SiteChrome currentPage={{ name: 'valuation' }}>
+      <ValuationPage onNavigate={navigate} />
     </SiteChrome>
   );
 }

@@ -63,6 +63,23 @@ export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId
   return (data ?? []) as Property[];
 }
 
+// Mẫu tham chiếu cho định giá: BĐS cùng khu vực/loại, chỉ lấy field giá + diện tích.
+export async function getComps(filters: { areaId?: string; typeId?: string; listingType?: string }): Promise<
+  { price: number; price_unit: string; area_sqm: number | null }[]
+> {
+  let q = supabase
+    .from('properties')
+    .select('price, price_unit, area_sqm')
+    .eq('is_active', true)
+    .not('area_sqm', 'is', null)
+    .gt('price', 0);
+  if (filters.areaId) q = q.eq('area_id', filters.areaId);
+  if (filters.typeId) q = q.eq('property_type_id', filters.typeId);
+  if (filters.listingType) q = q.eq('listing_type', filters.listingType);
+  const { data } = await q.limit(200);
+  return (data ?? []) as { price: number; price_unit: string; area_sqm: number | null }[];
+}
+
 export async function getFeaturedProperties(): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')
