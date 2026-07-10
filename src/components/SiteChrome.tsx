@@ -8,6 +8,7 @@ import { getAreas } from '../lib/api';
 import { type Area } from '../lib/supabase';
 import { Header, Footer, FloatingButtons } from './Layout';
 import { UserAuthModal } from './UserAuthModal';
+import { CompareBar } from './CompareBar';
 
 // Shell dùng chung cho mọi trang nội dung (trừ home có shell riêng, và admin).
 // Tái tạo phần Header/Footer/FloatingButtons + auth modal của App.tsx cũ.
@@ -31,6 +32,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
       {children}
       <Footer areas={areas} onNavigate={navigate} />
       <FloatingButtons />
+      <CompareBar />
       {authModal && (
         <UserAuthModal
           mode={authModal.mode}

@@ -15,6 +15,7 @@ export type Page =
   | { name: 'news'; articleId?: string; slug?: string; category?: string }
   | { name: 'about' }
   | { name: 'valuation' }
+  | { name: 'compare' }
   | { name: 'post-listing' }
   | { name: 'my-listings' }
   | { name: 'account' }
@@ -44,6 +45,7 @@ export function pageToHref(page: Page): string {
     case 'regions': return '/khu-vuc';
     case 'about': return '/ve-chung-toi';
     case 'valuation': return '/dinh-gia';
+    case 'compare': return '/so-sanh';
     case 'post-listing': return '/dang-tin';
     case 'my-listings': return '/tin-cua-toi';
     case 'account': return '/tai-khoan';

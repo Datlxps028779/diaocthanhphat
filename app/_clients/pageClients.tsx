@@ -8,6 +8,7 @@ import { RegionsPage } from '@/screens/RegionsPage';
 import { NewsPage } from '@/screens/NewsPage';
 import { AboutPage } from '@/screens/AboutPage';
 import { ValuationPage } from '@/screens/ValuationPage';
+import { ComparePage } from '@/screens/ComparePage';
 import { PostListingPage } from '@/screens/PostListingPage';
 import { MyListingsPage } from '@/screens/MyListingsPage';
 import { AccountPage } from '@/screens/AccountPage';
@@ -75,6 +76,15 @@ export function ValuationClient() {
   return (
     <SiteChrome currentPage={{ name: 'valuation' }}>
       <ValuationPage onNavigate={navigate} />
+    </SiteChrome>
+  );
+}
+
+export function CompareClient() {
+  const navigate = useNavigate();
+  return (
+    <SiteChrome currentPage={{ name: 'compare' }}>
+      <ComparePage onNavigate={navigate} />
     </SiteChrome>
   );
 }

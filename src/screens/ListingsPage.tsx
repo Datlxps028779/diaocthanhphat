@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { type Property } from '../lib/supabase';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { buildPropertyPath } from '../lib/api/properties';
+import { CompareButton } from '../components/CompareButton';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
@@ -639,12 +640,15 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
         {p.listing_type === 'cho_thue' && (
           <span className="absolute bottom-8 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}
-        <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
-          className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-          <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-        </button>
+        <div className="absolute top-2 right-2 z-[2] flex items-center gap-1.5">
+          <CompareButton property={p} variant="overlay" />
+          <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
+            className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
+            <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
         <div className="absolute bottom-2 right-2 flex items-center gap-1 text-white/90 text-[10px]">
           <Eye className="w-3 h-3" />{p.views ?? 0}
         </div>
@@ -705,6 +709,7 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
             <span>{new Date(p.created_at).toLocaleDateString('vi-VN')}</span>
           </div>
           <div className="flex gap-2">
+            <CompareButton property={p} variant="inline" />
             <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
               className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center hover:border-red-400 transition-colors">
               <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
