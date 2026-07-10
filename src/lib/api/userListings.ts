@@ -1,4 +1,5 @@
 import { supabase, type UserListing } from '../supabase';
+import { buildUniqueSlug } from '../slug';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
 export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
@@ -29,6 +30,7 @@ export async function approveUserListing(id: string): Promise<void> {
   const { data: listing, error: fetchErr } = await supabase.from('user_listings').select('*').eq('id', id).single();
   if (fetchErr || !listing) throw new Error('Listing not found');
   const { data: inserted, error: propErr } = await supabase.from('properties').insert({
+    slug: buildUniqueSlug(listing.title),
     title: listing.title, description: listing.description,
     price: listing.price, price_unit: listing.price_unit, price_label: listing.price_label,
     listing_type: listing.listing_type ?? 'mua_ban',

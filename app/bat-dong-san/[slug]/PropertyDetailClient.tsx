@@ -13,7 +13,7 @@ export function PropertyDetailClient({ propertyId, initialData }: {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'property', id: propertyId }}>
-      <PropertyDetailPage propertyId={propertyId} onNavigate={navigate} initialData={initialData} />
+      <PropertyDetailPage key={propertyId} propertyId={propertyId} onNavigate={navigate} initialData={initialData} />
     </SiteChrome>
   );
 }

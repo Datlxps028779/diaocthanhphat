@@ -274,7 +274,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId }: { onNavigate: (p: Page) => void; articleId?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles }: { onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[] }) {
   const [category, setCategory] = useState('Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -291,6 +291,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId }: { onNaviga
   const { data: articles = [], isLoading: loading } = useQuery({
     queryKey: qk.news(newsCategory),
     queryFn: () => getNews(newsCategory),
+    // Seed SSR khi ở category mặc định (server prefetch toàn bộ tin mới nhất).
+    initialData: !newsCategory && initialArticles ? initialArticles : undefined,
   });
 
   // activeArticle derive từ detail query — set articleId để mở, undefined để đóng

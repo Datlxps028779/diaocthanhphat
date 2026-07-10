@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { type Property } from '../lib/supabase';
-import { getAllProperties, getAllPropertiesForMap, getBanners } from '../lib/api';
+import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { buildPropertyPath } from '../lib/api/properties';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
@@ -24,6 +24,8 @@ interface ListingsPageProps {
     bedrooms: string; direction: string; legal: string;
     isFeatured: boolean; isHot: boolean; sort: string;
   }>;
+  // Dữ liệu SSR seed sẵn cho view mặc định → crawler thấy list ngay trong HTML gốc.
+  initialData?: { data: Property[]; total: number };
   onNavigate: (p: Page) => void;
 }
 
@@ -82,7 +84,7 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 // re-render vô hạn khi dùng làm default cho useQuery bị disable.
 const EMPTY_PROPS: Property[] = [];
 
-export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) {
+export function ListingsPage({ initialFilters, initialData, onNavigate }: ListingsPageProps) {
   const [viewportProps, setViewportProps] = useState<Property[]>([]);
   const mapBoundsRef = useRef<MapBounds | null>(null);
   const [district, setDistrict] = useState('');
@@ -123,6 +125,16 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
   const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
   const { data: topBanners = [] } = useQuery({ queryKey: qk.banners('listings_top'), queryFn: () => getBanners('listings_top') });
 
+  // Yêu thích: persist thật qua Supabase (trước đây GridCard/ListCard chỉ dùng
+  // useState cục bộ → bấm tim xong mất khi rời trang). Dùng chung logic với LandingPage.
+  const queryClient = useQueryClient();
+  const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
+  const favoriteIds = new Set(favIds);
+  const favMutation = useMutation({
+    mutationFn: (propertyId: string) => toggleFavorite(propertyId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+  });
+
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
   const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
   const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
@@ -135,10 +147,15 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
     isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
     sort, page, limit: PER_PAGE,
   };
+  // Chỉ seed dữ liệu SSR khi filter còn nguyên mặc định (đúng cái server prefetch):
+  // trang 1, không keyword/khu vực/loại/quận, khoảng giá & diện tích mặc định, mới nhất.
+  const isDefaultView = page === 1 && !debouncedKeyword && !areaId && !typeId && !district
+    && priceIdx === 0 && areaIdx === 0 && !bedrooms && !direction && !legal && sort === 'newest';
   const { data: result, isFetching: loading } = useQuery({
     queryKey: qk.properties(filters),
     queryFn: () => getAllProperties(filters),
     placeholderData: keepPreviousData, // giữ grid khi đổi trang, không nháy
+    initialData: isDefaultView && initialData ? initialData : undefined,
   });
   const properties = result?.data ?? [];
   const total = result?.total ?? 0;
@@ -502,6 +519,8 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {properties.map(p => (
                     <GridCard key={p.id} property={p}
+                      isFavorited={favoriteIds.has(p.id)}
+                      onToggleFavorite={() => favMutation.mutate(p.id)}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -517,6 +536,8 @@ export function ListingsPage({ initialFilters, onNavigate }: ListingsPageProps) 
                 <div className="space-y-3">
                   {properties.map(p => (
                     <ListCard key={p.id} property={p}
+                      isFavorited={favoriteIds.has(p.id)}
+                      onToggleFavorite={() => favMutation.mutate(p.id)}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -597,8 +618,7 @@ function EmptyState({ onReset, listingType }: { onReset: () => void; listingType
   );
 }
 
-function GridCard({ property: p, onContact }: { property: Property; onContact: () => void }) {
-  const [saved, setSaved] = useState(false);
+function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   const pricePerSqm = p.area_sqm && p.price
     ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
     : null;
@@ -619,9 +639,9 @@ function GridCard({ property: p, onContact }: { property: Property; onContact: (
         {p.listing_type === 'cho_thue' && (
           <span className="absolute bottom-8 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}
-        <button onClick={e => { e.stopPropagation(); setSaved(!saved); }}
+        <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
           className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-          <svg className={`w-3.5 h-3.5 ${saved ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
+          <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
         </button>
@@ -653,8 +673,7 @@ function GridCard({ property: p, onContact }: { property: Property; onContact: (
   );
 }
 
-function ListCard({ property: p, onContact }: { property: Property; onContact: () => void }) {
-  const [saved, setSaved] = useState(false);
+function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
       <div className="relative w-48 flex-shrink-0 overflow-hidden">
@@ -686,9 +705,9 @@ function ListCard({ property: p, onContact }: { property: Property; onContact: (
             <span>{new Date(p.created_at).toLocaleDateString('vi-VN')}</span>
           </div>
           <div className="flex gap-2">
-            <button onClick={e => { e.stopPropagation(); setSaved(!saved); }}
+            <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
               className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center hover:border-red-400 transition-colors">
-              <svg className={`w-3.5 h-3.5 ${saved ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
+              <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>

@@ -10,12 +10,16 @@ import { AboutPage } from '@/screens/AboutPage';
 import { PostListingPage } from '@/screens/PostListingPage';
 import { MyListingsPage } from '@/screens/MyListingsPage';
 import { AccountPage } from '@/screens/AccountPage';
+import type { Property, NewsArticle } from '@/lib/supabase';
 
-export function ListingsClient({ listingType }: { listingType?: 'mua_ban' | 'cho_thue' }) {
+export function ListingsClient({ listingType, initialData }: {
+  listingType?: 'mua_ban' | 'cho_thue';
+  initialData?: { data: Property[]; total: number };
+}) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
-      <ListingsPage initialFilters={{ listingType }} onNavigate={navigate} />
+      <ListingsPage initialFilters={{ listingType }} initialData={initialData} onNavigate={navigate} />
     </SiteChrome>
   );
 }
@@ -47,11 +51,11 @@ export function RegionsClient() {
   );
 }
 
-export function NewsListClient() {
+export function NewsListClient({ initialArticles }: { initialArticles?: NewsArticle[] }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'news' }}>
-      <NewsPage onNavigate={navigate} />
+      <NewsPage onNavigate={navigate} initialArticles={initialArticles} />
     </SiteChrome>
   );
 }

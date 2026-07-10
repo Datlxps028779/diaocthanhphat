@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ListingsClient } from '../_clients/pageClients';
+import { serverGetListings } from '@/lib/supabase-server';
 
 export const metadata: Metadata = {
   title: 'Mua bán bất động sản',
@@ -8,6 +9,8 @@ export const metadata: Metadata = {
 };
 export const revalidate = 1800;
 
-export default function Page() {
-  return <ListingsClient listingType="mua_ban" />;
+export default async function Page() {
+  // SSR: crawler + AI đọc được danh sách ngay trong HTML gốc (không chờ JS).
+  const props = await serverGetListings('mua_ban');
+  return <ListingsClient listingType="mua_ban" initialData={{ data: props, total: props.length }} />;
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ListingsClient } from '../_clients/pageClients';
+import { serverGetListings } from '@/lib/supabase-server';
 
 export const metadata: Metadata = {
   title: 'Cho thuê bất động sản',
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
 };
 export const revalidate = 1800;
 
-export default function Page() {
-  return <ListingsClient listingType="cho_thue" />;
+export default async function Page() {
+  const props = await serverGetListings('cho_thue');
+  return <ListingsClient listingType="cho_thue" initialData={{ data: props, total: props.length }} />;
 }

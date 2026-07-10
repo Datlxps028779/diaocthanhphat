@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { NewsListClient } from '../_clients/pageClients';
+import { serverGetNews } from '@/lib/supabase-server';
 
 export const metadata: Metadata = {
   title: 'Tin tức thị trường bất động sản',
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
 };
 export const revalidate = 1800;
 
-export default function Page() {
-  return <NewsListClient />;
+export default async function Page() {
+  const articles = await serverGetNews();
+  return <NewsListClient initialArticles={articles} />;
 }

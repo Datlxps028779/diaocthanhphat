@@ -123,12 +123,20 @@ export async function incrementPropertyView(id: string): Promise<void> {
 }
 
 export async function getRelatedProperties(property: Property, limit = 6): Promise<Property[]> {
-  const { data } = await supabase
+  // Chỉ ghép điều kiện với cột non-null: PostgREST cần is.null chứ không phải
+  // eq.null, và tin cùng area/type mới thực sự "tương tự". Nếu cả hai đều null,
+  // bỏ .or() và trả tin mới nhất cùng trạng thái active.
+  const ors: string[] = [];
+  if (property.area_id) ors.push(`area_id.eq.${property.area_id}`);
+  if (property.property_type_id) ors.push(`property_type_id.eq.${property.property_type_id}`);
+
+  let q = supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq('is_active', true).neq('id', property.id)
-    .or(`area_id.eq.${property.area_id},property_type_id.eq.${property.property_type_id}`)
-    .order('created_at', { ascending: false }).limit(limit);
+    .eq('is_active', true).neq('id', property.id);
+  if (ors.length) q = q.or(ors.join(','));
+
+  const { data } = await q.order('created_at', { ascending: false }).limit(limit);
   return (data ?? []) as Property[];
 }
 
