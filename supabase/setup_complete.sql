@@ -507,12 +507,12 @@ WHERE latitude IS NULL;
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO profiles (id, display_name)
+  INSERT INTO public.profiles (id, display_name)
   VALUES (NEW.id, NEW.raw_user_meta_data->>'display_name')
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -1679,52 +1679,20 @@ CREATE POLICY "uf_update" ON user_favorites FOR UPDATE TO authenticated
 CREATE OR REPLACE FUNCTION generate_slug(title text)
 RETURNS text AS $$
 DECLARE
-  slug text;
-  base_slug text;
+  s text;
 BEGIN
-  -- Chuyển thành chữ thường, bỏ dấu, thay khoảng trắng bằng dấu gạch ngang
-  base_slug := regexp_replace(
-    lower(
-      title,
-      'N'
-    ),
-    '[àáạảãâầấậẩẫăằắặẳẵ]', 'a', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[èéẹẻẽêềếệểễ]', 'e', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[ìíịỉĩ]', 'i', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[òóọỏõôồốộổỗơờớợởỡ]', 'o', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[ùúụủũưừứựửữ]', 'u', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[ỳýỵỷỹ]', 'y', 'g'
-  ) || regexp_replace(
-    lower(title),
-    '[đ]', 'd', 'g'
-  );
-  
-  -- Thay các ký tự đặc biệt và khoảng trắng thành gạch ngang
-  slug := regexp_replace(
-    regexp_replace(
-      base_slug,
-      '[^a-z0-9\s-]', '', 'g'
-    ),
-    '\s+', '-', 'g'
-  );
-  
-  -- Loại bỏ các gạch ngang ở đầu và cuối
-  slug := trim(both '-' from slug);
-  
-  -- Giới hạn độ dài slug
-  slug := substring(slug, 1, 100);
-  
-  RETURN slug;
+  -- Bỏ dấu tiếng Việt bằng translate (1 lần), chuẩn hóa về [a-z0-9-], tối đa 80 ký tự.
+  s := lower(coalesce(title, ''));
+  s := translate(s,
+    'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ',
+    'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd');
+  s := regexp_replace(s, '[^a-z0-9\s-]', '', 'g');
+  s := regexp_replace(s, '\s+', '-', 'g');
+  s := regexp_replace(s, '-+', '-', 'g');
+  s := trim(both '-' from s);
+  s := substring(s, 1, 80);
+  IF s = '' THEN s := 'bat-dong-san'; END IF;
+  RETURN s;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
