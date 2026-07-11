@@ -74,7 +74,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const heroImage = g('hero','image','https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg');
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-14">
+    <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative bg-gray-900 h-64 overflow-hidden">
         <img src={heroImage} alt="" className="w-full h-full object-cover opacity-30" />

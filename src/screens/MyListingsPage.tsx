@@ -63,7 +63,7 @@ export function MyListingsPage({ onNavigate }: MyListingsPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-14">
+    <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <Breadcrumb items={[

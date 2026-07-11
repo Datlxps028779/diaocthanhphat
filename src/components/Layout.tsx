@@ -4,7 +4,6 @@ import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, T
 import { type Page, scrollTop } from '../lib/router';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting } from '../lib/cms';
-import { SocialProofToast } from './SocialProofToast';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface HeaderProps {
@@ -268,7 +267,6 @@ export function FloatingButtons() {
   const phone = useSetting('phone_hotline', '0901234567');
   return (
     <>
-      <SocialProofToast />
       <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5">
         <a href={zaloLink} target="_blank" rel="noreferrer"
           className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all"

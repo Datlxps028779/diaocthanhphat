@@ -194,7 +194,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
   const detail = selectedArea ? AREA_DETAILS[selectedArea.slug] ?? AREA_DETAILS['binh-duong'] : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-[52px]">
+    <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-56 md:h-72 flex items-center"
         style={{ backgroundImage: `url('${g('hero','image','https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?auto=compress&w=1200')}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>

@@ -29,7 +29,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
         onShowAuth={(mode) => setAuthModal({ mode })}
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />
-      {children}
+      <div className="pt-[52px] md:pt-[76px]">{children}</div>
       <Footer areas={areas} onNavigate={navigate} />
       <FloatingButtons />
       <CompareBar />

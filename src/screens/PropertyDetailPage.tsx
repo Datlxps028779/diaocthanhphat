@@ -20,7 +20,6 @@ import { LoanCalculator } from '../components/LoanCalculator';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { VrTourSection } from '../components/VrTourSection';
-import { SocialProofToast } from '../components/SocialProofToast';
 import { useSetting } from '../lib/cms';
 
 interface PropertyDetailPageProps {
@@ -115,13 +114,13 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   };
 
   if (loading) return (
-    <div className="min-h-screen pt-[52px] flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   if (!property) return (
-    <div className="min-h-screen pt-[52px] flex flex-col items-center justify-center gap-4">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4">
       <Building2 className="w-16 h-16 text-gray-200" />
       <p className="text-gray-500 font-medium">Không tìm thấy bất động sản này.</p>
       <Link href={pageToHref({ name: 'listings' })} className="text-red-600 hover:underline text-sm font-medium flex items-center gap-1">
@@ -161,8 +160,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   ].filter(Boolean) as { icon: React.ReactNode; label: string; value: string }[];
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-[52px]">
-      <SocialProofToast />
+    <div className="min-h-screen bg-gray-50">
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-100">
