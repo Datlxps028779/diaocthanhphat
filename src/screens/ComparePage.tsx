@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Scale, X, Trash2 } from 'lucide-react';
+import { Scale, X, Trash2, Check } from 'lucide-react';
 import { getCompareList, removeFromCompare, clearCompare, COMPARE_EVENT, type CompareProperty } from '../lib/compare';
 import { buildPropertyPath } from '../lib/api/properties';
 import { Breadcrumb } from '../components/Layout';
@@ -20,17 +20,43 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   }, []);
 
   const price = (p: CompareProperty) => p.price_label ?? `${p.price} ${p.price_unit}`;
-  const rows: { label: string; render: (p: CompareProperty) => React.ReactNode }[] = [
-    { label: 'Giá', render: p => <span className="text-red-600 font-bold">{price(p)}</span> },
-    { label: 'Diện tích', render: p => p.area_sqm ? `${p.area_sqm} m²` : '—' },
-    { label: 'Giá/m²', render: p => p.area_sqm && p.price ? `${(((p.price_unit === 'tỷ' ? p.price * 1000 : p.price)) / p.area_sqm).toFixed(1)} tr/m²` : '—' },
-    { label: 'Phòng ngủ', render: p => p.bedrooms ? `${p.bedrooms}` : '—' },
-    { label: 'Phòng tắm', render: p => p.bathrooms ? `${p.bathrooms}` : '—' },
+  const priceTrieu = (p: CompareProperty) => p.price ? (p.price_unit === 'tỷ' ? p.price * 1000 : p.price) : null;
+  const pricePerSqm = (p: CompareProperty) => {
+    const t = priceTrieu(p);
+    return p.area_sqm && t ? t / p.area_sqm : null;
+  };
+
+  // `metric` trả về giá trị số để so sánh; `better` quyết định giá trị nào là "tốt
+  // nhất" trong hàng (giá & giá/m² thấp hơn thắng, còn lại cao hơn thắng).
+  type Row = {
+    label: string;
+    render: (p: CompareProperty) => React.ReactNode;
+    metric?: (p: CompareProperty) => number | null;
+    better?: 'min' | 'max';
+  };
+  const rows: Row[] = [
+    { label: 'Giá', render: p => <span className="text-red-600 font-bold">{price(p)}</span>, metric: priceTrieu, better: 'min' },
+    { label: 'Diện tích', render: p => p.area_sqm ? `${p.area_sqm} m²` : '—', metric: p => p.area_sqm || null, better: 'max' },
+    { label: 'Giá/m²', render: p => { const v = pricePerSqm(p); return v ? `${v.toFixed(1)} tr/m²` : '—'; }, metric: pricePerSqm, better: 'min' },
+    { label: 'Phòng ngủ', render: p => p.bedrooms ? `${p.bedrooms}` : '—', metric: p => p.bedrooms || null, better: 'max' },
+    { label: 'Phòng tắm', render: p => p.bathrooms ? `${p.bathrooms}` : '—', metric: p => p.bathrooms || null, better: 'max' },
     { label: 'Hướng', render: p => p.direction || '—' },
     { label: 'Pháp lý', render: p => p.legal_status || '—' },
     { label: 'Khu vực', render: p => `${p.district ? p.district + ', ' : ''}${p.city}` },
     { label: 'Hình thức', render: p => p.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán' },
   ];
+
+  // ID các BĐS "thắng" ở một hàng. Chỉ đánh dấu khi có ≥2 giá trị hợp lệ và giá trị
+  // tốt nhất không phải toàn bộ bằng nhau (nếu tất cả bằng nhau thì không nổi bật ai).
+  const bestIds = (r: Row): Set<string> => {
+    if (!r.metric || !r.better || items.length < 2) return new Set();
+    const vals = items.map(p => ({ id: p.id, v: r.metric!(p) })).filter(x => x.v != null) as { id: string; v: number }[];
+    if (vals.length < 2) return new Set();
+    const best = r.better === 'min' ? Math.min(...vals.map(x => x.v)) : Math.max(...vals.map(x => x.v));
+    const winners = vals.filter(x => x.v === best);
+    if (winners.length === vals.length) return new Set();
+    return new Set(winners.map(x => x.id));
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
@@ -87,17 +113,35 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.label} className={i % 2 ? 'bg-gray-50/60' : ''}>
-                  <td className="p-3 text-gray-500 font-medium text-xs">{r.label}</td>
-                  {items.map(p => (
-                    <td key={p.id} className="p-3 text-gray-800">{r.render(p)}</td>
-                  ))}
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const best = bestIds(r);
+                return (
+                  <tr key={r.label} className={i % 2 ? 'bg-gray-50/60' : ''}>
+                    <td className="p-3 text-gray-500 font-medium text-xs">{r.label}</td>
+                    {items.map(p => {
+                      const isBest = best.has(p.id);
+                      return (
+                        <td key={p.id} className={`p-3 text-gray-800 ${isBest ? 'bg-green-50' : ''}`}>
+                          <span className={isBest ? 'inline-flex items-center gap-1 font-semibold text-green-700' : ''}>
+                            {r.render(p)}
+                            {isBest && <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length > 1 && (
+        <p className="text-xs text-gray-400 mt-3 flex items-center gap-1.5">
+          <Check className="w-3.5 h-3.5 text-green-600" />
+          Ô được tô xanh là lựa chọn tốt nhất ở tiêu chí đó (giá & giá/m² thấp hơn, diện tích & số phòng nhiều hơn).
+        </p>
       )}
     </div>
   );
