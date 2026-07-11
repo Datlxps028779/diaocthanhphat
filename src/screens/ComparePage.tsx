@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Scale, X, Trash2, Check, Plus } from 'lucide-react';
-import { getCompareList, removeFromCompare, clearCompare, COMPARE_EVENT, COMPARE_MAX, type CompareProperty } from '../lib/compare';
-import { buildPropertyPath } from '../lib/api/properties';
+import { Scale, X, Trash2, Check, Plus, Share2 } from 'lucide-react';
+import { getCompareList, removeFromCompare, clearCompare, setCompareList, COMPARE_EVENT, COMPARE_MAX, type CompareProperty } from '../lib/compare';
+import { buildPropertyPath, getPropertyById } from '../lib/api/properties';
 import { Breadcrumb } from '../components/Layout';
 import { type Page } from '../lib/router';
 
@@ -11,13 +11,45 @@ import { type Page } from '../lib/router';
 // hydration) và lắng nghe COMPARE_EVENT để cập nhật khi user gỡ bớt.
 export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const [items, setItems] = useState<CompareProperty[]>([]);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     const sync = () => setItems(getCompareList());
-    sync();
     window.addEventListener(COMPARE_EVENT, sync);
+
+    // Link chia sẻ ?ids=a,b,c → dựng lại danh sách từ DB rồi dọn query khỏi URL.
+    const ids = new URLSearchParams(window.location.search).get('ids');
+    const wanted = ids ? ids.split(',').map(s => s.trim()).filter(Boolean).slice(0, COMPARE_MAX) : [];
+    if (wanted.length) {
+      Promise.all(wanted.map(id => getPropertyById(id)))
+        .then(props => {
+          const found = props.filter((p): p is NonNullable<typeof p> => p != null);
+          if (found.length) setCompareList(found);
+          sync();
+        })
+        .catch(() => sync());
+      window.history.replaceState(null, '', window.location.pathname);
+    } else {
+      sync();
+    }
+
     return () => window.removeEventListener(COMPARE_EVENT, sync);
   }, []);
+
+  const share = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?ids=${items.map(p => p.id).join(',')}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'So sánh bất động sản', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }
+    } catch {
+      // user huỷ hộp chia sẻ hoặc clipboard bị chặn → bỏ qua.
+    }
+  };
 
   const price = (p: CompareProperty) => p.price_label ?? `${p.price} ${p.price_unit}`;
   const priceTrieu = (p: CompareProperty) => p.price ? (p.price_unit === 'tỷ' ? p.price * 1000 : p.price) : null;
@@ -70,10 +102,16 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
           <h1 className="text-2xl font-black text-gray-900">So sánh bất động sản</h1>
         </div>
         {items.length > 0 && (
-          <button onClick={() => clearCompare()}
-            className="flex items-center gap-1.5 text-gray-500 hover:text-red-600 text-sm transition-colors">
-            <Trash2 className="w-4 h-4" />Xóa tất cả
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={share}
+              className="flex items-center gap-1.5 text-gray-500 hover:text-red-600 text-sm transition-colors">
+              <Share2 className="w-4 h-4" />{shared ? 'Đã sao chép link' : 'Chia sẻ'}
+            </button>
+            <button onClick={() => clearCompare()}
+              className="flex items-center gap-1.5 text-gray-500 hover:text-red-600 text-sm transition-colors">
+              <Trash2 className="w-4 h-4" />Xóa tất cả
+            </button>
+          </div>
         )}
       </div>
 

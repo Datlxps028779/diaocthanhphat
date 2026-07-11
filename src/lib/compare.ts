@@ -52,6 +52,23 @@ export function isInCompare(id: string): boolean {
   return read().some((p) => p.id === id);
 }
 
+function toEntry(p: Property): CompareProperty {
+  return {
+    id: p.id, slug: p.slug ?? null, title: p.title,
+    image_url: p.image_url, price: p.price, price_unit: p.price_unit,
+    price_label: p.price_label, area_sqm: p.area_sqm,
+    bedrooms: p.bedrooms, bathrooms: p.bathrooms, direction: p.direction,
+    legal_status: p.legal_status, district: p.district, city: p.city,
+    listing_type: p.listing_type ?? null,
+  };
+}
+
+// Ghi đè toàn bộ danh sách so sánh (cắt còn tối đa MAX). Dùng khi mở link
+// chia sẻ để dựng lại đúng các BĐS được chia sẻ.
+export function setCompareList(props: Property[]): void {
+  write(props.slice(0, MAX).map(toEntry));
+}
+
 // Bật/tắt 1 BĐS khỏi danh sách so sánh. Trả về trạng thái mới (true=đang có).
 // Nếu đã đầy MAX và item chưa có → không thêm, trả về false.
 export function toggleCompare(p: Property): { inList: boolean; full: boolean } {
@@ -64,15 +81,7 @@ export function toggleCompare(p: Property): { inList: boolean; full: boolean } {
   if (list.length >= MAX) {
     return { inList: false, full: true };
   }
-  const entry: CompareProperty = {
-    id: p.id, slug: p.slug ?? null, title: p.title,
-    image_url: p.image_url, price: p.price, price_unit: p.price_unit,
-    price_label: p.price_label, area_sqm: p.area_sqm,
-    bedrooms: p.bedrooms, bathrooms: p.bathrooms, direction: p.direction,
-    legal_status: p.legal_status, district: p.district, city: p.city,
-    listing_type: p.listing_type ?? null,
-  };
-  write([...list, entry]);
+  write([...list, toEntry(p)]);
   return { inList: true, full: false };
 }
 
