@@ -4,9 +4,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, MapPin, Building2, Home, TrendingUp, Shield, Phone,
+  Search, MapPin, TrendingUp, Shield, Phone,
   Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight,
-  CheckCircle, Newspaper, Users, Clock, Play
+  CheckCircle, Newspaper, Users, Clock
 } from 'lucide-react';
 import { type Property } from './lib/supabase';
 import {
@@ -17,6 +17,8 @@ import {
 import { useAreas, usePropertyTypes } from './lib/hooks/useTaxonomy';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
+import { quickCategoryToPage } from './lib/quickCategory';
+import { CategoryIcon } from './lib/categoryIcons';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
 import { Header, Footer, FloatingButtons } from './components/Layout';
@@ -144,22 +146,26 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
         <section key="categories" className="py-8 bg-white border-b border-gray-100">
           <div className="max-w-7xl mx-auto px-4">
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              {[
-                { icon: <Home className="w-5 h-5" />, label: sec('categories')('cat1_label', 'Nhà ở') },
-                { icon: <Building2 className="w-5 h-5" />, label: sec('categories')('cat2_label', 'Căn hộ') },
-                { icon: <MapPin className="w-5 h-5" />, label: sec('categories')('cat3_label', 'Đất nền') },
-                { icon: <TrendingUp className="w-5 h-5" />, label: sec('categories')('cat4_label', 'Đất nông nghiệp') },
-                { icon: <Shield className="w-5 h-5" />, label: sec('categories')('cat5_label', 'Biệt thự') },
-                { icon: <Play className="w-5 h-5" />, label: sec('categories')('cat6_label', 'Văn phòng') },
-              ].map((cat, i) => (
-                <button key={i} onClick={() => {
-                  const t = types.find(tp => tp.name.toLowerCase().includes(cat.label.toLowerCase().slice(0, 5)));
-                  goListings(t ? { typeId: t.id } : undefined);
-                }} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-red-400 hover:bg-red-50 transition-all group">
-                  <div className="w-10 h-10 bg-red-50 group-hover:bg-red-100 rounded-full flex items-center justify-center text-red-600 transition-colors">{cat.icon}</div>
-                  <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{cat.label}</span>
-                </button>
-              ))}
+              {[1, 2, 3, 4, 5, 6].map((i) => {
+                const g = sec('categories');
+                const label = g(`cat${i}_label`, ['Nhà ở', 'Căn hộ', 'Đất nền', 'Đất nông nghiệp', 'Biệt thự', 'Văn phòng'][i - 1]);
+                const iconName = g(`cat${i}_icon`, ['Home', 'Building2', 'MapPin', 'TrendingUp', 'Shield', 'Briefcase'][i - 1]);
+                const cfg = {
+                  listingType: g(`cat${i}_listing`, '') as 'mua_ban' | 'cho_thue' | '',
+                  typeId: g(`cat${i}_type`, ''),
+                  district: g(`cat${i}_district`, ''),
+                  legal: g(`cat${i}_legal`, ''),
+                };
+                return (
+                  <button key={i} onClick={() => onNavigate(quickCategoryToPage(cfg))}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-red-400 hover:bg-red-50 transition-all group">
+                    <div className="w-10 h-10 bg-red-50 group-hover:bg-red-100 rounded-full flex items-center justify-center text-red-600 transition-colors">
+                      <CategoryIcon name={iconName} className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>

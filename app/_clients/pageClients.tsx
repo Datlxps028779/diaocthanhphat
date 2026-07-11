@@ -14,14 +14,15 @@ import { MyListingsPage } from '@/screens/MyListingsPage';
 import { AccountPage } from '@/screens/AccountPage';
 import type { Property, NewsArticle } from '@/lib/supabase';
 
-export function ListingsClient({ listingType, initialData }: {
+export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
+  filters?: { typeId?: string; district?: string; legal?: string };
   initialData?: { data: Property[]; total: number };
 }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
-      <ListingsPage initialFilters={{ listingType }} initialData={initialData} onNavigate={navigate} />
+      <ListingsPage initialFilters={{ listingType, ...filters }} initialData={initialData} onNavigate={navigate} />
     </SiteChrome>
   );
 }

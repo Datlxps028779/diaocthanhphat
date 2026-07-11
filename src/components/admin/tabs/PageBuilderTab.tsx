@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Star, Newspaper, Plus, Edit2, CheckCircle, MapPin, Save, AlertCircle, BarChart3, ArrowUp, ArrowDown, Home, Shield, Zap, Layers, LayoutGrid, GripVertical, PanelLeft } from 'lucide-react';
-import type { PageSection } from '../../../lib/supabase';
-import { getPageLayout, adminSavePageLayout } from '../../../lib/api';
+import type { PageSection, PropertyType, District } from '../../../lib/supabase';
+import { getPageLayout, adminSavePageLayout, getPropertyTypes, getDistricts } from '../../../lib/api';
+import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
+import { CATEGORY_ICON_NAMES } from '../../../lib/categoryIcons';
 
 // ─── Page Builder Tab ─────────────────────────────────────────────────────────
 const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
@@ -19,10 +21,12 @@ const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
 
 type SectionSettings = Record<string, unknown>;
 
-function SectionEditor({ sectionId, settings, onChange }: {
+function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts }: {
   sectionId: string;
   settings: SectionSettings;
   onChange: (s: SectionSettings) => void;
+  propertyTypes: PropertyType[];
+  districts: District[];
 }) {
   const get = (key: string, def: string) => (settings[key] as string) ?? def;
   const set = (key: string, val: unknown) => onChange({ ...settings, [key]: val });
@@ -39,6 +43,21 @@ function SectionEditor({ sectionId, settings, onChange }: {
         <input type="text" value={get(k, def)} onChange={e => set(k, e.target.value)} placeholder={placeholder || def}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
       )}
+    </div>
+  );
+
+  // Dropdown chọn 1 giá trị từ danh sách (value có thể khác nhãn hiển thị). Mục
+  // rỗng = "không lọc theo chiều này".
+  const Select = ({ label, k, options, emptyLabel = '— Không lọc —' }: {
+    label: string; k: string; options: { value: string; label: string }[]; emptyLabel?: string;
+  }) => (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <select value={get(k, '')} onChange={e => set(k, e.target.value)}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400">
+        <option value="">{emptyLabel}</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   );
 
@@ -72,11 +91,27 @@ function SectionEditor({ sectionId, settings, onChange }: {
     );
     case 'categories': return (
       <div className="space-y-3">
-        <p className="text-xs text-gray-500">6 danh mục BĐS hiển thị dạng icon grid. Nhãn sẽ được dùng để khớp với loại BĐS trong hệ thống.</p>
+        <p className="text-xs text-gray-500">6 ô danh mục nhanh trên trang chủ. Mỗi ô có nhãn, icon và bộ lọc riêng — bấm vào sẽ mở trang danh sách đã lọc sẵn. Để trống chiều nào thì không lọc theo chiều đó.</p>
         {[1,2,3,4,5,6].map(i => (
-          <div key={i} className="grid grid-cols-2 gap-3">
-            <Field label={`Danh mục #${i}`} k={`cat${i}_label`} def={['Nhà ở','Căn hộ','Đất nền','Đất nông nghiệp','Biệt thự','Văn phòng'][i-1]} />
-            <Field label={`Icon #${i} (tên Lucide)`} k={`cat${i}_icon`} def={['Home','Building2','MapPin','TrendingUp','Shield','Briefcase'][i-1]} />
+          <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
+            <p className="text-xs font-bold text-gray-700">Ô #{i}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Nhãn hiển thị" k={`cat${i}_label`} def={['Nhà ở','Căn hộ','Đất nền','Đất nông nghiệp','Biệt thự','Văn phòng'][i-1]} />
+              <Select label="Icon" k={`cat${i}_icon`} emptyLabel="Home (mặc định)"
+                options={CATEGORY_ICON_NAMES.map(n => ({ value: n, label: n }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Select label="Lọc: Loại BĐS" k={`cat${i}_type`}
+                options={propertyTypes.map(t => ({ value: t.id, label: t.name }))} />
+              <Select label="Lọc: Khu vực" k={`cat${i}_district`}
+                options={districts.map(d => ({ value: d.name, label: d.name }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Select label="Lọc: Pháp lý" k={`cat${i}_legal`}
+                options={LEGAL_OPTIONS.map(l => ({ value: l, label: l }))} />
+              <Select label="Lọc: Hình thức" k={`cat${i}_listing`}
+                options={[{ value: 'mua_ban', label: 'Mua bán' }, { value: 'cho_thue', label: 'Cho thuê' }]} />
+            </div>
           </div>
         ))}
       </div>
@@ -187,9 +222,13 @@ export function PageBuilderTab() {
   const [savedState, setSavedState] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
 
   useEffect(() => {
     getPageLayout().then(data => { setSections(data); setLoading(false); });
+    getPropertyTypes().then(setPropertyTypes);
+    getDistricts().then(setDistricts);
   }, []);
 
   const move = (index: number, dir: -1 | 1) => {
@@ -359,6 +398,8 @@ export function PageBuilderTab() {
                     sectionId={section.id}
                     settings={section.settings as SectionSettings}
                     onChange={s => updateSettings(section.id, s)}
+                    propertyTypes={propertyTypes}
+                    districts={districts}
                   />
                 </div>
               )}

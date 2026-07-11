@@ -10,6 +10,7 @@ import { submitUserListing } from '../lib/api';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
@@ -20,7 +21,6 @@ interface PostListingPageProps {
 
 const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO'];
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
-const LEGAL_OPTIONS = ['Sổ đỏ/sổ hồng', 'Hợp đồng mua bán', 'Giấy tay', 'Chưa có sổ'];
 const AMENITIES_OPTIONS = [
   'Điện nước đầy đủ', 'Đường nhựa', 'An ninh 24/7', 'Gần trường học',
   'Gần bệnh viện', 'Gần chợ', 'Gần KCN', 'View sông', 'Gần cao tốc',

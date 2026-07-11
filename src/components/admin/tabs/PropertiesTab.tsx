@@ -5,6 +5,7 @@ import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, upda
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
@@ -649,7 +650,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
           {/* Legal + direction */}
           <div className="grid grid-cols-2 gap-3">
-            {fld('Pháp lý', 'legal_status', { options: ['Sổ đỏ', 'Sổ hồng', 'Sổ đỏ/sổ hồng', 'Giấy tay', 'Hợp đồng mua bán', 'Chưa có sổ'] })}
+            {fld('Pháp lý', 'legal_status', { options: LEGAL_OPTIONS })}
             {fld('Hướng nhà', 'direction', { options: ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'] })}
           </div>
 

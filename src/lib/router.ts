@@ -3,7 +3,7 @@ export type Page =
   | {
       name: 'listings';
       listingType?: 'mua_ban' | 'cho_thue';
-      areaId?: string; typeId?: string; keyword?: string;
+      areaId?: string; typeId?: string; district?: string; keyword?: string;
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
       isFeatured?: boolean; isHot?: boolean; sort?: string;
@@ -28,6 +28,22 @@ export function scrollTop() {
 
 export const ADMIN_PATH = '/quantrihethong';
 
+// Đọc ngược query string của trang danh sách (Next App Router truyền searchParams
+// dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
+// Là chiều nghịch của phần 'listings' trong pageToHref.
+type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
+export function parseListingParams(sp: RawSearchParams): { typeId?: string; district?: string; legal?: string } {
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
+  const out: { typeId?: string; district?: string; legal?: string } = {};
+  const type = first(sp?.type);
+  const district = first(sp?.district);
+  const legal = first(sp?.legal);
+  if (type) out.typeId = type;
+  if (district) out.district = district;
+  if (legal) out.legal = legal;
+  return out;
+}
+
 // Ánh xạ một Page → URL path. Là nguồn chân lý duy nhất cho điều hướng trong Next
 // (thay window.history.pushState của SPA cũ). Dùng cho <Link> và router.push.
 export function pageToHref(page: Page): string {
@@ -36,10 +52,17 @@ export function pageToHref(page: Page): string {
     case 'property': return `/bat-dong-san/${(page.slug && page.slug.trim()) || page.id}`;
     case 'news':
       return page.slug ? `/tin-tuc/${page.slug}` : (page.articleId ? `/tin-tuc/${page.articleId}` : '/tin-tuc');
-    case 'listings':
-      if (page.listingType === 'mua_ban') return '/mua-ban';
-      if (page.listingType === 'cho_thue') return '/cho-thue';
-      return '/danh-sach';
+    case 'listings': {
+      const base = page.listingType === 'mua_ban' ? '/mua-ban'
+        : page.listingType === 'cho_thue' ? '/cho-thue'
+        : '/danh-sach';
+      const q = new URLSearchParams();
+      if (page.typeId) q.set('type', page.typeId);
+      if (page.district) q.set('district', page.district);
+      if (page.legal) q.set('legal', page.legal);
+      const qs = q.toString();
+      return qs ? `${base}?${qs}` : base;
+    }
     case 'projects': return '/du-an';
     case 'invest': return '/dau-tu';
     case 'regions': return '/khu-vuc';

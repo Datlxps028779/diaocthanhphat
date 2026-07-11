@@ -14,13 +14,14 @@ import { CompareButton } from '../components/CompareButton';
 import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
+import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { PropertyMap, type MapBounds } from '../components/PropertyMap';
 
 interface ListingsPageProps {
   initialFilters?: Partial<{
-    listingType: string; areaId: string; typeId: string; keyword: string;
+    listingType: string; areaId: string; typeId: string; district: string; keyword: string;
     minPrice: number; maxPrice: number; minArea: number; maxArea: number;
     bedrooms: string; direction: string; legal: string;
     isFeatured: boolean; isHot: boolean; sort: string;
@@ -68,7 +69,6 @@ const AREA_RANGES = [
   { label: '500m² – 1.000m²', min: 500, max: 1000 },
   { label: 'Trên 1.000 m²', min: 1000, max: undefined },
 ];
-const LEGAL_OPTIONS = ['Sổ đỏ', 'Sổ hồng', 'Sổ đỏ/sổ hồng', 'Giấy tay', 'Hợp đồng mua bán', 'Chưa có sổ'];
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
 const PER_PAGE = 16;
 
@@ -88,7 +88,7 @@ const EMPTY_PROPS: Property[] = [];
 export function ListingsPage({ initialFilters, initialData, onNavigate }: ListingsPageProps) {
   const [viewportProps, setViewportProps] = useState<Property[]>([]);
   const mapBoundsRef = useRef<MapBounds | null>(null);
-  const [district, setDistrict] = useState('');
+  const [district, setDistrict] = useState(initialFilters?.district ?? '');
 
   const [listingType, setListingType] = useState<ListingTypeKey>((initialFilters?.listingType ?? '') as ListingTypeKey);
   const [keyword, setKeyword] = useState(initialFilters?.keyword ?? '');
@@ -121,7 +121,13 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const { data: areas = [] } = useAreas();
   const { data: types = [] } = usePropertyTypes();
   const { data: districts = [] } = useDistricts(areaId || undefined);
-  useEffect(() => { setDistrict(''); }, [areaId]);
+  // Reset district khi user đổi khu vực — nhưng bỏ qua lần mount đầu để không xoá
+  // district đã seed sẵn từ link "Danh mục nhanh" (?district=...).
+  const areaChangedOnce = useRef(false);
+  useEffect(() => {
+    if (!areaChangedOnce.current) { areaChangedOnce.current = true; return; }
+    setDistrict('');
+  }, [areaId]);
 
   const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
   const { data: topBanners = [] } = useQuery({ queryKey: qk.banners('listings_top'), queryFn: () => getBanners('listings_top') });
