@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { Calculator, TrendingUp, Info, Phone } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Calculator, TrendingUp, Info, Phone, CheckCircle } from 'lucide-react';
 import { getComps } from '../lib/api/properties';
+import { submitLead } from '../lib/api';
 import { estimateValuation, type Valuation } from '../lib/valuation';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
@@ -21,12 +23,48 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Form thu lead ngay tại trang định giá — nối funnel ước tính → liên hệ.
+  const [showLead, setShowLead] = useState(false);
+  const [leadName, setLeadName] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [leadErr, setLeadErr] = useState('');
+
   const fmtTrieu = (trieu: number) =>
     trieu >= 1000 ? `${(trieu / 1000).toFixed(2)} tỷ` : `${Math.round(trieu)} triệu`;
+
+  const areaName = areas.find(a => a.id === areaId)?.name ?? '';
+
+  const leadMutation = useMutation({
+    mutationFn: () => submitLead({
+      full_name: leadName,
+      phone: leadPhone,
+      area_interest: areaName || undefined,
+      budget: result ? `${fmtTrieu(result.lowTrieu)} – ${fmtTrieu(result.highTrieu)}` : undefined,
+      message: result
+        ? `Yêu cầu định giá: ${areaName}${areaSqm ? `, ${areaSqm}m²` : ''}. Ước tính ${fmtTrieu(result.midTrieu)}.`
+        : undefined,
+      source: 'valuation_page',
+    }),
+    onSuccess: () => setLeadErr(''),
+    onError: () => setLeadErr('Có lỗi khi gửi, vui lòng thử lại.'),
+  });
+
+  function handleLeadSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!leadName.trim() || !leadPhone.trim()) {
+      setLeadErr('Vui lòng điền họ tên và số điện thoại.');
+      return;
+    }
+    setLeadErr('');
+    leadMutation.mutate();
+  }
 
   async function handleEstimate() {
     setError('');
     setResult(null);
+    setShowLead(false);
+    setLeadErr('');
+    leadMutation.reset();
     const sqm = parseFloat(areaSqm);
     if (!sqm || sqm <= 0) { setError('Vui lòng nhập diện tích hợp lệ (m²).'); return; }
     if (!areaId) { setError('Vui lòng chọn khu vực.'); return; }
@@ -120,10 +158,33 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
               Đây là ước tính tham khảo, không thay thế thẩm định chính thức.
             </span>
           </div>
-          <button onClick={() => onNavigate({ name: 'listings', areaId, listingType })}
-            className="w-full border border-red-400 text-red-600 font-semibold py-2 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
-            <Phone className="w-4 h-4" />Liên hệ định giá chính xác
-          </button>
+          {leadMutation.isSuccess ? (
+            <div className="flex flex-col items-center text-center py-3">
+              <CheckCircle className="w-10 h-10 text-green-500 mb-2" />
+              <p className="font-bold text-gray-900">Đã gửi yêu cầu!</p>
+              <p className="text-sm text-gray-500">Chuyên viên sẽ liên hệ để định giá chính xác trong thời gian sớm nhất.</p>
+            </div>
+          ) : !showLead ? (
+            <button onClick={() => setShowLead(true)}
+              className="w-full border border-red-400 text-red-600 font-semibold py-2 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+              <Phone className="w-4 h-4" />Liên hệ định giá chính xác
+            </button>
+          ) : (
+            <form onSubmit={handleLeadSubmit} className="space-y-3 border-t border-red-100 pt-4">
+              <p className="text-sm font-semibold text-gray-700">Để lại thông tin, chuyên viên sẽ định giá chính xác cho bạn:</p>
+              <input type="text" value={leadName} onChange={e => setLeadName(e.target.value)}
+                placeholder="Họ và tên *"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-red-400 outline-none" />
+              <input type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)}
+                placeholder="Số điện thoại *"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-red-400 outline-none" />
+              {leadErr && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{leadErr}</p>}
+              <button type="submit" disabled={leadMutation.isPending}
+                className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                <Phone className="w-4 h-4" />{leadMutation.isPending ? 'Đang gửi...' : 'Gửi yêu cầu định giá'}
+              </button>
+            </form>
+          )}
         </div>
       )}
     </div>

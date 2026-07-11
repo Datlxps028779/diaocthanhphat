@@ -5,7 +5,7 @@ export async function submitLead(lead: { full_name: string; phone: string; area_
   const { error } = await supabase.from('leads').insert({
     full_name: lead.full_name, phone: lead.phone,
     area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
-    source: lead.source ?? null,
+    source: lead.source ?? null, budget: lead.budget ?? null,
   });
   if (error) throw error;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,8 +42,8 @@ export async function deleteLead(id: string): Promise<void> {
 
 // Xuất danh sách lead ra chuỗi CSV (UTF-8 BOM để Excel đọc đúng tiếng Việt).
 export function leadsToCsv(leads: Lead[]): string {
-  const cols = ['created_at', 'full_name', 'phone', 'status', 'source', 'assigned_to', 'area_interest', 'message', 'note'];
-  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Trạng thái', 'Nguồn', 'Phụ trách', 'Khu vực quan tâm', 'Lời nhắn', 'Ghi chú'];
+  const cols = ['created_at', 'full_name', 'phone', 'status', 'source', 'assigned_to', 'area_interest', 'budget', 'message', 'note'];
+  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Trạng thái', 'Nguồn', 'Phụ trách', 'Khu vực quan tâm', 'Ngân sách', 'Lời nhắn', 'Ghi chú'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
