@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Scale, X, Trash2, Check } from 'lucide-react';
-import { getCompareList, removeFromCompare, clearCompare, COMPARE_EVENT, type CompareProperty } from '../lib/compare';
+import { Scale, X, Trash2, Check, Plus } from 'lucide-react';
+import { getCompareList, removeFromCompare, clearCompare, COMPARE_EVENT, COMPARE_MAX, type CompareProperty } from '../lib/compare';
 import { buildPropertyPath } from '../lib/api/properties';
 import { Breadcrumb } from '../components/Layout';
 import { type Page } from '../lib/router';
@@ -110,6 +110,15 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                     </div>
                   </th>
                 ))}
+                {items.length < COMPARE_MAX && (
+                  <th className="p-3 align-top min-w-[180px]">
+                    <button onClick={() => onNavigate({ name: 'listings' })}
+                      className="w-full h-full min-h-[128px] flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-500 transition-colors">
+                      <Plus className="w-6 h-6" />
+                      <span className="text-xs font-medium">Thêm BĐS để so sánh</span>
+                    </button>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -129,6 +138,7 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
                         </td>
                       );
                     })}
+                    {items.length < COMPARE_MAX && <td className="p-3"></td>}
                   </tr>
                 );
               })}
