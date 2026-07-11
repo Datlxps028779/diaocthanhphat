@@ -226,7 +226,7 @@ function ConsultationForm() {
   const [error, setError] = useState('');
 
   const submitMutation = useMutation({
-    mutationFn: () => submitLead({ full_name: name, phone, message: notes, area_interest: 'Tư vấn đầu tư' }),
+    mutationFn: () => submitLead({ full_name: name, phone, message: notes, area_interest: 'Tư vấn đầu tư', source: 'invest_page' }),
     onSuccess: () => { setError(''); setSent(true); },
     onError: () => setError('Có lỗi xảy ra, vui lòng thử lại sau.'),
   });

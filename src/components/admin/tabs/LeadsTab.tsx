@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw } from 'lucide-react';
+import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads } from '../../../lib/api';
+import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+// Nhãn nguồn lead dễ đọc (khớp các giá trị source ghi khi submitLead).
+const SOURCE_LABELS: Record<string, string> = {
+  property_detail_form: 'Form chi tiết',
+  phone_reveal: 'Bấm hiện số',
+  contact_modal: 'Popup liên hệ',
+  invest_page: 'Trang đầu tư',
+  about_page: 'Trang liên hệ',
+};
 
 // ─── Leads Tab ────────────────────────────────────────────────────────────────
 export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -22,6 +31,24 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   };
   const handleDelete = async (id: string) => {
     await deleteLead(id); setConfirmDelete(null); await load(); onRefreshStats();
+  };
+
+  // CRM: lưu ghi chú + nhân viên phụ trách (blur/enter mới gọi API, không spam).
+  const handleCrmSave = async (id: string, patch: { note?: string | null; assigned_to?: string | null }) => {
+    await updateLeadCrm(id, patch);
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  };
+
+  // Xuất CSV danh sách lead đang hiển thị (theo filter hiện tại).
+  const handleExportCsv = () => {
+    const csv = leadsToCsv(leads);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ─── Bulk helpers ─────────────────────────────────────────────────────────
@@ -73,6 +100,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <button onClick={load} className={`${leads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
           <RefreshCw className="w-3.5 h-3.5" />Làm mới
         </button>
+        {leads.length > 0 && (
+          <button onClick={handleExportCsv} className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            <Download className="w-3.5 h-3.5" />Xuất CSV
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -117,10 +149,25 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-500">
                       <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>
                       {lead.area_interest && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{lead.area_interest}</span>}
+                      {lead.source && <span className="flex items-center gap-1 text-violet-600"><Tag className="w-3 h-3" />{SOURCE_LABELS[lead.source] ?? lead.source}</span>}
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(lead.created_at).toLocaleString('vi-VN')}</span>
                     </div>
                     {lead.message && <p className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 italic">"{lead.message}"</p>}
                     {lead.properties && <p className="mt-1 text-xs text-blue-600">BĐS: {lead.properties.title}</p>}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                        <UserCheck className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                        <input defaultValue={lead.assigned_to ?? ''} placeholder="Gán nhân viên"
+                          onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
+                          className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
+                      </div>
+                      <div className="flex items-center gap-1 flex-1 min-w-[180px]">
+                        <StickyNote className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                        <input defaultValue={lead.note ?? ''} placeholder="Ghi chú nội bộ"
+                          onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.note ?? null)) handleCrmSave(lead.id, { note: v }); }}
+                          className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
+                      </div>
+                    </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">

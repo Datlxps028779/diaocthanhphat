@@ -36,6 +36,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
 
   // initialData từ server (RSC prefetch) → crawler & first paint có ngay dữ liệu,
@@ -80,6 +81,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
       property_id: property?.id,
       property_title: property?.title,
       budget: form.budget || undefined,
+      source: 'property_detail_form',
     }),
     onSuccess: () => setFormSent(true),
   });
@@ -282,10 +284,17 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
                     <Phone className="w-4 h-4" />Yêu cầu tư vấn
                   </button>
-                  <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
-                    className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
-                    <Phone className="w-4 h-4" />{contactPhone}
-                  </a>
+                  {phoneRevealed ? (
+                    <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
+                      className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
+                      <Phone className="w-4 h-4" />{contactPhone}
+                    </a>
+                  ) : (
+                    <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                      className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
+                      <Phone className="w-4 h-4" />Bấm để hiện số
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -442,10 +451,17 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
                   Yêu cầu tư vấn ngay
                 </button>
-                <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
-                  className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
-                  <Phone className="w-4 h-4" />{contactPhone}
-                </a>
+                {phoneRevealed ? (
+                  <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
+                    className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
+                    <Phone className="w-4 h-4" />{contactPhone}
+                  </a>
+                ) : (
+                  <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                    className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
+                    <Phone className="w-4 h-4" />Bấm để hiện số
+                  </button>
+                )}
                 {contactZalo && (
                   <a href={`https://zalo.me/${contactZalo.replace(/\s/g, '')}`} target="_blank" rel="noreferrer"
                     className="w-full border border-blue-400 text-blue-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
@@ -470,10 +486,17 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     <p className="text-gray-500 text-xs">Chuyên viên BĐS</p>
                   </div>
                 </div>
-                <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
-                  className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                  <Phone className="w-3.5 h-3.5" />{contactPhone}
-                </a>
+                {phoneRevealed ? (
+                  <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
+                    className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                    <Phone className="w-3.5 h-3.5" />{contactPhone}
+                  </a>
+                ) : (
+                  <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                    className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                    <Phone className="w-3.5 h-3.5" />Bấm để hiện số
+                  </button>
+                )}
                 {contactZalo && (
                   <a href={`https://zalo.me/${contactZalo}`} target="_blank" rel="noreferrer"
                     className="mt-2 w-full border border-blue-300 text-blue-600 font-semibold py-2 rounded-xl text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">

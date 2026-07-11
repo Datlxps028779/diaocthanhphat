@@ -37,6 +37,7 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
         area_interest: form.area_interest || undefined,
         message: form.message || undefined,
         property_id: property.id,
+        source: 'contact_modal',
       });
       setSuccess(true);
     } catch {

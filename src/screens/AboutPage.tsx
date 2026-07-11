@@ -29,7 +29,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   const submitMutation = useMutation({
-    mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung' }),
+    mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung', source: 'about_page' }),
     onSuccess: () => setSent(true),
   });
   const loading = submitMutation.isPending;
