@@ -35,6 +35,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout }: 
     { label: nav.menu_rent || 'Cho thuê', page: { name: 'listings', listingType: 'cho_thue' } },
     { label: nav.menu_projects || 'Dự án', page: { name: 'projects' } },
     { label: nav.menu_invest || 'Đầu tư', page: { name: 'invest' } },
+    { label: nav.menu_valuation || 'Định giá', page: { name: 'valuation' } },
     { label: nav.menu_news || 'Tin tức', page: { name: 'news' } },
     { label: nav.menu_about || 'Về chúng tôi', page: { name: 'about' } },
   ];
