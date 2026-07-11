@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   MapPin, Phone, CheckCircle, Heart, Share2, Shield,
@@ -179,9 +180,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
             {/* Gallery */}
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-              <div className="relative">
-                <img src={allImages[activeImg]} alt={property.title}
-                  className="w-full aspect-video object-cover" />
+              <div className="relative aspect-video">
+                <Image src={allImages[activeImg]} alt={property.title} fill priority
+                  sizes="(max-width: 768px) 100vw, 66vw" className="object-cover" />
                 {allImages.length > 1 && (
                   <div className="absolute inset-0 flex items-center justify-between px-3">
                     <button onClick={() => setActiveImg(i => (i - 1 + allImages.length) % allImages.length)}

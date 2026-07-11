@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, MapPin, Building2, Home, TrendingUp, Shield, Phone,
@@ -386,7 +387,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
       <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-14">
         <div className="absolute inset-0">
-          <img src={heroBg} alt="hero" loading="eager" className="w-full h-full object-cover" />
+          <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/50 to-black/70" />
         </div>
 
