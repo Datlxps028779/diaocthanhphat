@@ -433,8 +433,8 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
               ))}
             </div>
 
-            <div className="flex gap-2 flex-wrap md:flex-nowrap">
-              <div className="relative flex-1 min-w-0">
+            <div className="flex gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
