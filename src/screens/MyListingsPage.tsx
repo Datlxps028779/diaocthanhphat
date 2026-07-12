@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw, Pencil } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw, Pencil, CalendarClock } from 'lucide-react';
 import { type UserListing } from '../lib/supabase';
-import { getMyListings, deleteMyListing, submitUserListing } from '../lib/api';
+import { getMyListings, deleteMyListing, submitUserListing, renewMyListing } from '../lib/api';
+import { daysUntilExpiry, expiryLabel } from '../lib/listingExpiry';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
@@ -17,13 +18,15 @@ const STATUS_MAP = {
   pending: { label: 'Chờ duyệt', icon: <Clock className="w-3.5 h-3.5" />, cls: 'bg-amber-100 text-amber-700' },
   approved: { label: 'Đã duyệt', icon: <CheckCircle className="w-3.5 h-3.5" />, cls: 'bg-emerald-100 text-emerald-700' },
   rejected: { label: 'Từ chối', icon: <XCircle className="w-3.5 h-3.5" />, cls: 'bg-red-100 text-red-700' },
+  expired: { label: 'Hết hạn', icon: <CalendarClock className="w-3.5 h-3.5" />, cls: 'bg-gray-200 text-gray-600' },
 };
 
 export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [tab, setTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [tab, setTab] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'expired'>('all');
   const [resubmitting, setResubmitting] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState<string | null>(null);
 
   const { data: listings = [], isLoading: loading } = useQuery({
     queryKey: qk.myListings(),
@@ -45,7 +48,7 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
     mutationFn: async (listing: UserListing) => {
       // Xóa tin bị từ chối rồi đăng lại mới
       await deleteMyListing(listing.id);
-      const { id, user_id, status, reject_reason, created_at, updated_at, areas, property_types, profiles, ...rest } = listing;
+      const { id, user_id, status, reject_reason, expires_at, property_id, created_at, updated_at, areas, property_types, profiles, ...rest } = listing;
       await submitUserListing(rest);
     },
     onMutate: (listing) => setResubmitting(listing.id),
@@ -56,11 +59,22 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
   });
   const handleResubmit = (listing: UserListing) => resubmitMutation.mutate(listing);
 
+  const renewMutation = useMutation({
+    mutationFn: (id: string) => renewMyListing(id),
+    onMutate: (id) => setRenewing(id),
+    onSettled: () => {
+      setRenewing(null);
+      queryClient.invalidateQueries({ queryKey: qk.myListings() });
+    },
+  });
+  const handleRenew = (id: string) => renewMutation.mutate(id);
+
   const counts = {
     all: listings.length,
     pending: listings.filter(l => l.status === 'pending').length,
     approved: listings.filter(l => l.status === 'approved').length,
     rejected: listings.filter(l => l.status === 'rejected').length,
+    expired: listings.filter(l => l.status === 'expired').length,
   };
 
   return (
@@ -97,7 +111,7 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
         )}
         {/* Tabs */}
         <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-          {(['all', 'pending', 'approved', 'rejected'] as const).map(s => (
+          {(['all', 'pending', 'approved', 'rejected', 'expired'] as const).map(s => (
             <button key={s} onClick={() => setTab(s)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold flex-shrink-0 transition-colors ${tab === s ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
               {s === 'all' ? 'Tất cả' : STATUS_MAP[s].label}
@@ -149,11 +163,27 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
                         <span>{listing.city}</span>
                         {listing.area_sqm && <span>{listing.area_sqm} m²</span>}
                         <span>{new Date(listing.created_at).toLocaleDateString('vi-VN')}</span>
+                        {listing.status === 'approved' && (() => {
+                          const d = daysUntilExpiry(listing.expires_at);
+                          if (d == null) return null;
+                          const soon = d <= 7;
+                          return (
+                            <span className={`inline-flex items-center gap-1 font-semibold ${soon ? 'text-amber-600' : 'text-gray-400'}`}>
+                              <CalendarClock className="w-3.5 h-3.5" />{expiryLabel(listing.expires_at)}
+                            </span>
+                          );
+                        })()}
                       </div>
                       {listing.status === 'rejected' && listing.reject_reason && (
                         <div className="mt-2 bg-red-50 border border-red-100 text-red-700 text-xs rounded-lg px-3 py-2 flex items-start gap-1.5">
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                           <span><strong>Lý do từ chối:</strong> {listing.reject_reason}</span>
+                        </div>
+                      )}
+                      {listing.status === 'expired' && (
+                        <div className="mt-2 bg-gray-50 border border-gray-200 text-gray-600 text-xs rounded-lg px-3 py-2 flex items-start gap-1.5">
+                          <CalendarClock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>Tin đã hết hạn hiển thị và được ẩn khỏi trang công khai. Bấm <strong>Gia hạn</strong> để gửi duyệt lại.</span>
                         </div>
                       )}
                     </div>
@@ -176,6 +206,19 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
                           {resubmitting === listing.id
                             ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Đang gửi...</>
                             : <><RefreshCw className="w-3 h-3" />Gửi lại</>
+                          }
+                        </button>
+                      )}
+                      {listing.status === 'expired' && (
+                        <button
+                          onClick={() => handleRenew(listing.id)}
+                          disabled={renewing === listing.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-60"
+                          title="Gia hạn: gửi tin duyệt lại để hiển thị tiếp"
+                        >
+                          {renewing === listing.id
+                            ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Đang gửi...</>
+                            : <><CalendarClock className="w-3 h-3" />Gia hạn</>
                           }
                         </button>
                       )}

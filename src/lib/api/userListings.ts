@@ -1,8 +1,9 @@
 import { supabase, type UserListing } from '../supabase';
 import { buildUniqueSlug } from '../slug';
+import { computeExpiresAt } from '../listingExpiry';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
-export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
+export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
   const { error } = await supabase.from('user_listings').insert(listing);
   if (error) throw error;
 }
@@ -29,7 +30,7 @@ export async function getMyListing(id: string): Promise<UserListing | null> {
 // duyệt lại (xoá luôn lý do từ chối cũ). RLS user_listings_update_own giới hạn đúng chủ.
 export async function updateMyListing(
   id: string,
-  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
+  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
 ): Promise<void> {
   const { data, error } = await supabase
     .from('user_listings')
@@ -71,8 +72,10 @@ export async function approveUserListing(id: string): Promise<void> {
     formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
   }).select('id').single();
   if (propErr) throw propErr;
-  // Lưu property_id để trigger biết dòng properties nào cần ẩn khi tin bị từ chối/xóa/sửa.
-  await supabase.from('user_listings').update({ status: 'approved', property_id: inserted?.id ?? null }).eq('id', id);
+  // Lưu property_id để trigger biết dòng properties nào cần ẩn khi tin bị từ chối/xóa/sửa/hết hạn.
+  // Đặt hạn hiển thị mặc định 60 ngày kể từ lúc duyệt (giữ hạn cũ nếu admin đã đặt riêng).
+  const expiresAt = listing.expires_at ?? computeExpiresAt(new Date().toISOString());
+  await supabase.from('user_listings').update({ status: 'approved', property_id: inserted?.id ?? null, expires_at: expiresAt }).eq('id', id);
 
   // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
   // Edge Function ai-autotag xác thực admin — anon key sẽ bị từ chối 401.
@@ -99,6 +102,29 @@ export async function approveUserListing(id: string): Promise<void> {
 }
 export async function rejectUserListing(id: string, reason: string): Promise<void> {
   const { error } = await supabase.from('user_listings').update({ status: 'rejected', reject_reason: reason }).eq('id', id);
+  if (error) throw error;
+}
+
+// User tự gia hạn tin đã hết hạn (hoặc sắp hết hạn): đưa về 'pending' để admin
+// duyệt lại → duyệt xong nhận hạn mới 60 ngày. RLS user_listings_update_own buộc
+// status sau khi sửa = 'pending' nên user không thể tự kéo dài hạn mà không qua duyệt.
+// .select() bắt trường hợp RLS lọc mất dòng (0-row update mà không báo lỗi).
+export async function renewMyListing(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('user_listings')
+    .update({ status: 'pending', reject_reason: null })
+    .eq('id', id)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('Không gia hạn được tin — bạn không có quyền hoặc tin không tồn tại.');
+  }
+}
+
+// Admin đặt/đổi ngày hết hạn cho 1 tin (form chỉnh sửa BĐS). Chỉ đổi expires_at,
+// giữ nguyên status. RLS user_listings_admin_update (is_admin) cho phép.
+export async function adminSetExpiry(id: string, expiresAtISO: string | null): Promise<void> {
+  const { error } = await supabase.from('user_listings').update({ expires_at: expiresAtISO }).eq('id', id);
   if (error) throw error;
 }
 

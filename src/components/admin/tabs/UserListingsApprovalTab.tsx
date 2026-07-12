@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2 } from 'lucide-react';
+import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock } from 'lucide-react';
 import type { UserListing } from '../../../lib/supabase';
-import { adminGetUserListings, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing } from '../../../lib/api';
+import { adminGetUserListings, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
+import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 
 // ─── User Listings Approval Tab ───────────────────────────────────────────────
 export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -46,6 +47,16 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); setDeleteModal(null); }
   };
 
+  // Admin chỉnh ngày hết hạn tin đã duyệt (input type=date → ISO cuối ngày đó).
+  const handleSetExpiry = async (id: string, dateStr: string) => {
+    setProcessingId(id);
+    try {
+      const iso = dateStr ? new Date(`${dateStr}T23:59:59`).toISOString() : null;
+      await adminSetExpiry(id, iso);
+      await load(); onRefreshStats();
+    } catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); }
+  };
+
   // ─── Bulk helpers ─────────────────────────────────────────────────────────
   // Chỉ cho chọn tin đang chờ duyệt — duyệt/từ chối tin đã xử lý là vô nghĩa.
   const pendingIds = listings.filter(l => l.status === 'pending').map(l => l.id);
@@ -80,6 +91,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     pending: { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-700' },
     approved: { label: 'Đã duyệt', cls: 'bg-emerald-100 text-emerald-700' },
     rejected: { label: 'Từ chối', cls: 'bg-red-100 text-red-700' },
+    expired: { label: 'Hết hạn', cls: 'bg-gray-200 text-gray-600' },
   };
 
   return (
@@ -93,8 +105,17 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
           </div>
         </div>
       )}
+      {statusFilter === 'expired' && (
+        <div className="flex items-start gap-2 bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl px-4 py-3">
+          <CalendarClock className="w-5 h-5 flex-shrink-0 text-gray-500 mt-0.5" />
+          <div>
+            <p className="font-semibold text-gray-900">Kho tin đã hết hạn hiển thị</p>
+            <p className="text-xs text-gray-500 mt-0.5">Tin quá hạn (mặc định 60 ngày) tự ẩn khỏi trang công khai. Bấm <b>Duyệt lại</b> để hiển thị tiếp với hạn mới, hoặc <b>Xóa hẳn</b> để gỡ vĩnh viễn.</p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2 flex-wrap">
-        {(['all', 'pending', 'approved', 'rejected'] as const).map(s => (
+        {(['all', 'pending', 'approved', 'rejected', 'expired'] as const).map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${statusFilter === s ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
             {s === 'all' ? 'Tất cả' : STATUS_CONFIG[s]?.label}
@@ -154,6 +175,15 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                           <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{listing.city}</span>
                           <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{listing.contact_phone}</span>
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(listing.created_at).toLocaleString('vi-VN')}</span>
+                          {listing.status === 'approved' && (() => {
+                            const d = daysUntilExpiry(listing.expires_at);
+                            if (d == null) return null;
+                            return (
+                              <span className={`flex items-center gap-1 font-semibold ${d <= 7 ? 'text-amber-600' : 'text-gray-500'}`}>
+                                <CalendarClock className="w-3 h-3" />{expiryLabel(listing.expires_at)}
+                              </span>
+                            );
+                          })()}
                         </div>
                         {listing.status === 'rejected' && listing.reject_reason && (
                           <p className="text-xs text-red-600 mt-1 bg-red-50 px-2 py-1 rounded">Lý do: {listing.reject_reason}</p>
@@ -176,11 +206,20 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                       </button>
                     </div>
                   )}
-                  {listing.status === 'rejected' && (
+                  {listing.status === 'approved' && (
+                    <div className="flex flex-col gap-1 flex-shrink-0 items-end">
+                      <label className="text-[10px] text-gray-400 font-medium">Ngày hết hạn</label>
+                      <input type="date" disabled={processingId === listing.id}
+                        defaultValue={listing.expires_at ? listing.expires_at.slice(0, 10) : ''}
+                        onChange={e => handleSetExpiry(listing.id, e.target.value)}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60" />
+                    </div>
+                  )}
+                  {(listing.status === 'rejected' || listing.status === 'expired') && (
                     <div className="flex flex-col gap-2 flex-shrink-0">
                       <button onClick={() => handleRestore(listing.id)} disabled={processingId === listing.id}
                         className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
-                        title="Duyệt lại tin này (khôi phục lên công khai)">
+                        title="Duyệt lại tin này (khôi phục lên công khai với hạn mới)">
                         <RotateCcw className="w-3.5 h-3.5" />Duyệt lại
                       </button>
                       <button onClick={() => setDeleteModal(listing.id)} disabled={processingId === listing.id}

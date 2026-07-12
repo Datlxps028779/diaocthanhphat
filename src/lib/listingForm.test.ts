@@ -5,7 +5,7 @@ import type { UserListing } from './supabase';
 // Row DB tối thiểu để dựng state form. Các test override phần cần kiểm.
 function makeListing(over: Partial<UserListing> = {}): UserListing {
   return {
-    id: 'l1', user_id: 'u1', status: 'approved', reject_reason: null,
+    id: 'l1', user_id: 'u1', status: 'approved', reject_reason: null, expires_at: null,
     title: 'Bán nhà', description: null,
     price: 0, price_unit: 'tỷ', price_label: null,
     listing_type: 'mua_ban', price_per_month: null,
