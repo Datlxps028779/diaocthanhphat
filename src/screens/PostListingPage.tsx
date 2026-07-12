@@ -3,13 +3,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Home, MapPin, Phone,
-  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search
+  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing } from '../lib/api';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { useAuth } from '../lib/auth';
+import { requestAuth } from '../lib/authModal';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
@@ -34,6 +36,7 @@ const LISTING_TYPE_OPTIONS: { value: ListingType; label: string; desc: string; c
 const isRental = (t: ListingType) => t === 'cho_thue';
 
 export function PostListingPage({ onNavigate }: PostListingPageProps) {
+  const { user, loading: authLoading } = useAuth();
   const [step, setStep] = useState(0);
   const { data: areas = [] } = useAreas();
   const { data: types = [] } = usePropertyTypes();
@@ -204,6 +207,33 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
     if (!validateStep()) return;
     submitMutation.mutate();
   };
+
+  // Gate đăng nhập: chưa đăng nhập thì KHÔNG cho vào form (RLS user_listings đòi
+  // auth.uid() = user_id → submit sẽ bị chặn). Hiện màn mời đăng nhập thay vì để
+  // người dùng điền hết rồi bấm gửi mà không có gì xảy ra.
+  if (!authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Home className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="font-black text-2xl text-gray-900 mb-2">Đăng nhập để đăng tin</h2>
+          <p className="text-gray-500 text-sm mb-6">Bạn cần đăng nhập tài khoản trước khi đăng tin bất động sản.</p>
+          <div className="flex gap-3">
+            <button onClick={() => { onNavigate({ name: 'home' }); scrollTop(); }}
+              className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors">
+              Về trang chủ
+            </button>
+            <button onClick={() => requestAuth('login')}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+              Đăng nhập
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -570,12 +600,6 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
                   </div>
                 ))}
               </div>
-
-              {errors.submit && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2.5">
-                  {errors.submit}
-                </div>
-              )}
             </div>
           )}
 
@@ -659,6 +683,13 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
                   focusKeywords={seo.focusKeywords}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Lỗi khi gửi tin — đặt ngoài các step để luôn hiển thị cạnh nút submit */}
+          {errors.submit && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5 mt-6">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{errors.submit}
             </div>
           )}
 

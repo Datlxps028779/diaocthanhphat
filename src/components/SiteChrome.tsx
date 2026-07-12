@@ -5,6 +5,7 @@ import { type Page } from '../lib/router';
 import { useNavigate } from '../lib/useNavigate';
 import { useAuth } from '../lib/auth';
 import { getAreas } from '../lib/api';
+import { SHOW_AUTH_EVENT } from '../lib/authModal';
 import { type Area } from '../lib/supabase';
 import { Header, Footer, FloatingButtons } from './Layout';
 import { UserAuthModal } from './UserAuthModal';
@@ -19,6 +20,17 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
   const [authModal, setAuthModal] = useState<{ mode: 'login' | 'register' } | null>(null);
 
   useEffect(() => { getAreas().then(setAreas).catch(() => {}); }, []);
+
+  // Trang con (vd đăng tin) yêu cầu mở modal đăng nhập qua global event vì modal
+  // sống ở shell này, không truyền onShowAuth xuống mọi page.
+  useEffect(() => {
+    const onShow = (e: Event) => {
+      const mode = (e as CustomEvent<{ mode?: 'login' | 'register' }>).detail?.mode ?? 'login';
+      setAuthModal({ mode });
+    };
+    window.addEventListener(SHOW_AUTH_EVENT, onShow);
+    return () => window.removeEventListener(SHOW_AUTH_EVENT, onShow);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
