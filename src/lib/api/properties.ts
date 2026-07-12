@@ -4,7 +4,7 @@ import { buildSlug, buildUniqueSlug } from '../slug';
 // ─── Properties (public) ──────────────────────────────────────────────────────
 export async function getAllProperties(filters?: {
   listingType?: string; areaId?: string; typeId?: string; city?: string; keyword?: string;
-  district?: string;
+  district?: string; ward?: string;
   minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
   bedrooms?: string; direction?: string; legal?: string;
   isFeatured?: boolean; isHot?: boolean;
@@ -21,6 +21,7 @@ export async function getAllProperties(filters?: {
   if (filters?.typeId) q = q.eq('property_type_id', filters.typeId);
   if (filters?.city) q = q.eq('city', filters.city);
   if (filters?.district) q = q.eq('district', filters.district);
+  if (filters?.ward) q = q.eq('ward', filters.ward);
   if (filters?.keyword) {
     // Sanitize: loại ký tự cấu trúc của PostgREST filter (, ( ) \) để keyword không
     // phá cú pháp .or() và chèn điều kiện lạ (vd lộ tin is_active=false).

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star } from 'lucide-react';
-import type { District, Property, Area, PropertyType } from '../../../lib/supabase';
-import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
+import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
+import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -354,6 +354,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     address: property?.address ?? '',
     city: property?.city ?? '',
     district: property?.district ?? '',
+    ward: property?.ward ?? '',
     area_id: property?.area_id ?? '',
     property_type_id: property?.property_type_id ?? '',
     image_url: property?.image_url ?? '',
@@ -384,6 +385,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   });
 
   const [districts, setDistricts] = useState<District[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
   const [mapSearchQuery, setMapSearchQuery] = useState(property?.city ?? '');
   const isRent = form.listing_type === 'cho_thue';
   const seoScore = calcSeoScore(form.title, form.description, form.image_url, form.area_sqm, form.price);
@@ -422,6 +424,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     setField('area_id', areaId);
     setField('city', area?.name ?? '');
     setField('district', '');
+    setField('ward', '');
+    setWards([]);
     if (areaId) {
       getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
       if (area?.name) setMapSearchQuery(area.name);
@@ -432,12 +436,23 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   const handleDistrictChange = useCallback((districtName: string) => {
     setField('district', districtName);
+    setField('ward', '');
+    const d = districts.find(x => x.name === districtName);
+    if (d) getWards(d.id).then(setWards).catch(() => setWards([]));
+    else setWards([]);
     if (districtName && form.city) setMapSearchQuery(`${districtName}, ${form.city}`);
-  }, [form.city]);
+  }, [form.city, districts]);
 
   useEffect(() => {
     if (property?.area_id) getDistricts(property.area_id).then(setDistricts).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nạp wards khi sửa BĐS có sẵn district (districts vừa load xong → map tên ra id).
+  useEffect(() => {
+    if (!property?.district || districts.length === 0) return;
+    const d = districts.find(x => x.name === property.district);
+    if (d) getWards(d.id).then(setWards).catch(() => {});
+  }, [districts, property?.district]);
 
   const seoColor = seoScore >= 70 ? 'text-emerald-600' : seoScore >= 40 ? 'text-amber-600' : 'text-red-600';
   const seoBarColor = seoScore >= 70 ? 'bg-emerald-500' : seoScore >= 40 ? 'bg-amber-500' : 'bg-red-500';
@@ -466,6 +481,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       address: cs(form.address),
       city: form.city,
       district: cs(form.district),
+      ward: cs(form.ward),
       area_id: cs(form.area_id),
       property_type_id: cs(form.property_type_id),
       image_url: cs(form.image_url),
@@ -597,6 +613,20 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               ) : (
                 <input value={form.district} onChange={e => handleDistrictChange(e.target.value)}
                   placeholder="Nhập quận/huyện..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Phường/Xã</label>
+              {wards.length > 0 ? (
+                <select value={form.ward} onChange={e => setField('ward', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                  <option value="">-- Chọn phường/xã --</option>
+                  {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                </select>
+              ) : (
+                <input value={form.ward} onChange={e => setField('ward', e.target.value)}
+                  placeholder="Nhập phường/xã..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               )}
             </div>

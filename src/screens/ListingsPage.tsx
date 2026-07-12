@@ -11,7 +11,7 @@ import { type Property } from '../lib/supabase';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { buildPropertyPath } from '../lib/api/properties';
 import { CompareButton } from '../components/CompareButton';
-import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
+import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -21,7 +21,7 @@ import { PropertyMap, type MapBounds } from '../components/PropertyMap';
 
 interface ListingsPageProps {
   initialFilters?: Partial<{
-    listingType: string; areaId: string; typeId: string; district: string; keyword: string;
+    listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
     minPrice: number; maxPrice: number; minArea: number; maxArea: number;
     bedrooms: string; direction: string; legal: string;
     isFeatured: boolean; isHot: boolean; sort: string;
@@ -89,6 +89,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [viewportProps, setViewportProps] = useState<Property[]>([]);
   const mapBoundsRef = useRef<MapBounds | null>(null);
   const [district, setDistrict] = useState(initialFilters?.district ?? '');
+  const [ward, setWard] = useState(initialFilters?.ward ?? '');
 
   const [listingType, setListingType] = useState<ListingTypeKey>((initialFilters?.listingType ?? '') as ListingTypeKey);
   const [keyword, setKeyword] = useState(initialFilters?.keyword ?? '');
@@ -129,6 +130,16 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     setDistrict('');
   }, [areaId]);
 
+  // Phường/xã theo quận/huyện đã chọn. district lưu dạng TÊN nên map ra id để fetch.
+  const selectedDistrictId = districts.find(d => d.name === district)?.id;
+  const { data: wards = [] } = useWards(selectedDistrictId || undefined);
+  // Reset ward khi user đổi quận/huyện — bỏ qua mount đầu để giữ ward seed từ ?ward=.
+  const districtChangedOnce = useRef(false);
+  useEffect(() => {
+    if (!districtChangedOnce.current) { districtChangedOnce.current = true; return; }
+    setWard('');
+  }, [district]);
+
   const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
   const { data: topBanners = [] } = useQuery({ queryKey: qk.banners('listings_top'), queryFn: () => getBanners('listings_top') });
 
@@ -149,6 +160,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     listingType: listingType || undefined,
     keyword: debouncedKeyword || undefined, areaId: areaId || undefined, typeId: typeId || undefined,
     district: district || undefined,
+    ward: ward || undefined,
     minPrice: pr.min, maxPrice: pr.max, minArea: ar.min, maxArea: ar.max,
     bedrooms: bedrooms || undefined, direction: direction || undefined, legal: legal || undefined,
     isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
@@ -156,7 +168,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   };
   // Chỉ seed dữ liệu SSR khi filter còn nguyên mặc định (đúng cái server prefetch):
   // trang 1, không keyword/khu vực/loại/quận, khoảng giá & diện tích mặc định, mới nhất.
-  const isDefaultView = page === 1 && !debouncedKeyword && !areaId && !typeId && !district
+  const isDefaultView = page === 1 && !debouncedKeyword && !areaId && !typeId && !district && !ward
     && priceIdx === 0 && areaIdx === 0 && !bedrooms && !direction && !legal && sort === 'newest';
   const { data: result, isFetching: loading } = useQuery({
     queryKey: qk.properties(filters),
@@ -190,13 +202,13 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   useEffect(() => { setPriceIdx(0); }, [listingType]);
 
   const resetFilters = () => {
-    setKeyword(''); setAreaId(''); setTypeId(''); setDistrict('');
+    setKeyword(''); setAreaId(''); setTypeId(''); setDistrict(''); setWard('');
     setPriceIdx(0); setAreaIdx(0); setBedrooms('');
     setDirection(''); setLegal(''); setPage(1);
   };
 
   const totalPages = Math.ceil(total / PER_PAGE);
-  const hasActiveFilters = !!(keyword || areaId || typeId || district || priceIdx || areaIdx || bedrooms || direction || legal);
+  const hasActiveFilters = !!(keyword || areaId || typeId || district || ward || priceIdx || areaIdx || bedrooms || direction || legal);
   const setFilter = (fn: () => void) => { fn(); setPage(1); };
 
   const pageTitle = initialFilters?.isFeatured ? 'BĐS Nổi bật'
@@ -233,6 +245,21 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
               <option value="">Tất cả quận/huyện</option>
               {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+      )}
+
+      {/* Ward filter — chỉ hiển thị khi đã chọn quận/huyện có phường/xã */}
+      {wards.length > 0 && (
+        <div>
+          <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Phường/Xã</label>
+          <div className="relative">
+            <select value={ward} onChange={e => setFilter(() => setWard(e.target.value))}
+              className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
+              <option value="">Tất cả phường/xã</option>
+              {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
             </select>
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
@@ -469,6 +496,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   <FilterChip label={`📍 ${areas.find(a => a.id === areaId)!.name}`} onRemove={() => setFilter(() => setAreaId(''))} />
                 )}
                 {district && <FilterChip label={district} onRemove={() => setFilter(() => setDistrict(''))} />}
+                {ward && <FilterChip label={ward} onRemove={() => setFilter(() => setWard(''))} />}
                 {typeId && types.find(t => t.id === typeId) && (
                   <FilterChip label={types.find(t => t.id === typeId)!.name} onRemove={() => setFilter(() => setTypeId(''))} />
                 )}

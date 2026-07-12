@@ -1,4 +1,4 @@
-import { supabase, type Area, type District, type PropertyType } from '../supabase';
+import { supabase, type Area, type District, type Ward, type PropertyType } from '../supabase';
 
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
@@ -28,6 +28,14 @@ export async function adminDeleteDistrict(id: string): Promise<void> {
 export async function updateArea(id: string, a: Partial<Area>): Promise<void> {
   const { error } = await supabase.from('areas').update(a).eq('id', id);
   if (error) throw error;
+}
+
+// ─── Wards (Phường/Xã) ──────────────────────────────────────────────────────────
+export async function getWards(districtId?: string): Promise<Ward[]> {
+  let q = supabase.from('wards').select('*').order('order_index');
+  if (districtId) q = q.eq('district_id', districtId);
+  const { data } = await q;
+  return (data ?? []) as Ward[];
 }
 
 // ─── Property Types ───────────────────────────────────────────────────────────

@@ -34,7 +34,7 @@ export async function approveUserListing(id: string): Promise<void> {
     title: listing.title, description: listing.description,
     price: listing.price, price_unit: listing.price_unit, price_label: listing.price_label,
     listing_type: listing.listing_type ?? 'mua_ban',
-    area_sqm: listing.area_sqm, address: listing.address, city: listing.city, district: listing.district,
+    area_sqm: listing.area_sqm, address: listing.address, city: listing.city, district: listing.district, ward: listing.ward,
     area_id: listing.area_id, property_type_id: listing.property_type_id,
     image_url: listing.image_url, images: listing.images, legal_status: listing.legal_status,
     bedrooms: listing.bedrooms, bathrooms: listing.bathrooms, direction: listing.direction,

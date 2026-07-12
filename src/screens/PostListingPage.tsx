@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing } from '../lib/api';
-import { useAreas, usePropertyTypes, useDistricts } from '../lib/hooks/useTaxonomy';
+import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -46,7 +46,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
     title: '', description: '',
     price: '', price_unit: 'tỷ', price_label: '',
     price_per_month: '',
-    area_sqm: '', address: '', city: '', district: '',
+    area_sqm: '', address: '', city: '', district: '', ward: '',
     area_id: '', property_type_id: '',
     image_url: '', images: [] as string[],
     video_url: '',
@@ -60,6 +60,9 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
 
   // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query
   const { data: districts = [] } = useDistricts(form.area_id || undefined);
+  // Phường/xã theo quận/huyện đã chọn. form.district lưu dạng TÊN nên phải map ra id.
+  const selectedDistrictId = districts.find(d => d.name === form.district)?.id;
+  const { data: wards = [] } = useWards(selectedDistrictId || undefined);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -93,7 +96,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
   // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
   // form + reset district đã chọn + đồng bộ map search.
   const setArea = useCallback((areaId: string, areaName: string) => {
-    setForm(f => ({ ...f, area_id: areaId, city: areaName, district: '' }));
+    setForm(f => ({ ...f, area_id: areaId, city: areaName, district: '', ward: '' }));
     if (areaName) setMapSearchQuery(areaName);
   }, []);
 
@@ -101,7 +104,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
     setForm(f => {
       const query = [district, f.city].filter(Boolean).join(', ');
       if (query) setMapSearchQuery(query);
-      return { ...f, district };
+      return { ...f, district, ward: '' };
     });
   }, []);
 
@@ -167,6 +170,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
         address: form.address || null,
         city: form.city,
         district: form.district || null,
+        ward: form.ward || null,
         area_id: form.area_id || null,
         property_type_id: form.property_type_id || null,
         image_url: coverId,
@@ -370,6 +374,17 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
                   ) : (
                     <input value={form.district} onChange={e => setDistrict(e.target.value)}
                       placeholder="VD: Dĩ An, Thuận An..." className={inputCls()} />
+                  )}
+                </FormField>
+                <FormField label="Phường/Xã">
+                  {wards.length > 0 ? (
+                    <select value={form.ward} onChange={e => set('ward', e.target.value)} className={selectCls()}>
+                      <option value="">-- Chọn phường/xã --</option>
+                      {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.ward} onChange={e => set('ward', e.target.value)}
+                      placeholder="VD: Bình Chuẩn, An Phú..." className={inputCls()} />
                   )}
                 </FormField>
               </div>

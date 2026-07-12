@@ -5,7 +5,9 @@ import type { Page } from './router';
 export interface CategoryFilterConfig {
   listingType?: 'mua_ban' | 'cho_thue' | '';
   typeId?: string;
+  areaId?: string;
   district?: string;
+  ward?: string;
   legal?: string;
 }
 
@@ -15,7 +17,9 @@ export function quickCategoryToPage(cfg: CategoryFilterConfig): Page {
   const page: Extract<Page, { name: 'listings' }> = { name: 'listings' };
   if (cfg.listingType) page.listingType = cfg.listingType;
   if (cfg.typeId) page.typeId = cfg.typeId;
+  if (cfg.areaId) page.areaId = cfg.areaId;
   if (cfg.district) page.district = cfg.district;
+  if (cfg.ward) page.ward = cfg.ward;
   if (cfg.legal) page.legal = cfg.legal;
   return page;
 }

@@ -18,6 +18,9 @@ export type Area = {
 export type District = {
   id: string; area_id: string; name: string; slug: string; order_index: number; created_at: string;
 };
+export type Ward = {
+  id: string; district_id: string; name: string; slug: string; order_index: number; created_at: string;
+};
 export type PropertyType = {
   id: string; name: string; slug: string; icon: string | null; created_at: string;
 };
@@ -27,7 +30,7 @@ export type Property = {
   price: number; price_unit: string; price_label: string | null;
   price_per_month: number | null;
   listing_type: ListingType;
-  area_sqm: number | null; address: string | null; city: string; district: string | null;
+  area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
   area_id: string | null; district_id: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null;
   badge: string | null; badge_color: string | null; legal_status: string | null;
@@ -82,7 +85,7 @@ export type UserListing = {
   price: number; price_unit: string; price_label: string | null;
   listing_type: ListingType;
   price_per_month: number | null;
-  area_sqm: number | null; address: string | null; city: string; district: string | null;
+  area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
   area_id: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null; legal_status: string | null;
   bedrooms: number | null; bathrooms: number | null; direction: string | null;

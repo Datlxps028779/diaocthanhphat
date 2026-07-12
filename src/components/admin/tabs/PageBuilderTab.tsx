@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, Newspaper, Plus, Edit2, CheckCircle, MapPin, Save, AlertCircle, BarChart3, ArrowUp, ArrowDown, Home, Shield, Zap, Layers, LayoutGrid, GripVertical, PanelLeft } from 'lucide-react';
-import type { PageSection, PropertyType, District } from '../../../lib/supabase';
-import { getPageLayout, adminSavePageLayout, getPropertyTypes, getDistricts } from '../../../lib/api';
+import type { PageSection, PropertyType, District, Ward } from '../../../lib/supabase';
+import { getPageLayout, adminSavePageLayout, getPropertyTypes, getDistricts, getWards } from '../../../lib/api';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { CATEGORY_ICON_NAMES } from '../../../lib/categoryIcons';
 
@@ -21,12 +21,13 @@ const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
 
 type SectionSettings = Record<string, unknown>;
 
-function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts }: {
+function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts, wards }: {
   sectionId: string;
   settings: SectionSettings;
   onChange: (s: SectionSettings) => void;
   propertyTypes: PropertyType[];
   districts: District[];
+  wards: Ward[];
 }) {
   const get = (key: string, def: string) => (settings[key] as string) ?? def;
   const set = (key: string, val: unknown) => onChange({ ...settings, [key]: val });
@@ -92,7 +93,11 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
     case 'categories': return (
       <div className="space-y-3">
         <p className="text-xs text-gray-500">6 ô danh mục nhanh trên trang chủ. Mỗi ô có nhãn, icon và bộ lọc riêng — bấm vào sẽ mở trang danh sách đã lọc sẵn. Để trống chiều nào thì không lọc theo chiều đó.</p>
-        {[1,2,3,4,5,6].map(i => (
+        {[1,2,3,4,5,6].map(i => {
+          const districtName = get(`cat${i}_district`, '');
+          const districtId = districts.find(d => d.name === districtName)?.id;
+          const cellWards = districtId ? wards.filter(w => w.district_id === districtId) : [];
+          return (
           <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
             <p className="text-xs font-bold text-gray-700">Ô #{i}</p>
             <div className="grid grid-cols-2 gap-2">
@@ -107,13 +112,19 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
                 options={districts.map(d => ({ value: d.name, label: d.name }))} />
             </div>
             <div className="grid grid-cols-2 gap-2">
+              <Select label="Lọc: Phường/Xã" k={`cat${i}_ward`}
+                emptyLabel={districtName ? '— Không lọc —' : '(Chọn quận/huyện trước)'}
+                options={cellWards.map(w => ({ value: w.name, label: w.name }))} />
               <Select label="Lọc: Pháp lý" k={`cat${i}_legal`}
                 options={LEGAL_OPTIONS.map(l => ({ value: l, label: l }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <Select label="Lọc: Hình thức" k={`cat${i}_listing`}
                 options={[{ value: 'mua_ban', label: 'Mua bán' }, { value: 'cho_thue', label: 'Cho thuê' }]} />
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     );
     case 'featured_sections': return (
@@ -224,11 +235,13 @@ export function PageBuilderTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
 
   useEffect(() => {
     getPageLayout().then(data => { setSections(data); setLoading(false); });
     getPropertyTypes().then(setPropertyTypes);
     getDistricts().then(setDistricts);
+    getWards().then(setWards);
   }, []);
 
   const move = (index: number, dir: -1 | 1) => {
@@ -400,6 +413,7 @@ export function PageBuilderTab() {
                     onChange={s => updateSettings(section.id, s)}
                     propertyTypes={propertyTypes}
                     districts={districts}
+                    wards={wards}
                   />
                 </div>
               )}

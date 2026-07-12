@@ -14,7 +14,7 @@ import {
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
   getPageLayout, buildPropertyPath,
 } from './lib/api';
-import { useAreas, usePropertyTypes } from './lib/hooks/useTaxonomy';
+import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
 import { quickCategoryToPage } from './lib/quickCategory';
@@ -56,6 +56,8 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchAreaId, setSearchAreaId] = useState('');
+  const [searchDistrict, setSearchDistrict] = useState('');
+  const [searchWard, setSearchWard] = useState('');
   const [searchTypeId, setSearchTypeId] = useState('');
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
 
@@ -64,6 +66,11 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   // Taxonomy + dữ liệu trang chủ qua React Query (cache/dedup)
   const { data: areas = [] } = useAreas();
   const { data: types = [] } = usePropertyTypes();
+  // Hero search cascade: Quận/Huyện theo tỉnh, Phường/Xã theo quận/huyện (district
+  // lưu dạng TÊN nên map ra id để lấy wards).
+  const { data: searchDistricts = [] } = useDistricts(searchAreaId || undefined);
+  const searchDistrictId = searchDistricts.find(d => d.name === searchDistrict)?.id;
+  const { data: searchWards = [] } = useWards(searchDistrictId || undefined);
   const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
   const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 6), queryFn: () => getNews(undefined, 6) });
   const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
@@ -113,6 +120,8 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
       name: 'listings',
       listingType: activeTab,
       areaId: searchAreaId || undefined,
+      district: searchDistrict || undefined,
+      ward: searchWard || undefined,
       typeId: searchTypeId || undefined,
       keyword: searchKeyword || undefined,
     });
@@ -154,6 +163,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
                   listingType: g(`cat${i}_listing`, '') as 'mua_ban' | 'cho_thue' | '',
                   typeId: g(`cat${i}_type`, ''),
                   district: g(`cat${i}_district`, ''),
+                  ward: g(`cat${i}_ward`, ''),
                   legal: g(`cat${i}_legal`, ''),
                 };
                 return (
@@ -437,12 +447,32 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
               </div>
               <select
                 value={searchAreaId}
-                onChange={e => setSearchAreaId(e.target.value)}
+                onChange={e => { setSearchAreaId(e.target.value); setSearchDistrict(''); setSearchWard(''); }}
                 className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
               >
                 <option value="">Tất cả khu vực</option>
                 {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
+              {searchDistricts.length > 0 && (
+                <select
+                  value={searchDistrict}
+                  onChange={e => { setSearchDistrict(e.target.value); setSearchWard(''); }}
+                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                >
+                  <option value="">Tất cả quận/huyện</option>
+                  {searchDistricts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+              )}
+              {searchWards.length > 0 && (
+                <select
+                  value={searchWard}
+                  onChange={e => setSearchWard(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                >
+                  <option value="">Tất cả phường/xã</option>
+                  {searchWards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                </select>
+              )}
               <select
                 value={searchTypeId}
                 onChange={e => setSearchTypeId(e.target.value)}

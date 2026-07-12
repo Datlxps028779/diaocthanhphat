@@ -12,6 +12,11 @@ describe('quickCategoryToPage — dựng Page listings từ cấu hình 1 ô dan
       .toEqual({ name: 'listings', typeId: 'nha-o', district: 'Thuận An' });
   });
 
+  it('ô lọc đủ 3 cấp khu vực: tỉnh + quận/huyện + phường/xã', () => {
+    expect(quickCategoryToPage({ areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' }))
+      .toEqual({ name: 'listings', areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
+  });
+
   it('ô lọc loại + pháp lý (VD: Đất sổ chung)', () => {
     expect(quickCategoryToPage({ typeId: 'dat-nen', legal: 'Sổ chung' }))
       .toEqual({ name: 'listings', typeId: 'dat-nen', legal: 'Sổ chung' });

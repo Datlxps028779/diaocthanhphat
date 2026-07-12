@@ -27,6 +27,16 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('district')).toBe('Dĩ An');
     expect(params.get('legal')).toBeNull();
   });
+
+  it('mang đủ 3 cấp khu vực: areaId + district + ward qua query', () => {
+    const href = pageToHref({ name: 'listings', areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
+    const [path, qs] = href.split('?');
+    expect(path).toBe('/danh-sach');
+    const params = new URLSearchParams(qs);
+    expect(params.get('area')).toBe('bd');
+    expect(params.get('district')).toBe('Thuận An');
+    expect(params.get('ward')).toBe('Bình Chuẩn');
+  });
 });
 
 describe('parseListingParams — đọc ngược query của Next searchParams', () => {
@@ -49,5 +59,17 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     const qs = pageToHref(page).split('?')[1];
     const sp = Object.fromEntries(new URLSearchParams(qs));
     expect(parseListingParams(sp)).toEqual({ typeId: 't9', district: 'Dĩ An', legal: 'Sổ hồng' });
+  });
+
+  it('bóc đủ 3 cấp khu vực: area/district/ward', () => {
+    expect(parseListingParams({ area: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' }))
+      .toEqual({ areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
+  });
+
+  it('round-trip 3 cấp: areaId + district + ward → href → parse khớp gốc', () => {
+    const page = { name: 'listings' as const, areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' };
+    const qs = pageToHref(page).split('?')[1];
+    const sp = Object.fromEntries(new URLSearchParams(qs));
+    expect(parseListingParams(sp)).toEqual({ areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
   });
 });

@@ -3,7 +3,7 @@ export type Page =
   | {
       name: 'listings';
       listingType?: 'mua_ban' | 'cho_thue';
-      areaId?: string; typeId?: string; district?: string; keyword?: string;
+      areaId?: string; typeId?: string; district?: string; ward?: string; keyword?: string;
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
       isFeatured?: boolean; isHot?: boolean; sort?: string;
@@ -32,14 +32,18 @@ export const ADMIN_PATH = '/quantrihethong';
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { typeId?: string; district?: string; legal?: string } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
-  const out: { typeId?: string; district?: string; legal?: string } = {};
+  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string } = {};
+  const area = first(sp?.area);
   const type = first(sp?.type);
   const district = first(sp?.district);
+  const ward = first(sp?.ward);
   const legal = first(sp?.legal);
+  if (area) out.areaId = area;
   if (type) out.typeId = type;
   if (district) out.district = district;
+  if (ward) out.ward = ward;
   if (legal) out.legal = legal;
   return out;
 }
@@ -57,8 +61,10 @@ export function pageToHref(page: Page): string {
         : page.listingType === 'cho_thue' ? '/cho-thue'
         : '/danh-sach';
       const q = new URLSearchParams();
+      if (page.areaId) q.set('area', page.areaId);
       if (page.typeId) q.set('type', page.typeId);
       if (page.district) q.set('district', page.district);
+      if (page.ward) q.set('ward', page.ward);
       if (page.legal) q.set('legal', page.legal);
       const qs = q.toString();
       return qs ? `${base}?${qs}` : base;
