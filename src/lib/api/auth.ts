@@ -25,6 +25,23 @@ export async function signIn(email: string, password: string) {
   return data;
 }
 export async function signOut() { await supabase.auth.signOut(); }
+
+// Gửi email đặt lại mật khẩu. redirectTo trỏ về /dat-lai-mat-khau (cùng cơ chế host
+// như xác nhận email) — user bấm link trong mail sẽ vào trang đó với session recovery
+// tạm, rồi gọi updatePassword. Lưu ý: Supabase bật chống dò email nên hàm này KHÔNG
+// báo lỗi khi email chưa đăng ký (tránh lộ email nào tồn tại) — UI luôn báo "đã gửi".
+export async function requestPasswordReset(email: string) {
+  const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/dat-lai-mat-khau` : undefined;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw error;
+}
+
+// Đặt mật khẩu mới. Chỉ chạy được khi đã có session (recovery từ link mail hoặc đang
+// đăng nhập). Trang /dat-lai-mat-khau kiểm tra session trước khi cho nhập.
+export async function updatePassword(newPassword: string) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
 export async function getProfile(): Promise<Profile | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

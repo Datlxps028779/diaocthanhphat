@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
-import { signIn, signUp } from '../lib/api';
+import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { signIn, signUp, requestPasswordReset } from '../lib/api';
+import { interpretSignUpResult } from '../lib/authFlow';
 
 interface UserAuthModalProps {
   mode: 'login' | 'register';
@@ -21,6 +22,9 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
   // Đăng ký xong mà chưa có session = Supabase bật "Confirm email" → phải xác nhận
   // qua mail trước khi đăng nhập. Hiện màn "kiểm tra email" thay vì "đang đăng nhập".
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
+  // Luồng quên mật khẩu: forgotMode = đang ở form nhập email; resetSent = đã gửi mail.
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +38,18 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
         if (!displayName.trim()) { setError('Vui lòng nhập họ tên.'); setLoading(false); return; }
         if (password.length < 6) { setError('Mật khẩu tối thiểu 6 ký tự.'); setLoading(false); return; }
         const data = await signUp(email, password, displayName, phone);
-        if (data.session) {
+        const outcome = interpretSignUpResult(data);
+        if (outcome === 'logged_in') {
           // Confirm email TẮT → đã đăng nhập luôn.
           setSuccess(true);
           setTimeout(onSuccess, 1500);
+        } else if (outcome === 'already_registered') {
+          // Supabase chống dò email: KHÔNG gửi mail cho email đã tồn tại. Báo rõ +
+          // chuyển sang tab Đăng nhập, giữ email đã nhập để user đăng nhập luôn.
+          setError('Email này đã được đăng ký. Vui lòng đăng nhập.');
+          onSwitchMode('login');
         } else {
-          // Confirm email BẬT → chờ user bấm link trong mail.
+          // Confirm email BẬT, đăng ký mới → chờ user bấm link trong mail.
           setNeedsEmailConfirm(true);
         }
       }
@@ -52,6 +62,20 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
       } else {
         setError(msg);
       }
+    } finally { setLoading(false); }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim()) { setError('Vui lòng nhập email.'); return; }
+    setLoading(true);
+    try {
+      await requestPasswordReset(email);
+      // Luôn báo "đã gửi" dù email có tồn tại hay không (chống dò email).
+      setResetSent(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không gửi được email đặt lại mật khẩu.');
     } finally { setLoading(false); }
   };
 
@@ -83,6 +107,47 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
             <h3 className="font-black text-gray-900 text-xl mb-1">Đăng ký thành công!</h3>
             <p className="text-gray-500 text-sm">Đang đăng nhập...</p>
           </div>
+        ) : resetSent ? (
+          <div className="text-center py-6">
+            <Mail className="w-14 h-14 text-red-500 mx-auto mb-3" />
+            <h3 className="font-black text-gray-900 text-xl mb-1">Kiểm tra email của bạn</h3>
+            <p className="text-gray-500 text-sm">
+              Nếu <span className="font-semibold text-gray-700">{email}</span> đã đăng ký, chúng tôi vừa gửi
+              liên kết đặt lại mật khẩu. Mở email và bấm vào liên kết để tạo mật khẩu mới.
+            </p>
+            <p className="text-gray-400 text-xs mt-3">Không thấy email? Kiểm tra mục Spam/Quảng cáo.</p>
+            <button onClick={onClose}
+              className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors">
+              Đã hiểu
+            </button>
+          </div>
+        ) : forgotMode ? (
+          <>
+            <button onClick={() => { setForgotMode(false); setError(''); }}
+              className="flex items-center gap-1 text-gray-400 hover:text-gray-600 text-xs mb-3 transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Quay lại đăng nhập
+            </button>
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Lock className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-black text-gray-900 text-xl">Quên mật khẩu</h3>
+              <p className="text-gray-500 text-xs mt-1">Nhập email để nhận liên kết đặt lại mật khẩu</p>
+            </div>
+            <form onSubmit={handleForgot} className="space-y-3">
+              <InputField icon={<Mail className="w-4 h-4" />} type="email" placeholder="Email *"
+                value={email} onChange={setEmail} required />
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+                </div>
+              )}
+              <button type="submit" disabled={loading}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 rounded-xl text-sm transition-colors disabled:opacity-60">
+                {loading ? 'Đang gửi...' : 'Gửi liên kết đặt lại'}
+              </button>
+            </form>
+          </>
         ) : (
           <>
             <div className="text-center mb-5">
@@ -120,6 +185,15 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+
+              {mode === 'login' && (
+                <div className="text-right -mt-1">
+                  <button type="button" onClick={() => { setForgotMode(true); setError(''); }}
+                    className="text-red-600 text-xs font-semibold hover:underline">
+                    Quên mật khẩu?
+                  </button>
+                </div>
+              )}
 
               {error && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2.5">
