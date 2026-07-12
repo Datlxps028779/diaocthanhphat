@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
-import { signIn, signUp, requestPasswordReset } from '../lib/api';
+import { signIn, signUp, requestPasswordReset, signOut, getCurrentRole } from '../lib/api';
 import { interpretSignUpResult } from '../lib/authFlow';
+import { isElevatedRole } from '../lib/authGuard';
 
 interface UserAuthModalProps {
   mode: 'login' | 'register';
@@ -33,6 +34,15 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
     try {
       if (mode === 'login') {
         await signIn(email, password);
+        // Chặn tài khoản quản trị đăng nhập qua cổng người dùng: cắt phiên ngay và
+        // hướng về /quantrihethong. Thu hẹp bề mặt tấn công lên tài khoản quyền cao.
+        const role = await getCurrentRole().catch(() => null);
+        if (isElevatedRole(role)) {
+          await signOut();
+          setError('Tài khoản quản trị vui lòng đăng nhập tại trang /quantrihethong.');
+          setLoading(false);
+          return;
+        }
         onSuccess();
       } else {
         if (!displayName.trim()) { setError('Vui lòng nhập họ tên.'); setLoading(false); return; }

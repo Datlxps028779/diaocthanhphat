@@ -1,4 +1,5 @@
 import { supabase, type Profile } from '../supabase';
+import { isElevatedRole } from '../authGuard';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 // Đăng ký. emailRedirectTo dựng theo origin hiện tại → link xác nhận trong mail
@@ -52,7 +53,16 @@ export async function getAdminRole(): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
   const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  return (data as { role: string } | null)?.role === 'admin';
+  return isElevatedRole((data as { role: string } | null)?.role);
+}
+// Lấy role của session hiện tại (đọc profiles). Dùng để chặn admin đăng nhập ở cổng
+// người dùng: sau signIn/recovery, nếu role cao thì cắt phiên ngay. maybeSingle → null
+// nếu chưa có profile (người dùng mới) → không chặn nhầm.
+export async function getCurrentRole(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  return (data as { role: string } | null)?.role ?? null;
 }
 export async function updateProfile(updates: Partial<Profile>): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();

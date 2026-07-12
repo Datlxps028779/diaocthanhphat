@@ -30,7 +30,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setState({ user: session?.user ?? null, session, loading: false });
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Link đặt lại mật khẩu: client tự nuốt hash (#access_token=...&type=recovery) và
+      // phát PASSWORD_RECOVERY. Dù link rơi vào bất kỳ trang nào (kể cả "/"), điều hướng
+      // về /dat-lai-mat-khau để hiện form — tránh việc bị đăng nhập thẳng vào trang chủ.
+      if (event === 'PASSWORD_RECOVERY' && typeof window !== 'undefined'
+          && window.location.pathname !== '/dat-lai-mat-khau') {
+        window.location.replace('/dat-lai-mat-khau');
+        return;
+      }
       setState({ user: session?.user ?? null, session, loading: false });
     });
     return () => subscription.unsubscribe();

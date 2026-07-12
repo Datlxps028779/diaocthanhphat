@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, AlertCircle, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { updatePassword } from '@/lib/api';
+import { updatePassword, getCurrentRole, signOut } from '@/lib/api';
 import { friendlyAuthLinkError } from '@/lib/authFlow';
+import { isElevatedRole } from '@/lib/authGuard';
 
 // Trang tiếp nhận link đặt lại mật khẩu từ Supabase. requestPasswordReset đặt
 // redirectTo về đây; link có thể ở 3 dạng: ?code= (PKCE), ?token_hash=&type=recovery
@@ -21,6 +22,32 @@ export default function DatLaiMatKhauPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Sau khi có session recovery: chặn tài khoản quản trị đổi mật khẩu qua cổng này
+    // (phải dùng /quantrihethong), rồi mở form cho người dùng thường.
+    const gate = async () => {
+      const role = await getCurrentRole().catch(() => null);
+      if (cancelled) return;
+      if (isElevatedRole(role)) {
+        await signOut();
+        if (cancelled) return;
+        setStatus('error');
+        setMessage('Tài khoản quản trị vui lòng đổi mật khẩu tại trang /quantrihethong.');
+        return;
+      }
+      setStatus('ready');
+    };
+
+    // Link implicit (#access_token=...&type=recovery) được client tự nuốt BẤT ĐỒNG BỘ
+    // rồi phát sự kiện — getSession() gọi một lần dễ chạy TRƯỚC lúc đó (đua) và thấy
+    // null. Nghe onAuthStateChange để bắt đúng thời điểm session sẵn sàng.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        gate();
+      }
+    });
+
     (async () => {
       try {
         const url = new URL(window.location.href);
@@ -41,22 +68,25 @@ export default function DatLaiMatKhauPage() {
           });
           if (error) throw error;
         }
-        // Dạng implicit (#access_token=): detectSessionInUrl đã xử lý trước khi tới đây.
-
+        // Dạng implicit (#access_token=): onAuthStateChange ở trên sẽ bắt session.
+        // Kiểm tra lần đầu phòng khi session đã sẵn (không phát thêm sự kiện).
         const { data: { session } } = await supabase.auth.getSession();
         if (cancelled) return;
         if (session) {
-          setStatus('ready');
-        } else {
+          gate();
+        } else if (!window.location.hash.includes('access_token')) {
+          // Không có code/token_hash/hash recovery nào → link hỏng thật sự.
           throw new Error('Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu lần nữa.');
         }
+        // Có hash access_token nhưng chưa nuốt xong → chờ onAuthStateChange.
       } catch (e: unknown) {
         if (cancelled) return;
         setStatus('error');
         setMessage(friendlyAuthLinkError(e instanceof Error ? e.message : null));
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
