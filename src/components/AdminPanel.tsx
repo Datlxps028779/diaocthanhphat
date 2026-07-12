@@ -13,6 +13,7 @@ const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
 const LeadsTab = lazy(() => import('./admin/tabs/LeadsTab').then(m => ({ default: m.LeadsTab })));
 const UserListingsApprovalTab = lazy(() => import('./admin/tabs/UserListingsApprovalTab').then(m => ({ default: m.UserListingsApprovalTab })));
+const UsersTab = lazy(() => import('./admin/tabs/UsersTab').then(m => ({ default: m.UsersTab })));
 const ProjectsTab = lazy(() => import('./admin/tabs/ProjectsTab').then(m => ({ default: m.ProjectsTab })));
 const NewsTab = lazy(() => import('./admin/tabs/NewsTab').then(m => ({ default: m.NewsTab })));
 const TestimonialsTab = lazy(() => import('./admin/tabs/TestimonialsTab').then(m => ({ default: m.TestimonialsTab })));
@@ -44,6 +45,7 @@ export function AdminPanel({ onLogout, initialTab }: AdminPanelProps) {
     { id: 'properties', label: 'Bất động sản', icon: <Building2 className="w-4 h-4" />, badge: stats.activeProperties },
     { id: 'leads', label: 'Khách hàng', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
+    { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
     { id: 'projects', label: 'Dự án', icon: <FolderOpen className="w-4 h-4" /> },
     { id: 'news', label: 'Tin tức', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'testimonials', label: 'Đánh giá', icon: <Star className="w-4 h-4" /> },
@@ -132,6 +134,7 @@ export function AdminPanel({ onLogout, initialTab }: AdminPanelProps) {
           {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} />}
           {tab === 'leads' && <LeadsTab onRefreshStats={loadStats} />}
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}
+          {tab === 'users' && <UsersTab />}
           {tab === 'projects' && <ProjectsTab />}
           {tab === 'news' && <NewsTab />}
           {tab === 'testimonials' && <TestimonialsTab />}

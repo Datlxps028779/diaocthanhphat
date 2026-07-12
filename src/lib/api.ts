@@ -12,3 +12,4 @@ export * from './api/siteSettings';
 export * from './api/cms';
 export * from './api/media';
 export * from './api/misc';
+export * from './api/adminUsers';
