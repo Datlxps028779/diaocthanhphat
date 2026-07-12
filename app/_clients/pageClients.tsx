@@ -89,11 +89,11 @@ export function CompareClient() {
   );
 }
 
-export function PostListingClient() {
+export function PostListingClient({ editId }: { editId?: string }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'post-listing' }}>
-      <PostListingPage onNavigate={navigate} />
+      <PostListingPage onNavigate={navigate} editId={editId} />
     </SiteChrome>
   );
 }

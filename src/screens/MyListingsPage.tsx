@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw, Pencil } from 'lucide-react';
 import { type UserListing } from '../lib/supabase';
 import { getMyListings, deleteMyListing, submitUserListing } from '../lib/api';
 import { qk } from '../lib/queryKeys';
@@ -158,12 +158,14 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
                       )}
                     </div>
                     <div className="flex flex-col gap-2 flex-shrink-0">
-                      {listing.status === 'pending' && (
-                        <button onClick={() => setConfirmDelete(listing.id)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Xóa">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button onClick={() => { onNavigate({ name: 'post-listing', id: listing.id }); scrollTop(); }}
+                        className="p-2 text-gray-500 hover:bg-gray-100 hover:text-red-600 rounded-lg transition-colors" title="Sửa tin">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setConfirmDelete(listing.id)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Xóa">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                       {listing.status === 'rejected' && (
                         <button
                           onClick={() => handleResubmit(listing)}

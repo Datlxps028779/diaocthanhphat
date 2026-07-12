@@ -7,6 +7,6 @@ export const metadata: Metadata = {
   alternates: { canonical: '/dang-tin' },
 };
 
-export default function Page() {
-  return <PostListingClient />;
+export default function Page({ searchParams }: { searchParams?: { id?: string } }) {
+  return <PostListingClient editId={searchParams?.id} />;
 }

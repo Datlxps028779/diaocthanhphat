@@ -17,6 +17,26 @@ export async function deleteMyListing(id: string): Promise<void> {
   const { error } = await supabase.from('user_listings').delete().eq('id', id);
   if (error) throw error;
 }
+export async function getMyListing(id: string): Promise<UserListing | null> {
+  const { data } = await supabase
+    .from('user_listings')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .eq('id', id)
+    .maybeSingle();
+  return (data as UserListing | null) ?? null;
+}
+// Sửa tin của chính mình. Bất kể trạng thái cũ, sau khi sửa quay về 'pending' để
+// duyệt lại (xoá luôn lý do từ chối cũ). RLS user_listings_update_own giới hạn đúng chủ.
+export async function updateMyListing(
+  id: string,
+  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_listings')
+    .update({ ...listing, status: 'pending', reject_reason: null })
+    .eq('id', id);
+  if (error) throw error;
+}
 export async function adminGetUserListings(status?: string): Promise<UserListing[]> {
   let q = supabase
     .from('user_listings')

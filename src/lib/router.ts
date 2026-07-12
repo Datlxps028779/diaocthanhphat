@@ -16,7 +16,7 @@ export type Page =
   | { name: 'about' }
   | { name: 'valuation' }
   | { name: 'compare' }
-  | { name: 'post-listing' }
+  | { name: 'post-listing'; id?: string }
   | { name: 'my-listings' }
   | { name: 'account' }
   | { name: 'quantri-login' }
@@ -75,7 +75,7 @@ export function pageToHref(page: Page): string {
     case 'about': return '/ve-chung-toi';
     case 'valuation': return '/dinh-gia';
     case 'compare': return '/so-sanh';
-    case 'post-listing': return '/dang-tin';
+    case 'post-listing': return page.id ? `/dang-tin?id=${page.id}` : '/dang-tin';
     case 'my-listings': return '/tin-cua-toi';
     case 'account': return '/tai-khoan';
     case 'quantri-login':

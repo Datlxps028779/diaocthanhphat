@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Users, Shield, ShieldOff, Ban, CheckCircle2, RefreshCw, ArrowLeft, ImageIcon, Building2, Phone, Mail, Clock, AlertTriangle } from 'lucide-react';
-import { getAdminUsers, getUserActivity, setUserRole, banUser, unbanUser, type AdminUserRow, type UserActivity } from '../../../lib/api';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, Shield, ShieldOff, Ban, CheckCircle2, RefreshCw, ArrowLeft, ImageIcon, Building2, Phone, Mail, Clock, AlertTriangle, Trash2, Check, X } from 'lucide-react';
+import { getAdminUsers, getUserActivity, setUserRole, banUser, unbanUser, deleteMyListing, deleteUserMedia, approveUserListing, rejectUserListing, type AdminUserRow, type UserActivity } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 const STATUS_LABEL: Record<string, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
@@ -152,14 +152,42 @@ export function UsersTab() {
   );
 }
 
-// Chi tiết hoạt động của 1 user: tin đăng + kho ảnh (đọc qua RLS admin).
+// Chi tiết hoạt động của 1 user: tin đăng + kho ảnh (đọc qua RLS admin) + hành động
+// quản lý tại chỗ (xóa tin, xóa ảnh, duyệt/từ chối tin chờ). Các thao tác ghi dùng
+// RLS admin sẵn có (user_listings_admin_delete/update, um_delete_admin).
 function UserDetail({ user, onBack }: { user: AdminUserRow; onBack: () => void }) {
   const [activity, setActivity] = useState<UserActivity | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [confirm, setConfirm] = useState<{ msg: string; run: () => Promise<void> } | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
-  useEffect(() => {
-    getUserActivity(user.id).then(setActivity).catch(() => setActivity({ listings: [], media: [] })).finally(() => setLoading(false));
+  const load = useCallback(() => {
+    setLoading(true);
+    getUserActivity(user.id)
+      .then(setActivity)
+      .catch(() => setActivity({ listings: [], media: [] }))
+      .finally(() => setLoading(false));
   }, [user.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key); setError('');
+    try { await fn(); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Thao tác thất bại.'); }
+    finally { setBusy(null); }
+  };
+
+  const doReject = async () => {
+    if (!rejectId) return;
+    const id = rejectId;
+    setRejectId(null);
+    await run(id, () => rejectUserListing(id, rejectReason || 'Không đáp ứng yêu cầu đăng tin'));
+    setRejectReason('');
+  };
 
   return (
     <div>
@@ -189,6 +217,10 @@ function UserDetail({ user, onBack }: { user: AdminUserRow; onBack: () => void }
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5 mb-4">{error}</div>
+      )}
+
       {loading ? (
         <div className="text-center text-gray-400 py-10">Đang tải hoạt động...</div>
       ) : (
@@ -197,13 +229,34 @@ function UserDetail({ user, onBack }: { user: AdminUserRow; onBack: () => void }
             <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
               <Building2 className="w-4 h-4 text-red-500" /> Tin đăng ({activity?.listings.length ?? 0})
             </h3>
-            <div className="space-y-2 max-h-80 overflow-auto">
+            <div className="space-y-2 max-h-96 overflow-auto">
               {(activity?.listings ?? []).map(l => (
-                <div key={l.id} className="flex items-center justify-between text-sm border-b border-gray-50 pb-2">
-                  <span className="text-gray-800 truncate mr-2">{l.title}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${l.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : l.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {STATUS_LABEL[l.status] ?? l.status}
-                  </span>
+                <div key={l.id} className="border-b border-gray-50 pb-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-800 truncate mr-2">{l.title}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${l.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : l.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {STATUS_LABEL[l.status] ?? l.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {l.status === 'pending' && (
+                      <>
+                        <button disabled={busy === l.id} onClick={() => run(l.id, () => approveUserListing(l.id))}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-40">
+                          <Check className="w-3 h-3" />Duyệt
+                        </button>
+                        <button disabled={busy === l.id} onClick={() => { setRejectId(l.id); setRejectReason(''); }}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-40">
+                          <X className="w-3 h-3" />Từ chối
+                        </button>
+                      </>
+                    )}
+                    <button disabled={busy === l.id}
+                      onClick={() => setConfirm({ msg: `Xóa tin "${l.title}" của người dùng này? Không thể hoàn tác.`, run: () => run(l.id, () => deleteMyListing(l.id)) })}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-40">
+                      <Trash2 className="w-3 h-3" />Xóa
+                    </button>
+                  </div>
                 </div>
               ))}
               {(activity?.listings.length ?? 0) === 0 && <p className="text-gray-400 text-sm">Chưa có tin đăng.</p>}
@@ -214,12 +267,44 @@ function UserDetail({ user, onBack }: { user: AdminUserRow; onBack: () => void }
             <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
               <ImageIcon className="w-4 h-4 text-red-500" /> Kho ảnh ({activity?.media.length ?? 0})
             </h3>
-            <div className="grid grid-cols-3 gap-2 max-h-80 overflow-auto">
+            <div className="grid grid-cols-3 gap-2 max-h-96 overflow-auto">
               {(activity?.media ?? []).map(m => (
-                <img key={m.id} src={m.url} alt={m.filename} loading="lazy"
-                  className="w-full aspect-square object-cover rounded-lg border border-gray-100" />
+                <div key={m.id} className="relative group">
+                  <img src={m.url} alt={m.filename} loading="lazy"
+                    className="w-full aspect-square object-cover rounded-lg border border-gray-100" />
+                  <button disabled={busy === m.id}
+                    onClick={() => setConfirm({ msg: 'Xóa ảnh này khỏi kho của người dùng? Không thể hoàn tác.', run: () => run(m.id, () => deleteUserMedia(m.id)) })}
+                    className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all disabled:opacity-40"
+                    title="Xóa ảnh">
+                    <Trash2 className="w-3 h-3 text-red-500" />
+                  </button>
+                </div>
               ))}
               {(activity?.media.length ?? 0) === 0 && <p className="text-gray-400 text-sm col-span-3">Chưa có ảnh.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          message={confirm.msg}
+          onConfirm={() => { const r = confirm.run; setConfirm(null); r(); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {rejectId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setRejectId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <h3 className="font-bold text-gray-900 mb-2">Từ chối tin đăng</h3>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="Lý do từ chối (không bắt buộc)..." rows={3}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setRejectId(null)} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors">Hủy</button>
+              <button onClick={doReject} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">Từ chối</button>
             </div>
           </div>
         </div>

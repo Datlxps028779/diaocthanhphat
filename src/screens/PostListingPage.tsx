@@ -6,7 +6,8 @@ import {
   CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
-import { submitUserListing } from '../lib/api';
+import { submitUserListing, updateMyListing, getMyListing } from '../lib/api';
+import { listingToFormState } from '../lib/listingForm';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
@@ -19,6 +20,7 @@ import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill'
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
+  editId?: string;   // có id = chế độ sửa: nạp tin cũ, submit sẽ update
 }
 
 const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO'];
@@ -35,7 +37,7 @@ const LISTING_TYPE_OPTIONS: { value: ListingType; label: string; desc: string; c
 
 const isRental = (t: ListingType) => t === 'cho_thue';
 
-export function PostListingPage({ onNavigate }: PostListingPageProps) {
+export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   const { user, loading: authLoading } = useAuth();
   const [step, setStep] = useState(0);
   const { data: areas = [] } = useAreas();
@@ -43,6 +45,8 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [loadingEdit, setLoadingEdit] = useState(!!editId);
+  const [loadError, setLoadError] = useState('');
 
   const [form, setForm] = useState({
     listing_type: 'mua_ban' as ListingType,
@@ -95,6 +99,23 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
   useEffect(() => { setForm(f => ({ ...f, meta_description: seo.metaDescription })); }, [seo.metaDescription]);
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
   useEffect(() => { setForm(f => ({ ...f, schema_markup: seo.schemaMarkup })); }, [seo.schemaMarkup]);
+
+  // Chế độ sửa: nạp tin cũ vào form. Chỉ chạy 1 lần theo editId.
+  useEffect(() => {
+    if (!editId) return;
+    let alive = true;
+    setLoadingEdit(true);
+    getMyListing(editId)
+      .then(listing => {
+        if (!alive) return;
+        if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
+        setForm(listingToFormState(listing));
+        if (listing.city) setMapSearchQuery(listing.city);
+      })
+      .catch(() => { if (alive) setLoadError('Không tải được tin đăng để sửa.'); })
+      .finally(() => { if (alive) setLoadingEdit(false); });
+    return () => { alive = false; };
+  }, [editId]);
 
   // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
   // form + reset district đã chọn + đồng bộ map search.
@@ -161,7 +182,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
       // Lọc bỏ các phần tử rỗng/falsy để đảm bảo mảng ảnh chỉ chứa URL hợp lệ
       const cleanImages = form.images.filter((url): url is string => !!url);
       const coverId = cleanImages[0] ?? (form.image_url || null);
-      await submitUserListing({
+      const payload = {
         listing_type: form.listing_type,
         title: form.title,
         description: form.description || null,
@@ -196,7 +217,9 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
         vr_tour_url: null,
         video_url: form.video_url || null,
         contact_zalo: null,
-      });
+      };
+      if (editId) await updateMyListing(editId, payload);
+      else await submitUserListing(payload);
     },
     onSuccess: () => setSubmitted(true),
     onError: (err) => setErrors({ submit: err instanceof Error ? err.message : 'Có lỗi xảy ra' }),
@@ -235,6 +258,35 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
     );
   }
 
+  // Chế độ sửa: đang nạp tin cũ / lỗi nạp.
+  if (editId && loadingEdit) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-500">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-red-500 rounded-full animate-spin" />
+          Đang tải tin đăng để sửa...
+        </div>
+      </div>
+    );
+  }
+  if (editId && loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <AlertCircle className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="font-black text-2xl text-gray-900 mb-2">Không sửa được tin</h2>
+          <p className="text-gray-500 text-sm mb-6">{loadError}</p>
+          <button onClick={() => { onNavigate({ name: 'my-listings' }); scrollTop(); }}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-colors">
+            Về tin của tôi
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -242,8 +294,8 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
             <CheckCircle className="w-10 h-10 text-emerald-500" />
           </div>
-          <h2 className="font-black text-2xl text-gray-900 mb-2">Đã gửi thành công!</h2>
-          <p className="text-gray-500 text-sm mb-2">Tin đăng của bạn đang chờ quản trị viên duyệt.</p>
+          <h2 className="font-black text-2xl text-gray-900 mb-2">{editId ? 'Đã cập nhật thành công!' : 'Đã gửi thành công!'}</h2>
+          <p className="text-gray-500 text-sm mb-2">{editId ? 'Tin đăng đã sửa và đang chờ duyệt lại.' : 'Tin đăng của bạn đang chờ quản trị viên duyệt.'}</p>
           <p className="text-gray-400 text-xs mb-6">Thông thường trong vòng 1–2 giờ làm việc.</p>
           <div className="flex gap-3">
             <Link href={pageToHref({ name: 'my-listings' })}
@@ -270,10 +322,10 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
               <ArrowLeft className="w-4 h-4" />Trang chủ
             </button>
             <span className="text-gray-300">/</span>
-            <span className="text-gray-800 font-medium text-sm">Đăng tin</span>
+            <span className="text-gray-800 font-medium text-sm">{editId ? 'Sửa tin' : 'Đăng tin'}</span>
           </div>
-          <h1 className="font-black text-2xl text-gray-900">Đăng tin bất động sản</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Tin sẽ được kiểm duyệt trước khi hiển thị công khai</p>
+          <h1 className="font-black text-2xl text-gray-900">{editId ? 'Sửa tin đăng' : 'Đăng tin bất động sản'}</h1>
+          <p className="text-gray-500 text-sm mt-0.5">{editId ? 'Sau khi lưu, tin sẽ chờ duyệt lại' : 'Tin sẽ được kiểm duyệt trước khi hiển thị công khai'}</p>
         </div>
         <div className="max-w-3xl mx-auto px-4 pb-4">
           <div className="flex items-center">
@@ -708,7 +760,7 @@ export function PostListingPage({ onNavigate }: PostListingPageProps) {
               <button onClick={handleSubmit} disabled={submitting}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-colors flex items-center gap-2 disabled:opacity-60">
                 <CheckCircle className="w-4 h-4" />
-                {submitting ? 'Đang gửi...' : 'Gửi duyệt tin'}
+                {submitting ? (editId ? 'Đang lưu...' : 'Đang gửi...') : (editId ? 'Lưu thay đổi' : 'Gửi duyệt tin')}
               </button>
             )}
           </div>
