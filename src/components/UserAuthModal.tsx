@@ -18,6 +18,9 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  // Đăng ký xong mà chưa có session = Supabase bật "Confirm email" → phải xác nhận
+  // qua mail trước khi đăng nhập. Hiện màn "kiểm tra email" thay vì "đang đăng nhập".
+  const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +33,15 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
       } else {
         if (!displayName.trim()) { setError('Vui lòng nhập họ tên.'); setLoading(false); return; }
         if (password.length < 6) { setError('Mật khẩu tối thiểu 6 ký tự.'); setLoading(false); return; }
-        await signUp(email, password, displayName, phone);
-        setSuccess(true);
-        setTimeout(onSuccess, 1500);
+        const data = await signUp(email, password, displayName, phone);
+        if (data.session) {
+          // Confirm email TẮT → đã đăng nhập luôn.
+          setSuccess(true);
+          setTimeout(onSuccess, 1500);
+        } else {
+          // Confirm email BẬT → chờ user bấm link trong mail.
+          setNeedsEmailConfirm(true);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Có lỗi xảy ra';
@@ -54,7 +63,21 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
           <X className="w-5 h-5" />
         </button>
 
-        {success ? (
+        {needsEmailConfirm ? (
+          <div className="text-center py-6">
+            <Mail className="w-14 h-14 text-red-500 mx-auto mb-3" />
+            <h3 className="font-black text-gray-900 text-xl mb-1">Kiểm tra email của bạn</h3>
+            <p className="text-gray-500 text-sm">
+              Chúng tôi vừa gửi liên kết xác nhận đến <span className="font-semibold text-gray-700">{email}</span>.
+              Mở email và bấm vào liên kết để kích hoạt tài khoản, sau đó đăng nhập.
+            </p>
+            <p className="text-gray-400 text-xs mt-3">Không thấy email? Kiểm tra mục Spam/Quảng cáo.</p>
+            <button onClick={onClose}
+              className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors">
+              Đã hiểu
+            </button>
+          </div>
+        ) : success ? (
           <div className="text-center py-6">
             <CheckCircle className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
             <h3 className="font-black text-gray-900 text-xl mb-1">Đăng ký thành công!</h3>

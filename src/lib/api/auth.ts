@@ -1,12 +1,22 @@
 import { supabase, type Profile } from '../supabase';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+// Đăng ký. emailRedirectTo dựng theo origin hiện tại → link xác nhận trong mail
+// quay về đúng host (localhost khi dev, domain thật khi prod) tại /xac-nhan-email.
+// KHÔNG upsert profiles ở đây: trigger DB handle_new_user() (SECURITY DEFINER) tạo
+// profile server-side, tránh RLS chặn khi email confirm bật (lúc này chưa có session).
+// display_name + phone gửi qua user metadata để trigger đọc.
 export async function signUp(email: string, password: string, displayName: string, phone: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } });
+  const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/xac-nhan-email` : undefined;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { display_name: displayName, phone },
+      emailRedirectTo,
+    },
+  });
   if (error) throw error;
-  if (data.user) {
-    await supabase.from('profiles').upsert({ id: data.user.id, display_name: displayName, phone }).single();
-  }
   return data;
 }
 export async function signIn(email: string, password: string) {
