@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle, AlertCircle, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { updatePassword } from '@/lib/api';
+import { friendlyAuthLinkError } from '@/lib/authFlow';
 
 // Trang tiếp nhận link đặt lại mật khẩu từ Supabase. requestPasswordReset đặt
 // redirectTo về đây; link có thể ở 3 dạng: ?code= (PKCE), ?token_hash=&type=recovery
@@ -52,7 +53,7 @@ export default function DatLaiMatKhauPage() {
       } catch (e: unknown) {
         if (cancelled) return;
         setStatus('error');
-        setMessage(e instanceof Error ? e.message : 'Xác thực liên kết thất bại.');
+        setMessage(friendlyAuthLinkError(e instanceof Error ? e.message : null));
       }
     })();
     return () => { cancelled = true; };

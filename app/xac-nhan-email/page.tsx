@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { friendlyAuthLinkError } from '@/lib/authFlow';
 
 // Trang tiếp nhận link xác nhận email từ Supabase. signUp đặt emailRedirectTo về
 // đây; link có thể ở 3 dạng tuỳ cấu hình: ?code= (PKCE), ?token_hash=&type= (verify
@@ -52,7 +53,7 @@ export default function XacNhanEmailPage() {
       } catch (e: unknown) {
         if (cancelled) return;
         setStatus('error');
-        setMessage(e instanceof Error ? e.message : 'Xác nhận email thất bại.');
+        setMessage(friendlyAuthLinkError(e instanceof Error ? e.message : null));
       }
     })();
     return () => { cancelled = true; };

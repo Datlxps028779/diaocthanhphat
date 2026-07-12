@@ -19,3 +19,22 @@ export function interpretSignUpResult(data: SignUpLike): SignUpOutcome {
   if (Array.isArray(identities) && identities.length === 0) return 'already_registered';
   return 'needs_confirm';
 }
+
+// Dịch lỗi xác thực link (xác nhận email / đặt lại mật khẩu) thành câu tiếng Việt
+// thân thiện, KHÔNG lộ chuỗi kỹ thuật của Supabase (vd "both auth code and code
+// verifier should be non-empty") ra người dùng. Thông điệp mình tự đặt (chứa "Vui
+// lòng") được giữ nguyên để không dịch chồng.
+const AUTH_LINK_EXPIRED = 'Liên kết đã hết hạn. Vui lòng yêu cầu gửi lại.';
+const AUTH_LINK_INVALID = 'Liên kết không hợp lệ hoặc đã được sử dụng. Vui lòng thực hiện lại.';
+const AUTH_LINK_FALLBACK = 'Xác thực liên kết thất bại. Vui lòng thử lại.';
+
+export function friendlyAuthLinkError(raw: string | undefined | null): string {
+  if (!raw) return AUTH_LINK_FALLBACK;
+  if (raw.includes('Vui lòng')) return raw; // đã là thông điệp thân thiện của mình
+  const s = raw.toLowerCase();
+  if (s.includes('expired')) return AUTH_LINK_EXPIRED;
+  if (s.includes('invalid') || s.includes('code verifier') || s.includes('access_denied')) {
+    return AUTH_LINK_INVALID;
+  }
+  return AUTH_LINK_FALLBACK;
+}
