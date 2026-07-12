@@ -10,8 +10,7 @@ import { AboutPage } from '@/screens/AboutPage';
 import { ValuationPage } from '@/screens/ValuationPage';
 import { ComparePage } from '@/screens/ComparePage';
 import { PostListingPage } from '@/screens/PostListingPage';
-import { MyListingsPage } from '@/screens/MyListingsPage';
-import { AccountPage } from '@/screens/AccountPage';
+import { AccountHubPage } from '@/screens/AccountHubPage';
 import type { Property, NewsArticle } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
@@ -103,7 +102,7 @@ export function MyListingsClient() {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'my-listings' }}>
-      <MyListingsPage onNavigate={navigate} />
+      <AccountHubPage onNavigate={navigate} initialTab="listings" />
     </SiteChrome>
   );
 }
@@ -112,7 +111,7 @@ export function AccountClient() {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'account' }}>
-      <AccountPage onNavigate={navigate} />
+      <AccountHubPage onNavigate={navigate} initialTab="favorites" />
     </SiteChrome>
   );
 }

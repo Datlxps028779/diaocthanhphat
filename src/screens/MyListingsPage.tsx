@@ -10,6 +10,7 @@ import { Breadcrumb } from '../components/Layout';
 
 interface MyListingsPageProps {
   onNavigate: (p: Page) => void;
+  embedded?: boolean;   // true = render trong hub Tài khoản, bỏ header riêng
 }
 
 const STATUS_MAP = {
@@ -18,7 +19,7 @@ const STATUS_MAP = {
   rejected: { label: 'Từ chối', icon: <XCircle className="w-3.5 h-3.5" />, cls: 'bg-red-100 text-red-700' },
 };
 
-export function MyListingsPage({ onNavigate }: MyListingsPageProps) {
+export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -63,27 +64,37 @@ export function MyListingsPage({ onNavigate }: MyListingsPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <Breadcrumb items={[
-            { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
-            { label: 'Tin đăng của tôi' },
-          ]} />
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="font-black text-xl text-gray-900">Tin đăng của tôi</h1>
-              <p className="text-gray-500 text-xs mt-0.5">Quản lý và theo dõi trạng thái tin đăng</p>
+    <div className={embedded ? '' : 'min-h-screen bg-gray-50'}>
+      {!embedded && (
+        <div className="bg-white border-b border-gray-100 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+            <Breadcrumb items={[
+              { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
+              { label: 'Tin đăng của tôi' },
+            ]} />
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="font-black text-xl text-gray-900">Tin đăng của tôi</h1>
+                <p className="text-gray-500 text-xs mt-0.5">Quản lý và theo dõi trạng thái tin đăng</p>
+              </div>
+              <button onClick={() => { onNavigate({ name: 'post-listing' }); scrollTop(); }}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors">
+                <Plus className="w-4 h-4" />Đăng tin mới
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      <div className={embedded ? '' : 'max-w-5xl mx-auto px-4 py-5'}>
+        {embedded && (
+          <div className="flex justify-end mb-4">
             <button onClick={() => { onNavigate({ name: 'post-listing' }); scrollTop(); }}
               className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors">
               <Plus className="w-4 h-4" />Đăng tin mới
             </button>
           </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 py-5">
+        )}
         {/* Tabs */}
         <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
           {(['all', 'pending', 'approved', 'rejected'] as const).map(s => (

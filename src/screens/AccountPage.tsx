@@ -11,9 +11,10 @@ import { PropertyCard } from '../LandingPage';
 
 interface AccountPageProps {
   onNavigate: (p: Page) => void;
+  embedded?: boolean;   // true = render trong hub Tài khoản, bỏ header riêng
 }
 
-export function AccountPage({ onNavigate }: AccountPageProps) {
+export function AccountPage({ onNavigate, embedded }: AccountPageProps) {
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<string | null>(null);
 
@@ -47,28 +48,30 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   const favoritesWithProps = favorites.filter(f => f.properties);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <Breadcrumb items={[
-            { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
-            { label: 'Tài khoản' },
-            { label: 'BĐS yêu thích' },
-          ]} />
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="font-black text-xl text-gray-900">BĐS yêu thích của tôi</h1>
-              <p className="text-gray-500 text-xs mt-0.5">Quản lý danh sách bất động sản đã lưu</p>
-            </div>
-            <div className="flex items-center gap-2 text-red-600">
-              <Heart className="w-5 h-5 fill-red-500" />
-              <span className="font-bold">{favoritesWithProps.length} BĐS</span>
+    <div className={embedded ? '' : 'min-h-screen bg-gray-50'}>
+      {!embedded && (
+        <div className="bg-white border-b border-gray-100 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+            <Breadcrumb items={[
+              { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
+              { label: 'Tài khoản' },
+              { label: 'BĐS yêu thích' },
+            ]} />
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="font-black text-xl text-gray-900">BĐS yêu thích của tôi</h1>
+                <p className="text-gray-500 text-xs mt-0.5">Quản lý danh sách bất động sản đã lưu</p>
+              </div>
+              <div className="flex items-center gap-2 text-red-600">
+                <Heart className="w-5 h-5 fill-red-500" />
+                <span className="font-bold">{favoritesWithProps.length} BĐS</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="max-w-5xl mx-auto px-4 py-5">
+      <div className={embedded ? '' : 'max-w-5xl mx-auto px-4 py-5'}>
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
