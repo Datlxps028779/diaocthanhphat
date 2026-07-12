@@ -32,6 +32,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [liked, setLiked] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -46,6 +47,26 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     enabled: !!propertyId,
     initialData: initialData ?? undefined,
   });
+
+  // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
+  // để giữ đúng thứ tự hooks.
+  useEffect(() => {
+    if (!lightboxOpen || !property) return;
+    const imgs = [property.image_url, ...(property.images ?? [])].filter(Boolean) as string[];
+    const n = imgs.length || 1;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+      else if (e.key === 'ArrowLeft') setActiveImg(i => (i - 1 + n) % n);
+      else if (e.key === 'ArrowRight') setActiveImg(i => (i + 1) % n);
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [lightboxOpen, property]);
 
   const { data: testimonialsRaw = [] } = useQuery({
     queryKey: qk.testimonials(),
@@ -180,17 +201,28 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
             {/* Gallery */}
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-              <div className="relative aspect-video">
-                <Image src={allImages[activeImg]} alt={property.title} fill priority
-                  sizes="(max-width: 768px) 100vw, 66vw" className="object-cover" />
+              <div className="relative aspect-video overflow-hidden group/gallery">
+                {/* Track trượt ngang cho slide mượt (translateX theo activeImg) */}
+                <div className="flex h-full transition-transform duration-300 ease-out"
+                  style={{ transform: `translateX(-${activeImg * 100}%)` }}>
+                  {allImages.map((img, i) => (
+                    <button key={i} type="button" onClick={() => setLightboxOpen(true)}
+                      className="relative flex-shrink-0 w-full h-full cursor-zoom-in"
+                      aria-label="Phóng to ảnh">
+                      <Image src={img} alt={`${property.title} - ảnh ${i + 1}`} fill
+                        priority={i === 0}
+                        sizes="(max-width: 768px) 100vw, 66vw" className="object-cover" />
+                    </button>
+                  ))}
+                </div>
                 {allImages.length > 1 && (
-                  <div className="absolute inset-0 flex items-center justify-between px-3">
+                  <div className="absolute inset-0 flex items-center justify-between px-3 pointer-events-none">
                     <button onClick={() => setActiveImg(i => (i - 1 + allImages.length) % allImages.length)}
-                      className="w-9 h-9 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition-colors">
+                      className="pointer-events-auto w-9 h-9 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition-colors">
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                     <button onClick={() => setActiveImg(i => (i + 1) % allImages.length)}
-                      className="w-9 h-9 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition-colors">
+                      className="pointer-events-auto w-9 h-9 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition-colors">
                       <ChevRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -213,6 +245,11 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     )}
                   </button>
                 </div>
+                {/* Nút phóng to */}
+                <button onClick={() => setLightboxOpen(true)} title="Phóng to" aria-label="Phóng to ảnh"
+                  className="absolute bottom-2 left-3 w-9 h-9 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors">
+                  <Maximize2 className="w-4 h-4" />
+                </button>
                 <div className="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
                   {activeImg + 1}/{allImages.length}
                 </div>
@@ -568,6 +605,37 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
       </div>
 
       <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />
+
+      {/* Lightbox phóng to ảnh — object-contain để xem đầy đủ, không méo/vỡ hình */}
+      {lightboxOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
+          onClick={() => setLightboxOpen(false)}>
+          <button onClick={() => setLightboxOpen(false)} aria-label="Đóng"
+            className="absolute top-4 right-4 w-11 h-11 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white text-2xl transition-colors">
+            ✕
+          </button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/80 text-sm font-medium">
+            {activeImg + 1} / {allImages.length}
+          </div>
+          <img src={allImages[activeImg]} alt={`${property.title} - ảnh ${activeImg + 1}`}
+            onClick={e => e.stopPropagation()}
+            className="max-w-[92vw] max-h-[85vh] object-contain select-none" />
+          {allImages.length > 1 && (
+            <>
+              <button aria-label="Ảnh trước"
+                onClick={e => { e.stopPropagation(); setActiveImg(i => (i - 1 + allImages.length) % allImages.length); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button aria-label="Ảnh sau"
+                onClick={e => { e.stopPropagation(); setActiveImg(i => (i + 1) % allImages.length); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
+                <ChevRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
