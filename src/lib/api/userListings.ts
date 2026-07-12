@@ -31,11 +31,17 @@ export async function updateMyListing(
   id: string,
   listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_listings')
     .update({ ...listing, status: 'pending', reject_reason: null })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  // RLS có thể lọc mất dòng (không đúng chủ) → update trúng 0 dòng mà không báo lỗi.
+  // Bắt trường hợp này để không hiện "thành công" giả trong khi DB không đổi.
+  if (!data || data.length === 0) {
+    throw new Error('Không cập nhật được tin — bạn không có quyền sửa hoặc tin không tồn tại.');
+  }
 }
 export async function adminGetUserListings(status?: string): Promise<UserListing[]> {
   let q = supabase
