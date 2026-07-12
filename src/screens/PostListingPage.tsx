@@ -8,6 +8,7 @@ import {
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing, updateMyListing, getMyListing } from '../lib/api';
 import { listingToFormState } from '../lib/listingForm';
+import { extractErrorMessage } from '../lib/errorMessage';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
@@ -203,7 +204,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         meta_title: form.meta_title || null,
         meta_description: form.meta_description || null,
         focus_keywords: form.focus_keywords || null,
-        schema_markup: form.schema_markup ? JSON.parse(form.schema_markup) : null,
+        schema_markup: parseSchema(form.schema_markup),
         legal_status: form.legal_status || null,
         bedrooms: form.bedrooms ? parseInt(form.bedrooms) : null,
         bathrooms: form.bathrooms ? parseInt(form.bathrooms) : null,
@@ -222,7 +223,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
       else await submitUserListing(payload);
     },
     onSuccess: () => setSubmitted(true),
-    onError: (err) => setErrors({ submit: err instanceof Error ? err.message : 'Có lỗi xảy ra' }),
+    onError: (err) => setErrors({ submit: extractErrorMessage(err, editId ? 'Không lưu được tin' : 'Không gửi được tin') }),
   });
   const submitting = submitMutation.isPending;
 
@@ -664,7 +665,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                 <p className="text-blue-800 text-xs leading-relaxed">
                   Các trường SEO được tự động điền dựa trên thông tin tin đăng. Bạn có thể chỉnh sửa thủ công.
-                  Slug (URL thân thiện) sẽ tự tạo khi đăng. Schema Markup (JSON-LD) giúp Google hiểu rõ loại tin BĐS.
+                  Slug (URL thân thiện) sẽ tự tạo khi đăng.
                 </p>
               </div>
 
@@ -710,14 +711,8 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 <p className="text-gray-400 text-xs mt-1">Slug tự động tạo từ tiêu đề. Sẽ duy nhất khi đăng.</p>
               </FormField>
 
-              <FormField label="Schema Markup (JSON-LD - RealEstateListing)">
-                <textarea
-                  value={seo.schemaMarkup}
-                  onChange={e => seo.setSchemaMarkup(e.target.value)}
-                  rows={8}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-                />
-              </FormField>
+              {/* Schema Markup (JSON-LD) vẫn được tạo tự động ngầm khi submit —
+                  ẩn khỏi giao diện vì người dùng không cần chỉnh tay, tránh nhiễu. */}
 
               <button
                 type="button"
@@ -770,8 +765,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   );
 }
 
-function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
+function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {  return (
     <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
       {icon}<h3 className="font-bold text-gray-900">{label}</h3>
     </div>
@@ -785,6 +779,11 @@ function FormField({ label, error, children, className = '' }: { label: string; 
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
+}
+// Schema JSON-LD tự sinh ẩn — không để JSON hỏng chặn việc gửi tin. Lỗi parse → null.
+function parseSchema(raw: string): Record<string, unknown> | null {
+  if (!raw || !raw.trim()) return null;
+  try { return JSON.parse(raw); } catch { return null; }
 }
 const inputCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400`;
 const selectCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-red-400`;
