@@ -18,6 +18,7 @@ function makeListing(over: Partial<UserListing> = {}): UserListing {
     formatted_address: null, vr_tour_url: null, video_url: null, contact_zalo: null,
     slug: null, meta_title: null, meta_description: null,
     focus_keywords: null, schema_markup: null,
+    property_id: null,
     created_at: '2026-01-01', updated_at: '2026-01-01',
     ...over,
   };

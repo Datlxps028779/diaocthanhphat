@@ -95,6 +95,7 @@ export type UserListing = {
   contact_zalo: string | null;
   slug: string | null; meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
+  property_id: string | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;
   profiles?: Pick<Profile, 'display_name' | 'phone'> | null;

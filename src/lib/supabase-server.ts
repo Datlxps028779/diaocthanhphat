@@ -20,10 +20,13 @@ const PROPERTY_SELECT = '*, areas(id,name,slug), property_types(id,name,slug)';
 export async function serverGetPropertyByIdOrSlug(idOrSlug: string): Promise<Property | null> {
   const sb = serverClient();
   const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
+  // Lọc is_active: tin đã ẩn/từ chối/xóa → null → trang gọi notFound() (404),
+  // không render thành trang sống (tránh Google index tin đã gỡ). Chuẩn SEO.
   const { data } = await sb
     .from('properties')
     .select(PROPERTY_SELECT)
     .eq(col, idOrSlug)
+    .eq('is_active', true)
     .maybeSingle();
   return data as Property | null;
 }

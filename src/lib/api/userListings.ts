@@ -2,7 +2,7 @@ import { supabase, type UserListing } from '../supabase';
 import { buildUniqueSlug } from '../slug';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
-export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
+export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
   const { error } = await supabase.from('user_listings').insert(listing);
   if (error) throw error;
 }
@@ -29,7 +29,7 @@ export async function getMyListing(id: string): Promise<UserListing | null> {
 // duyệt lại (xoá luôn lý do từ chối cũ). RLS user_listings_update_own giới hạn đúng chủ.
 export async function updateMyListing(
   id: string,
-  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
+  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
 ): Promise<void> {
   const { data, error } = await supabase
     .from('user_listings')
@@ -71,7 +71,8 @@ export async function approveUserListing(id: string): Promise<void> {
     formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
   }).select('id').single();
   if (propErr) throw propErr;
-  await supabase.from('user_listings').update({ status: 'approved' }).eq('id', id);
+  // Lưu property_id để trigger biết dòng properties nào cần ẩn khi tin bị từ chối/xóa/sửa.
+  await supabase.from('user_listings').update({ status: 'approved', property_id: inserted?.id ?? null }).eq('id', id);
 
   // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
   // Edge Function ai-autotag xác thực admin — anon key sẽ bị từ chối 401.
