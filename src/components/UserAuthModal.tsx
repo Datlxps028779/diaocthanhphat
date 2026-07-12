@@ -34,12 +34,13 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
     try {
       if (mode === 'login') {
         await signIn(email, password);
-        // Chặn tài khoản quản trị đăng nhập qua cổng người dùng: cắt phiên ngay và
-        // hướng về /quantrihethong. Thu hẹp bề mặt tấn công lên tài khoản quyền cao.
+        // Chặn tài khoản quản trị đăng nhập qua cổng người dùng: cắt phiên ngay.
+        // Dùng lỗi CHUNG CHUNG (giống sai mật khẩu) — KHÔNG tiết lộ tài khoản là
+        // admin hay đường dẫn trang quản trị, tránh dò tài khoản đặc quyền.
         const role = await getCurrentRole().catch(() => null);
         if (isElevatedRole(role)) {
           await signOut();
-          setError('Tài khoản quản trị vui lòng đăng nhập tại trang /quantrihethong.');
+          setError('Email hoặc mật khẩu không đúng.');
           setLoading(false);
           return;
         }

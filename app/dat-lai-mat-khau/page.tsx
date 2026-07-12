@@ -23,8 +23,9 @@ export default function DatLaiMatKhauPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Sau khi có session recovery: chặn tài khoản quản trị đổi mật khẩu qua cổng này
-    // (phải dùng /quantrihethong), rồi mở form cho người dùng thường.
+    // Sau khi có session recovery: chặn tài khoản quản trị đổi mật khẩu qua cổng này,
+    // rồi mở form cho người dùng thường. Dùng lỗi CHUNG CHUNG (giống link hỏng) —
+    // KHÔNG tiết lộ tài khoản là admin hay đường dẫn trang quản trị.
     const gate = async () => {
       const role = await getCurrentRole().catch(() => null);
       if (cancelled) return;
@@ -32,7 +33,7 @@ export default function DatLaiMatKhauPage() {
         await signOut();
         if (cancelled) return;
         setStatus('error');
-        setMessage('Tài khoản quản trị vui lòng đổi mật khẩu tại trang /quantrihethong.');
+        setMessage('Liên kết không hợp lệ hoặc đã hết hạn.');
         return;
       }
       setStatus('ready');
