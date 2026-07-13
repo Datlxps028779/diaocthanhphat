@@ -5,6 +5,7 @@ import { serializeJsonLd } from '@/lib/seo';
 import { Providers } from './providers';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { AnalyticsConsent } from './_components/AnalyticsConsent';
 
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
@@ -67,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>{children}</Providers>
         <Analytics />
         <SpeedInsights />
+        <AnalyticsConsent />
       </body>
     </html>
   );
