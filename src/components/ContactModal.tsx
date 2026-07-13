@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Phone, MessageSquare, ChevronDown } from 'lucide-react';
+import { X, Phone, MessageSquare, ChevronDown, ShieldCheck, Clock, Award } from 'lucide-react';
 import { submitLead } from '../lib/api';
+import { useSetting } from '../lib/cms';
 
 // Kiểu tối giản cho ContactModal — chỉ cần id, title, price_label
 interface ContactTarget {
@@ -19,6 +20,11 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  // Trust signals cạnh điểm chuyển đổi — giảm ma sát để lại SĐT. Số liệu lấy từ
+  // cài đặt admin (dùng chung khóa với section stats trang chủ), có default hợp lý.
+  const experience = useSetting('stat3_number', '7 năm');
+  const responseTime = useSetting('lead_response_time', '30 phút');
 
   if (!property) return null;
 
@@ -61,17 +67,30 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
               <MessageSquare className="w-8 h-8 text-emerald-500" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Đã nhận thông tin!</h3>
-            <p className="text-gray-500">Tư vấn viên sẽ liên hệ với bạn trong vòng 30 phút.</p>
+            <p className="text-gray-500">Tư vấn viên sẽ liên hệ với bạn trong vòng {responseTime}.</p>
             <button onClick={onClose} className="mt-6 w-full bg-amber-500 text-white font-semibold py-3 rounded-xl hover:bg-amber-600 transition-colors">
               Đóng
             </button>
           </div>
         ) : (
           <>
-            <div className="mb-5">
+            <div className="mb-4">
               <p className="text-xs text-amber-600 font-semibold uppercase tracking-wider mb-1">Đăng ký tư vấn</p>
               <h3 className="text-lg font-bold text-gray-900 leading-snug line-clamp-2">{property.title}</h3>
               <p className="text-amber-600 font-bold text-xl mt-1">{property.price_label}</p>
+            </div>
+
+            {/* Trust signals — giảm ma sát ngay tại điểm để lại SĐT */}
+            <div className="flex items-center gap-3 mb-4 py-2.5 px-3 bg-gray-50 rounded-xl border border-gray-100">
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />Pháp lý minh bạch
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
+                <Award className="w-4 h-4 text-amber-500 flex-shrink-0" />{experience} kinh nghiệm
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
+                <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />Phản hồi {responseTime}
+              </span>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
