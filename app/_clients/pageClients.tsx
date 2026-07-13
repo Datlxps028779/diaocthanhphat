@@ -15,7 +15,7 @@ import type { Property, NewsArticle } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
-  filters?: { typeId?: string; district?: string; legal?: string };
+  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number };
   initialData?: { data: Property[]; total: number };
 }) {
   const navigate = useNavigate();

@@ -32,19 +32,31 @@ export const ADMIN_PATH = '/quantrihethong';
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; minPrice?: number; maxPrice?: number } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
-  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string } = {};
+  const num = (v: string | string[] | undefined) => {
+    const s = first(v);
+    if (s == null) return undefined;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; minPrice?: number; maxPrice?: number } = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
   const district = first(sp?.district);
   const ward = first(sp?.ward);
   const legal = first(sp?.legal);
+  const keyword = first(sp?.q);
+  const minPrice = num(sp?.minPrice);
+  const maxPrice = num(sp?.maxPrice);
   if (area) out.areaId = area;
   if (type) out.typeId = type;
   if (district) out.district = district;
   if (ward) out.ward = ward;
   if (legal) out.legal = legal;
+  if (keyword) out.keyword = keyword;
+  if (minPrice != null) out.minPrice = minPrice;
+  if (maxPrice != null) out.maxPrice = maxPrice;
   return out;
 }
 
@@ -66,6 +78,9 @@ export function pageToHref(page: Page): string {
       if (page.district) q.set('district', page.district);
       if (page.ward) q.set('ward', page.ward);
       if (page.legal) q.set('legal', page.legal);
+      if (page.keyword) q.set('q', page.keyword);
+      if (page.minPrice != null) q.set('minPrice', String(page.minPrice));
+      if (page.maxPrice != null) q.set('maxPrice', String(page.maxPrice));
       const qs = q.toString();
       return qs ? `${base}?${qs}` : base;
     }

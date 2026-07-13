@@ -15,6 +15,7 @@ import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
+import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { PropertyMap, type MapBounds } from '../components/PropertyMap';
@@ -39,36 +40,7 @@ const LISTING_TYPES: { key: ListingTypeKey; label: string; icon: React.ReactNode
   { key: 'cho_thue', label: 'Cho thuê', icon: <Tag className="w-3.5 h-3.5" /> },
 ];
 
-// Price ranges: for mua_ban in tỷ, cho_thue in triệu/tháng
-const PRICE_RANGES_SALE = [
-  { label: 'Tất cả mức giá', min: undefined as number | undefined, max: undefined as number | undefined },
-  { label: 'Dưới 500 triệu', min: 0, max: 0.5 },
-  { label: '500tr – 1 tỷ', min: 0.5, max: 1 },
-  { label: '1 – 2 tỷ', min: 1, max: 2 },
-  { label: '2 – 5 tỷ', min: 2, max: 5 },
-  { label: '5 – 10 tỷ', min: 5, max: 10 },
-  { label: '10 – 20 tỷ', min: 10, max: 20 },
-  { label: '20 – 50 tỷ', min: 20, max: 50 },
-  { label: 'Trên 50 tỷ', min: 50, max: undefined },
-];
-const PRICE_RANGES_RENT = [
-  { label: 'Tất cả mức giá', min: undefined as number | undefined, max: undefined as number | undefined },
-  { label: 'Dưới 3 triệu/tháng', min: 0, max: 3 },
-  { label: '3 – 5 triệu/tháng', min: 3, max: 5 },
-  { label: '5 – 10 triệu/tháng', min: 5, max: 10 },
-  { label: '10 – 20 triệu/tháng', min: 10, max: 20 },
-  { label: '20 – 50 triệu/tháng', min: 20, max: 50 },
-  { label: 'Trên 50 triệu/tháng', min: 50, max: undefined },
-];
-const AREA_RANGES = [
-  { label: 'Tất cả diện tích', min: undefined as number | undefined, max: undefined as number | undefined },
-  { label: 'Dưới 50 m²', min: 0, max: 50 },
-  { label: '50 – 100 m²', min: 50, max: 100 },
-  { label: '100 – 200 m²', min: 100, max: 200 },
-  { label: '200 – 500 m²', min: 200, max: 500 },
-  { label: '500m² – 1.000m²', min: 500, max: 1000 },
-  { label: 'Trên 1.000 m²', min: 1000, max: undefined },
-];
+// Price ranges & area ranges: dùng chung từ lib/priceRange (hero + listing khớp index).
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
 const PER_PAGE = 16;
 
@@ -96,7 +68,12 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [debouncedKeyword, setDebouncedKeyword] = useState(keyword);
   const [areaId, setAreaId] = useState(initialFilters?.areaId ?? '');
   const [typeId, setTypeId] = useState(initialFilters?.typeId ?? '');
-  const [priceIdx, setPriceIdx] = useState(0);
+  const [priceIdx, setPriceIdx] = useState(() =>
+    findRangeIndex(
+      initialFilters?.listingType === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE,
+      initialFilters?.minPrice, initialFilters?.maxPrice,
+    ),
+  );
   const [areaIdx, setAreaIdx] = useState(0);
   const [bedrooms, setBedrooms] = useState(initialFilters?.bedrooms ?? '');
   const [direction, setDirection] = useState(initialFilters?.direction ?? '');
@@ -198,8 +175,16 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     setViewportProps(filterByBounds(mapProperties, bounds));
   }, [mapProperties]);
 
-  // Reset price index when switching between sale/rent
-  useEffect(() => { setPriceIdx(0); }, [listingType]);
+  // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
+  // so giá trị trước, không dùng cờ boolean (cờ bị StrictMode double-invoke reset
+  // nhầm priceIdx đã seed từ URL ?minPrice/?maxPrice ngay khi mount).
+  const prevListingType = useRef(listingType);
+  useEffect(() => {
+    if (prevListingType.current !== listingType) {
+      prevListingType.current = listingType;
+      setPriceIdx(0);
+    }
+  }, [listingType]);
 
   const resetFilters = () => {
     setKeyword(''); setAreaId(''); setTypeId(''); setDistrict(''); setWard('');

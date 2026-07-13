@@ -15,6 +15,7 @@ import {
   getPageLayout, buildPropertyPath,
 } from './lib/api';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
+import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
 import { quickCategoryToPage } from './lib/quickCategory';
@@ -59,6 +60,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   const [searchDistrict, setSearchDistrict] = useState('');
   const [searchWard, setSearchWard] = useState('');
   const [searchTypeId, setSearchTypeId] = useState('');
+  const [searchPriceIdx, setSearchPriceIdx] = useState(0);
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
@@ -116,6 +118,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   };
 
   const handleSearch = () => {
+    const pr = (activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE)[searchPriceIdx];
     onNavigate({
       name: 'listings',
       listingType: activeTab,
@@ -124,6 +127,8 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
       ward: searchWard || undefined,
       typeId: searchTypeId || undefined,
       keyword: searchKeyword || undefined,
+      minPrice: pr?.min,
+      maxPrice: pr?.max,
     });
   };
 
@@ -425,7 +430,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
               {LISTING_TYPE_TABS.map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => { setActiveTab(tab.key); setSearchPriceIdx(0); }}
                   className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === tab.key ? 'bg-red-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
                 >
                   {tab.key === 'mua_ban' ? sec('hero')('tab_buy', tab.label) : sec('hero')('tab_rent', tab.label)}
@@ -480,6 +485,16 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
               >
                 <option value="">Loại BĐS</option>
                 {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <select
+                value={searchPriceIdx}
+                onChange={e => setSearchPriceIdx(Number(e.target.value))}
+                aria-label="Khoảng giá"
+                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+              >
+                {(activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE).map((r, i) => (
+                  <option key={i} value={i}>{r.label}</option>
+                ))}
               </select>
               <button
                 onClick={handleSearch}

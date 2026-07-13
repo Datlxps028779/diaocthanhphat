@@ -37,6 +37,28 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('district')).toBe('Thuận An');
     expect(params.get('ward')).toBe('Bình Chuẩn');
   });
+
+  it('mang keyword (q) và khoảng giá (minPrice/maxPrice) qua query', () => {
+    const href = pageToHref({ name: 'listings', keyword: 'nhà phố', minPrice: 1, maxPrice: 2 });
+    const [path, qs] = href.split('?');
+    expect(path).toBe('/danh-sach');
+    const params = new URLSearchParams(qs);
+    expect(params.get('q')).toBe('nhà phố');
+    expect(params.get('minPrice')).toBe('1');
+    expect(params.get('maxPrice')).toBe('2');
+  });
+
+  it('mang minPrice=0 (Dưới X) — không bỏ sót vì 0 là falsy', () => {
+    const params = new URLSearchParams(pageToHref({ name: 'listings', minPrice: 0, maxPrice: 0.5 }).split('?')[1]);
+    expect(params.get('minPrice')).toBe('0');
+    expect(params.get('maxPrice')).toBe('0.5');
+  });
+
+  it('khoảng giá max mở (Trên 50 tỷ): chỉ có minPrice, không có maxPrice', () => {
+    const params = new URLSearchParams(pageToHref({ name: 'listings', minPrice: 50 }).split('?')[1]);
+    expect(params.get('minPrice')).toBe('50');
+    expect(params.get('maxPrice')).toBeNull();
+  });
 });
 
 describe('parseListingParams — đọc ngược query của Next searchParams', () => {
@@ -71,5 +93,26 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     const qs = pageToHref(page).split('?')[1];
     const sp = Object.fromEntries(new URLSearchParams(qs));
     expect(parseListingParams(sp)).toEqual({ areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
+  });
+
+  it('bóc keyword (q) và ép số minPrice/maxPrice', () => {
+    expect(parseListingParams({ q: 'đất nền', minPrice: '1', maxPrice: '2' }))
+      .toEqual({ keyword: 'đất nền', minPrice: 1, maxPrice: 2 });
+  });
+
+  it('minPrice=0 được giữ (không nhầm với thiếu param)', () => {
+    expect(parseListingParams({ minPrice: '0', maxPrice: '0.5' }))
+      .toEqual({ minPrice: 0, maxPrice: 0.5 });
+  });
+
+  it('bỏ qua price không phải số hợp lệ', () => {
+    expect(parseListingParams({ minPrice: 'abc' })).toEqual({});
+  });
+
+  it('round-trip keyword + giá: page → href → parse khớp gốc', () => {
+    const page = { name: 'listings' as const, keyword: 'nhà phố', minPrice: 2, maxPrice: 5 };
+    const qs = pageToHref(page).split('?')[1];
+    const sp = Object.fromEntries(new URLSearchParams(qs));
+    expect(parseListingParams(sp)).toEqual({ keyword: 'nhà phố', minPrice: 2, maxPrice: 5 });
   });
 });
