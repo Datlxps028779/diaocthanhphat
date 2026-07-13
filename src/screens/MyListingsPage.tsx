@@ -77,6 +77,14 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
     expired: listings.filter(l => l.status === 'expired').length,
   };
 
+  // Cảnh báo in-app: tin đã duyệt sắp hết hạn (còn ≤7 ngày) + tin đã hết hạn.
+  const expiringSoon = listings.filter(l => {
+    if (l.status !== 'approved') return false;
+    const d = daysUntilExpiry(l.expires_at);
+    return d != null && d > 0 && d <= 7;
+  }).length;
+  const expiredCount = counts.expired;
+
   return (
     <div className={embedded ? '' : 'min-h-screen bg-gray-50'}>
       {!embedded && (
@@ -107,6 +115,25 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
               className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors">
               <Plus className="w-4 h-4" />Đăng tin mới
             </button>
+          </div>
+        )}
+        {/* Cảnh báo hết hạn */}
+        {(expiringSoon > 0 || expiredCount > 0) && (
+          <div className="flex flex-col gap-2 mb-4">
+            {expiringSoon > 0 && (
+              <button onClick={() => setTab('approved')}
+                className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 text-left hover:bg-amber-100 transition-colors">
+                <CalendarClock className="w-4 h-4 flex-shrink-0" />
+                <span>Bạn có <strong>{expiringSoon}</strong> tin sắp hết hạn (còn ≤7 ngày). Xem để gia hạn kịp thời.</span>
+              </button>
+            )}
+            {expiredCount > 0 && (
+              <button onClick={() => setTab('expired')}
+                className="flex items-center gap-2 bg-gray-100 border border-gray-200 text-gray-700 text-sm rounded-xl px-4 py-3 text-left hover:bg-gray-200 transition-colors">
+                <CalendarClock className="w-4 h-4 flex-shrink-0" />
+                <span>Bạn có <strong>{expiredCount}</strong> tin đã hết hạn và bị ẩn khỏi trang công khai. Bấm để gia hạn.</span>
+              </button>
+            )}
           </div>
         )}
         {/* Tabs */}
