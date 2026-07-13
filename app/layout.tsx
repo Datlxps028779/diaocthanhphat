@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import '@/index.css';
 import { serializeJsonLd } from '@/lib/seo';
 import { Providers } from './providers';
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
@@ -63,6 +65,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>{children}</Providers>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

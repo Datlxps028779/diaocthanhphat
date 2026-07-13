@@ -10,6 +10,7 @@ import {
   Navigation, ExternalLink, Play
 } from 'lucide-react';
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath } from '../lib/api';
+import { track, EVENTS } from '../lib/analytics';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
@@ -103,7 +104,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
       budget: form.budget || undefined,
       source: 'property_detail_form',
     }),
-    onSuccess: () => setFormSent(true),
+    onSuccess: () => {
+      track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_detail_form', hasBudget: !!form.budget });
+      setFormSent(true);
+    },
   });
   const formLoading = submitMutation.isPending;
 

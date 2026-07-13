@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Phone, MessageSquare, ChevronDown, ShieldCheck, Clock, Award } from 'lucide-react';
 import { submitLead } from '../lib/api';
 import { useSetting } from '../lib/cms';
+import { track, EVENTS } from '../lib/analytics';
 
 // Kiểu tối giản cho ContactModal — chỉ cần id, title, price_label
 interface ContactTarget {
@@ -26,6 +27,11 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
   const experience = useSetting('stat3_number', '7 năm');
   const responseTime = useSetting('lead_response_time', '30 phút');
 
+  // Đo mở modal liên hệ — bước trung gian quan trọng của phễu thu lead.
+  useEffect(() => {
+    if (property) track(EVENTS.CONTACT_OPEN, { listingId: property.id, source: 'contact_modal' });
+  }, [property]);
+
   if (!property) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +51,7 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
         property_id: property.id,
         source: 'contact_modal',
       });
+      track(EVENTS.LEAD_SUBMIT, { listingId: property.id, source: 'contact_modal', hasMessage: !!form.message.trim() });
       setSuccess(true);
     } catch {
       setError('Có lỗi xảy ra. Vui lòng thử lại.');

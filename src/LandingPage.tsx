@@ -17,6 +17,7 @@ import {
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
 import { FAQ_ITEMS } from './lib/faq';
+import { track, EVENTS } from './lib/analytics';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
 import { quickCategoryToPage } from './lib/quickCategory';
@@ -121,6 +122,12 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
 
   const handleSearch = () => {
     const pr = (activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE)[searchPriceIdx];
+    track(EVENTS.SEARCH, {
+      listingType: activeTab,
+      hasKeyword: !!searchKeyword.trim(),
+      hasArea: !!searchAreaId,
+      priceIdx: searchPriceIdx,
+    });
     onNavigate({
       name: 'listings',
       listingType: activeTab,
