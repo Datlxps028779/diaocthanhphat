@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, MapPin, TrendingUp, Shield, Phone,
-  Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight,
+  Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight, ChevronDown,
   CheckCircle, Newspaper, Users, Clock
 } from 'lucide-react';
 import { type Property } from './lib/supabase';
@@ -16,6 +16,7 @@ import {
 } from './lib/api';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
+import { FAQ_ITEMS } from './lib/faq';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
 import { quickCategoryToPage } from './lib/quickCategory';
@@ -61,6 +62,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
   const [searchWard, setSearchWard] = useState('');
   const [searchTypeId, setSearchTypeId] = useState('');
   const [searchPriceIdx, setSearchPriceIdx] = useState(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
@@ -349,6 +351,30 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
           </div>
         </section>
       ) : null;
+      case 'faq': return (
+        <section key="faq" className="py-12 bg-gray-50 border-t border-gray-100">
+          <div className="max-w-3xl mx-auto px-4">
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900 text-center mb-2">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
+            <p className="text-gray-500 text-sm text-center mb-8">{sec('faq')('subtitle', 'Những điều bạn cần biết trước khi mua bán, cho thuê bất động sản')}</p>
+            <div className="space-y-3">
+              {FAQ_ITEMS.map((item, i) => {
+                const open = openFaq === i;
+                return (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <button onClick={() => setOpenFaq(open ? null : i)}
+                      className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+                      aria-expanded={open}>
+                      <span className="font-semibold text-gray-900 text-sm">{item.q}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </button>
+                    {open && <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed">{item.a}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      );
       case 'cta': return (
         <section key="cta" className="py-14 bg-gradient-to-r from-red-600 to-red-700 relative overflow-hidden">
           <div className="absolute inset-0 opacity-10">
@@ -390,10 +416,16 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'cta', 'social_proof'];
-  const orderedIds = pageLayout.length > 0
-    ? pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id)
-    : DEFAULT_SECTION_ORDER;
+  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
+  const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
+  // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
+  // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
+  // nếu admin đã thêm/ẩn row faq thì tôn trọng đúng cấu hình CMS.
+  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'faq')) {
+    const at = cmsOrder.indexOf('cta');
+    if (at >= 0) cmsOrder.splice(at, 0, 'faq'); else cmsOrder.push('faq');
+  }
+  const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
 
   return (
     <div className="min-h-screen bg-white">
