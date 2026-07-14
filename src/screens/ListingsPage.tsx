@@ -14,6 +14,7 @@ import { CompareButton } from '../components/CompareButton';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
+import { recordSignal } from '../lib/tasteStore';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
 import { Breadcrumb } from '../components/Layout';
@@ -155,6 +156,14 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   });
   const properties = result?.data ?? [];
   const total = result?.total ?? 0;
+
+  // Tự học: ghi tín hiệu tìm kiếm khi khách chọn khu vực/loại/loại-tin (bỏ qua view
+  // mặc định rỗng). Không cần đăng nhập — lưu localStorage để tự gợi ý về sau.
+  useEffect(() => {
+    if (areaId || typeId || listingType) {
+      recordSignal('search', { areaId: areaId || null, typeId: typeId || null, listingType: listingType || null });
+    }
+  }, [areaId, typeId, listingType]);
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({

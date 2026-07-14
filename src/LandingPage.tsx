@@ -24,6 +24,7 @@ import { quickCategoryToPage } from './lib/quickCategory';
 import { CategoryIcon } from './lib/categoryIcons';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
+import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -566,6 +567,11 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
       {orderedIds.map(id => renderSection(id))}
+
+      {/* Gợi ý tự học từ hành vi (ẩn nếu chưa đủ tín hiệu) */}
+      <div className="max-w-7xl mx-auto px-4 pb-4">
+        <ForYou />
+      </div>
 
       <Footer areas={areas} onNavigate={onNavigate} />
       <FloatingButtons />

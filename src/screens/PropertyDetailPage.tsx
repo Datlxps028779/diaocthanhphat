@@ -19,7 +19,9 @@ import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { LoanCalculator } from '../components/LoanCalculator';
 import { RecentlyViewed } from '../components/RecentlyViewed';
+import { ForYou } from '../components/ForYou';
 import { recordRecentlyViewed } from '../lib/recentlyViewed';
+import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 
@@ -90,6 +92,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
       recordRecentlyViewed(property);
+      recordSignal('view', {
+        areaId: property.area_id, typeId: property.property_type_id,
+        listingType: property.listing_type, price: property.price,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
@@ -605,6 +611,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
           </div>
         )}
 
+        <ForYou excludeId={property.id} />
         <RecentlyViewed excludeId={property.id} />
       </div>
 
