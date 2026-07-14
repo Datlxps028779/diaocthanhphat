@@ -54,10 +54,16 @@ export type Testimonial = {
 export type Lead = {
   id: string; full_name: string; phone: string;
   area_interest: string | null; message: string | null;
-  property_id: string | null; status: 'new' | 'contacted' | 'closed'; created_at: string;
+  property_id: string | null; status: 'new' | 'contacted' | 'nurturing' | 'viewing' | 'negotiating' | 'won' | 'lost'; created_at: string;
   source: string | null; note: string | null; assigned_to: string | null; budget: string | null;
   follow_up_at: string | null;
   properties?: Pick<Property, 'id' | 'title'> | null;
+};
+
+export type LeadActivity = {
+  id: string; lead_id: string;
+  kind: 'created' | 'note' | 'call' | 'stage_change' | 'follow_up';
+  body: string | null; author: string | null; created_at: string;
 };
 export type NewsArticle = {
   id: string; title: string; slug: string; excerpt: string | null; content: string | null;

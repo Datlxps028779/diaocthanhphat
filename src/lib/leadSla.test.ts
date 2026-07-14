@@ -47,9 +47,11 @@ describe('leadSla — trạng thái SLA + sắp xếp + chia đều lead', () =>
       expect(leadSlaState(tomorrow, NOW)).toBe('ok');
     });
 
-    it('lead đã đóng (closed) → none dù cũ', () => {
-      const closed = mk({ status: 'closed', created_at: iso(at(2026, 7, 1, 0, 0)) });
-      expect(leadSlaState(closed, NOW)).toBe('none');
+    it('lead terminal (won/lost) → none dù cũ', () => {
+      const won = mk({ status: 'won', created_at: iso(at(2026, 7, 1, 0, 0)) });
+      expect(leadSlaState(won, NOW)).toBe('none');
+      const lost = mk({ status: 'lost', created_at: iso(at(2026, 7, 1, 0, 0)) });
+      expect(leadSlaState(lost, NOW)).toBe('none');
     });
 
     it('contacted không có follow_up, không phải new → ok (không bị SLA new)', () => {

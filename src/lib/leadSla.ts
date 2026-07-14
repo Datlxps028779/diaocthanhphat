@@ -1,8 +1,10 @@
 // Logic SLA cho lead (thuần, test được) — dùng ở LeadsTab để tô cảnh báo + sắp xếp.
 // Mọi hàm nhận `now` làm tham số để test tất định, không đọc đồng hồ bên trong.
 
+import { isTerminal, type StageKey } from './leadPipeline';
+
 export type SlaLead = {
-  status: 'new' | 'contacted' | 'closed';
+  status: StageKey;
   created_at: string;
   follow_up_at: string | null;
 };
@@ -19,7 +21,8 @@ function sameLocalDay(a: Date, b: Date): boolean {
 }
 
 export function leadSlaState(lead: SlaLead, now: Date): SlaState {
-  if (lead.status === 'closed') return 'none';
+  // Lead đã chốt/mất (terminal) → không còn nhắc SLA.
+  if (isTerminal(lead.status)) return 'none';
 
   const nowMs = now.getTime();
 

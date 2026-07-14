@@ -4,6 +4,7 @@ import type { Lead } from '../../../lib/supabase';
 import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads } from '../../../lib/api';
 import { getAdminUsers } from '../../../lib/api/adminUsers';
 import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
+import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ISO (UTC) → giá trị cho input datetime-local (giờ địa phương, không timezone).
@@ -120,12 +121,6 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     } finally { setBulkBusy(false); }
   };
 
-  const STATUS_CONFIG = {
-    new: { label: 'Mới', color: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
-    contacted: { label: 'Đã liên hệ', color: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
-    closed: { label: 'Hoàn thành', color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  };
-
   // Sắp xếp theo độ khẩn (quá hạn → cần gọi hôm nay → mới nhất) + đếm quá hạn.
   const sortedLeads = sortLeadsByUrgency(leads, now);
   const overdueCount = leads.filter(l => leadSlaState(l, now) === 'overdue').length;
@@ -133,10 +128,14 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        {(['all', 'new', 'contacted', 'closed'] as const).map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${statusFilter === s ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
-            {s === 'all' ? 'Tất cả' : STATUS_CONFIG[s].label}
+        <button onClick={() => setStatusFilter('all')}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${statusFilter === 'all' ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
+          Tất cả
+        </button>
+        {PIPELINE_STAGES.map(s => (
+          <button key={s.key} onClick={() => setStatusFilter(s.key)}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${statusFilter === s.key ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
+            {s.label}
           </button>
         ))}
         {overdueCount > 0 && (
@@ -171,11 +170,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
           <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
           <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'contacted'), 'đã liên hệ')}
-            className="text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đã liên hệ</button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'closed'), 'hoàn thành')}
-            className="text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Hoàn thành</button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'new'), 'đánh dấu mới')}
-            className="text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đánh dấu mới</button>
+            className="text-xs font-medium bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đã liên hệ</button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'won'), 'chốt')}
+            className="text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Chốt</button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'lost'), 'mất')}
+            className="text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Mất</button>
           <button disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}
             className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Trash2 className="w-3.5 h-3.5" />Xóa
@@ -205,9 +204,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-gray-900 text-sm">{lead.full_name}</h4>
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_CONFIG[lead.status].color}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[lead.status].dot}`} />
-                        {STATUS_CONFIG[lead.status].label}
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${stageMeta(lead.status).color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${stageMeta(lead.status).dot}`} />
+                        {stageMeta(lead.status).label}
                       </span>
                       {(sla === 'overdue' || sla === 'due_soon') && (
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${sla === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -264,11 +263,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                       <button className="flex items-center gap-1 border border-gray-200 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
                         Trạng thái <ChevronDown className="w-3 h-3" />
                       </button>
-                      <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-10 hidden group-hover:block min-w-[140px]">
-                        {(['new', 'contacted', 'closed'] as const).map(s => (
-                          <button key={s} onClick={() => handleStatus(lead.id, s)}
-                            className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${lead.status === s ? 'font-bold text-red-600' : 'text-gray-700'}`}>
-                            {STATUS_CONFIG[s].label}
+                      <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-10 hidden group-hover:block min-w-[150px]">
+                        {PIPELINE_STAGES.map(s => (
+                          <button key={s.key} onClick={() => handleStatus(lead.id, s.key)}
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${lead.status === s.key ? 'font-bold text-red-600' : 'text-gray-700'}`}>
+                            {s.label}
                           </button>
                         ))}
                       </div>
