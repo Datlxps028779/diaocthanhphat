@@ -7,6 +7,7 @@ import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { PropertyPicker } from '../shared/PropertyPicker';
+import { FunnelReport } from '../shared/FunnelReport';
 import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -221,6 +222,8 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
           </button>
         )}
       </div>
+
+      {statusFilter === 'all' && !loading && <FunnelReport leads={leads} />}
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
