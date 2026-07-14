@@ -1,4 +1,5 @@
-import { supabase, type Lead } from '../supabase';
+import { supabase, type Lead, type LeadActivity } from '../supabase';
+import { stageMeta } from '../leadPipeline';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 export async function submitLead(lead: { full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string }): Promise<void> {
@@ -20,6 +21,37 @@ export async function submitLead(lead: { full_name: string; phone: string; area_
     }),
   }).catch(() => {});
 }
+
+// Admin tạo lead thủ công (khách gọi điện/sự kiện/giới thiệu — không qua form web).
+// KHÔNG bắn crm-webhook (khỏi spam Zalo NV cho lead admin tự nhập). Ghi 1 activity 'created'.
+export async function createLead(input: {
+  full_name: string; phone: string; area_interest?: string | null; budget?: string | null;
+  message?: string | null; assigned_to?: string | null; status?: Lead['status']; author?: string | null;
+}): Promise<Lead> {
+  const { data, error } = await supabase.from('leads').insert({
+    full_name: input.full_name, phone: input.phone,
+    area_interest: input.area_interest ?? null, budget: input.budget ?? null,
+    message: input.message ?? null, assigned_to: input.assigned_to ?? null,
+    status: input.status ?? 'new', source: 'admin_manual',
+  }).select('*, properties(id,title)').single();
+  if (error) throw error;
+  const lead = data as Lead;
+  await addLeadActivity(lead.id, { kind: 'created', body: 'Tạo khách thủ công', author: input.author ?? null });
+  return lead;
+}
+
+// ─── Lead activities (nhật ký chăm sóc) ────────────────────────────────────────
+export async function getLeadActivities(leadId: string): Promise<LeadActivity[]> {
+  const { data } = await supabase.from('lead_activities')
+    .select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
+  return (data ?? []) as LeadActivity[];
+}
+export async function addLeadActivity(leadId: string, a: { kind: LeadActivity['kind']; body?: string | null; author?: string | null }): Promise<void> {
+  const { error } = await supabase.from('lead_activities')
+    .insert({ lead_id: leadId, kind: a.kind, body: a.body ?? null, author: a.author ?? null });
+  if (error) throw error;
+}
+
 export async function getLeads(status?: string): Promise<Lead[]> {
   let q = supabase.from('leads').select('*, properties(id,title)').order('created_at', { ascending: false });
   if (status && status !== 'all') q = q.eq('status', status);
@@ -51,12 +83,14 @@ export async function deleteLead(id: string): Promise<void> {
 // Xuất danh sách lead ra chuỗi CSV (UTF-8 BOM để Excel đọc đúng tiếng Việt).
 export function leadsToCsv(leads: Lead[]): string {
   const cols = ['created_at', 'full_name', 'phone', 'status', 'source', 'assigned_to', 'follow_up_at', 'area_interest', 'budget', 'message', 'note'];
-  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Trạng thái', 'Nguồn', 'Phụ trách', 'Hẹn gọi lại', 'Khu vực quan tâm', 'Ngân sách', 'Lời nhắn', 'Ghi chú'];
+  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Giai đoạn', 'Nguồn', 'Phụ trách', 'Hẹn gọi lại', 'Khu vực quan tâm', 'Ngân sách', 'Lời nhắn', 'Ghi chú'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows = leads.map(l => cols.map(c => esc((l as Record<string, unknown>)[c])).join(','));
+  const rows = leads.map(l => cols.map(c =>
+    esc(c === 'status' ? stageMeta(l.status).label : (l as Record<string, unknown>)[c])
+  ).join(','));
   return '﻿' + [header.join(','), ...rows].join('\n');
 }
 

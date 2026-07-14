@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split } from 'lucide-react';
+import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads } from '../../../lib/api';
+import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead } from '../../../lib/api';
 import { getAdminUsers } from '../../../lib/api/adminUsers';
 import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
@@ -37,6 +37,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [staffLoaded, setStaffLoaded] = useState(false);   // false + rỗng → fallback ô nhập tay
   const [confirmDistribute, setConfirmDistribute] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [creating, setCreating] = useState(false);
+  const emptyForm = { full_name: '', phone: '', area_interest: '', budget: '', message: '', assigned_to: '', status: 'new' as Lead['status'] };
+  const [createForm, setCreateForm] = useState(emptyForm);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createErr, setCreateErr] = useState('');
 
   const load = async () => { setLoading(true); const data = await getLeads(statusFilter); setLeads(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
@@ -70,6 +75,30 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     } catch (e) {
       alert(`Chia lead thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
     } finally { setBulkBusy(false); }
+  };
+
+  // Tạo khách thủ công (admin nhập tay). Validate họ tên + SĐT trước khi gọi API.
+  const openCreate = () => { setCreateForm(emptyForm); setCreateErr(''); setCreating(true); };
+  const handleCreate = async () => {
+    if (!createForm.full_name.trim() || !createForm.phone.trim()) {
+      setCreateErr('Vui lòng nhập họ tên và số điện thoại.');
+      return;
+    }
+    setCreateBusy(true); setCreateErr('');
+    try {
+      await createLead({
+        full_name: createForm.full_name.trim(), phone: createForm.phone.trim(),
+        area_interest: createForm.area_interest.trim() || null,
+        budget: createForm.budget.trim() || null,
+        message: createForm.message.trim() || null,
+        assigned_to: createForm.assigned_to || null,
+        status: createForm.status,
+      });
+      setCreating(false);
+      await load(); onRefreshStats();
+    } catch (e) {
+      setCreateErr(`Tạo khách thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
+    } finally { setCreateBusy(false); }
   };
 
   const handleStatus = async (id: string, status: Lead['status']) => {
@@ -128,6 +157,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={openCreate}
+          className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">
+          <UserPlus className="w-4 h-4" />Tạo khách mới
+        </button>
         <button onClick={() => setStatusFilter('all')}
           className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${statusFilter === 'all' ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-red-400'}`}>
           Tất cả
@@ -294,6 +327,54 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
       {confirmDistribute && (
         <ConfirmDialog message={`Tự chia đều ${unassignedVisible.length} lead chưa gán cho ${staff.length} nhân viên?`}
           onConfirm={handleDistribute} onCancel={() => setConfirmDistribute(false)} />
+      )}
+
+      {creating && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-10">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !createBusy && setCreating(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-red-600" />Tạo khách mới
+              </h3>
+              <button onClick={() => !createBusy && setCreating(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {createErr && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{createErr}</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <input value={createForm.full_name} onChange={e => setCreateForm(f => ({ ...f, full_name: e.target.value }))}
+                placeholder="Họ và tên *" className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+              <input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="Số điện thoại *" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+              <input value={createForm.area_interest} onChange={e => setCreateForm(f => ({ ...f, area_interest: e.target.value }))}
+                placeholder="Khu vực quan tâm" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+              <input value={createForm.budget} onChange={e => setCreateForm(f => ({ ...f, budget: e.target.value }))}
+                placeholder="Ngân sách" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+              <select value={createForm.status} onChange={e => setCreateForm(f => ({ ...f, status: e.target.value as Lead['status'] }))}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 outline-none">
+                {PIPELINE_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+              {staff.length > 0 && (
+                <select value={createForm.assigned_to} onChange={e => setCreateForm(f => ({ ...f, assigned_to: e.target.value }))}
+                  className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 outline-none">
+                  <option value="">Chưa gán nhân viên</option>
+                  {staff.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              )}
+              <textarea value={createForm.message} onChange={e => setCreateForm(f => ({ ...f, message: e.target.value }))}
+                placeholder="Nhu cầu / ghi chú" rows={3} className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none resize-none" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setCreating(false)} disabled={createBusy}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
+              <button onClick={handleCreate} disabled={createBusy}
+                className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                {createBusy ? 'Đang tạo...' : 'Tạo khách'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
