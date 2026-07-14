@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock, Building2, CalendarPlus } from 'lucide-react';
 import type { Lead, LeadActivity } from '../../../lib/supabase';
-import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm } from '../../../lib/api';
+import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm, getTeamMembers, addAssignee, removeAssignee } from '../../../lib/api';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { buildTimeline } from '../../../lib/leadTimeline';
+import { assigneesOf, memberLabel, type TeamMember } from '../../../lib/leadAssignment';
+import { useAuth } from '../../../lib/auth';
 import { PropertyPicker } from '../shared/PropertyPicker';
+import { AssigneePicker } from '../shared/AssigneePicker';
 
 // Nhãn + icon cho từng loại activity trong timeline.
 const KIND_META: Record<LeadActivity['kind'], { label: string; icon: typeof StickyNote }> = {
@@ -31,6 +34,10 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
   const [noteKind, setNoteKind] = useState<'note' | 'call'>('note');
   const [noteBody, setNoteBody] = useState('');
   const [busy, setBusy] = useState(false);
+  const [roster, setRoster] = useState<TeamMember[]>([]);
+  const [assignments, setAssignments] = useState<{ user_id: string }[]>(lead.lead_assignments ?? []);
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
@@ -39,6 +46,33 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
   }, [lead.id]);
 
   useEffect(() => { loadActivities(); }, [loadActivities]);
+  useEffect(() => { getTeamMembers().then(setRoster).catch(() => setRoster([])); }, []);
+
+  // Thêm/gỡ NV phụ trách → cập nhật DB + ghi activity + reload timeline & list.
+  const handleAddAssignee = async (userId: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await addAssignee(lead.id, userId, currentUserId);
+      setAssignments(prev => prev.some(a => a.user_id === userId) ? prev : [...prev, { user_id: userId }]);
+      const m = roster.find(r => r.id === userId);
+      await addLeadActivity(lead.id, { kind: 'note', author, body: `Thêm phụ trách: ${m ? memberLabel(m) : userId}` });
+      await loadActivities();
+      onChanged();
+    } finally { setBusy(false); }
+  };
+  const handleRemoveAssignee = async (userId: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await removeAssignee(lead.id, userId);
+      setAssignments(prev => prev.filter(a => a.user_id !== userId));
+      const m = roster.find(r => r.id === userId);
+      await addLeadActivity(lead.id, { kind: 'note', author, body: `Gỡ phụ trách: ${m ? memberLabel(m) : userId}` });
+      await loadActivities();
+      onChanged();
+    } finally { setBusy(false); }
+  };
 
   // Đổi giai đoạn → cập nhật DB + ghi activity stage_change + reload timeline & list.
   const handleStage = async (next: Lead['status']) => {
@@ -140,12 +174,13 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
 
           {/* Gán NV + hẹn gọi lại */}
           <div className="grid grid-cols-1 gap-2">
-            <label className="flex items-center gap-2 text-xs">
-              <UserPlus className="w-3.5 h-3.5 text-gray-400" />
-              <input defaultValue={lead.assigned_to ?? ''} placeholder="Gán nhân viên"
-                onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) { updateLeadCrm(lead.id, { assigned_to: v }).then(onChanged); } }}
-                className="flex-1 border border-gray-200 rounded-md px-2 py-1.5 focus:ring-1 focus:ring-red-400 outline-none" />
-            </label>
+            <div className="flex items-start gap-2 text-xs border border-gray-200 rounded-md px-2 py-1.5">
+              <UserPlus className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <AssigneePicker assignees={assigneesOf({ lead_assignments: assignments }, roster)} roster={roster}
+                  onAdd={handleAddAssignee} onRemove={handleRemoveAssignee} disabled={busy} />
+              </div>
+            </div>
             <div className="text-xs">
               <PropertyPicker value={propertyId} valueLabel={propertyTitle}
                 onChange={handleProperty} disabled={busy} />

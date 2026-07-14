@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { funnelReport, conversionRate, staffPerformance, leadsInLastDays, type AnalyticsLead } from './leadAnalytics';
 import type { StageKey } from './leadPipeline';
+import type { TeamMember } from './leadAssignment';
 
-const mk = (status: StageKey, assigned_to: string | null = null, created_at = '2026-07-10T08:00:00Z'): AnalyticsLead =>
-  ({ status, assigned_to, created_at });
+const mk = (status: StageKey, assignee_ids: string[] = [], created_at = '2026-07-10T08:00:00Z'): AnalyticsLead =>
+  ({ status, assignee_ids, created_at });
+
+const member = (id: string, display_name: string): TeamMember =>
+  ({ id, display_name, phone: null, role: 'staff' });
 
 describe('funnelReport', () => {
   it('đếm đủ 7 giai đoạn kể cả 0', () => {
@@ -34,12 +38,14 @@ describe('conversionRate', () => {
 });
 
 describe('staffPerformance', () => {
-  it('gộp theo NV + gộp chưa gán', () => {
+  const roster: TeamMember[] = [member('u1', 'An'), member('u2', 'Bình')];
+
+  it('gộp theo NV (user_id) + gộp lead chưa gán', () => {
     const rows = staffPerformance([
-      mk('won', 'An'), mk('lost', 'An'), mk('new', 'An'),
-      mk('won', 'Bình'),
-      mk('new', null),
-    ]);
+      mk('won', ['u1']), mk('lost', ['u1']), mk('new', ['u1']),
+      mk('won', ['u2']),
+      mk('new', []),
+    ], roster);
     const an = rows.find(r => r.name === 'An')!;
     expect(an.total).toBe(3);
     expect(an.won).toBe(1);
@@ -47,9 +53,21 @@ describe('staffPerformance', () => {
     expect(an.winRate).toBe(50);
     expect(rows.find(r => r.name === 'Chưa gán')?.total).toBe(1);
   });
+
+  it('1 lead nhiều NV → mỗi NV tính lead đó 1 lần (đồng phụ trách)', () => {
+    const rows = staffPerformance([mk('won', ['u1', 'u2'])], roster);
+    expect(rows.find(r => r.name === 'An')?.won).toBe(1);
+    expect(rows.find(r => r.name === 'Bình')?.won).toBe(1);
+  });
+
   it('sắp xếp nhiều chốt trước', () => {
-    const rows = staffPerformance([mk('won', 'A'), mk('won', 'B'), mk('won', 'B')]);
-    expect(rows[0].name).toBe('B');
+    const rows = staffPerformance([mk('won', ['u1']), mk('won', ['u2']), mk('won', ['u2'])], roster);
+    expect(rows[0].name).toBe('Bình');
+  });
+
+  it('user_id ngoài roster vẫn hiện nhãn NV-…', () => {
+    const rows = staffPerformance([mk('won', ['zzzzzz9999'])], roster);
+    expect(rows.find(r => r.name === 'NV-zzzzzz')?.won).toBe(1);
   });
 });
 
@@ -57,9 +75,9 @@ describe('leadsInLastDays', () => {
   const now = new Date('2026-07-14T12:00:00Z');
   it('đếm lead trong cửa sổ ngày', () => {
     const leads = [
-      mk('new', null, '2026-07-14T08:00:00Z'),  // hôm nay
-      mk('new', null, '2026-07-10T08:00:00Z'),  // 4 ngày trước
-      mk('new', null, '2026-06-01T08:00:00Z'),  // ngoài 7 ngày
+      mk('new', [], '2026-07-14T08:00:00Z'),  // hôm nay
+      mk('new', [], '2026-07-10T08:00:00Z'),  // 4 ngày trước
+      mk('new', [], '2026-06-01T08:00:00Z'),  // ngoài 7 ngày
     ];
     expect(leadsInLastDays(leads, 7, now)).toBe(2);
     expect(leadsInLastDays(leads, 1, now)).toBe(1);

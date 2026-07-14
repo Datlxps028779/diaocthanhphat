@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SLA_NEW_HOURS, leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin,
+  SLA_NEW_HOURS, leadSlaState, slaLabel, sortLeadsByUrgency,
   countSlaStates, type SlaLead,
 } from './leadSla';
 
@@ -86,29 +86,6 @@ describe('leadSla — trạng thái SLA + sắp xếp + chia đều lead', () =>
       const input = [a, b];
       sortLeadsByUrgency(input, NOW);
       expect(input[0]).toBe(a); // vẫn nguyên thứ tự cũ
-    });
-  });
-
-  describe('distributeRoundRobin', () => {
-    it('chia luân phiên id cho staff theo vòng', () => {
-      const out = distributeRoundRobin(['l1', 'l2', 'l3', 'l4'], ['A', 'B']);
-      expect(out).toEqual([
-        { id: 'l1', assigned_to: 'A' },
-        { id: 'l2', assigned_to: 'B' },
-        { id: 'l3', assigned_to: 'A' },
-        { id: 'l4', assigned_to: 'B' },
-      ]);
-    });
-
-    it('số dư lẻ: staff đầu nhận nhiều hơn 1', () => {
-      const out = distributeRoundRobin(['l1', 'l2', 'l3'], ['A', 'B']);
-      expect(out.filter(x => x.assigned_to === 'A').length).toBe(2);
-      expect(out.filter(x => x.assigned_to === 'B').length).toBe(1);
-    });
-
-    it('không có staff hoặc không có lead → rỗng', () => {
-      expect(distributeRoundRobin([], ['A'])).toEqual([]);
-      expect(distributeRoundRobin(['l1'], [])).toEqual([]);
     });
   });
 

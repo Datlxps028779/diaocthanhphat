@@ -2,10 +2,11 @@
 // Nhận danh sách lead đã tải sẵn, KHÔNG fetch thêm.
 
 import { PIPELINE_STAGES, isTerminal, type StageKey } from './leadPipeline';
+import { memberLabel, type TeamMember } from './leadAssignment';
 
 export interface AnalyticsLead {
   status: StageKey;
-  assigned_to: string | null;
+  assignee_ids: string[];   // user_id các NV cùng phụ trách (rỗng = chưa gán)
   created_at: string;
 }
 
@@ -45,14 +46,23 @@ export interface StaffPerformance {
   winRate: number;    // won / (đã kết thúc), %
 }
 
-// Hiệu suất theo nhân viên phụ trách. Lead chưa gán gộp vào nhãn "Chưa gán".
+// Hiệu suất theo nhân viên phụ trách. 1 lead có nhiều NV → mỗi (NV,lead) tính 1 lần
+// (đồng phụ trách đều được ghi công). Lead không NV nào → gộp nhãn "Chưa gán".
+// Tên NV resolve qua roster (user_id → nhãn); id ngoài roster vẫn hiện NV-<id6>.
 // Sắp xếp: nhiều chốt trước → tổng lead nhiều trước.
-export function staffPerformance(leads: AnalyticsLead[]): StaffPerformance[] {
+export function staffPerformance(leads: AnalyticsLead[], roster: TeamMember[]): StaffPerformance[] {
+  const labelOf = (userId: string): string => {
+    const m = roster.find(r => r.id === userId);
+    return m ? memberLabel(m) : `NV-${userId.slice(0, 6)}`;
+  };
   const byStaff = new Map<string, AnalyticsLead[]>();
-  for (const l of leads) {
-    const key = l.assigned_to?.trim() || 'Chưa gán';
+  const push = (key: string, l: AnalyticsLead) => {
     if (!byStaff.has(key)) byStaff.set(key, []);
     byStaff.get(key)!.push(l);
+  };
+  for (const l of leads) {
+    if (l.assignee_ids.length === 0) push('Chưa gán', l);
+    else for (const uid of l.assignee_ids) push(labelOf(uid), l);
   }
   const rows: StaffPerformance[] = [];
   for (const [name, list] of byStaff) {

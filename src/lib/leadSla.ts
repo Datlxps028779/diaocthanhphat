@@ -76,12 +76,3 @@ export function countSlaStates(leads: SlaLead[], now: Date): SlaCounts {
   }
   return { overdue, dueSoon, total: overdue + dueSoon };
 }
-
-// Chia luân phiên danh sách lead cho các nhân viên (round-robin). Rỗng nếu thiếu 1 phía.
-export function distributeRoundRobin(
-  leadIds: string[],
-  staffLabels: string[],
-): { id: string; assigned_to: string }[] {
-  if (leadIds.length === 0 || staffLabels.length === 0) return [];
-  return leadIds.map((id, i) => ({ id, assigned_to: staffLabels[i % staffLabels.length] }));
-}

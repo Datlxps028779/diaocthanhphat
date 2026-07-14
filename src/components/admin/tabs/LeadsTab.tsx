@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X, Eye } from 'lucide-react';
+import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X, Eye } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead, addLeadActivity } from '../../../lib/api';
-import { getAdminUsers } from '../../../lib/api/adminUsers';
-import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
+import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead, addLeadActivity, getTeamMembers, addAssignee, removeAssignee } from '../../../lib/api';
+import { leadSlaState, slaLabel, sortLeadsByUrgency } from '../../../lib/leadSla';
+import { assigneesOf, assignmentPlan, memberLabel, type TeamMember } from '../../../lib/leadAssignment';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { PropertyPicker } from '../shared/PropertyPicker';
+import { AssigneePicker } from '../shared/AssigneePicker';
 import { FunnelReport } from '../shared/FunnelReport';
 import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -37,12 +38,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [staff, setStaff] = useState<string[]>([]);       // nhãn NV (admin) để gán dropdown
-  const [staffLoaded, setStaffLoaded] = useState(false);   // false + rỗng → fallback ô nhập tay
+  const [roster, setRoster] = useState<TeamMember[]>([]);   // NV admin/staff để gán
   const [confirmDistribute, setConfirmDistribute] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [creating, setCreating] = useState(false);
-  const emptyForm = { full_name: '', phone: '', area_interest: '', budget: '', message: '', assigned_to: '', status: 'new' as Lead['status'], property_id: null as string | null, property_title: null as string | null };
+  const emptyForm = { full_name: '', phone: '', area_interest: '', budget: '', message: '', assignee_ids: [] as string[], status: 'new' as Lead['status'], property_id: null as string | null, property_title: null as string | null };
   const [createForm, setCreateForm] = useState(emptyForm);
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState('');
@@ -57,24 +57,16 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   // Cập nhật mốc "now" định kỳ để badge SLA tự đổi khi lead quá hạn theo thời gian thực.
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(t); }, []);
 
-  // Tải danh sách NV (admin) 1 lần cho dropdown gán. Lỗi → giữ fallback ô nhập tay.
+  // Tải roster NV (admin+staff) 1 lần cho picker gán. Lỗi → roster rỗng (ẩn nút thêm).
   useEffect(() => {
-    getAdminUsers()
-      .then(({ users }) => {
-        const labels = users
-          .filter(u => u.role === 'admin')
-          .map(u => u.display_name?.trim() || u.phone?.trim() || `NV-${u.id.slice(0, 6)}`);
-        setStaff(labels);
-        setStaffLoaded(true);
-      })
-      .catch(() => setStaffLoaded(false));
+    getTeamMembers().then(setRoster).catch(() => setRoster([]));
   }, []);
 
-  // Tự chia đều lead CHƯA gán (đang hiển thị) cho các NV theo round-robin.
-  const unassignedVisible = leads.filter(l => !l.assigned_to);
+  // Tự chia đều lead CHƯA gán (đang hiển thị) cho các NV theo round-robin (user_id).
+  const unassignedVisible = leads.filter(l => (l.lead_assignments?.length ?? 0) === 0);
   const handleDistribute = async () => {
     setConfirmDistribute(false);
-    const plan = distributeRoundRobin(unassignedVisible.map(l => l.id), staff);
+    const plan = assignmentPlan(unassignedVisible.map(l => l.id), roster.map(m => m.id));
     if (plan.length === 0) return;
     setBulkBusy(true);
     try {
@@ -83,6 +75,22 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     } catch (e) {
       alert(`Chia lead thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
     } finally { setBulkBusy(false); }
+  };
+
+  // Thêm/gỡ NV phụ trách 1 lead (từ card) → ghi activity + cập nhật local, không reload cả trang.
+  const handleAddAssignee = async (leadId: string, userId: string) => {
+    await addAssignee(leadId, userId, user?.id ?? null);
+    setLeads(prev => prev.map(l => l.id === leadId
+      ? { ...l, lead_assignments: [...(l.lead_assignments ?? []), { user_id: userId }] } : l));
+    const m = roster.find(r => r.id === userId);
+    await addLeadActivity(leadId, { kind: 'note', author: authorLabel, body: `Thêm phụ trách: ${m ? memberLabel(m) : userId}` });
+  };
+  const handleRemoveAssignee = async (leadId: string, userId: string) => {
+    await removeAssignee(leadId, userId);
+    setLeads(prev => prev.map(l => l.id === leadId
+      ? { ...l, lead_assignments: (l.lead_assignments ?? []).filter(a => a.user_id !== userId) } : l));
+    const m = roster.find(r => r.id === userId);
+    await addLeadActivity(leadId, { kind: 'note', author: authorLabel, body: `Gỡ phụ trách: ${m ? memberLabel(m) : userId}` });
   };
 
   // Tạo khách thủ công (admin nhập tay). Validate họ tên + SĐT trước khi gọi API.
@@ -99,7 +107,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         area_interest: createForm.area_interest.trim() || null,
         budget: createForm.budget.trim() || null,
         message: createForm.message.trim() || null,
-        assigned_to: createForm.assigned_to || null,
+        assignee_ids: createForm.assignee_ids,
+        creator_id: user?.id ?? null,
+        author: authorLabel,
         status: createForm.status,
         property_id: createForm.property_id,
       });
@@ -124,12 +134,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
 
   // CRM: lưu ghi chú + nhân viên phụ trách (blur/enter mới gọi API, không spam).
   // Ghi vào nhật ký để hành trình chăm sóc đầy đủ dù thao tác ngoài drawer.
-  const handleCrmSave = async (id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null }) => {
+  const handleCrmSave = async (id: string, patch: { note?: string | null; follow_up_at?: string | null }) => {
     await updateLeadCrm(id, patch);
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
-    if ('assigned_to' in patch) {
-      await addLeadActivity(id, { kind: 'note', author: authorLabel, body: patch.assigned_to ? `Gán phụ trách: ${patch.assigned_to}` : 'Bỏ gán phụ trách' });
-    }
     if ('follow_up_at' in patch) {
       await addLeadActivity(id, { kind: 'follow_up', author: authorLabel, body: patch.follow_up_at ? new Date(patch.follow_up_at).toLocaleString('vi-VN') : 'Xóa hẹn gọi lại' });
     }
@@ -140,7 +147,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
 
   // Xuất CSV danh sách lead đang hiển thị (theo filter hiện tại).
   const handleExportCsv = () => {
-    const csv = leadsToCsv(leads);
+    const csv = leadsToCsv(leads, roster);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -210,7 +217,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <button onClick={load} className={`${leads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
           <RefreshCw className="w-3.5 h-3.5" />Làm mới
         </button>
-        {staff.length > 0 && unassignedVisible.length > 0 && (
+        {roster.length > 0 && unassignedVisible.length > 0 && (
           <button disabled={bulkBusy} onClick={() => setConfirmDistribute(true)}
             className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1">
             <Split className="w-3.5 h-3.5" />Tự chia đều ({unassignedVisible.length})
@@ -223,7 +230,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         )}
       </div>
 
-      {statusFilter === 'all' && !loading && <FunnelReport leads={leads} />}
+      {statusFilter === 'all' && !loading && <FunnelReport leads={leads} roster={roster} />}
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
@@ -282,22 +289,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     {lead.message && <p className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 italic">"{lead.message}"</p>}
                     {lead.properties && <p className="mt-1 text-xs text-blue-600">BĐS: {lead.properties.title}</p>}
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <div className="flex items-center gap-1 flex-1 min-w-[140px]">
-                        <UserCheck className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        {staffLoaded && staff.length > 0 ? (
-                          <select value={lead.assigned_to ?? ''}
-                            onChange={e => { const v = e.target.value || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
-                            className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none">
-                            <option value="">Chưa gán</option>
-                            {/* Giữ nhãn cũ nếu không còn trong danh sách NV (NV đã đổi tên/mất quyền admin) */}
-                            {lead.assigned_to && !staff.includes(lead.assigned_to) && <option value={lead.assigned_to}>{lead.assigned_to}</option>}
-                            {staff.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        ) : (
-                          <input defaultValue={lead.assigned_to ?? ''} placeholder="Gán nhân viên"
-                            onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
-                            className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
-                        )}
+                      <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+                        <AssigneePicker compact assignees={assigneesOf(lead, roster)} roster={roster}
+                          onAdd={uid => handleAddAssignee(lead.id, uid)}
+                          onRemove={uid => handleRemoveAssignee(lead.id, uid)} />
                       </div>
                       <div className="flex items-center gap-1 flex-1 min-w-[180px]">
                         <StickyNote className="w-3 h-3 text-gray-400 flex-shrink-0" />
@@ -354,7 +349,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
           onCancel={() => setConfirmBulkDelete(false)} />
       )}
       {confirmDistribute && (
-        <ConfirmDialog message={`Tự chia đều ${unassignedVisible.length} lead chưa gán cho ${staff.length} nhân viên?`}
+        <ConfirmDialog message={`Tự chia đều ${unassignedVisible.length} lead chưa gán cho ${roster.length} nhân viên?`}
           onConfirm={handleDistribute} onCancel={() => setConfirmDistribute(false)} />
       )}
 
@@ -389,12 +384,14 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 outline-none">
                 {PIPELINE_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
-              {staff.length > 0 && (
-                <select value={createForm.assigned_to} onChange={e => setCreateForm(f => ({ ...f, assigned_to: e.target.value }))}
-                  className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 outline-none">
-                  <option value="">Chưa gán nhân viên</option>
-                  {staff.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              {roster.length > 0 && (
+                <div className="col-span-2 border border-gray-200 rounded-lg px-3 py-2.5">
+                  <AssigneePicker
+                    assignees={createForm.assignee_ids.map(id => ({ id, label: memberLabel(roster.find(m => m.id === id) ?? { id, display_name: null, phone: null }) }))}
+                    roster={roster}
+                    onAdd={uid => setCreateForm(f => ({ ...f, assignee_ids: [...f.assignee_ids, uid] }))}
+                    onRemove={uid => setCreateForm(f => ({ ...f, assignee_ids: f.assignee_ids.filter(x => x !== uid) }))} />
+                </div>
               )}
               <div className="col-span-2">
                 <PropertyPicker value={createForm.property_id} valueLabel={createForm.property_title}

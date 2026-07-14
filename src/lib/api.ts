@@ -5,6 +5,7 @@ export * from './api/properties';
 export * from './api/taxonomy';
 export * from './api/testimonials';
 export * from './api/leads';
+export * from './api/leadAssignments';
 export * from './api/news';
 export * from './api/projects';
 export * from './api/userListings';

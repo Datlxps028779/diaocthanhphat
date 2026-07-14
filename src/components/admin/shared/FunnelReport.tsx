@@ -1,20 +1,26 @@
 import { useState, useMemo } from 'react';
 import { BarChart3, ChevronDown, TrendingUp, Trophy, CalendarRange } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { funnelReport, conversionRate, staffPerformance, leadsInLastDays } from '../../../lib/leadAnalytics';
+import { funnelReport, conversionRate, staffPerformance, leadsInLastDays, type AnalyticsLead } from '../../../lib/leadAnalytics';
+import type { TeamMember } from '../../../lib/leadAssignment';
 import { stageMeta } from '../../../lib/leadPipeline';
 
 // Báo cáo phễu CRM: phân tích trên toàn bộ lead đang tải ở LeadsTab (không fetch thêm).
 // Mặc định thu gọn để không che danh sách; bung ra khi cần xem tổng quan.
-export function FunnelReport({ leads }: { leads: Lead[] }) {
+export function FunnelReport({ leads, roster }: { leads: Lead[]; roster: TeamMember[] }) {
   const [open, setOpen] = useState(false);
   const now = useMemo(() => new Date(), []);
 
-  const rows = useMemo(() => funnelReport(leads), [leads]);
-  const conv = useMemo(() => conversionRate(leads), [leads]);
-  const staff = useMemo(() => staffPerformance(leads), [leads]);
-  const last7 = useMemo(() => leadsInLastDays(leads, 7, now), [leads, now]);
-  const last30 = useMemo(() => leadsInLastDays(leads, 30, now), [leads, now]);
+  // Chuẩn hoá Lead → AnalyticsLead (status + assignee_ids + created_at) cho hàm thuần.
+  const analyticsLeads = useMemo<AnalyticsLead[]>(
+    () => leads.map(l => ({ status: l.status, created_at: l.created_at, assignee_ids: (l.lead_assignments ?? []).map(a => a.user_id) })),
+    [leads],
+  );
+  const rows = useMemo(() => funnelReport(analyticsLeads), [analyticsLeads]);
+  const conv = useMemo(() => conversionRate(analyticsLeads), [analyticsLeads]);
+  const staff = useMemo(() => staffPerformance(analyticsLeads, roster), [analyticsLeads, roster]);
+  const last7 = useMemo(() => leadsInLastDays(analyticsLeads, 7, now), [analyticsLeads, now]);
+  const last30 = useMemo(() => leadsInLastDays(analyticsLeads, 30, now), [analyticsLeads, now]);
   const maxCount = Math.max(1, ...rows.map(r => r.count));
 
   if (leads.length === 0) return null;
