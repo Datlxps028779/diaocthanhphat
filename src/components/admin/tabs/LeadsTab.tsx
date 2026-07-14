@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X } from 'lucide-react';
+import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X, Eye } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
 import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead } from '../../../lib/api';
 import { getAdminUsers } from '../../../lib/api/adminUsers';
 import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
+import { LeadDetailDrawer } from './LeadDetailDrawer';
+import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ISO (UTC) → giá trị cho input datetime-local (giờ địa phương, không timezone).
@@ -42,6 +44,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [createForm, setCreateForm] = useState(emptyForm);
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState('');
+  const [detailLead, setDetailLead] = useState<Lead | null>(null);
+
+  const { user } = useAuth();
+  const authorLabel = (user?.user_metadata?.display_name as string | undefined)?.trim() || user?.email || 'Admin';
 
   const load = async () => { setLoading(true); const data = await getLeads(statusFilter); setLeads(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
@@ -289,6 +295,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => setDetailLead(lead)} className="flex items-center gap-1 bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                      <Eye className="w-3 h-3" />Chi tiết
+                    </button>
                     <a href={`tel:${lead.phone}`} className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
                       <Phone className="w-3 h-3" />Gọi
                     </a>
@@ -327,6 +336,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
       {confirmDistribute && (
         <ConfirmDialog message={`Tự chia đều ${unassignedVisible.length} lead chưa gán cho ${staff.length} nhân viên?`}
           onConfirm={handleDistribute} onCancel={() => setConfirmDistribute(false)} />
+      )}
+
+      {detailLead && (
+        <LeadDetailDrawer lead={detailLead} author={authorLabel}
+          onClose={() => setDetailLead(null)} onChanged={load} />
       )}
 
       {creating && (
