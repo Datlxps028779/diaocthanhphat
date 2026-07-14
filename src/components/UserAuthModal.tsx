@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
-import { signIn, signUp, requestPasswordReset, signOut, getCurrentRole } from '../lib/api';
+import { signIn, signUp, requestPasswordReset, getCurrentRole } from '../lib/api';
 import { interpretSignUpResult } from '../lib/authFlow';
 import { isElevatedRole } from '../lib/authGuard';
 
@@ -34,14 +34,12 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
     try {
       if (mode === 'login') {
         await signIn(email, password);
-        // Chặn tài khoản quản trị đăng nhập qua cổng người dùng: cắt phiên ngay.
-        // Dùng lỗi CHUNG CHUNG (giống sai mật khẩu) — KHÔNG tiết lộ tài khoản là
-        // admin hay đường dẫn trang quản trị, tránh dò tài khoản đặc quyền.
+        // Tài khoản đội ngũ (admin/staff) đăng nhập qua cổng người dùng: giữ phiên
+        // và đưa thẳng vào trang quản trị (điều hướng cứng để không phụ thuộc router
+        // của từng nơi mở modal). Người dùng thường thì đóng modal như cũ.
         const role = await getCurrentRole().catch(() => null);
         if (isElevatedRole(role)) {
-          await signOut();
-          setError('Email hoặc mật khẩu không đúng.');
-          setLoading(false);
+          window.location.href = '/quantrihethong';
           return;
         }
         onSuccess();

@@ -2,11 +2,30 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 
+// Nhận diện lỗi tải chunk (xảy ra sau khi deploy bản mới: client cache đi tải chunk
+// lazy có hash cũ đã biến mất). Tải lại trang là lấy được manifest mới → hết lỗi.
+function isChunkLoadError(error: Error): boolean {
+  return error.name === 'ChunkLoadError'
+    || /Loading chunk [\w-]+ failed/i.test(error.message)
+    || /Failed to fetch dynamically imported module/i.test(error.message);
+}
+
 // Error boundary toàn cục cho App Router. Bắt lỗi runtime ở server/client component,
 // hiển thị UI có thương hiệu thay vì màn hình lỗi trắng, kèm nút thử lại.
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error('[App error boundary]', error);
+    // Lỗi tải chunk sau deploy → tự tải lại 1 lần. Dùng dấu thời gian để chỉ chặn
+    // lặp trong 10s (phòng bản deploy hỏng gây reload vô hạn); deploy lần sau vẫn
+    // tự phục hồi được. Người dùng không phải bấm "Thử lại" thủ công.
+    if (isChunkLoadError(error)) {
+      const KEY = 'chunk-reload-at';
+      const last = Number(sessionStorage.getItem(KEY) ?? 0);
+      if (Date.now() - last > 10_000) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        window.location.reload();
+      }
+    }
   }, [error]);
 
   return (
