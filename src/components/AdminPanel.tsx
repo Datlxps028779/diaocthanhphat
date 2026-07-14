@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
+import { SlaBell } from './admin/shared/SlaBell';
 
 const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
@@ -119,6 +120,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
             <p className="text-gray-400 text-xs">BĐS Bình Dương – Hệ thống quản trị</p>
           </div>
           <div className="flex items-center gap-3">
+            {allowedTabs.includes('leads') && <SlaBell onOpenLeads={() => setTab('leads')} />}
             <button onClick={loadStats} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Làm mới số liệu">
               <RefreshCw className="w-4 h-4" />
             </button>

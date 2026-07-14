@@ -64,6 +64,19 @@ export function sortLeadsByUrgency<T extends SlaLead>(leads: T[], now: Date): T[
   });
 }
 
+// Đếm số lead theo mức khẩn (để hiện chuông nhắc ở header admin, mọi tab đều thấy).
+export interface SlaCounts { overdue: number; dueSoon: number; total: number }
+
+export function countSlaStates(leads: SlaLead[], now: Date): SlaCounts {
+  let overdue = 0, dueSoon = 0;
+  for (const l of leads) {
+    const s = leadSlaState(l, now);
+    if (s === 'overdue') overdue++;
+    else if (s === 'due_soon') dueSoon++;
+  }
+  return { overdue, dueSoon, total: overdue + dueSoon };
+}
+
 // Chia luân phiên danh sách lead cho các nhân viên (round-robin). Rỗng nếu thiếu 1 phía.
 export function distributeRoundRobin(
   leadIds: string[],

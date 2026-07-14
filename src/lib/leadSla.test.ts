@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SLA_NEW_HOURS, leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin,
-  type SlaLead,
+  countSlaStates, type SlaLead,
 } from './leadSla';
 
 // Dùng constructor theo thành phần local để so-sánh-cùng-ngày không lệ thuộc múi giờ máy chạy test.
@@ -109,6 +109,22 @@ describe('leadSla — trạng thái SLA + sắp xếp + chia đều lead', () =>
     it('không có staff hoặc không có lead → rỗng', () => {
       expect(distributeRoundRobin([], ['A'])).toEqual([]);
       expect(distributeRoundRobin(['l1'], [])).toEqual([]);
+    });
+  });
+
+  describe('countSlaStates', () => {
+    it('đếm overdue + due_soon, bỏ ok/none', () => {
+      const leads: SlaLead[] = [
+        mk({ created_at: iso(at(2026, 7, 14, 6, 0)) }),                               // new quá hạn → overdue
+        mk({ status: 'contacted', created_at: iso(at(2026, 7, 1)), follow_up_at: iso(at(2026, 7, 13)) }), // hẹn đã qua → overdue
+        mk({ status: 'contacted', created_at: iso(at(2026, 7, 1)), follow_up_at: iso(at(2026, 7, 14, 20, 0)) }), // hẹn hôm nay → due_soon
+        mk({ status: 'contacted', created_at: iso(at(2026, 7, 14, 11, 0)) }),         // vừa liên hệ → ok
+        mk({ status: 'won', created_at: iso(at(2026, 7, 1)) }),                       // terminal → none
+      ];
+      expect(countSlaStates(leads, NOW)).toEqual({ overdue: 2, dueSoon: 1, total: 3 });
+    });
+    it('rỗng → tất cả 0', () => {
+      expect(countSlaStates([], NOW)).toEqual({ overdue: 0, dueSoon: 0, total: 0 });
     });
   });
 });

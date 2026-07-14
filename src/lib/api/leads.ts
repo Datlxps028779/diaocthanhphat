@@ -54,6 +54,15 @@ export async function addLeadActivity(leadId: string, a: { kind: LeadActivity['k
   if (error) throw error;
 }
 
+// Tải gọn field SLA của các lead chưa kết thúc (won/lost) — cho chuông nhắc ở header.
+// Chỉ 3 cột, lọc bỏ terminal ở DB để không kéo toàn bộ lead lịch sử về.
+export async function getOpenLeadSla(): Promise<{ status: Lead['status']; created_at: string; follow_up_at: string | null }[]> {
+  const { data } = await supabase.from('leads')
+    .select('status, created_at, follow_up_at')
+    .not('status', 'in', '(won,lost)');
+  return (data ?? []) as { status: Lead['status']; created_at: string; follow_up_at: string | null }[];
+}
+
 export async function getLeads(status?: string): Promise<Lead[]> {
   let q = supabase.from('leads').select('*, properties(id,title)').order('created_at', { ascending: false });
   if (status && status !== 'all') q = q.eq('status', status);
