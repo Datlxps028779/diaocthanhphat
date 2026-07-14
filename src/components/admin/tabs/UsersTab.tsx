@@ -25,11 +25,12 @@ export function UsersTab() {
   const [selected, setSelected] = useState<AdminUserRow | null>(null);
   const [confirm, setConfirm] = useState<{ msg: string; run: () => Promise<void> } | null>(null);
 
+  // Chỉ hiện người dùng đăng ký thường (role=user). Đội ngũ admin/staff quản ở tab Nhân viên.
   const load = async () => {
     setLoading(true); setError('');
     try {
       const { users, serviceRole } = await getAdminUsers();
-      setUsers(users); setServiceRole(serviceRole);
+      setUsers(users.filter(u => u.role === 'user')); setServiceRole(serviceRole);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không tải được danh sách.');
     } finally { setLoading(false); }

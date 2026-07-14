@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -16,6 +16,7 @@ const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => 
 const LeadsTab = lazy(() => import('./admin/tabs/LeadsTab').then(m => ({ default: m.LeadsTab })));
 const UserListingsApprovalTab = lazy(() => import('./admin/tabs/UserListingsApprovalTab').then(m => ({ default: m.UserListingsApprovalTab })));
 const UsersTab = lazy(() => import('./admin/tabs/UsersTab').then(m => ({ default: m.UsersTab })));
+const StaffTab = lazy(() => import('./admin/tabs/StaffTab').then(m => ({ default: m.StaffTab })));
 const ProjectsTab = lazy(() => import('./admin/tabs/ProjectsTab').then(m => ({ default: m.ProjectsTab })));
 const NewsTab = lazy(() => import('./admin/tabs/NewsTab').then(m => ({ default: m.NewsTab })));
 const TestimonialsTab = lazy(() => import('./admin/tabs/TestimonialsTab').then(m => ({ default: m.TestimonialsTab })));
@@ -55,6 +56,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'leads', label: 'Khách hàng', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
     { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
+    { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
     { id: 'projects', label: 'Dự án', icon: <FolderOpen className="w-4 h-4" /> },
     { id: 'news', label: 'Tin tức', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'testimonials', label: 'Đánh giá', icon: <Star className="w-4 h-4" /> },
@@ -145,6 +147,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'leads' && <LeadsTab onRefreshStats={loadStats} />}
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}
           {tab === 'users' && <UsersTab />}
+          {tab === 'staff' && <StaffTab />}
           {tab === 'projects' && <ProjectsTab />}
           {tab === 'news' && <NewsTab />}
           {tab === 'testimonials' && <TestimonialsTab />}

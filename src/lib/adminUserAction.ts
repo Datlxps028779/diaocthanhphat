@@ -4,15 +4,33 @@
 export type AdminUserAction =
   | { action: 'set_role'; userId: string; role: 'user' | 'staff' | 'admin' }
   | { action: 'ban'; userId: string }
-  | { action: 'unban'; userId: string };
+  | { action: 'unban'; userId: string }
+  | { action: 'create_staff'; email: string; password: string; role: 'staff' | 'admin'; display_name: string | null };
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
 }
 
+// Email hợp lệ tối thiểu: có "@" và "." sau đó, không khoảng trắng. Đủ chặn rác;
+// xác thực thật do Supabase Auth làm khi tạo user.
+function isEmail(v: unknown): v is string {
+  return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
 export function validateAdminUserAction(body: unknown): AdminUserAction | null {
   if (typeof body !== 'object' || body === null) return null;
   const b = body as Record<string, unknown>;
+
+  // create_staff tạo tài khoản MỚI → không có userId; validate riêng.
+  if (b.action === 'create_staff') {
+    if (!isEmail(b.email)) return null;
+    if (!isNonEmptyString(b.password) || b.password.length < 6) return null;
+    if (b.role !== 'staff' && b.role !== 'admin') return null;   // tab NV không tạo role 'user'
+    const display_name = isNonEmptyString(b.display_name) ? b.display_name.trim() : null;
+    return { action: 'create_staff', email: (b.email as string).trim().toLowerCase(), password: b.password, role: b.role, display_name };
+  }
+
+  // Các action còn lại thao tác trên user có sẵn → bắt buộc userId.
   if (!isNonEmptyString(b.userId)) return null;
 
   if (b.action === 'set_role') {

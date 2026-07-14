@@ -54,4 +54,33 @@ describe('validateAdminUserAction', () => {
     expect(validateAdminUserAction('ban')).toBeNull();
     expect(validateAdminUserAction(42)).toBeNull();
   });
+
+  describe('create_staff (tạo tài khoản nhân viên mới)', () => {
+    it('hợp lệ (staff) → chuẩn hoá, chuẩn hoá email về lowercase + trim, không có userId', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: '  NV@Shop.VN ', password: 'matkhau123', role: 'staff', display_name: '  An  ' }))
+        .toEqual({ action: 'create_staff', email: 'nv@shop.vn', password: 'matkhau123', role: 'staff', display_name: 'An' });
+    });
+
+    it('hợp lệ (admin)', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'admin' }))
+        .toEqual({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'admin', display_name: null });
+    });
+
+    it('role user → null (tab NV chỉ tạo staff/admin)', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'user' })).toBeNull();
+    });
+
+    it('email sai định dạng → null', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'khong-phai-email', password: 'abcdef', role: 'staff' })).toBeNull();
+    });
+
+    it('mật khẩu dưới 6 ký tự → null', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: '123', role: 'staff' })).toBeNull();
+    });
+
+    it('thiếu email/password → null', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', password: 'abcdef', role: 'staff' })).toBeNull();
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', role: 'staff' })).toBeNull();
+    });
+  });
 });

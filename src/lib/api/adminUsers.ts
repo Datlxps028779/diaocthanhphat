@@ -49,6 +49,11 @@ export async function unbanUser(userId: string): Promise<void> {
   await postAction({ action: 'unban', userId });
 }
 
+// Admin tạo tài khoản nhân viên mới (email/mật khẩu). Server tạo auth user + set role.
+export async function createStaff(input: { email: string; password: string; role: 'staff' | 'admin'; display_name?: string | null }): Promise<void> {
+  await postAction({ action: 'create_staff', ...input });
+}
+
 // Hoạt động của MỘT user (dùng ở chi tiết admin). Đọc trực tiếp qua RLS admin sẵn có:
 // user_listings có um... policy admin, user_media có um_select_admin. KHÔNG gồm yêu
 // thích vì user_favorites chỉ cho chủ sở hữu đọc (không có policy admin).
