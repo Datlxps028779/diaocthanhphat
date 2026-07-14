@@ -27,12 +27,14 @@ export async function submitLead(lead: { full_name: string; phone: string; area_
 export async function createLead(input: {
   full_name: string; phone: string; area_interest?: string | null; budget?: string | null;
   message?: string | null; assigned_to?: string | null; status?: Lead['status']; author?: string | null;
+  property_id?: string | null;
 }): Promise<Lead> {
   const { data, error } = await supabase.from('leads').insert({
     full_name: input.full_name, phone: input.phone,
     area_interest: input.area_interest ?? null, budget: input.budget ?? null,
     message: input.message ?? null, assigned_to: input.assigned_to ?? null,
     status: input.status ?? 'new', source: 'admin_manual',
+    property_id: input.property_id ?? null,
   }).select('*, properties(id,title)').single();
   if (error) throw error;
   const lead = data as Lead;
@@ -63,7 +65,7 @@ export async function updateLeadStatus(id: string, status: Lead['status']): Prom
   if (error) throw error;
 }
 // CRM: cập nhật ghi chú nội bộ + nhân viên phụ trách + hẹn gọi lại.
-export async function updateLeadCrm(id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null }): Promise<void> {
+export async function updateLeadCrm(id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null; property_id?: string | null }): Promise<void> {
   const { error } = await supabase.from('leads').update(patch).eq('id', id);
   if (error) throw error;
 }

@@ -3,6 +3,7 @@ import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, C
 import type { Lead, LeadActivity } from '../../../lib/supabase';
 import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm } from '../../../lib/api';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
+import { PropertyPicker } from '../shared/PropertyPicker';
 
 // Nhãn + icon cho từng loại activity trong timeline.
 const KIND_META: Record<LeadActivity['kind'], { label: string; icon: typeof StickyNote }> = {
@@ -24,6 +25,8 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Lead['status']>(lead.status);
+  const [propertyId, setPropertyId] = useState<string | null>(lead.property_id);
+  const [propertyTitle, setPropertyTitle] = useState<string | null>(lead.properties?.title ?? null);
   const [noteKind, setNoteKind] = useState<'note' | 'call'>('note');
   const [noteBody, setNoteBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,6 +50,23 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
         body: `${stageMeta(status).label} → ${stageMeta(next).label}`,
       });
       setStatus(next);
+      await loadActivities();
+      onChanged();
+    } finally { setBusy(false); }
+  };
+
+  // Gắn/đổi/gỡ BĐS quan tâm → cập nhật DB + ghi activity note + reload list.
+  const handleProperty = async (id: string | null, title: string | null) => {
+    if (id === propertyId || busy) return;
+    setBusy(true);
+    try {
+      await updateLeadCrm(lead.id, { property_id: id });
+      await addLeadActivity(lead.id, {
+        kind: 'note', author,
+        body: id ? `Gắn BĐS quan tâm: ${title ?? id}` : 'Gỡ BĐS quan tâm',
+      });
+      setPropertyId(id);
+      setPropertyTitle(title);
       await loadActivities();
       onChanged();
     } finally { setBusy(false); }
@@ -101,6 +121,10 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
                 onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) { updateLeadCrm(lead.id, { assigned_to: v }).then(onChanged); } }}
                 className="flex-1 border border-gray-200 rounded-md px-2 py-1.5 focus:ring-1 focus:ring-red-400 outline-none" />
             </label>
+            <div className="text-xs">
+              <PropertyPicker value={propertyId} valueLabel={propertyTitle}
+                onChange={handleProperty} disabled={busy} />
+            </div>
             <label className="flex items-center gap-2 text-xs">
               <Clock className="w-3.5 h-3.5 text-gray-400" />
               <input type="datetime-local" aria-label="Hẹn gọi lại"

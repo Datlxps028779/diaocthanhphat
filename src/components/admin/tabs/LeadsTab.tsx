@@ -6,6 +6,7 @@ import { getAdminUsers } from '../../../lib/api/adminUsers';
 import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
+import { PropertyPicker } from '../shared/PropertyPicker';
 import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -40,7 +41,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [confirmDistribute, setConfirmDistribute] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [creating, setCreating] = useState(false);
-  const emptyForm = { full_name: '', phone: '', area_interest: '', budget: '', message: '', assigned_to: '', status: 'new' as Lead['status'] };
+  const emptyForm = { full_name: '', phone: '', area_interest: '', budget: '', message: '', assigned_to: '', status: 'new' as Lead['status'], property_id: null as string | null, property_title: null as string | null };
   const [createForm, setCreateForm] = useState(emptyForm);
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState('');
@@ -99,6 +100,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         message: createForm.message.trim() || null,
         assigned_to: createForm.assigned_to || null,
         status: createForm.status,
+        property_id: createForm.property_id,
       });
       setCreating(false);
       await load(); onRefreshStats();
@@ -376,6 +378,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                   {staff.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               )}
+              <div className="col-span-2">
+                <PropertyPicker value={createForm.property_id} valueLabel={createForm.property_title}
+                  onChange={(id, title) => setCreateForm(f => ({ ...f, property_id: id, property_title: title }))} />
+              </div>
               <textarea value={createForm.message} onChange={e => setCreateForm(f => ({ ...f, message: e.target.value }))}
                 placeholder="Nhu cầu / ghi chú" rows={3} className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none resize-none" />
             </div>

@@ -81,6 +81,19 @@ export async function getComps(filters: { areaId?: string; typeId?: string; list
   return (data ?? []) as { price: number; price_unit: string; area_sqm: number | null }[];
 }
 
+// Danh sách gọn (chỉ field cần) cho picker gắn BĐS vào lead. Lọc keyword phía client.
+export async function getPropertyOptions(limit = 300): Promise<
+  { id: string; title: string; price: number; price_unit: string; price_label: string | null; area_sqm: number | null }[]
+> {
+  const { data } = await supabase
+    .from('properties')
+    .select('id, title, price, price_unit, price_label, area_sqm')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data ?? []) as { id: string; title: string; price: number; price_unit: string; price_label: string | null; area_sqm: number | null }[];
+}
+
 export async function getFeaturedProperties(): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')
