@@ -83,7 +83,7 @@ export type Project = {
 };
 export type Profile = {
   id: string; display_name: string | null; phone: string | null;
-  avatar_url: string | null; role: 'user' | 'admin'; created_at: string; updated_at: string;
+  avatar_url: string | null; role: 'user' | 'staff' | 'admin'; created_at: string; updated_at: string;
 };
 export type UserListing = {
   id: string; user_id: string; status: 'pending' | 'approved' | 'rejected' | 'expired';

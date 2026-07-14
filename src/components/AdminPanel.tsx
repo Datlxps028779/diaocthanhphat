@@ -8,6 +8,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
+import { visibleTabs } from '../lib/adminAccess';
 
 const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
@@ -26,8 +27,15 @@ const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
 
-export function AdminPanel({ onLogout, initialTab }: AdminPanelProps) {
-  const [tab, setTab] = useState<AdminTab>((initialTab as AdminTab) ?? 'dashboard');
+export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
+  const allowedTabs = visibleTabs(role);
+  // Tab mặc định: initialTab nếu hợp quyền, else tab đầu tiên staff/admin được thấy.
+  const defaultTab: AdminTab = (initialTab && allowedTabs.includes(initialTab as AdminTab))
+    ? (initialTab as AdminTab)
+    : (allowedTabs[0] ?? 'dashboard');
+  const [tab, setTabRaw] = useState<AdminTab>(defaultTab);
+  // Chặn chuyển sang tab ngoài quyền (staff gõ tay / initialTab lạ).
+  const setTab = (t: AdminTab) => { if (allowedTabs.includes(t)) setTabRaw(t); };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0, activeProperties: 0, featuredProperties: 0, hotProperties: 0,
@@ -78,7 +86,7 @@ export function AdminPanel({ onLogout, initialTab }: AdminPanelProps) {
         </div>
 
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => (
+          {navItems.filter(item => allowedTabs.includes(item.id)).map(item => (
             <button key={item.id} onClick={() => setTab(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${tab === item.id ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span className="flex-shrink-0">{item.icon}</span>

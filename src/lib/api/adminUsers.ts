@@ -9,7 +9,7 @@ export interface AdminUserRow {
   id: string;
   display_name: string | null;
   phone: string | null;
-  role: 'user' | 'admin';
+  role: 'user' | 'staff' | 'admin';
   created_at: string;
   email: string | null;   // null nếu server chưa cấu hình service_role
   banned: boolean;
@@ -39,7 +39,7 @@ async function postAction(body: Record<string, unknown>): Promise<void> {
   if (!res.ok) throw new Error(json.error ?? 'Thao tác thất bại.');
 }
 
-export async function setUserRole(userId: string, role: 'user' | 'admin'): Promise<void> {
+export async function setUserRole(userId: string, role: 'user' | 'staff' | 'admin'): Promise<void> {
   await postAction({ action: 'set_role', userId, role });
 }
 export async function banUser(userId: string): Promise<void> {

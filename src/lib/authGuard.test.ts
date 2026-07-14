@@ -9,6 +9,11 @@ describe('isElevatedRole', () => {
     expect(isElevatedRole('admin')).toBe(true);
   });
 
+  it('role staff → true (nhân viên cũng là quyền cao, chặn ở cổng người dùng)', () => {
+    expect(isElevatedRole('staff')).toBe(true);
+    expect(isElevatedRole('STAFF')).toBe(true);
+  });
+
   it('role user → false (cho phép)', () => {
     expect(isElevatedRole('user')).toBe(false);
   });

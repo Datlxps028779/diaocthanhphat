@@ -15,7 +15,12 @@ describe('validateAdminUserAction', () => {
       .toEqual({ action: 'set_role', userId: 'u1', role: 'admin' });
   });
 
-  it('set_role role lạ → null (chỉ nhận user|admin)', () => {
+  it('set_role hợp lệ (staff) → chuẩn hoá', () => {
+    expect(validateAdminUserAction({ action: 'set_role', userId: 'u1', role: 'staff' }))
+      .toEqual({ action: 'set_role', userId: 'u1', role: 'staff' });
+  });
+
+  it('set_role role lạ → null (chỉ nhận user|staff|admin)', () => {
     expect(validateAdminUserAction({ action: 'set_role', userId: 'u1', role: 'superuser' })).toBeNull();
   });
 

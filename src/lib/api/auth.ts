@@ -1,5 +1,6 @@
 import { supabase, type Profile } from '../supabase';
 import { isElevatedRole } from '../authGuard';
+import type { Role } from '../adminAccess';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 // Đăng ký. emailRedirectTo dựng theo origin hiện tại → link xác nhận trong mail
@@ -63,6 +64,12 @@ export async function getCurrentRole(): Promise<string | null> {
   if (!user) return null;
   const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   return (data as { role: string } | null)?.role ?? null;
+}
+// Role dùng để gate admin panel (admin|staff|user|null). Dùng ở AdminClient để
+// quyết được vào panel + lọc tab. Chuẩn hoá về kiểu Role của adminAccess.
+export async function getPanelRole(): Promise<Role | null> {
+  const role = await getCurrentRole();
+  return role === 'admin' || role === 'staff' || role === 'user' ? role : null;
 }
 export async function updateProfile(updates: Partial<Profile>): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();

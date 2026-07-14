@@ -2,7 +2,7 @@
 // về union rõ ràng hoặc trả null để route từ chối (400) trước khi chạm service_role
 // (bỏ qua RLS). Chỉ nhận đúng action + tham số hợp lệ, không đoán.
 export type AdminUserAction =
-  | { action: 'set_role'; userId: string; role: 'user' | 'admin' }
+  | { action: 'set_role'; userId: string; role: 'user' | 'staff' | 'admin' }
   | { action: 'ban'; userId: string }
   | { action: 'unban'; userId: string };
 
@@ -16,7 +16,7 @@ export function validateAdminUserAction(body: unknown): AdminUserAction | null {
   if (!isNonEmptyString(b.userId)) return null;
 
   if (b.action === 'set_role') {
-    if (b.role === 'user' || b.role === 'admin') {
+    if (b.role === 'user' || b.role === 'staff' || b.role === 'admin') {
       return { action: 'set_role', userId: b.userId, role: b.role };
     }
     return null;

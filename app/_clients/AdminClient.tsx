@@ -2,7 +2,8 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { getAdminRole } from '@/lib/api';
+import { getPanelRole } from '@/lib/api';
+import { canAccessPanel, type Role } from '@/lib/adminAccess';
 import { AdminLogin } from '@/components/AdminLogin';
 
 // AdminPanel (~193KB) lazy-load để không vào bundle khách vãng lai.
@@ -16,29 +17,29 @@ const Spinner = ({ dark }: { dark?: boolean }) => (
 
 export function AdminClient() {
   const { user, loading: authLoading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminChecked, setAdminChecked] = useState(false);
+  const [role, setRole] = useState<Role | null>(null);
+  const [roleChecked, setRoleChecked] = useState(false);
   const [entered, setEntered] = useState(false); // đã bấm login thành công
 
   useEffect(() => {
     if (user) {
-      getAdminRole().then(r => { setIsAdmin(r); setAdminChecked(true); })
-        .catch(() => { setIsAdmin(false); setAdminChecked(true); });
+      getPanelRole().then(r => { setRole(r); setRoleChecked(true); })
+        .catch(() => { setRole(null); setRoleChecked(true); });
     } else {
-      setIsAdmin(false); setAdminChecked(true);
+      setRole(null); setRoleChecked(true);
     }
   }, [user]);
 
   if (authLoading) return <Spinner />;
-  if (!user || !isAdmin) {
-    if (!adminChecked) return <Spinner dark />;
+  if (!user || !canAccessPanel(role)) {
+    if (!roleChecked) return <Spinner dark />;
     return <AdminLogin onSuccess={() => setEntered(true)} />;
   }
-  // user + isAdmin OK
+  // user + quyền vào panel (admin|staff) OK
   void entered;
   return (
     <Suspense fallback={<Spinner dark />}>
-      <AdminPanel onLogout={async () => { await supabase.auth.signOut(); }} />
+      <AdminPanel role={role!} onLogout={async () => { await supabase.auth.signOut(); }} />
     </Suspense>
   );
 }

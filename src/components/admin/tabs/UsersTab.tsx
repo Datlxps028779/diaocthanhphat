@@ -1,9 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Shield, ShieldOff, Ban, CheckCircle2, RefreshCw, ArrowLeft, ImageIcon, Building2, Phone, Mail, Clock, AlertTriangle, Trash2, Check, X } from 'lucide-react';
+import { Users, Ban, CheckCircle2, RefreshCw, ArrowLeft, ImageIcon, Building2, Phone, Mail, Clock, AlertTriangle, Trash2, Check, X } from 'lucide-react';
 import { getAdminUsers, getUserActivity, setUserRole, banUser, unbanUser, deleteMyListing, deleteUserMedia, approveUserListing, rejectUserListing, type AdminUserRow, type UserActivity } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 const STATUS_LABEL: Record<string, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
+
+// Nhãn + màu badge cho từng role (user/staff/admin).
+const ROLE_META: Record<string, { label: string; badge: string }> = {
+  admin: { label: 'Quản trị', badge: 'bg-amber-100 text-amber-700' },
+  staff: { label: 'Nhân viên', badge: 'bg-blue-100 text-blue-700' },
+  user: { label: 'Người dùng', badge: 'bg-gray-100 text-gray-600' },
+};
+const roleMeta = (r: string) => ROLE_META[r] ?? ROLE_META.user;
 
 // Tab quản lý người dùng. Danh sách + chi tiết hoạt động (tin đăng, kho ảnh) + hành
 // động (đổi role, khóa/mở khóa). Email & khóa cần server có SUPABASE_SERVICE_ROLE_KEY;
@@ -35,14 +43,15 @@ export function UsersTab() {
     finally { setBusy(null); }
   };
 
-  const handleToggleRole = (u: AdminUserRow) => {
-    const next = u.role === 'admin' ? 'user' : 'admin';
-    setConfirm({
-      msg: next === 'admin'
-        ? `Cấp quyền QUẢN TRỊ cho "${u.display_name || u.email || u.id}"? Tài khoản này sẽ vào được trang quản trị.`
-        : `Gỡ quyền quản trị của "${u.display_name || u.email || u.id}"?`,
-      run: () => runAction(u.id, () => setUserRole(u.id, next)),
-    });
+  const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff' | 'admin') => {
+    if (next === u.role) return;
+    const who = u.display_name || u.email || u.id;
+    const msg = next === 'admin'
+      ? `Cấp quyền QUẢN TRỊ cho "${who}"? Toàn quyền vào trang quản trị.`
+      : next === 'staff'
+        ? `Đặt "${who}" làm NHÂN VIÊN? Chỉ vào được CRM khách hàng + duyệt tin đăng.`
+        : `Chuyển "${who}" về người dùng thường? Sẽ mất quyền vào trang quản trị.`;
+    setConfirm({ msg, run: () => runAction(u.id, () => setUserRole(u.id, next)) });
   };
 
   const handleToggleBan = (u: AdminUserRow) => {
@@ -113,17 +122,20 @@ export function UsersTab() {
                     <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{u.phone || '—'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${u.role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {u.role === 'admin' ? 'Quản trị' : 'Người dùng'}
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${roleMeta(u.role).badge}`}>
+                      {roleMeta(u.role).label}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button disabled={busy === u.id} onClick={() => handleToggleRole(u)}
-                        title={u.role === 'admin' ? 'Gỡ quyền quản trị' : 'Cấp quyền quản trị'}
-                        className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-amber-600 transition-colors disabled:opacity-40">
-                        {u.role === 'admin' ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-                      </button>
+                      <select disabled={busy === u.id} value={u.role}
+                        onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff' | 'admin')}
+                        title="Đổi quyền"
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-red-400 outline-none disabled:opacity-40">
+                        <option value="user">Người dùng</option>
+                        <option value="staff">Nhân viên</option>
+                        <option value="admin">Quản trị</option>
+                      </select>
                       <button disabled={busy === u.id} onClick={() => handleToggleBan(u)}
                         title={u.banned ? 'Mở khóa' : 'Khóa tài khoản'}
                         className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${u.banned ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-500 hover:bg-red-50 hover:text-red-600'}`}>
@@ -204,8 +216,8 @@ function UserDetail({ user, onBack }: { user: AdminUserRow; onBack: () => void }
             <h2 className="font-black text-xl text-gray-900 flex items-center gap-2">
               {user.display_name || '(Chưa đặt tên)'}
               {user.banned && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Đã khóa</span>}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                {user.role === 'admin' ? 'Quản trị' : 'Người dùng'}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${roleMeta(user.role).badge}`}>
+                {roleMeta(user.role).label}
               </span>
             </h2>
             <div className="text-gray-500 text-sm flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
