@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock } from 'lucide-react';
+import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock, Building2, CalendarPlus } from 'lucide-react';
 import type { Lead, LeadActivity } from '../../../lib/supabase';
 import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm } from '../../../lib/api';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
+import { buildTimeline } from '../../../lib/leadTimeline';
 import { PropertyPicker } from '../shared/PropertyPicker';
 
 // Nhãn + icon cho từng loại activity trong timeline.
@@ -100,6 +101,30 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
         </div>
 
         <div className="p-5 space-y-5">
+          {/* Thông tin cơ bản: ngày phát sinh · sản phẩm · tài chính · vị trí */}
+          <dl className="bg-white rounded-xl border border-gray-200 p-3 grid grid-cols-1 gap-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <CalendarPlus className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <dt className="text-gray-500 w-24 flex-shrink-0">Ngày phát sinh</dt>
+              <dd className="text-gray-800 font-medium">{new Date(lead.created_at).toLocaleString('vi-VN')}</dd>
+            </div>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <dt className="text-gray-500 w-24 flex-shrink-0">Sản phẩm</dt>
+              <dd className={propertyTitle ? 'text-blue-600 font-medium min-w-0 truncate' : 'text-gray-400'}>{propertyTitle ?? 'Chưa gắn BĐS'}</dd>
+            </div>
+            <div className="flex items-center gap-2">
+              <Wallet className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <dt className="text-gray-500 w-24 flex-shrink-0">Tài chính</dt>
+              <dd className={lead.budget ? 'text-gray-800 font-medium' : 'text-gray-400'}>{lead.budget ?? 'Chưa rõ'}</dd>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <dt className="text-gray-500 w-24 flex-shrink-0">Vị trí quan tâm</dt>
+              <dd className={lead.area_interest ? 'text-gray-800 font-medium' : 'text-gray-400'}>{lead.area_interest ?? 'Chưa rõ'}</dd>
+            </div>
+          </dl>
+
           {/* Stepper giai đoạn */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Giai đoạn</p>
@@ -158,11 +183,9 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Nhật ký chăm sóc</p>
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />)}</div>
-            ) : activities.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">Chưa có tương tác nào.</p>
             ) : (
               <ol className="space-y-2">
-                {activities.map(a => {
+                {buildTimeline(lead, activities).map(a => {
                   const meta = KIND_META[a.kind];
                   const Icon = meta.icon;
                   return (

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split, UserPlus, X, Eye } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead } from '../../../lib/api';
+import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads, createLead, addLeadActivity } from '../../../lib/api';
 import { getAdminUsers } from '../../../lib/api/adminUsers';
 import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
@@ -110,16 +110,31 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   };
 
   const handleStatus = async (id: string, status: Lead['status']) => {
-    await updateLeadStatus(id, status); await load(); onRefreshStats();
+    const prev = leads.find(l => l.id === id)?.status;
+    await updateLeadStatus(id, status);
+    if (prev && prev !== status) {
+      await addLeadActivity(id, { kind: 'stage_change', author: authorLabel, body: `${stageMeta(prev).label} → ${stageMeta(status).label}` });
+    }
+    await load(); onRefreshStats();
   };
   const handleDelete = async (id: string) => {
     await deleteLead(id); setConfirmDelete(null); await load(); onRefreshStats();
   };
 
   // CRM: lưu ghi chú + nhân viên phụ trách (blur/enter mới gọi API, không spam).
+  // Ghi vào nhật ký để hành trình chăm sóc đầy đủ dù thao tác ngoài drawer.
   const handleCrmSave = async (id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null }) => {
     await updateLeadCrm(id, patch);
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+    if ('assigned_to' in patch) {
+      await addLeadActivity(id, { kind: 'note', author: authorLabel, body: patch.assigned_to ? `Gán phụ trách: ${patch.assigned_to}` : 'Bỏ gán phụ trách' });
+    }
+    if ('follow_up_at' in patch) {
+      await addLeadActivity(id, { kind: 'follow_up', author: authorLabel, body: patch.follow_up_at ? new Date(patch.follow_up_at).toLocaleString('vi-VN') : 'Xóa hẹn gọi lại' });
+    }
+    if ('note' in patch) {
+      await addLeadActivity(id, { kind: 'note', author: authorLabel, body: patch.note ? `Ghi chú: ${patch.note}` : 'Xóa ghi chú' });
+    }
   };
 
   // Xuất CSV danh sách lead đang hiển thị (theo filter hiện tại).
