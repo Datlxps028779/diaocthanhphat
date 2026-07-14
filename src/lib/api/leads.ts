@@ -30,10 +30,18 @@ export async function updateLeadStatus(id: string, status: Lead['status']): Prom
   const { error } = await supabase.from('leads').update({ status }).eq('id', id);
   if (error) throw error;
 }
-// CRM: cập nhật ghi chú nội bộ + nhân viên phụ trách.
-export async function updateLeadCrm(id: string, patch: { note?: string | null; assigned_to?: string | null }): Promise<void> {
+// CRM: cập nhật ghi chú nội bộ + nhân viên phụ trách + hẹn gọi lại.
+export async function updateLeadCrm(id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null }): Promise<void> {
   const { error } = await supabase.from('leads').update(patch).eq('id', id);
   if (error) throw error;
+}
+
+// Gán hàng loạt — mỗi lead một nhãn NV khác nhau (round-robin) nên không gộp 1 query.
+// Team nhỏ, số lead chưa gán mỗi lần bấm không lớn → Promise.all chấp nhận được.
+export async function bulkAssignLeads(assignments: { id: string; assigned_to: string }[]): Promise<number> {
+  if (assignments.length === 0) return 0;
+  await Promise.all(assignments.map(a => updateLeadCrm(a.id, { assigned_to: a.assigned_to })));
+  return assignments.length;
 }
 export async function deleteLead(id: string): Promise<void> {
   const { error } = await supabase.from('leads').delete().eq('id', id);
@@ -42,8 +50,8 @@ export async function deleteLead(id: string): Promise<void> {
 
 // Xuất danh sách lead ra chuỗi CSV (UTF-8 BOM để Excel đọc đúng tiếng Việt).
 export function leadsToCsv(leads: Lead[]): string {
-  const cols = ['created_at', 'full_name', 'phone', 'status', 'source', 'assigned_to', 'area_interest', 'budget', 'message', 'note'];
-  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Trạng thái', 'Nguồn', 'Phụ trách', 'Khu vực quan tâm', 'Ngân sách', 'Lời nhắn', 'Ghi chú'];
+  const cols = ['created_at', 'full_name', 'phone', 'status', 'source', 'assigned_to', 'follow_up_at', 'area_interest', 'budget', 'message', 'note'];
+  const header = ['Ngày tạo', 'Họ tên', 'SĐT', 'Trạng thái', 'Nguồn', 'Phụ trách', 'Hẹn gọi lại', 'Khu vực quan tâm', 'Ngân sách', 'Lời nhắn', 'Ghi chú'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

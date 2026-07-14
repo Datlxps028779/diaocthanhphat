@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote } from 'lucide-react';
+import { Users, Trash2, Phone, MapPin, Clock, ChevronDown, RefreshCw, Download, Tag, UserCheck, StickyNote, AlertTriangle, CalendarClock, Split } from 'lucide-react';
 import type { Lead } from '../../../lib/supabase';
-import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv } from '../../../lib/api';
+import { getLeads, updateLeadStatus, updateLeadCrm, deleteLead, bulkUpdateLeadStatus, bulkDeleteLeads, leadsToCsv, bulkAssignLeads } from '../../../lib/api';
+import { getAdminUsers } from '../../../lib/api/adminUsers';
+import { leadSlaState, slaLabel, sortLeadsByUrgency, distributeRoundRobin } from '../../../lib/leadSla';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+// ISO (UTC) → giá trị cho input datetime-local (giờ địa phương, không timezone).
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // Nhãn nguồn lead dễ đọc (khớp các giá trị source ghi khi submitLead).
 const SOURCE_LABELS: Record<string, string> = {
@@ -22,9 +32,44 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [staff, setStaff] = useState<string[]>([]);       // nhãn NV (admin) để gán dropdown
+  const [staffLoaded, setStaffLoaded] = useState(false);   // false + rỗng → fallback ô nhập tay
+  const [confirmDistribute, setConfirmDistribute] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   const load = async () => { setLoading(true); const data = await getLeads(statusFilter); setLeads(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
+
+  // Cập nhật mốc "now" định kỳ để badge SLA tự đổi khi lead quá hạn theo thời gian thực.
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(t); }, []);
+
+  // Tải danh sách NV (admin) 1 lần cho dropdown gán. Lỗi → giữ fallback ô nhập tay.
+  useEffect(() => {
+    getAdminUsers()
+      .then(({ users }) => {
+        const labels = users
+          .filter(u => u.role === 'admin')
+          .map(u => u.display_name?.trim() || u.phone?.trim() || `NV-${u.id.slice(0, 6)}`);
+        setStaff(labels);
+        setStaffLoaded(true);
+      })
+      .catch(() => setStaffLoaded(false));
+  }, []);
+
+  // Tự chia đều lead CHƯA gán (đang hiển thị) cho các NV theo round-robin.
+  const unassignedVisible = leads.filter(l => !l.assigned_to);
+  const handleDistribute = async () => {
+    setConfirmDistribute(false);
+    const plan = distributeRoundRobin(unassignedVisible.map(l => l.id), staff);
+    if (plan.length === 0) return;
+    setBulkBusy(true);
+    try {
+      await bulkAssignLeads(plan);
+      await load();
+    } catch (e) {
+      alert(`Chia lead thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
+    } finally { setBulkBusy(false); }
+  };
 
   const handleStatus = async (id: string, status: Lead['status']) => {
     await updateLeadStatus(id, status); await load(); onRefreshStats();
@@ -34,7 +79,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   };
 
   // CRM: lưu ghi chú + nhân viên phụ trách (blur/enter mới gọi API, không spam).
-  const handleCrmSave = async (id: string, patch: { note?: string | null; assigned_to?: string | null }) => {
+  const handleCrmSave = async (id: string, patch: { note?: string | null; assigned_to?: string | null; follow_up_at?: string | null }) => {
     await updateLeadCrm(id, patch);
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
   };
@@ -81,6 +126,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     closed: { label: 'Hoàn thành', color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
   };
 
+  // Sắp xếp theo độ khẩn (quá hạn → cần gọi hôm nay → mới nhất) + đếm quá hạn.
+  const sortedLeads = sortLeadsByUrgency(leads, now);
+  const overdueCount = leads.filter(l => leadSlaState(l, now) === 'overdue').length;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
@@ -90,6 +139,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
             {s === 'all' ? 'Tất cả' : STATUS_CONFIG[s].label}
           </button>
         ))}
+        {overdueCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+            <AlertTriangle className="w-3.5 h-3.5" />{overdueCount} quá hạn
+          </span>
+        )}
         {leads.length > 0 && (
           <label className="ml-auto flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
             <input type="checkbox" checked={allSelected} onChange={toggleAll}
@@ -100,6 +154,12 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <button onClick={load} className={`${leads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
           <RefreshCw className="w-3.5 h-3.5" />Làm mới
         </button>
+        {staff.length > 0 && unassignedVisible.length > 0 && (
+          <button disabled={bulkBusy} onClick={() => setConfirmDistribute(true)}
+            className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1">
+            <Split className="w-3.5 h-3.5" />Tự chia đều ({unassignedVisible.length})
+          </button>
+        )}
         {leads.length > 0 && (
           <button onClick={handleExportCsv} className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
             <Download className="w-3.5 h-3.5" />Xuất CSV
@@ -132,8 +192,12 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {leads.map(lead => (
-              <div key={lead.id} className={`bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow ${selected.has(lead.id) ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-200'}`}>
+            {sortedLeads.map(lead => {
+              const sla = leadSlaState(lead, now);
+              const slaBorder = sla === 'overdue' ? 'border-red-400 bg-red-50/40'
+                : sla === 'due_soon' ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200';
+              return (
+              <div key={lead.id} className={`bg-white rounded-xl border shadow-sm p-4 hover:shadow-md transition-shadow ${selected.has(lead.id) ? 'border-red-400 ring-1 ring-red-300' : slaBorder}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleOne(lead.id)}
@@ -145,6 +209,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[lead.status].dot}`} />
                         {STATUS_CONFIG[lead.status].label}
                       </span>
+                      {(sla === 'overdue' || sla === 'due_soon') && (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${sla === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                          <AlertTriangle className="w-3 h-3" />{slaLabel(sla)}
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-500">
                       <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>
@@ -157,14 +226,31 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <div className="flex items-center gap-1 flex-1 min-w-[140px]">
                         <UserCheck className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        <input defaultValue={lead.assigned_to ?? ''} placeholder="Gán nhân viên"
-                          onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
-                          className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
+                        {staffLoaded && staff.length > 0 ? (
+                          <select value={lead.assigned_to ?? ''}
+                            onChange={e => { const v = e.target.value || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
+                            className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none">
+                            <option value="">Chưa gán</option>
+                            {/* Giữ nhãn cũ nếu không còn trong danh sách NV (NV đã đổi tên/mất quyền admin) */}
+                            {lead.assigned_to && !staff.includes(lead.assigned_to) && <option value={lead.assigned_to}>{lead.assigned_to}</option>}
+                            {staff.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        ) : (
+                          <input defaultValue={lead.assigned_to ?? ''} placeholder="Gán nhân viên"
+                            onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.assigned_to ?? null)) handleCrmSave(lead.id, { assigned_to: v }); }}
+                            className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
+                        )}
                       </div>
                       <div className="flex items-center gap-1 flex-1 min-w-[180px]">
                         <StickyNote className="w-3 h-3 text-gray-400 flex-shrink-0" />
                         <input defaultValue={lead.note ?? ''} placeholder="Ghi chú nội bộ"
                           onBlur={e => { const v = e.target.value.trim() || null; if (v !== (lead.note ?? null)) handleCrmSave(lead.id, { note: v }); }}
+                          className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
+                      </div>
+                      <div className="flex items-center gap-1 flex-1 min-w-[170px]">
+                        <CalendarClock className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                        <input type="datetime-local" value={isoToLocalInput(lead.follow_up_at)} aria-label="Hẹn gọi lại"
+                          onChange={e => { const v = e.target.value ? new Date(e.target.value).toISOString() : null; handleCrmSave(lead.id, { follow_up_at: v }); }}
                           className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-red-400 focus:border-red-400 outline-none" />
                       </div>
                     </div>
@@ -193,7 +279,8 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -204,6 +291,10 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <ConfirmDialog message={`Xóa ${selected.size} khách hàng đã chọn? Thao tác không thể hoàn tác.`}
           onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteLeads(selectedIds()), 'xóa'); }}
           onCancel={() => setConfirmBulkDelete(false)} />
+      )}
+      {confirmDistribute && (
+        <ConfirmDialog message={`Tự chia đều ${unassignedVisible.length} lead chưa gán cho ${staff.length} nhân viên?`}
+          onConfirm={handleDistribute} onCancel={() => setConfirmDistribute(false)} />
       )}
     </div>
   );
