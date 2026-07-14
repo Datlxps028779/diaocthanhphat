@@ -32,7 +32,7 @@ CREATE POLICY "user_uploads_select"
   TO authenticated
   USING (
     bucket_id = 'user-uploads'
-    AND (storage.owner(id) = auth.uid())
+    AND owner = auth.uid()
   );
 
 NOTIFY pgrst, 'reload schema';
