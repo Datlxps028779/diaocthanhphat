@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
@@ -225,8 +226,8 @@ export function Footer({ areas, onNavigate }: FooterProps) {
         <div>
           <h4 className="font-bold text-sm mb-3 text-white">{footer.col3_title || 'KHU VỰC'}</h4>
           {areas.map(a => (
-            <button key={a.id} onClick={() => go({ name: 'regions', areaId: a.id })}
-              className="block text-gray-400 hover:text-red-400 text-xs mb-2 transition-colors">{a.name}</button>
+            <Link key={a.id} href={`/khu-vuc/${a.slug}`} onClick={() => scrollTop()}
+              className="block text-gray-400 hover:text-red-400 text-xs mb-2 transition-colors">{a.name}</Link>
           ))}
           <div className="mt-2 pt-2 border-t border-gray-800">
             <p className="text-gray-500 text-xs">{col3sub1}</p>

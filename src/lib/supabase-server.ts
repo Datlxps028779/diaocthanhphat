@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Property, NewsArticle } from './supabase';
+import type { Property, NewsArticle, Area } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -73,6 +73,46 @@ export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', li
   if (listingType) q = q.eq('listing_type', listingType);
   const { data } = await q;
   return (data ?? []) as Property[];
+}
+
+export async function serverGetAreas(): Promise<Area[]> {
+  const sb = serverClient();
+  const { data } = await sb.from('areas').select('*').order('order_index', { ascending: true });
+  return (data ?? []) as Area[];
+}
+
+export async function serverGetAreaBySlug(slug: string): Promise<Area | null> {
+  const sb = serverClient();
+  const { data } = await sb.from('areas').select('*').eq('slug', slug).maybeSingle();
+  return (data as Area | null) ?? null;
+}
+
+export async function serverGetAreaListings(areaId: string, limit = 12): Promise<Property[]> {
+  const sb = serverClient();
+  const { data } = await sb
+    .from('properties')
+    .select(PROPERTY_SELECT)
+    .eq('is_active', true)
+    .eq('area_id', areaId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data ?? []) as Property[];
+}
+
+export async function serverGetAreaStats(areaId: string): Promise<{ districts: string[]; propertyTypes: string[]; activeCount: number }> {
+  const sb = serverClient();
+  const { data, count } = await sb
+    .from('properties')
+    .select('district, property_type_id', { count: 'exact' })
+    .eq('is_active', true)
+    .eq('area_id', areaId)
+    .limit(500);
+  const rows = (data ?? []) as Array<{ district: string | null; property_type_id: string | null }>;
+  return {
+    districts: Array.from(new Set(rows.map(r => r.district).filter((v): v is string => !!v))),
+    propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
+    activeCount: count ?? rows.length,
+  };
 }
 
 // News: URL /tin-tuc/{slug} tra theo slug; fallback id nếu là UUID.

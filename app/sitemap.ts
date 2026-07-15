@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 
 const SITE_URL = (process.env.SITE_URL || 'https://diaocthanhphat.com').replace(/\/$/, '');
 
@@ -47,6 +48,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: 'weekly',
         priority: 0.8,
       });
+    }
+
+    const [areasRes, areaPropsRes] = await Promise.all([
+      sb.from('areas').select('id,name,slug,description,created_at').limit(5000),
+      sb.from('properties').select('id,area_id,district,property_type_id').eq('is_active', true).not('area_id', 'is', null).limit(5000),
+    ]);
+    const areaProps = (areaPropsRes.data ?? []) as Array<{ id: string; area_id: string | null; district: string | null; property_type_id: string | null }>;
+    for (const area of (areasRes.data ?? []) as Array<{ id: string; name: string; slug: string; description: string | null; created_at?: string | null }>) {
+      const rows = areaProps.filter(p => p.area_id === area.id);
+      const detail = getAreaDetails(area.slug);
+      const evaluation = evaluateAreaSeo({
+        area,
+        activeListings: rows,
+        districts: Array.from(new Set(rows.map(r => r.district).filter((v): v is string => !!v))),
+        propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
+        hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
+      });
+      if (evaluation.indexable) {
+        entries.push({
+          url: `${SITE_URL}/khu-vuc/${area.slug}`,
+          lastModified: area.created_at ? new Date(area.created_at) : undefined,
+          changeFrequency: 'weekly',
+          priority: 0.65,
+        });
+      }
     }
 
     const news = await sb.from('news').select('id,slug,updated_at').eq('is_published', true).limit(5000);

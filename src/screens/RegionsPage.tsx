@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, TrendingUp, Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
@@ -9,59 +10,7 @@ import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { PropertyMap } from '../components/PropertyMap';
-
-interface AreaDetail {
-  heroImage: string;
-  description: string;
-  infrastructure: string[];
-  investmentTypes: string[];
-  priceRange: string;
-  growthPct: number;
-  riskLevel: string;
-  highlights: string[];
-  centerLat: number;
-  centerLng: number;
-  zoom: number;
-}
-
-const AREA_DETAILS: Record<string, AreaDetail> = {
-  'tp-hcm': {
-    heroImage: 'https://images.pexels.com/photos/1103970/pexels-photo-1103970.jpeg?auto=compress&w=800',
-    description: 'TP. Hồ Chí Minh là trung tâm kinh tế lớn nhất Việt Nam, thị trường BĐS sôi động, thanh khoản cao nhất cả nước.',
-    infrastructure: ['Metro Bến Thành – Suối Tiên (khai thác)', 'Vành đai 3 TP.HCM (đang xây)', 'Cao tốc TP.HCM – Mộc Bài', 'Cầu Thủ Thiêm 3, 4', 'QL50 & QL13 mở rộng'],
-    investmentTypes: ['Nhà phố cho thuê', 'Căn hộ cao cấp', 'Shophouse thương mại', 'Đất nền vùng ven'],
-    priceRange: '4 – 15 tỷ/căn', growthPct: 15, riskLevel: 'Rất thấp',
-    highlights: ['Trung tâm kinh tế lớn nhất VN', 'Thanh khoản cao nhất', 'Hạ tầng đồng bộ'],
-    centerLat: 10.82, centerLng: 106.63, zoom: 11,
-  },
-  'binh-duong': {
-    heroImage: 'https://images.pexels.com/photos/1642125/pexels-photo-1642125.jpeg?auto=compress&w=800',
-    description: 'Bình Dương là trung tâm công nghiệp năng động, dẫn đầu cả nước về thu hút FDI với hơn 30 khu công nghiệp.',
-    infrastructure: ['Cao tốc TP.HCM – Thủ Dầu Một', 'Metro số 1 kéo dài đến Bình Dương', 'KCN VSIP 1, 2, 3', 'QL13 mở rộng 6 làn', 'Vành đai 3 TP.HCM qua Bình Dương'],
-    investmentTypes: ['Đất nền khu dân cư', 'Nhà phố thương mại', 'Nhà ở công nhân', 'Shophouse KCN'],
-    priceRange: '1,5 – 4,5 tỷ/nền', growthPct: 22, riskLevel: 'Thấp',
-    highlights: ['30+ KCN đang hoạt động', 'Dân số tăng nhanh', 'FDI dẫn đầu cả nước'],
-    centerLat: 11.07, centerLng: 106.65, zoom: 11,
-  },
-  'dong-nai': {
-    heroImage: 'https://images.pexels.com/photos/2119713/pexels-photo-2119713.jpeg?auto=compress&w=800',
-    description: 'Đồng Nai là tâm điểm hạ tầng với Sân bay Long Thành – công trình tỷ đô tạo cú hích tăng giá mạnh nhất khu vực.',
-    infrastructure: ['Sân bay Quốc tế Long Thành (2026)', 'Cao tốc Biên Hòa – Vũng Tàu', 'Vành đai 4 TP.HCM', 'Cầu Đồng Nai 2', 'Cao tốc Phan Thiết – Dầu Giây'],
-    investmentTypes: ['Đất ven sân bay', 'Đất nền ven sông', 'Nhà phố trung tâm', 'Biệt thự nghỉ dưỡng'],
-    priceRange: '1,8 – 6 tỷ/nền', growthPct: 25, riskLevel: 'Thấp',
-    highlights: ['Sân bay Long Thành – lớn nhất VN', 'Giá còn thấp so với tiềm năng', 'Hạ tầng bùng nổ'],
-    centerLat: 10.96, centerLng: 107.0, zoom: 11,
-  },
-  'binh-phuoc': {
-    heroImage: 'https://images.pexels.com/photos/440731/pexels-photo-440731.jpeg?auto=compress&w=800',
-    description: 'Bình Phước nổi lên như vùng đất vàng với quỹ đất rộng lớn, giá còn thấp, hạ tầng đầu tư mạnh.',
-    infrastructure: ['Cao tốc Chơn Thành – Đức Hòa (đang xây)', 'Quốc lộ 14 nâng cấp 4 làn', 'KCN Becamex Bình Phước 4.600ha', 'Cửa khẩu quốc tế Hoa Lư', 'Sân bay Đồng Xoài (quy hoạch)'],
-    investmentTypes: ['Đất nền giá thấp', 'Đất ven sông Bé', 'Trang trại kết hợp', 'Đất công nghiệp'],
-    priceRange: '400tr – 1,8 tỷ/nền', growthPct: 35, riskLevel: 'Trung bình',
-    highlights: ['Giá đất thấp nhất vùng', 'Tiềm năng tăng giá 35%+/năm', 'Quỹ đất dồi dào'],
-    centerLat: 11.74, centerLng: 106.72, zoom: 10,
-  },
-};
+import { AREA_DETAILS } from '../lib/areaSeo';
 
 function SkeletonCard() {
   return (
@@ -79,30 +28,34 @@ function SkeletonCard() {
 function AreaCard({ area, isSelected, onClick }: { area: Area; isSelected: boolean; onClick: () => void }) {
   const detail = AREA_DETAILS[area.slug] ?? AREA_DETAILS['binh-duong'];
   return (
-    <button onClick={onClick}
-      className={`relative overflow-hidden rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 text-left group ${isSelected ? 'ring-4 ring-red-500 scale-[1.01]' : ''}`}>
-      <div className="h-52 bg-cover bg-center" style={{ backgroundImage: `url('${detail.heroImage}')` }}>
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent" />
-      </div>
-      <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-bold leading-tight">{area.name}</h3>
-          </div>
-          <span className="flex items-center gap-1 text-green-400 text-sm font-semibold bg-black/30 px-2 py-1 rounded-full">
-            <TrendingUp className="w-3.5 h-3.5" /> +{detail.growthPct}%
-          </span>
+    <div className={`relative overflow-hidden rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 text-left group ${isSelected ? 'ring-4 ring-red-500 scale-[1.01]' : ''}`}>
+      <button onClick={onClick} className="block w-full text-left">
+        <div className="h-52 bg-cover bg-center" style={{ backgroundImage: `url('${detail.heroImage}')` }}>
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent" />
         </div>
-        <div className="flex gap-3 mt-2 text-xs text-gray-300">
-          <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {detail.priceRange}</span>
-        </div>
-        {isSelected && (
-          <div className="mt-2 text-xs text-red-300 font-semibold flex items-center gap-1">
-            <CheckCircle className="w-3.5 h-3.5" /> Đang xem chi tiết
+        <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-bold leading-tight">{area.name}</h3>
+            </div>
+            <span className="flex items-center gap-1 text-green-400 text-sm font-semibold bg-black/30 px-2 py-1 rounded-full">
+              <TrendingUp className="w-3.5 h-3.5" /> +{detail.growthPct}%
+            </span>
           </div>
-        )}
-      </div>
-    </button>
+          <div className="flex gap-3 mt-2 text-xs text-gray-300">
+            <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {detail.priceRange}</span>
+          </div>
+          {isSelected && (
+            <div className="mt-2 text-xs text-red-300 font-semibold flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5" /> Đang xem chi tiết
+            </div>
+          )}
+        </div>
+      </button>
+      <Link href={`/khu-vuc/${area.slug}`} className="absolute right-4 bottom-4 z-10 text-[11px] font-bold text-white/90 hover:text-white underline underline-offset-2">
+        Trang khu vực
+      </Link>
+    </div>
   );
 }
 
