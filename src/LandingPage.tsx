@@ -24,6 +24,7 @@ import { quickCategoryToPage } from './lib/quickCategory';
 import { CategoryIcon } from './lib/categoryIcons';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
+import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -617,6 +618,9 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
         ) : null}
         {p.listing_type === 'cho_thue' && (
           <span className="absolute top-2 right-8 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">Cho thuê</span>
+        )}
+        {p.is_verified && (
+          <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge verified /></span>
         )}
         <button onClick={e => { e.stopPropagation(); onToggleFavorite?.(); }}
           className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">

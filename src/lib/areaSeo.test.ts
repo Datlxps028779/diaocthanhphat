@@ -44,6 +44,7 @@ function property(id: string, typeId = 'type-a', district = 'Thủ Dầu Một')
     is_featured: false,
     is_hot: false,
     is_active: true,
+    is_verified: false,
     views: 0,
     contact_name: null,
     contact_phone: null,

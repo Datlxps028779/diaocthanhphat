@@ -223,7 +223,7 @@ export async function deleteProperty(id: string): Promise<void> {
 // hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field nhạy cảm.
 export async function bulkUpdateProperties(
   ids: string[],
-  patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>,
+  patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured' | 'is_verified'>>,
 ): Promise<number> {
   if (ids.length === 0) return 0;
   const { error, count } = await supabase

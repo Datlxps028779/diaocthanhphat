@@ -34,7 +34,7 @@ export type Property = {
   area_id: string | null; district_id: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null;
   badge: string | null; badge_color: string | null; legal_status: string | null;
-  is_featured: boolean; is_hot: boolean; is_active: boolean; views: number;
+  is_featured: boolean; is_hot: boolean; is_active: boolean; is_verified: boolean; views: number;
   contact_name: string | null; contact_phone: string | null;
   bedrooms: number | null; bathrooms: number | null; floor_count: number | null; floor_number: number | null;
   direction: string | null; road_width: number | null; frontage: number | null;

@@ -7,7 +7,8 @@ import {
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight, MessageCircle,
-  Navigation, ExternalLink, Play
+  Navigation, ExternalLink, Play,
+  ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
@@ -17,6 +18,9 @@ import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
+import { VerifiedBadge } from '../components/VerifiedBadge';
+import { NearbyPoi } from '../components/NearbyPoi';
+import { buildTrustSignals, type TrustIcon } from '../lib/trustSignals';
 import { LoanCalculator } from '../components/LoanCalculator';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { ForYou } from '../components/ForYou';
@@ -310,6 +314,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
             {/* Title & price */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
               <h1 className="text-xl font-black text-gray-900 leading-tight mb-2">{property.title}</h1>
               <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-4 flex-wrap">
                 <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
@@ -403,7 +408,27 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                 Chỉ đường bằng Google Maps
                 <ExternalLink className="w-3.5 h-3.5 opacity-70" />
               </a>
+              {hasCoords && <NearbyPoi lat={property.latitude!} lng={property.longitude!} />}
             </div>
+
+            {(() => {
+              const signals = buildTrustSignals(property);
+              if (signals.length === 0) return null;
+              const Icon = (icon: TrustIcon) =>
+                icon === 'shield' ? <ShieldCheck className="w-3.5 h-3.5" />
+                : icon === 'file' ? <FileCheck className="w-3.5 h-3.5" />
+                : icon === 'map' ? <MapPin className="w-3.5 h-3.5" />
+                : <ImageIcon className="w-3.5 h-3.5" />;
+              return (
+                <div className="flex flex-wrap gap-2">
+                  {signals.map(s => (
+                    <span key={s.key} className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1.5">
+                      {Icon(s.icon)}{s.label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Legal guarantee */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex gap-3">

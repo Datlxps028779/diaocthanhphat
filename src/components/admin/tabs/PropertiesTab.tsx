@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star, ShieldCheck } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
 import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
@@ -145,6 +145,10 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
             className="flex items-center gap-1 text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Star className="w-3.5 h-3.5" />Nổi bật
           </button>
+          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_verified: true }), 'xác minh')}
+            className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
+            <ShieldCheck className="w-3.5 h-3.5" />Xác minh
+          </button>
           <button disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}
             className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Trash2 className="w-3.5 h-3.5" />Xóa
@@ -189,6 +193,7 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
                           <div className="flex gap-1 mt-0.5">
                             {p.is_featured && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Nổi bật</span>}
                             {p.is_hot && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded">HOT</span>}
+                            {p.is_verified && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Đã xác minh</span>}
                           </div>
                         </div>
                       </div>
@@ -365,6 +370,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     is_featured: property?.is_featured ?? false,
     is_hot: property?.is_hot ?? false,
     is_active: property?.is_active ?? true,
+    is_verified: property?.is_verified ?? false,
     contact_name: property?.contact_name ?? '',
     contact_phone: property?.contact_phone ?? '',
     contact_zalo: property?.contact_zalo ?? '',
@@ -492,6 +498,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       is_featured: form.is_featured,
       is_hot: form.is_hot,
       is_active: form.is_active,
+      is_verified: form.is_verified,
       contact_name: cs(form.contact_name),
       contact_phone: cs(form.contact_phone),
       contact_zalo: cs(form.contact_zalo),
@@ -725,7 +732,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
           {/* Toggles */}
           <div className="flex flex-wrap gap-4 pt-2 border-t border-gray-100">
-            {[{ key: 'is_active', label: 'Đang hiển thị' }, { key: 'is_featured', label: 'Nổi bật' }, { key: 'is_hot', label: 'HOT' }].map(({ key, label }) => (
+            {[{ key: 'is_active', label: 'Đang hiển thị' }, { key: 'is_featured', label: 'Nổi bật' }, { key: 'is_hot', label: 'HOT' }, { key: 'is_verified', label: 'Đã xác minh' }].map(({ key, label }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={!!form[key as keyof typeof form]}
                   onChange={e => setField(key, e.target.checked)} className="accent-red-500 w-4 h-4" />

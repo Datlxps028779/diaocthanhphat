@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
+import { buildPropertyGallery, FALLBACK_PROPERTY_IMAGE } from './propertyImages';
 
 const SITE_URL = process.env.SITE_URL || 'https://diaocthanhphat.com';
 const SITE_NAME = 'BĐS Bình Dương';
@@ -115,14 +116,17 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     return p.schema_markup as Record<string, unknown>;
   }
   const url = `${SITE_URL}/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
+  const gallery = buildPropertyGallery(p.image_url, p.images).filter(u => u !== FALLBACK_PROPERTY_IMAGE);
+  const video = buildPropertyVideoObject(p);
   return {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
     name: p.title,
     description: p.description ?? undefined,
     url,
-    image: p.image_url ?? undefined,
+    ...(gallery.length > 0 ? { image: gallery } : {}),
     datePosted: p.created_at,
+    ...(p.bedrooms != null ? { numberOfRooms: p.bedrooms } : {}),
     ...(p.price ? {
       offers: {
         '@type': 'Offer',
@@ -143,7 +147,35 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     ...(p.latitude && p.longitude ? {
       geo: { '@type': 'GeoCoordinates', latitude: p.latitude, longitude: p.longitude },
     } : {}),
+    ...(video ? { video } : {}),
   };
+}
+
+function youtubeId(u: string): string | null {
+  const m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
+  const src = p.video_url?.trim();
+  if (!src) return null;
+  const base = {
+    '@type': 'VideoObject',
+    name: `Video: ${p.title}`,
+    description: p.description ?? p.title,
+    uploadDate: p.created_at,
+  };
+  const yt = youtubeId(src);
+  if (yt) {
+    return {
+      ...base,
+      thumbnailUrl: `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+      embedUrl: `https://www.youtube.com/embed/${yt}`,
+    };
+  }
+  const thumb = p.image_url?.trim();
+  if (!thumb) return null;
+  return { ...base, thumbnailUrl: thumb, contentUrl: src };
 }
 
 // ─── News → Metadata ──────────────────────────────────────────────────────────
