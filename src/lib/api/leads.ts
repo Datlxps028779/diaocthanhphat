@@ -3,8 +3,9 @@ import { stageMeta } from '../leadPipeline';
 import { assigneesOf, type TeamMember } from '../leadAssignment';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
-export async function submitLead(lead: { full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string }): Promise<void> {
+export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string }): Promise<string | undefined> {
   const { error } = await supabase.from('leads').insert({
+    ...(lead.id ? { id: lead.id } : {}),
     full_name: lead.full_name, phone: lead.phone,
     area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
     source: lead.source ?? null, budget: lead.budget ?? null,
@@ -21,6 +22,7 @@ export async function submitLead(lead: { full_name: string; phone: string; area_
       message: lead.message, budget: lead.budget,
     }),
   }).catch(() => {});
+  return lead.id;
 }
 
 // Admin/staff tạo lead thủ công (khách gọi điện/sự kiện/giới thiệu — không qua form web).

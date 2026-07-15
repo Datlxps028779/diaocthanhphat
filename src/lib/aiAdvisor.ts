@@ -4,7 +4,7 @@ import { parseSearchIntent, normalizeVietnamese, type AiSearchMatch, type Search
 import type { submitLead } from './api/leads';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
-export interface AdvisorMessage { role: 'user' | 'assistant'; text: string; chips?: string[] }
+export interface AdvisorMessage { role: 'user' | 'assistant' | 'staff' | 'system'; text: string; chips?: string[] }
 export interface AdvisorPropertySummary {
   id: string;
   slug: string | null;

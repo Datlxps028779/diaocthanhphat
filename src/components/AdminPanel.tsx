@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
-  FolderOpen, LogOut, Bell, Menu, X, TrendingUp,
+  FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
   RefreshCw, FileText, Database, Layers, PanelLeft, UserCog
 } from 'lucide-react';
@@ -10,10 +10,12 @@ import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
 import { SlaBell } from './admin/shared/SlaBell';
+import { ChatOpsBell } from './admin/shared/ChatOpsBell';
 
 const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
 const LeadsTab = lazy(() => import('./admin/tabs/LeadsTab').then(m => ({ default: m.LeadsTab })));
+const ChatSessionsTab = lazy(() => import('./admin/tabs/ChatSessionsTab').then(m => ({ default: m.ChatSessionsTab })));
 const UserListingsApprovalTab = lazy(() => import('./admin/tabs/UserListingsApprovalTab').then(m => ({ default: m.UserListingsApprovalTab })));
 const UsersTab = lazy(() => import('./admin/tabs/UsersTab').then(m => ({ default: m.UsersTab })));
 const StaffTab = lazy(() => import('./admin/tabs/StaffTab').then(m => ({ default: m.StaffTab })));
@@ -54,6 +56,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'properties', label: 'Bất động sản', icon: <Building2 className="w-4 h-4" />, badge: stats.activeProperties },
     { id: 'leads', label: 'Khách hàng', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
+    { id: 'chat-sessions', label: 'Phiên chat', icon: <MessagesSquare className="w-4 h-4" /> },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
     { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
     { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
@@ -123,6 +126,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           </div>
           <div className="flex items-center gap-3">
             {allowedTabs.includes('leads') && <SlaBell onOpenLeads={() => setTab('leads')} />}
+            {allowedTabs.includes('chat-sessions') && <ChatOpsBell onOpenChat={() => setTab('chat-sessions')} />}
             <button onClick={loadStats} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Làm mới số liệu">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -145,6 +149,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'dashboard' && <DashboardTab stats={stats} setTab={setTab} />}
           {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} />}
           {tab === 'leads' && <LeadsTab onRefreshStats={loadStats} />}
+          {tab === 'chat-sessions' && <ChatSessionsTab />}
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}
           {tab === 'users' && <UsersTab />}
           {tab === 'staff' && <StaffTab />}

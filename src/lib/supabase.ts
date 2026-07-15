@@ -72,6 +72,35 @@ export type LeadActivity = {
   kind: 'created' | 'note' | 'call' | 'stage_change' | 'follow_up';
   body: string | null; author: string | null; created_at: string;
 };
+
+export type ChatSessionStatus = 'new' | 'active' | 'closed';
+export type ChatMessageSender = 'visitor' | 'assistant' | 'staff' | 'system';
+
+export type ChatSession = {
+  id: string; visitor_token: string; source: string; status: ChatSessionStatus;
+  lead_id: string | null; property_id: string | null;
+  visitor_name: string | null; visitor_phone: string | null; need_summary: string | null;
+  last_message: string | null; admin_attention: boolean;
+  created_at: string; updated_at: string; last_message_at: string; closed_at: string | null;
+  chat_assignments?: { user_id: string }[];
+  properties?: Pick<Property, 'id' | 'title'> | null;
+  leads?: Pick<Lead, 'id' | 'full_name' | 'phone'> | null;
+};
+
+export type ChatMessage = {
+  id: string; session_id: string; sender: ChatMessageSender; body: string;
+  author_id: string | null; created_at: string;
+};
+
+export type ChatAssignment = {
+  id: string; session_id: string; user_id: string;
+  assigned_by: string | null; created_at: string;
+};
+
+export type ChatStaffCapacity = {
+  user_id: string; max_active_sessions: number; is_available: boolean;
+  last_assigned_at: string | null; updated_at: string;
+};
 export type NewsArticle = {
   id: string; title: string; slug: string; excerpt: string | null; content: string | null;
   image_url: string | null; category: string; author: string;

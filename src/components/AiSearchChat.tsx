@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
-import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
+import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
 import { getAllProperties } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
+import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
 
 const EXAMPLES = [
@@ -34,6 +35,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const [leadSent, setLeadSent] = useState(false);
   const [submittingLead, setSubmittingLead] = useState(false);
   const [leadFormExpanded, setLeadFormExpanded] = useState(false);
+  const [chatHandle, setChatHandle] = useState<PublicChatHandle | null>(null);
+  const chatHandleRef = useRef<PublicChatHandle | null>(null);
+  const seenRemoteMessageIds = useRef<Set<string>>(new Set());
   const requestSeq = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,6 +57,29 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [open, messages.length, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
 
+  useEffect(() => {
+    if (!open || !chatHandle) return;
+    let alive = true;
+    const loadReplies = async () => {
+      try {
+        const rows = await getPublicChatMessages(chatHandle);
+        const incoming = rows.filter(m => {
+          if (seenRemoteMessageIds.current.has(m.id)) return false;
+          seenRemoteMessageIds.current.add(m.id);
+          return m.sender === 'staff' || m.sender === 'system';
+        });
+        if (!alive || incoming.length === 0) return;
+        setMessages(prev => [...prev, ...incoming.map(m => ({
+          role: m.sender === 'staff' ? 'staff' as const : 'system' as const,
+          text: m.body,
+        }))]);
+      } catch { /* polling phụ, không chặn chat */ }
+    };
+    loadReplies();
+    const t = setInterval(loadReplies, 5_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [open, chatHandle]);
+
   const resetConversation = () => {
     requestSeq.current += 1;
     setQuery('');
@@ -67,6 +94,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setLeadSent(false);
     setSubmittingLead(false);
     setLeadFormExpanded(false);
+    chatHandleRef.current = null;
+    seenRemoteMessageIds.current = new Set();
+    setChatHandle(null);
   };
 
   const openPanel = () => {
@@ -75,6 +105,35 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       if (next) track(EVENTS.AI_ADVISOR_OPEN);
       return next;
     });
+  };
+
+  const createChatHandle = async (needSummary: string): Promise<PublicChatHandle | null> => {
+    if (chatHandleRef.current) return chatHandleRef.current;
+    const handle = {
+      sessionId: crypto.randomUUID(),
+      visitorToken: crypto.randomUUID(),
+    };
+    chatHandleRef.current = handle;
+    setChatHandle(handle);
+    try {
+      await startChatSession({ sessionId: handle.sessionId, visitorToken: handle.visitorToken, needSummary });
+      return handle;
+    } catch (error) {
+      if (chatHandleRef.current?.sessionId === handle.sessionId) {
+        chatHandleRef.current = null;
+        setChatHandle(null);
+      }
+      throw error;
+    }
+  };
+
+  const persistChatMessage = async (handle: PublicChatHandle | null, sender: 'visitor' | 'assistant', body: string) => {
+    if (!handle) return;
+    try {
+      await appendPublicChatMessage(handle, sender, body);
+      const rows = await getPublicChatMessages(handle);
+      rows.forEach(m => seenRemoteMessageIds.current.add(m.id));
+    } catch { /* không chặn trải nghiệm chat */ }
   };
 
   const send = async (raw = query) => {
@@ -90,10 +149,14 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setMessages(prev => [...prev, { role: 'user', text }]);
     track(EVENTS.AI_ADVISOR_SEND, { hasText: true });
 
+    const handle = await createChatHandle(text).catch(() => null);
+    await persistChatMessage(handle, 'visitor', text);
+
     const turn = buildAdvisorTurn(text, taxonomy);
     setLastTurn(turn);
     setResults([]);
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
+    await persistChatMessage(handle, 'assistant', turn.reply);
     if (turn.stage === 'collecting_contact') setShowGeneralLeadForm(true);
 
     if (turn.stage !== 'showing_matches') return;
@@ -107,14 +170,18 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       // Luôn cho phép để lại liên hệ sau khi gợi ý, kể cả khi đã có tin.
       setShowGeneralLeadForm(true);
       track(EVENTS.AI_ADVISOR_SUGGEST, { count: cards.length });
+      const resultReply = cards.length ? `Em tìm được ${cards.length} tin phù hợp nhất. Anh/chị có thể xem chi tiết, lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ.` : 'Hiện chưa có tin thật sự khớp. Anh/chị có thể nới khoảng giá/khu vực, bấm lọc toàn bộ kết quả hoặc để lại thông tin để tư vấn viên tìm giúp.';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        text: cards.length ? `Em tìm được ${cards.length} tin phù hợp nhất. Anh/chị có thể xem chi tiết, lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ.` : 'Hiện chưa có tin thật sự khớp. Anh/chị có thể nới khoảng giá/khu vực, bấm lọc toàn bộ kết quả hoặc để lại thông tin để tư vấn viên tìm giúp.',
+        text: resultReply,
       }]);
+      await persistChatMessage(handle, 'assistant', resultReply);
     } catch {
       if (seq !== requestSeq.current) return;
       setShowGeneralLeadForm(true);
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Em chưa tải được danh sách gợi ý lúc này. Anh/chị có thể bấm lọc toàn bộ kết quả hoặc để lại số điện thoại để tư vấn viên hỗ trợ.' }]);
+      const errorReply = 'Em chưa tải được danh sách gợi ý lúc này. Anh/chị có thể bấm lọc toàn bộ kết quả hoặc để lại số điện thoại để tư vấn viên hỗ trợ.';
+      setMessages(prev => [...prev, { role: 'assistant', text: errorReply }]);
+      await persistChatMessage(handle, 'assistant', errorReply);
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
@@ -164,12 +231,25 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setSubmittingLead(true);
     try {
       const payload = buildAdvisorLeadPayload(leadForm, lastTurn, leadFor ?? undefined);
-      await submitLead(payload);
+      const leadId = crypto.randomUUID();
+      await submitLead({ ...payload, id: leadId });
+      if (chatHandle) {
+        await linkChatLead(chatHandle, {
+          leadId,
+          visitorName: leadForm.full_name,
+          visitorPhone: leadForm.phone,
+          needSummary: summarizeAdvisorNeed(lastTurn),
+          propertyId: leadFor?.id ?? undefined,
+        }).catch(() => {});
+        await routeChatSession(chatHandle).catch(() => {});
+      }
       track(EVENTS.LEAD_SUBMIT, { source: 'ai_advisor', hasProperty: !!leadFor, hasMessage: !!leadForm.message.trim() });
+      const successReply = 'Đã gửi thông tin, tư vấn viên sẽ liên hệ anh/chị trong thời gian sớm nhất.';
       setLeadSent(true);
       setShowGeneralLeadForm(false);
       setLeadFormExpanded(false);
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Đã gửi thông tin, tư vấn viên sẽ liên hệ anh/chị trong thời gian sớm nhất.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: successReply }]);
+      await persistChatMessage(chatHandle, 'assistant', successReply);
       setLeadForm({ full_name: '', phone: '', message: '' });
       setLeadFor(null);
     } catch {
@@ -201,18 +281,29 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3" aria-live="polite">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-red-600 text-white' : 'bg-gray-50 text-gray-700'}`}>
-                  <p>{m.text}</p>
-                  {m.chips && m.chips.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {m.chips.map(c => <span key={c} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-1">{c}</span>)}
-                    </div>
-                  )}
+            {messages.map((m, i) => {
+              const bubbleClass = m.role === 'user'
+                ? 'bg-red-600 text-white'
+                : m.role === 'staff'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
+                  : m.role === 'system'
+                    ? 'bg-amber-50 text-amber-800 border border-amber-100'
+                    : 'bg-gray-50 text-gray-700';
+              return (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${bubbleClass}`}>
+                    {m.role === 'staff' && <p className="text-[10px] font-black uppercase tracking-wide mb-1 text-emerald-700">Tư vấn viên</p>}
+                    {m.role === 'system' && <p className="text-[10px] font-black uppercase tracking-wide mb-1 text-amber-700">Hệ thống</p>}
+                    <p>{m.text}</p>
+                    {m.chips && m.chips.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {m.chips.map(c => <span key={c} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-1">{c}</span>)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {loading && <div className="text-xs text-gray-400">Đang tìm BĐS phù hợp…</div>}
 
@@ -305,6 +396,11 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {!open && (
+        <div className="absolute bottom-14 right-0 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-xs font-black text-red-600 shadow-lg ring-1 ring-red-100 animate-pulse">
+          Tư vấn AI
         </div>
       )}
       <button
