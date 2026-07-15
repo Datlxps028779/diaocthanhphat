@@ -1,3 +1,5 @@
+import { leadOriginLabel } from './leadSource';
+
 // Ghép timeline "kín" cho hành trình lead: mọi khách phải có mốc khởi đầu (Tạo khách)
 // dù activity 'created' chưa được ghi (lead từ form web, hoặc dữ liệu cũ trước khi có
 // bảng lead_activities). Thuần, test được — không đụng DB.
@@ -16,19 +18,8 @@ export interface TimelineLead {
   source: string | null;
 }
 
-// Nhãn nguồn để mô tả mốc tạo suy ra ("Phát sinh từ ...").
-const SOURCE_ORIGIN: Record<string, string> = {
-  property_detail_form: 'form trang chi tiết',
-  phone_reveal: 'bấm hiện số',
-  contact_modal: 'popup liên hệ',
-  invest_page: 'trang đầu tư',
-  about_page: 'trang liên hệ',
-  admin_manual: 'nhập tay',
-};
-
 export function originLabel(source: string | null): string {
-  if (!source) return 'Phát sinh khách mới';
-  return `Phát sinh từ ${SOURCE_ORIGIN[source] ?? source}`;
+  return leadOriginLabel(source);
 }
 
 // Trả timeline sắp xếp MỚI NHẤT TRƯỚC, đảm bảo có đúng 1 mốc 'created' ở cuối

@@ -11,6 +11,7 @@ import { AssigneePicker } from '../shared/AssigneePicker';
 import { FunnelReport } from '../shared/FunnelReport';
 import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { leadSourceLabel } from '../../../lib/leadSource';
 
 // ISO (UTC) → giá trị cho input datetime-local (giờ địa phương, không timezone).
 function isoToLocalInput(iso: string | null): string {
@@ -19,15 +20,6 @@ function isoToLocalInput(iso: string | null): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-
-// Nhãn nguồn lead dễ đọc (khớp các giá trị source ghi khi submitLead).
-const SOURCE_LABELS: Record<string, string> = {
-  property_detail_form: 'Form chi tiết',
-  phone_reveal: 'Bấm hiện số',
-  contact_modal: 'Popup liên hệ',
-  invest_page: 'Trang đầu tư',
-  about_page: 'Trang liên hệ',
-};
 
 // ─── Leads Tab ────────────────────────────────────────────────────────────────
 export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -283,7 +275,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-500">
                       <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>
                       {lead.area_interest && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{lead.area_interest}</span>}
-                      {lead.source && <span className="flex items-center gap-1 text-violet-600"><Tag className="w-3 h-3" />{SOURCE_LABELS[lead.source] ?? lead.source}</span>}
+                      {lead.source && <span className="flex items-center gap-1 text-violet-600"><Tag className="w-3 h-3" />{leadSourceLabel(lead.source)}</span>}
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(lead.created_at).toLocaleString('vi-VN')}</span>
                     </div>
                     {lead.message && <p className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 italic">"{lead.message}"</p>}

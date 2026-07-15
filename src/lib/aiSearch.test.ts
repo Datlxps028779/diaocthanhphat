@@ -54,6 +54,13 @@ describe('parseSearchIntent', () => {
     expect(r.residualKeyword).toBe('');
   });
 
+  it('mua bán dưới 900 triệu → quy về 0.9 tỷ (đơn vị DB mua bán)', () => {
+    const r = parseSearchIntent('nhà Dĩ An dưới 900 triệu sổ hồng', taxonomy);
+    expect(r.filters.maxPrice).toBe(0.9);
+    expect(r.filters.district).toBe('Dĩ An');
+    expect(r.filters.legal).toBe('Sổ hồng');
+  });
+
   it('đất nền Bến Cát trên 100m2 gần VSIP → type + district + minArea, residual giữ VSIP', () => {
     const r = parseSearchIntent('đất nền Bến Cát trên 100m2 gần VSIP', taxonomy);
     expect(r.filters.typeId).toBe('type-dat');

@@ -69,14 +69,21 @@ function findType(queryNorm: string, types: PropertyType[]): PropertyType | null
   return types.find(t => matched.terms.some(term => normalizeVietnamese(t.name).includes(normalizeVietnamese(term)))) ?? null;
 }
 
-function extractPrice(queryNorm: string): { min?: number; max?: number; phrase?: string } | null {
+function extractPrice(queryNorm: string): { min?: number; max?: number; unit?: 'ty' | 'trieu'; phrase?: string } | null {
   const range = queryNorm.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*(ty|trieu)/);
-  if (range) return { min: Number(range[1]), max: Number(range[2]), phrase: range[0] };
+  if (range) return { min: Number(range[1]), max: Number(range[2]), unit: range[3] as 'ty' | 'trieu', phrase: range[0] };
   const under = queryNorm.match(/\b(duoi|nho hon|toi da)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
-  if (under) return { max: Number(under[2]), phrase: under[0] };
+  if (under) return { max: Number(under[2]), unit: under[3] as 'ty' | 'trieu', phrase: under[0] };
   const above = queryNorm.match(/\b(tren|tu)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
-  if (above) return { min: Number(above[2]), phrase: above[0] };
+  if (above) return { min: Number(above[2]), unit: above[3] as 'ty' | 'trieu', phrase: above[0] };
   return null;
+}
+
+// Mua bán lưu giá theo tỷ; cho thuê theo triệu/tháng. "900 triệu" mua bán → 0.9 tỷ.
+function normalizePriceForListing(value: number, unit: 'ty' | 'trieu' | undefined, listingType?: string): number {
+  if (unit === 'trieu' && listingType !== 'cho_thue') return value / 1000;
+  if (unit === 'ty' && listingType === 'cho_thue') return value * 1000;
+  return value;
 }
 
 function extractArea(queryNorm: string): { min?: number; max?: number; phrase?: string } | null {
@@ -176,9 +183,22 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
 
   const price = extractPrice(q);
   if (price) {
-    const wroteMin = price.min == null || mergeFilter(filters, explicitFilters, 'minPrice', price.min);
-    const wroteMax = price.max == null || mergeFilter(filters, explicitFilters, 'maxPrice', price.max);
-    if (wroteMin || wroteMax) matched.push({ kind: 'price', label: price.min != null && price.max != null ? `${price.min}–${price.max}` : price.max != null ? `Dưới ${price.max}` : `Trên ${price.min}` });
+    const listingType = filters.listingType ?? explicitFilters.listingType;
+    const min = price.min == null ? undefined : normalizePriceForListing(price.min, price.unit, listingType);
+    const max = price.max == null ? undefined : normalizePriceForListing(price.max, price.unit, listingType);
+    const wroteMin = min == null || mergeFilter(filters, explicitFilters, 'minPrice', min);
+    const wroteMax = max == null || mergeFilter(filters, explicitFilters, 'maxPrice', max);
+    if (wroteMin || wroteMax) {
+      const unitLabel = listingType === 'cho_thue' ? ' triệu' : price.unit === 'trieu' && listingType !== 'cho_thue' ? ' triệu' : '';
+      matched.push({
+        kind: 'price',
+        label: price.min != null && price.max != null
+          ? `${price.min}–${price.max}${unitLabel}`
+          : price.max != null
+            ? `Dưới ${price.max}${unitLabel}`
+            : `Trên ${price.min}${unitLabel}`,
+      });
+    }
     if (price.phrase) removeSpan(remove, rawPhraseForNorm(query, price.phrase));
   }
 
