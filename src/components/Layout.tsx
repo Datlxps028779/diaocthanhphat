@@ -266,7 +266,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
 
 export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void }) {
   return (
-    <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 items-end">
+    <div className="fixed bottom-6 right-4 z-[60] flex flex-col gap-2.5 items-end">
       <AiSearchChat onNavigate={onNavigate} />
     </div>
   );

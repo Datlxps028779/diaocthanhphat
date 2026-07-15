@@ -46,7 +46,6 @@ export function Breadcrumb({ items }: { items: { label: string; onClick?: () => 
 }
 
 interface LandingPageProps {
-  onAdmin: () => void;
   onNavigate: (p: Page) => void;
   user?: SupabaseUser | null;
   onShowAuth: (mode: 'login' | 'register') => void;
@@ -57,7 +56,7 @@ const LISTING_TYPE_TABS = [
   { key: 'cho_thue', label: 'Cho thuê' },
 ] as const;
 
-export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPageProps) {
+export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) {
   const queryClient = useQueryClient();
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -588,11 +587,6 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
       <Footer areas={areas} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)} />
-
-      {/* Admin access button */}
-      <button onClick={onAdmin} className="fixed bottom-24 right-4 z-30 w-8 h-8 bg-gray-800/60 hover:bg-gray-900 rounded-full flex items-center justify-center" title="Admin">
-        <span className="text-white text-[10px] font-bold">A</span>
-      </button>
     </div>
   );
 }

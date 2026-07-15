@@ -15,7 +15,6 @@ export function HomeClient() {
   return (
     <>
       <LandingPage
-        onAdmin={() => navigate({ name: 'quantri-login' })}
         onNavigate={navigate}
         user={user}
         onShowAuth={(mode) => setAuthModal({ mode })}
