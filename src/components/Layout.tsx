@@ -265,24 +265,10 @@ export function Footer({ areas, onNavigate }: FooterProps) {
 }
 
 export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void }) {
-  const zaloLink = useSetting('zalo_link', 'https://zalo.me');
-  const phone = useSetting('phone_hotline', '0901234567');
   return (
-    <>
-      <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 items-end">
-        <AiSearchChat onNavigate={onNavigate} />
-        <a href={zaloLink} target="_blank" rel="noreferrer"
-          className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all"
-          title="Zalo">
-          <MessageCircle className="w-5 h-5 text-white" />
-        </a>
-        <a href={`tel:${phone.replace(/\s/g, '')}`}
-          className="w-12 h-12 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all animate-pulse"
-          title="Gọi ngay">
-          <Phone className="w-5 h-5 text-white" />
-        </a>
-      </div>
-    </>
+    <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 items-end">
+      <AiSearchChat onNavigate={onNavigate} />
+    </div>
   );
 }
 

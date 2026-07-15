@@ -1,6 +1,6 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
-import { Bot, Send, Sparkles, X, Phone, ExternalLink } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
@@ -33,7 +33,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const [leadError, setLeadError] = useState<string | null>(null);
   const [leadSent, setLeadSent] = useState(false);
   const [submittingLead, setSubmittingLead] = useState(false);
+  const [leadFormExpanded, setLeadFormExpanded] = useState(false);
   const requestSeq = useRef(0);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: areas = [], isLoading: loadingAreas } = useAreas();
   const { data: propertyTypes = [], isLoading: loadingTypes } = usePropertyTypes();
@@ -41,6 +43,31 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const { data: wards = [], isLoading: loadingWards } = useWards();
   const taxonomyReady = !loadingAreas && !loadingTypes && !loadingDistricts && !loadingWards;
   const taxonomy = useMemo(() => ({ areas, districts, wards, propertyTypes }), [areas, districts, wards, propertyTypes]);
+  const hasUserMessage = messages.some(m => m.role === 'user');
+  const showExamples = !hasUserMessage && !loading;
+  const showMatchActions = !loading && lastTurn?.stage === 'showing_matches';
+  const showLeadCta = !leadSent && (Boolean(leadFor) || showGeneralLeadForm);
+
+  useEffect(() => {
+    if (!open) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [open, messages.length, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
+
+  const resetConversation = () => {
+    requestSeq.current += 1;
+    setQuery('');
+    setMessages([GREETING]);
+    setLoading(false);
+    setResults([]);
+    setLastTurn(null);
+    setLeadFor(null);
+    setShowGeneralLeadForm(false);
+    setLeadForm({ full_name: '', phone: '', message: '' });
+    setLeadError(null);
+    setLeadSent(false);
+    setSubmittingLead(false);
+    setLeadFormExpanded(false);
+  };
 
   const openPanel = () => {
     setOpen(v => {
@@ -59,6 +86,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setShowGeneralLeadForm(false);
     setLeadError(null);
     setLeadSent(false);
+    setLeadFormExpanded(false);
     setMessages(prev => [...prev, { role: 'user', text }]);
     track(EVENTS.AI_ADVISOR_SEND, { hasText: true });
 
@@ -120,6 +148,14 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setOpen(false);
   };
 
+  const openLeadForm = (property?: AdvisorPropertySummary) => {
+    setLeadFor(property ?? null);
+    setShowGeneralLeadForm(!property);
+    setLeadFormExpanded(true);
+    setLeadError(null);
+    setLeadSent(false);
+  };
+
   const submitAdvisorLead = async () => {
     if (!lastTurn || submittingLead) return;
     const validation = validateAdvisorLeadContact(leadForm);
@@ -132,6 +168,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       track(EVENTS.LEAD_SUBMIT, { source: 'ai_advisor', hasProperty: !!leadFor, hasMessage: !!leadForm.message.trim() });
       setLeadSent(true);
       setShowGeneralLeadForm(false);
+      setLeadFormExpanded(false);
       setMessages(prev => [...prev, { role: 'assistant', text: 'Đã gửi thông tin, tư vấn viên sẽ liên hệ anh/chị trong thời gian sớm nhất.' }]);
       setLeadForm({ full_name: '', phone: '', message: '' });
       setLeadFor(null);
@@ -145,18 +182,25 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   return (
     <div className="relative">
       {open && (
-        <div className="absolute bottom-16 right-0 w-[360px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in flex flex-col">
-          <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-4 flex items-start justify-between gap-3">
+        <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 right-4 sm:left-auto sm:right-0 sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in flex flex-col min-h-0">
+          <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
             <div>
               <div className="flex items-center gap-2 font-black text-sm"><Bot className="w-4 h-4" />Trợ lý BĐS</div>
               <p className="text-xs text-white/80 mt-1">Tư vấn nhu cầu, gợi ý tin phù hợp và kết nối tư vấn viên.</p>
             </div>
-            <button onClick={() => setOpen(false)} className="p-1 rounded-full hover:bg-white/15 transition-colors" aria-label="Đóng trợ lý">
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {hasUserMessage && (
+                <button onClick={resetConversation} className="p-1.5 rounded-full hover:bg-white/15 transition-colors" aria-label="Bắt đầu lại cuộc trò chuyện" title="Bắt đầu lại">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} className="p-1.5 rounded-full hover:bg-white/15 transition-colors" aria-label="Đóng trợ lý">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3" aria-live="polite">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3" aria-live="polite">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-red-600 text-white' : 'bg-gray-50 text-gray-700'}`}>
@@ -172,7 +216,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
 
             {loading && <div className="text-xs text-gray-400">Đang tìm BĐS phù hợp…</div>}
 
-            {!loading && (results.length > 0 || lastTurn?.stage === 'showing_matches') && (
+            {!loading && (results.length > 0 || showMatchActions) && (
               <div className="space-y-2">
                 {results.map(p => (
                   <div key={p.id} className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
@@ -190,43 +234,68 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                     </div>
                     <div className="grid grid-cols-2 border-t border-gray-100">
                       <button onClick={() => openProperty(p)} className="text-xs font-semibold text-gray-700 py-2 hover:bg-gray-50 flex items-center justify-center gap-1"><ExternalLink className="w-3 h-3" />Xem chi tiết</button>
-                      <button onClick={() => { setLeadFor(p); setShowGeneralLeadForm(false); setLeadError(null); setLeadSent(false); }} className="text-xs font-semibold text-red-600 py-2 hover:bg-red-50 flex items-center justify-center gap-1"><Phone className="w-3 h-3" />Tư vấn căn này</button>
+                      <button onClick={() => openLeadForm(p)} className="text-xs font-semibold text-red-600 py-2 hover:bg-red-50 flex items-center justify-center gap-1"><Phone className="w-3 h-3" />Tư vấn căn này</button>
                     </div>
                   </div>
                 ))}
-                <button onClick={navigateAll} className="w-full border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold rounded-xl py-2.5 transition-colors">
-                  Lọc tất cả kết quả phù hợp
-                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  <button onClick={navigateAll} className="flex-1 min-w-[120px] border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold rounded-lg py-2 transition-colors">
+                    Lọc tất cả kết quả
+                  </button>
+                  {!showLeadCta && (
+                    <button onClick={() => openLeadForm()} className="flex-1 min-w-[120px] border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-semibold rounded-lg py-2 transition-colors">
+                      Để lại liên hệ
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-            {(leadFor || (showGeneralLeadForm && !leadSent)) && (
-              <div className="border border-red-100 bg-red-50/40 rounded-xl p-3 space-y-2">
-                <p className="text-xs font-bold text-gray-800">{leadFor ? `Tư vấn về: ${leadFor.title}` : 'Để lại thông tin tư vấn viên liên hệ'}</p>
-                <input value={leadForm.full_name} onChange={e => setLeadForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Họ tên" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-                <input value={leadForm.phone} onChange={e => setLeadForm(f => ({ ...f, phone: e.target.value }))} placeholder="Số điện thoại" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-                <textarea value={leadForm.message} onChange={e => setLeadForm(f => ({ ...f, message: e.target.value }))} placeholder="Ghi chú thêm (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[60px] resize-none focus:outline-none focus:ring-2 focus:ring-red-400" />
-                {leadError && <p className="text-xs text-red-600">{leadError}</p>}
-                <button onClick={submitAdvisorLead} disabled={submittingLead} className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold text-sm py-2 rounded-lg transition-colors">
-                  {submittingLead ? 'Đang gửi…' : 'Gửi cho tư vấn viên'}
+            {showLeadCta && (
+              leadFormExpanded ? (
+                <div className="border border-red-100 bg-red-50/40 rounded-xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold text-gray-800">{leadFor ? `Tư vấn về: ${leadFor.title}` : 'Để lại thông tin tư vấn viên liên hệ'}</p>
+                    <button onClick={() => setLeadFormExpanded(false)} className="text-[11px] text-gray-500 hover:text-gray-700 flex-shrink-0" aria-label="Thu gọn biểu mẫu">Thu gọn</button>
+                  </div>
+                  <input value={leadForm.full_name} onChange={e => setLeadForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Họ tên" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  <input value={leadForm.phone} onChange={e => setLeadForm(f => ({ ...f, phone: e.target.value }))} placeholder="Số điện thoại" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  <textarea value={leadForm.message} onChange={e => setLeadForm(f => ({ ...f, message: e.target.value }))} placeholder="Ghi chú thêm (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  {leadError && <p className="text-xs text-red-600">{leadError}</p>}
+                  <button onClick={submitAdvisorLead} disabled={submittingLead} className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold text-sm py-2 rounded-lg transition-colors">
+                    {submittingLead ? 'Đang gửi…' : 'Gửi cho tư vấn viên'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setLeadFormExpanded(true)} className="w-full text-left border border-red-100 bg-red-50/40 rounded-xl p-3 hover:bg-red-50 transition-colors">
+                  <p className="text-xs font-bold text-gray-800 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-red-600" />{leadFor ? `Tư vấn về: ${leadFor.title}` : 'Cần tư vấn viên hỗ trợ?'}</p>
+                  <p className="text-[11px] text-red-600 font-semibold mt-1">Nhập thông tin để được liên hệ</p>
                 </button>
-              </div>
+              )
             )}
+
+            <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t border-gray-100 p-3 space-y-2">
+          <div className="border-t border-gray-100 p-2.5 sm:p-3 space-y-2 flex-shrink-0">
             {!taxonomyReady && <p className="text-xs text-gray-400">Đang nạp dữ liệu khu vực/loại BĐS…</p>}
-            <div className="flex flex-wrap gap-1.5">
-              {EXAMPLES.map(example => (
-                <button key={example} disabled={!taxonomyReady} onClick={() => send(example)} className="text-[11px] text-gray-600 hover:text-red-600 bg-gray-50 hover:bg-red-50 disabled:opacity-50 rounded-full px-2.5 py-1.5 transition-colors">{example}</button>
-              ))}
-            </div>
+            {showExamples && (
+              <div className="flex flex-wrap gap-1.5">
+                {EXAMPLES.map(example => (
+                  <button key={example} disabled={!taxonomyReady} onClick={() => send(example)} className="text-[11px] text-gray-600 hover:text-red-600 bg-gray-50 hover:bg-red-50 disabled:opacity-50 rounded-full px-2.5 py-1.5 transition-colors">{example}</button>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <textarea
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') send();
+                  if (e.key !== 'Enter') return;
+                  if (e.nativeEvent.isComposing) return;
+                  if (e.shiftKey) return;
+                  e.preventDefault();
+                  send();
                 }}
                 placeholder="Nhập nhu cầu: khu vực, giá, pháp lý, số phòng…"
                 className="flex-1 max-h-24 min-h-[42px] resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
