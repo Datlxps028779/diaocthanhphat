@@ -24,6 +24,7 @@ import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
+import { buildPropertyGallery } from '../lib/propertyImages';
 
 interface PropertyDetailPageProps {
   propertyId: string;
@@ -160,11 +161,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     </div>
   );
 
-  const allImages = [
-    property.image_url,
-    ...(property.images ?? []),
-  ].filter(Boolean) as string[];
-  if (allImages.length === 0) allImages.push('https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg');
+  const allImages = buildPropertyGallery(property.image_url, property.images);
 
   const pricePerSqm = property.area_sqm
     ? ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0)

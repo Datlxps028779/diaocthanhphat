@@ -1,6 +1,6 @@
 import { supabase, type UserListing } from '../supabase';
 import { buildUniqueSlug } from '../slug';
-import { computeExpiresAt } from '../listingExpiry';
+import { resolveApprovalExpiresAt } from '../listingExpiry';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
 export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
@@ -34,7 +34,7 @@ export async function updateMyListing(
 ): Promise<void> {
   const { data, error } = await supabase
     .from('user_listings')
-    .update({ ...listing, status: 'pending', reject_reason: null })
+    .update({ ...listing, status: 'pending', reject_reason: null, expires_at: null })
     .eq('id', id)
     .select('id');
   if (error) throw error;
@@ -72,9 +72,7 @@ export async function approveUserListing(id: string): Promise<void> {
     formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
   }).select('id').single();
   if (propErr) throw propErr;
-  // Lưu property_id để trigger biết dòng properties nào cần ẩn khi tin bị từ chối/xóa/sửa/hết hạn.
-  // Đặt hạn hiển thị mặc định 60 ngày kể từ lúc duyệt (giữ hạn cũ nếu admin đã đặt riêng).
-  const expiresAt = listing.expires_at ?? computeExpiresAt(new Date().toISOString());
+  const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());
   await supabase.from('user_listings').update({ status: 'approved', property_id: inserted?.id ?? null, expires_at: expiresAt }).eq('id', id);
 
   // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
@@ -112,7 +110,7 @@ export async function rejectUserListing(id: string, reason: string): Promise<voi
 export async function renewMyListing(id: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_listings')
-    .update({ status: 'pending', reject_reason: null })
+    .update({ status: 'pending', reject_reason: null, expires_at: null })
     .eq('id', id)
     .select('id');
   if (error) throw error;

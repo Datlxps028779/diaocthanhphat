@@ -127,7 +127,9 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq('id', id).maybeSingle();
+    .eq('id', id)
+    .eq('is_active', true)
+    .maybeSingle();
   return data as Property | null;
 }
 
@@ -139,7 +141,9 @@ export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property 
   const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq(col, idOrSlug).maybeSingle();
+    .eq(col, idOrSlug)
+    .eq('is_active', true)
+    .maybeSingle();
   return data as Property | null;
 }
 

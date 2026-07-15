@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeExpiresAt, daysUntilExpiry, isExpired, expiryLabel, EXPIRY_DAYS } from './listingExpiry';
+import { computeExpiresAt, daysUntilExpiry, isExpired, expiryLabel, resolveApprovalExpiresAt, EXPIRY_DAYS } from './listingExpiry';
 
 describe('listingExpiry — tính hạn hiển thị tin đăng', () => {
   const T0 = '2026-01-01T00:00:00.000Z';
@@ -12,6 +12,20 @@ describe('listingExpiry — tính hạn hiển thị tin đăng', () => {
     it('nhận số ngày tùy chỉnh (admin đặt riêng)', () => {
       expect(computeExpiresAt(T0, 30)).toBe('2026-01-31T00:00:00.000Z');
       expect(computeExpiresAt(T0, 1)).toBe('2026-01-02T00:00:00.000Z');
+    });
+  });
+
+  describe('resolveApprovalExpiresAt', () => {
+    it('tạo hạn mới khi tin chưa có hạn', () => {
+      expect(resolveApprovalExpiresAt(null, T0)).toBe('2026-03-02T00:00:00.000Z');
+    });
+
+    it('tạo hạn mới khi hạn cũ đã qua', () => {
+      expect(resolveApprovalExpiresAt('2025-12-31T00:00:00.000Z', T0)).toBe('2026-03-02T00:00:00.000Z');
+    });
+
+    it('giữ hạn custom trong tương lai do admin đặt', () => {
+      expect(resolveApprovalExpiresAt('2026-04-01T00:00:00.000Z', T0)).toBe('2026-04-01T00:00:00.000Z');
     });
   });
 

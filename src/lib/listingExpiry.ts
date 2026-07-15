@@ -13,6 +13,15 @@ export function computeExpiresAt(fromISO: string, days = EXPIRY_DAYS): string {
   return new Date(new Date(fromISO).getTime() + days * DAY_MS).toISOString();
 }
 
+export function resolveApprovalExpiresAt(existingExpiresAt: string | null | undefined, nowISO: string): string {
+  if (existingExpiresAt) {
+    const existing = new Date(existingExpiresAt).getTime();
+    const now = new Date(nowISO).getTime();
+    if (Number.isFinite(existing) && existing > now) return existingExpiresAt;
+  }
+  return computeExpiresAt(nowISO);
+}
+
 // Số ngày còn lại tới hạn (làm tròn lên). null nếu tin không có hạn.
 // Âm hoặc 0 nghĩa là đã tới/qua hạn.
 export function daysUntilExpiry(expiresAtISO: string | null | undefined, nowISO?: string): number | null {

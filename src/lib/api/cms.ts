@@ -14,12 +14,13 @@ export async function getPropertiesForSection(section: FeaturedSection): Promise
   if (section.mode === 'manual') {
     const { data } = await supabase
       .from('featured_section_items')
-      .select('order_index, properties(*, areas(id,name,slug), property_types(id,name,slug))')
+      .select('order_index, properties!inner(*, areas(id,name,slug), property_types(id,name,slug))')
       .eq('section_id', section.id)
+      .eq('properties.is_active', true)
       .order('order_index');
     return ((data ?? []) as unknown as FeaturedSectionItem[])
       .map(item => item.properties)
-      .filter((p): p is Property => p != null);
+      .filter((p): p is Property => p != null && p.is_active === true);
   }
 
   // NOTE: Tạm đọc trực tiếp bảng `properties` (join areas + property_types).
