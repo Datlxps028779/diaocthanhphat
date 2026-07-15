@@ -43,7 +43,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
       />
       <div className="pt-[52px] md:pt-[76px]">{children}</div>
       <Footer areas={areas} onNavigate={navigate} />
-      <FloatingButtons />
+      <FloatingButtons onNavigate={navigate} />
       <CompareBar />
       {authModal && (
         <UserAuthModal

@@ -38,12 +38,13 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('ward')).toBe('Bình Chuẩn');
   });
 
-  it('mang keyword (q) và khoảng giá (minPrice/maxPrice) qua query', () => {
-    const href = pageToHref({ name: 'listings', keyword: 'nhà phố', minPrice: 1, maxPrice: 2 });
+  it('mang keyword (q), sort và khoảng giá (minPrice/maxPrice) qua query', () => {
+    const href = pageToHref({ name: 'listings', keyword: 'nhà phố', sort: 'relevance', minPrice: 1, maxPrice: 2 });
     const [path, qs] = href.split('?');
     expect(path).toBe('/danh-sach');
     const params = new URLSearchParams(qs);
     expect(params.get('q')).toBe('nhà phố');
+    expect(params.get('sort')).toBe('relevance');
     expect(params.get('minPrice')).toBe('1');
     expect(params.get('maxPrice')).toBe('2');
   });
@@ -95,9 +96,9 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     expect(parseListingParams(sp)).toEqual({ areaId: 'bd', district: 'Thuận An', ward: 'Bình Chuẩn' });
   });
 
-  it('bóc keyword (q) và ép số minPrice/maxPrice', () => {
-    expect(parseListingParams({ q: 'đất nền', minPrice: '1', maxPrice: '2' }))
-      .toEqual({ keyword: 'đất nền', minPrice: 1, maxPrice: 2 });
+  it('bóc keyword (q), sort và ép số minPrice/maxPrice', () => {
+    expect(parseListingParams({ q: 'đất nền', sort: 'relevance', minPrice: '1', maxPrice: '2' }))
+      .toEqual({ keyword: 'đất nền', sort: 'relevance', minPrice: 1, maxPrice: 2 });
   });
 
   it('minPrice=0 được giữ (không nhầm với thiếu param)', () => {

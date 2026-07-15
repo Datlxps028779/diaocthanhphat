@@ -16,6 +16,7 @@ import {
 } from './lib/api';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
+import { parseSearchIntent } from './lib/aiSearch';
 import { FAQ_ITEMS } from './lib/faq';
 import { track, EVENTS } from './lib/analytics';
 import { qk } from './lib/queryKeys';
@@ -124,22 +125,32 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
 
   const handleSearch = () => {
     const pr = (activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE)[searchPriceIdx];
-    track(EVENTS.SEARCH, {
-      listingType: activeTab,
-      hasKeyword: !!searchKeyword.trim(),
-      hasArea: !!searchAreaId,
-      priceIdx: searchPriceIdx,
-    });
-    onNavigate({
-      name: 'listings',
-      listingType: activeTab,
+    const explicit = {
       areaId: searchAreaId || undefined,
       district: searchDistrict || undefined,
       ward: searchWard || undefined,
       typeId: searchTypeId || undefined,
+      minPrice: searchPriceIdx > 0 ? pr?.min : undefined,
+      maxPrice: searchPriceIdx > 0 ? pr?.max : undefined,
+    };
+    const intent = parseSearchIntent(searchKeyword, { areas, districts: searchDistricts, wards: searchWards, propertyTypes: types }, explicit);
+    const inferredListingType = intent.filters.listingType === 'mua_ban' || intent.filters.listingType === 'cho_thue' ? intent.filters.listingType : undefined;
+    track(EVENTS.SEARCH, {
+      listingType: inferredListingType ?? activeTab,
+      hasKeyword: !!searchKeyword.trim(),
+      hasArea: !!(searchAreaId || intent.filters.areaId),
+      priceIdx: searchPriceIdx,
+    });
+    onNavigate({
+      name: 'listings',
+      listingType: inferredListingType ?? activeTab,
+      areaId: searchAreaId || intent.filters.areaId,
+      district: searchDistrict || intent.filters.district,
+      ward: searchWard || intent.filters.ward,
+      typeId: searchTypeId || intent.filters.typeId,
       keyword: searchKeyword || undefined,
-      minPrice: pr?.min,
-      maxPrice: pr?.max,
+      minPrice: searchPriceIdx > 0 ? pr?.min : intent.filters.minPrice,
+      maxPrice: searchPriceIdx > 0 ? pr?.max : intent.filters.maxPrice,
     });
   };
 
@@ -575,7 +586,7 @@ export function LandingPage({ onAdmin, onNavigate, user, onShowAuth }: LandingPa
       </div>
 
       <Footer areas={areas} onNavigate={onNavigate} />
-      <FloatingButtons />
+      <FloatingButtons onNavigate={onNavigate} />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)} />
 
       {/* Admin access button */}

@@ -1,16 +1,24 @@
 import { supabase, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 
-// ─── Properties (public) ──────────────────────────────────────────────────────
-export async function getAllProperties(filters?: {
+export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
+export interface PropertyFilters {
   listingType?: string; areaId?: string; typeId?: string; city?: string; keyword?: string;
   district?: string; ward?: string;
   minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
   bedrooms?: string; direction?: string; legal?: string;
   isFeatured?: boolean; isHot?: boolean;
-  sort?: 'newest' | 'price_asc' | 'price_desc' | 'views';
+  sort?: PropertySort;
   page?: number; limit?: number;
-}): Promise<{ data: Property[]; total: number }> {
+}
+
+// ─── Properties (public) ──────────────────────────────────────────────────────
+export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+  if (filters?.keyword || filters?.sort === 'relevance') {
+    const ranked = await getRankedPropertyMatches(filters);
+    if (ranked) return ranked;
+  }
+
   let q = supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' })
@@ -50,6 +58,47 @@ export async function getAllProperties(filters?: {
   const { data, error, count } = await q;
   if (error) throw error;
   return { data: (data ?? []) as Property[], total: count ?? 0 };
+}
+
+interface RankedMatch { id: string; rank: number; total_count: number }
+
+async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number } | null> {
+  const limit = filters.limit ?? 20;
+  const page = filters.page ?? 1;
+  const bedrooms = filters.bedrooms && filters.bedrooms !== 'all' ? Number(filters.bedrooms) : undefined;
+  const { data: matches, error } = await supabase.rpc('search_property_matches', {
+    kw: filters.keyword ?? null,
+    f_listing_type: filters.listingType && filters.listingType !== 'all' ? filters.listingType : null,
+    f_area_id: filters.areaId ?? null,
+    f_type_id: filters.typeId ?? null,
+    f_city: filters.city ?? null,
+    f_district: filters.district ?? null,
+    f_ward: filters.ward ?? null,
+    f_min_price: filters.minPrice ?? null,
+    f_max_price: filters.maxPrice ?? null,
+    f_min_area: filters.minArea ?? null,
+    f_max_area: filters.maxArea ?? null,
+    f_bedrooms: Number.isFinite(bedrooms) ? bedrooms : null,
+    f_direction: filters.direction ?? null,
+    f_legal: filters.legal ?? null,
+    f_featured: filters.isFeatured ?? null,
+    f_hot: filters.isHot ?? null,
+    f_sort: filters.sort ?? (filters.keyword ? 'relevance' : 'newest'),
+    f_limit: limit,
+    f_offset: (page - 1) * limit,
+  });
+  if (error) return null;
+  const rows = (matches ?? []) as RankedMatch[];
+  if (rows.length === 0) return { data: [], total: 0 };
+  const ids = rows.map(r => r.id);
+  const { data, error: detailError } = await supabase
+    .from('properties')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .eq('is_active', true)
+    .in('id', ids);
+  if (detailError) return null;
+  const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
+  return { data: ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p)), total: rows[0]?.total_count ?? rows.length };
 }
 
 export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId?: string }): Promise<Property[]> {

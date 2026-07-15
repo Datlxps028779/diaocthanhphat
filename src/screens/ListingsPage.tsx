@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
@@ -9,7 +9,8 @@ import {
 import Link from 'next/link';
 import { type Property } from '../lib/supabase';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
-import { buildPropertyPath } from '../lib/api/properties';
+import { buildPropertyPath, type PropertySort } from '../lib/api/properties';
+import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
@@ -27,7 +28,7 @@ interface ListingsPageProps {
     listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
     minPrice: number; maxPrice: number; minArea: number; maxArea: number;
     bedrooms: string; direction: string; legal: string;
-    isFeatured: boolean; isHot: boolean; sort: string;
+    isFeatured: boolean; isHot: boolean; sort: PropertySort;
   }>;
   // Dữ liệu SSR seed sẵn cho view mặc định → crawler thấy list ngay trong HTML gốc.
   initialData?: { data: Property[]; total: number };
@@ -80,9 +81,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [bedrooms, setBedrooms] = useState(initialFilters?.bedrooms ?? '');
   const [direction, setDirection] = useState(initialFilters?.direction ?? '');
   const [legal, setLegal] = useState(initialFilters?.legal ?? '');
-  const [sort, setSort] = useState<'newest' | 'price_asc' | 'price_desc' | 'views'>(
-    (initialFilters?.sort as 'newest' | 'price_asc' | 'price_desc' | 'views') ?? 'newest'
-  );
+  const [sort, setSort] = useState<PropertySort>((initialFilters?.sort as PropertySort) ?? 'newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
   const [page, setPage] = useState(1);
   const [mobileFilter, setMobileFilter] = useState(false);
@@ -135,15 +134,28 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
   const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
   const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
-  const filters = {
+  const explicitFilters = {
     listingType: listingType || undefined,
-    keyword: debouncedKeyword || undefined, areaId: areaId || undefined, typeId: typeId || undefined,
+    areaId: areaId || undefined,
+    typeId: typeId || undefined,
     district: district || undefined,
     ward: ward || undefined,
-    minPrice: pr.min, maxPrice: pr.max, minArea: ar.min, maxArea: ar.max,
-    bedrooms: bedrooms || undefined, direction: direction || undefined, legal: legal || undefined,
+    minPrice: pr.min,
+    maxPrice: pr.max,
+    minArea: ar.min,
+    maxArea: ar.max,
+    bedrooms: bedrooms || undefined,
+    direction: direction || undefined,
+    legal: legal || undefined,
+  };
+  const searchIntent = useMemo(() => parseSearchIntent(debouncedKeyword, { areas, districts, wards, propertyTypes: types }, explicitFilters), [debouncedKeyword, areas, districts, wards, types, listingType, areaId, typeId, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
+  const effectiveSort: PropertySort = debouncedKeyword && sort === 'newest' ? 'relevance' : sort;
+  const filters = {
+    ...explicitFilters,
+    ...searchIntent.filters,
+    keyword: searchIntent.residualKeyword.trim() || undefined,
     isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
-    sort, page, limit: PER_PAGE,
+    sort: effectiveSort, page, limit: PER_PAGE,
   };
   // Chỉ seed dữ liệu SSR khi filter còn nguyên mặc định (đúng cái server prefetch):
   // trang 1, không keyword/khu vực/loại/quận, khoảng giá & diện tích mặc định, mới nhất.
@@ -161,10 +173,10 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   // Tự học: ghi tín hiệu tìm kiếm khi khách chọn khu vực/loại/loại-tin (bỏ qua view
   // mặc định rỗng). Không cần đăng nhập — lưu localStorage để tự gợi ý về sau.
   useEffect(() => {
-    if (areaId || typeId || listingType) {
-      recordSignal('search', { areaId: areaId || null, typeId: typeId || null, listingType: listingType || null });
+    if (filters.areaId || filters.typeId || filters.listingType) {
+      recordSignal('search', { areaId: filters.areaId || null, typeId: filters.typeId || null, listingType: filters.listingType || null });
     }
-  }, [areaId, typeId, listingType]);
+  }, [filters.areaId, filters.typeId, filters.listingType]);
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({
@@ -462,8 +474,9 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
             <div className="flex items-center justify-between mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <ArrowUpDown className="w-4 h-4 text-gray-400" />
-                <select value={sort} onChange={e => setFilter(() => setSort(e.target.value as typeof sort))}
+                <select value={effectiveSort} onChange={e => setFilter(() => setSort(e.target.value as PropertySort))}
                   className="border-0 text-sm text-gray-700 focus:outline-none bg-transparent font-medium">
+                  <option value="relevance">Liên quan nhất</option>
                   <option value="newest">Mới nhất</option>
                   <option value="price_asc">Giá thấp → cao</option>
                   <option value="price_desc">Giá cao → thấp</option>
@@ -487,6 +500,11 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
             {/* Active filter chips */}
             {hasActiveFilters && (
               <div className="flex flex-wrap gap-2 mb-3">
+                {searchIntent.matched.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 rounded-full text-xs font-semibold">
+                    <Sparkles className="w-3 h-3" />AI đã hiểu: {searchIntent.matched.map(m => m.label).join(' · ')}
+                  </span>
+                )}
                 {areaId && areas.find(a => a.id === areaId) && (
                   <FilterChip label={`📍 ${areas.find(a => a.id === areaId)!.name}`} onRemove={() => setFilter(() => setAreaId(''))} />
                 )}

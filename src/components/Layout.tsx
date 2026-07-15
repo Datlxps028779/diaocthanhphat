@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
+import { AiSearchChat } from './AiSearchChat';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -263,12 +264,13 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   );
 }
 
-export function FloatingButtons() {
+export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void }) {
   const zaloLink = useSetting('zalo_link', 'https://zalo.me');
   const phone = useSetting('phone_hotline', '0901234567');
   return (
     <>
-      <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5">
+      <div className="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 items-end">
+        <AiSearchChat onNavigate={onNavigate} />
         <a href={zaloLink} target="_blank" rel="noreferrer"
           className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all"
           title="Zalo">
