@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '@/index.css';
-import { serializeJsonLd } from '@/lib/seo';
+import { serializeJsonLd, buildLocalBusinessJsonLd } from '@/lib/seo';
+import { serverGetSiteSettings } from '@/lib/supabase-server';
 import { Providers } from './providers';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -35,17 +36,12 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // JSON-LD Organization + WebSite ở mọi trang — giúp Google Knowledge Graph và
-  // AI crawler nhận diện thương hiệu + hỗ trợ sitelinks search box.
-  const orgJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'RealEstateAgent',
-    name: SITE_NAME,
-    url: SITE_URL,
-    areaServed: 'Bình Dương, Việt Nam',
-    description: 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
-  };
+  // AI crawler nhận diện thương hiệu + hỗ trợ sitelinks search box. Làm giàu từ
+  // site_settings (địa chỉ/điện thoại/email/logo/social) khi có.
+  const settings = await serverGetSiteSettings();
+  const orgJsonLd = buildLocalBusinessJsonLd(settings);
   const siteJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',

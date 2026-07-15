@@ -91,3 +91,19 @@ export async function serverGetNews(limit = 20): Promise<NewsArticle[]> {
     .order('created_at', { ascending: false }).limit(limit);
   return (data ?? []) as NewsArticle[];
 }
+
+// Đọc site_settings phía server cho layout (làm giàu JSON-LD LocalBusiness). Trả {}
+// nếu lỗi để layout không vỡ khi DB gặp sự cố.
+export async function serverGetSiteSettings(): Promise<Record<string, string>> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('site_settings').select('key, value');
+    const map: Record<string, string> = {};
+    for (const row of (data ?? []) as Array<{ key: string; value: string | null }>) {
+      map[row.key] = row.value ?? '';
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}

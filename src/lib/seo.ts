@@ -14,6 +14,68 @@ export function serializeJsonLd(obj: Record<string, unknown>): string {
     .replace(/&/g, '\\u0026');
 }
 
+// ─── LocalBusiness/Organization JSON-LD (site-wide) ───────────────────────────
+// Làm giàu từ site_settings (địa chỉ/điện thoại/email/logo/social). Chỉ thêm field
+// khi giá trị non-empty để tránh schema rỗng bị Google phạt rich result.
+export function buildLocalBusinessJsonLd(settings: Record<string, string>): Record<string, unknown> {
+  const get = (k: string) => (settings[k] ?? '').trim();
+  const name = get('site_name') || SITE_NAME;
+  const email = get('email') || get('email_contact');
+  const logo = get('site_logo_url') || get('og_image');
+  const sameAs = [
+    get('facebook_url'), get('youtube_url'), get('tiktok_url'),
+    get('social_facebook'), get('social_youtube'), get('social_tiktok'),
+    get('social_instagram'), get('social_telegram'),
+  ].filter(Boolean);
+
+  const ld: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateAgent',
+    name,
+    url: SITE_URL,
+    areaServed: 'Bình Dương, Việt Nam',
+    description: get('footer_description')
+      || 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
+  };
+  if (get('phone_main')) ld.telephone = get('phone_main');
+  if (email) ld.email = email;
+  if (logo) ld.logo = logo;
+  if (logo) ld.image = logo;
+  if (get('address')) {
+    ld.address = {
+      '@type': 'PostalAddress',
+      streetAddress: get('address'),
+      addressRegion: 'Bình Dương',
+      addressCountry: 'VN',
+    };
+  }
+  if (sameAs.length > 0) ld.sameAs = sameAs;
+  return ld;
+}
+
+// ─── Static page → Metadata (DRY cho các route tĩnh) ──────────────────────────
+// Bổ sung OG/Twitter riêng cho từng trang (trước đây static route chỉ có
+// title/description/canonical → share ra FB/Zalo hiện thẻ generic của site).
+export function staticPageMetadata(opts: { title: string; description: string; path: string; ogImage?: string }): Metadata {
+  const { title, description, path, ogImage } = opts;
+  const images = ogImage ? [{ url: ogImage, width: 1200, height: 630 }] : undefined;
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url: path,
+      siteName: SITE_NAME,
+      locale: 'vi_VN',
+      images,
+    },
+    twitter: { card: 'summary_large_image', title, description, images: ogImage ? [ogImage] : undefined },
+  };
+}
+
 // ─── Property → Metadata (Next.js Metadata API) ───────────────────────────────
 // Thay cho applyPropertySeo cũ (vốn thao tác DOM). Ưu tiên meta_title/description
 // nhập tay, fallback tự sinh. Canonical dùng SITE_URL (server-safe, không window).
