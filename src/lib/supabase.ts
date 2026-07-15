@@ -56,8 +56,6 @@ export type Lead = {
   area_interest: string | null; message: string | null;
   property_id: string | null; status: 'new' | 'contacted' | 'nurturing' | 'viewing' | 'negotiating' | 'won' | 'lost'; created_at: string;
   source: string | null; note: string | null;
-  /** @deprecated Gán NV nay dùng bảng lead_assignments (nhiều NV/khách). Giữ cột để không vỡ dữ liệu cũ; sẽ drop ở migration contract. */
-  assigned_to: string | null;
   budget: string | null;
   follow_up_at: string | null;
   properties?: Pick<Property, 'id' | 'title'> | null;
