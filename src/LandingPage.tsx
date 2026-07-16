@@ -206,6 +206,13 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </div>
         </section>
       );
+      case 'for_you': return (
+        <section key="for_you" className="pt-4 pb-2 bg-white">
+          <div className="max-w-7xl mx-auto px-4">
+            <ForYou />
+          </div>
+        </section>
+      );
       case 'featured_sections': return (
         <React.Fragment key="featured_sections">
           {sections.map(({ section, properties }) => properties.length > 0 && (
@@ -435,7 +442,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
+  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
   const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
   // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
   // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
@@ -443,6 +450,12 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'faq')) {
     const at = cmsOrder.indexOf('cta');
     if (at >= 0) cmsOrder.splice(at, 0, 'faq'); else cmsOrder.push('faq');
+  }
+  // "Gợi ý dành cho bạn" cũng chưa có trong CMS. Auto-chèn ngay sau 'categories'
+  // (đầu trang, dưới Danh mục nhanh) khi CMS chưa cấu hình row 'for_you'.
+  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'for_you')) {
+    const at = cmsOrder.indexOf('categories');
+    if (at >= 0) cmsOrder.splice(at + 1, 0, 'for_you'); else cmsOrder.unshift('for_you');
   }
   const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
 
@@ -578,11 +591,6 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
       {orderedIds.map(id => renderSection(id))}
-
-      {/* Gợi ý tự học từ hành vi (ẩn nếu chưa đủ tín hiệu) */}
-      <div className="max-w-7xl mx-auto px-4 pb-4">
-        <ForYou />
-      </div>
 
       <Footer areas={areas} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />
