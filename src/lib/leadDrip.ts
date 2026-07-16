@@ -89,6 +89,22 @@ export function validateNurtureConfig(input: NurtureConfigInput): { ok: true; va
   return { ok: true, value: { enabled: input.enabled, endpoint: endpoint || null, secret: secret || null } };
 }
 
+export const NURTURE_DEPLOY_COMMAND = 'supabase functions deploy nurture-drip';
+
+export const NURTURE_SECRET_KEYS = ['NURTURE_DRIP_SECRET', 'ZALO_OA_TOKEN'] as const;
+
+export function parseSupabaseRef(endpoint?: string | null): string | null {
+  const url = endpoint?.trim();
+  if (!url) return null;
+  const match = /^https:\/\/([a-z0-9]+)\.supabase\.co(?:\/|$)/i.exec(url);
+  return match ? match[1].toLowerCase() : null;
+}
+
+export function supabaseSecretsUrl(endpoint?: string | null): string | null {
+  const ref = parseSupabaseRef(endpoint);
+  return ref ? `https://supabase.com/dashboard/project/${ref}/settings/functions` : null;
+}
+
 export interface DripLogCounts {
   sent: number;
   skipped: number;

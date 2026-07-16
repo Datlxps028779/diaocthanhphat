@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dripMessage, dripStatusLabel, dripStatusTone, dripStepLabel, pickDripStep, summarizeDripLogs, validateNurtureConfig, type DripLead } from './leadDrip';
+import { dripMessage, dripStatusLabel, dripStatusTone, dripStepLabel, parseSupabaseRef, pickDripStep, summarizeDripLogs, supabaseSecretsUrl, validateNurtureConfig, type DripLead } from './leadDrip';
 
 const at = (y: number, mo: number, d: number, h = 0) => new Date(y, mo - 1, d, h, 0, 0);
 const iso = (dt: Date) => dt.toISOString();
@@ -72,5 +72,18 @@ describe('leadDrip', () => {
     expect(summarizeDripLogs([])).toEqual({ sent: 0, skipped: 0, failed: 0, total: 0 });
     const logs = [{ status: 'sent' }, { status: 'sent' }, { status: 'skipped' }, { status: 'failed' }] as const;
     expect(summarizeDripLogs([...logs])).toEqual({ sent: 2, skipped: 1, failed: 1, total: 4 });
+  });
+
+  it('suy project-ref và link secrets từ endpoint', () => {
+    expect(parseSupabaseRef('https://abcd1234.supabase.co/functions/v1/nurture-drip')).toBe('abcd1234');
+    expect(parseSupabaseRef(' https://ABCD1234.supabase.co/functions/v1/x ')).toBe('abcd1234');
+    expect(parseSupabaseRef('https://abcd1234.supabase.co')).toBe('abcd1234');
+    expect(parseSupabaseRef('')).toBeNull();
+    expect(parseSupabaseRef('http://abcd1234.supabase.co/x')).toBeNull();
+    expect(parseSupabaseRef('https://evil.com/x')).toBeNull();
+    expect(parseSupabaseRef('https://abcd1234.supabase.co.evil.com/x')).toBeNull();
+    expect(supabaseSecretsUrl('https://abcd1234.supabase.co/functions/v1/nurture-drip'))
+      .toBe('https://supabase.com/dashboard/project/abcd1234/settings/functions');
+    expect(supabaseSecretsUrl('nope')).toBeNull();
   });
 });

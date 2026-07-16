@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock, KeyRound, Play, RefreshCw, Save, Send, ShieldCheck, XCircle } from 'lucide-react';
+import { CheckCircle, Clock, Copy, ExternalLink, KeyRound, Play, RefreshCw, Save, Send, ShieldCheck, XCircle } from 'lucide-react';
 import { getNurtureDripConfig, getRecentDripLogs, invokeNurtureDrip, updateNurtureDripConfig, type DripLogWithLead } from '../../../lib/api';
 import type { LeadDripLog, NurtureDripConfig } from '../../../lib/supabase';
-import { dripStatusLabel, dripStatusTone, dripStepLabel, summarizeDripLogs, validateNurtureConfig } from '../../../lib/leadDrip';
+import { NURTURE_DEPLOY_COMMAND, NURTURE_SECRET_KEYS, dripStatusLabel, dripStatusTone, dripStepLabel, summarizeDripLogs, supabaseSecretsUrl, validateNurtureConfig } from '../../../lib/leadDrip';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 type LogFilter = 'all' | LeadDripLog['status'];
@@ -36,6 +36,17 @@ export function NurtureTab() {
   const [logs, setLogs] = useState<DripLogWithLead[]>([]);
   const [logFilter, setLogFilter] = useState<LogFilter>('all');
   const [logsLoading, setLogsLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyText = useCallback(async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied(c => (c === key ? null : c)), 1500);
+    } catch {
+      setError('Trình duyệt chặn clipboard. Chép tay đoạn văn bản này.');
+    }
+  }, []);
 
   const loadLogs = useCallback(async () => {
     setLogsLoading(true);
@@ -50,6 +61,7 @@ export function NurtureTab() {
 
   const counts = useMemo(() => summarizeDripLogs(logs), [logs]);
   const filteredLogs = useMemo(() => logFilter === 'all' ? logs : logs.filter(l => l.status === logFilter), [logs, logFilter]);
+  const secretsUrl = useMemo(() => supabaseSecretsUrl(endpoint), [endpoint]);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -222,17 +234,61 @@ export function NurtureTab() {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-2">
-        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
         <div>
-          <p className="font-bold">Checklist production</p>
-          <ol className="list-decimal ml-4 mt-1 space-y-0.5 text-xs">
-            <li>Deploy Edge Function: <span className="font-mono">supabase functions deploy nurture-drip</span></li>
-            <li>Set secrets: <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, <span className="font-mono">NURTURE_DRIP_SECRET</span>, <span className="font-mono">ZALO_OA_TOKEN</span>.</li>
-            <li>Secret trong form này phải trùng <span className="font-mono">NURTURE_DRIP_SECRET</span>.</li>
-            <li>Lead cần <span className="font-mono">zalo_user_id</span>; chỉ có SĐT thì log sẽ là skipped.</li>
-          </ol>
+          <h2 className="font-black text-gray-900 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-red-500" />Kích hoạt production</h2>
+          <p className="text-xs text-gray-500 mt-1">3 bước bật drip thật. Chạy trên máy đã đăng nhập Supabase CLI.</p>
         </div>
+
+        <ol className="space-y-3">
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-700 text-xs font-black flex items-center justify-center">1</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800">Deploy Edge Function</p>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 min-w-0 truncate rounded-lg bg-gray-900 text-gray-100 px-3 py-2 text-xs font-mono">{NURTURE_DEPLOY_COMMAND}</code>
+                <button onClick={() => copyText('deploy', NURTURE_DEPLOY_COMMAND)} className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+                  {copied === 'deploy' ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied === 'deploy' ? 'Đã chép' : 'Chép'}
+                </button>
+              </div>
+            </div>
+          </li>
+
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-700 text-xs font-black flex items-center justify-center">2</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-semibold text-gray-800">Set secrets cho Edge Function</p>
+                {secretsUrl && (
+                  <a href={secretsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline">
+                    Mở Supabase <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              <div className="mt-1 space-y-1.5">
+                {NURTURE_SECRET_KEYS.map(key => (
+                  <div key={key} className="flex items-center gap-2">
+                    <code className="flex-1 min-w-0 truncate rounded-lg bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs font-mono text-gray-700">{key}</code>
+                    <button onClick={() => copyText(key, key)} className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+                      {copied === key ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied === key ? 'Đã chép' : 'Chép'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1"><span className="font-mono">NURTURE_DRIP_SECRET</span> phải trùng secret trong form cấu hình phía trên. <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span> có sẵn cho Edge Function, không cần set.</p>
+            </div>
+          </li>
+
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-700 text-xs font-black flex items-center justify-center">3</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800">Gán <span className="font-mono">zalo_user_id</span> cho lead</p>
+              <p className="text-xs text-gray-500 mt-0.5">Chỉ gửi Zalo khi khách đã follow OA và có <span className="font-mono">zalo_user_id</span>. Thiếu token hoặc id thì log ghi <span className="font-semibold text-amber-600">Bỏ qua</span>, không gửi bừa theo SĐT.</p>
+            </div>
+          </li>
+        </ol>
       </div>
 
       {confirmRun && (
