@@ -197,6 +197,14 @@ export type UserFavorite = {
   id: string; user_id: string; property_id: string; created_at: string;
   properties?: Property | null;
 };
+export type SavedSearchCadence = 'instant' | 'daily' | 'weekly';
+export type UserSavedSearch = {
+  id: string; user_id: string; name: string;
+  filters: Record<string, unknown>;
+  alert_enabled: boolean; cadence: SavedSearchCadence;
+  last_notified_at: string | null;
+  created_at: string; updated_at: string;
+};
 export type Subscriber = {
   id: string; email: string; name: string | null; phone: string | null;
   area_interest: string | null; is_active: boolean; created_at: string;

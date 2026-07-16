@@ -17,3 +17,4 @@ export * from './api/adminUsers';
 export * from './api/chatOps';
 export * from './api/taste';
 export * from './api/nurture';
+export * from './api/savedSearches';

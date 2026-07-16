@@ -60,6 +60,21 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('minPrice')).toBe('50');
     expect(params.get('maxPrice')).toBeNull();
   });
+
+  it('mang minArea/maxArea, bedrooms, direction qua query', () => {
+    const href = pageToHref({ name: 'listings', minArea: 50, maxArea: 100, bedrooms: '3', direction: 'Đông Nam' });
+    const params = new URLSearchParams(href.split('?')[1]);
+    expect(params.get('minArea')).toBe('50');
+    expect(params.get('maxArea')).toBe('100');
+    expect(params.get('bedrooms')).toBe('3');
+    expect(params.get('direction')).toBe('Đông Nam');
+  });
+
+  it('minArea=0 được giữ (0 là falsy nhưng vẫn là giá trị hợp lệ)', () => {
+    const params = new URLSearchParams(pageToHref({ name: 'listings', minArea: 0, maxArea: 80 }).split('?')[1]);
+    expect(params.get('minArea')).toBe('0');
+    expect(params.get('maxArea')).toBe('80');
+  });
 });
 
 describe('parseListingParams — đọc ngược query của Next searchParams', () => {
@@ -115,5 +130,17 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     const qs = pageToHref(page).split('?')[1];
     const sp = Object.fromEntries(new URLSearchParams(qs));
     expect(parseListingParams(sp)).toEqual({ keyword: 'nhà phố', minPrice: 2, maxPrice: 5 });
+  });
+
+  it('bóc minArea/maxArea (ép số), bedrooms, direction', () => {
+    expect(parseListingParams({ minArea: '50', maxArea: '100', bedrooms: '3', direction: 'Đông Nam' }))
+      .toEqual({ minArea: 50, maxArea: 100, bedrooms: '3', direction: 'Đông Nam' });
+  });
+
+  it('round-trip đủ filter diện tích + phòng ngủ + hướng: page → href → parse khớp gốc', () => {
+    const page = { name: 'listings' as const, minArea: 50, maxArea: 100, bedrooms: '2', direction: 'Tây Bắc' };
+    const qs = pageToHref(page).split('?')[1];
+    const sp = Object.fromEntries(new URLSearchParams(qs));
+    expect(parseListingParams(sp)).toEqual({ minArea: 50, maxArea: 100, bedrooms: '2', direction: 'Tây Bắc' });
   });
 });

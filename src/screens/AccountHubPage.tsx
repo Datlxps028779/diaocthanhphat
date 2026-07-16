@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save } from 'lucide-react';
+import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, Bell, BellOff, Search as SearchIcon } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { MyListingsPage } from './MyListingsPage';
@@ -9,10 +9,12 @@ import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
   getProfile, updateProfile,
+  listSavedSearches, updateSavedSearch, deleteSavedSearch,
 } from '../lib/api';
-import { type UserMedia, type Profile } from '../lib/supabase';
+import { type UserMedia, type Profile, type UserSavedSearch } from '../lib/supabase';
+import { filtersToPage, CADENCE_LABELS, isAlertCadence, type SavedFilters, type AlertCadence } from '../lib/savedSearch';
 
-export type AccountHubTab = 'listings' | 'media' | 'favorites' | 'profile';
+export type AccountHubTab = 'listings' | 'media' | 'favorites' | 'profile' | 'saved';
 
 interface AccountHubPageProps {
   onNavigate: (p: Page) => void;
@@ -23,6 +25,7 @@ const TABS: { id: AccountHubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'listings', label: 'Tin đăng', icon: <Building2 className="w-4 h-4" /> },
   { id: 'media', label: 'Kho ảnh', icon: <ImageIcon className="w-4 h-4" /> },
   { id: 'favorites', label: 'Yêu thích', icon: <Heart className="w-4 h-4" /> },
+  { id: 'saved', label: 'Tìm kiếm đã lưu', icon: <SearchIcon className="w-4 h-4" /> },
   { id: 'profile', label: 'Hồ sơ', icon: <UserIcon className="w-4 h-4" /> },
 ];
 
@@ -57,6 +60,7 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
       <div className="max-w-5xl mx-auto px-4 py-5">
         {tab === 'listings' && <MyListingsPage onNavigate={onNavigate} embedded />}
         {tab === 'favorites' && <AccountPage onNavigate={onNavigate} embedded />}
+        {tab === 'saved' && <SavedSearchesTab onNavigate={onNavigate} />}
         {tab === 'media' && <MediaTab />}
         {tab === 'profile' && <ProfileTab />}
       </div>
@@ -208,6 +212,122 @@ function ProfileTab() {
           {saveMutation.isPending ? 'Đang lưu...' : saved ? 'Đã lưu ✓' : 'Lưu thay đổi'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Tìm kiếm đã lưu ──────────────────────────────────────────────────────────
+// Danh sách bộ lọc đã lưu: bật/tắt cảnh báo tin mới, đổi tần suất, xem lại, xóa.
+// Slice này chỉ quản lý; gửi cảnh báo thật là foundation cho bước sau.
+function SavedSearchesTab({ onNavigate }: { onNavigate: (p: Page) => void }) {
+  const queryClient = useQueryClient();
+  const { data: searches = [], isLoading } = useQuery({
+    queryKey: ['savedSearches'],
+    queryFn: listSavedSearches,
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, alert_enabled }: { id: string; alert_enabled: boolean }) =>
+      updateSavedSearch(id, { alert_enabled }),
+    onMutate: async ({ id, alert_enabled }) => {
+      const prev = queryClient.getQueryData<UserSavedSearch[]>(['savedSearches']);
+      queryClient.setQueryData<UserSavedSearch[]>(['savedSearches'],
+        (old) => (old ?? []).map(s => s.id === id ? { ...s, alert_enabled } : s));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.prev) queryClient.setQueryData(['savedSearches'], ctx.prev); },
+    onSettled: invalidate,
+  });
+
+  const cadenceMutation = useMutation({
+    mutationFn: ({ id, cadence }: { id: string; cadence: AlertCadence }) =>
+      updateSavedSearch(id, { cadence }),
+    onMutate: async ({ id, cadence }) => {
+      const prev = queryClient.getQueryData<UserSavedSearch[]>(['savedSearches']);
+      queryClient.setQueryData<UserSavedSearch[]>(['savedSearches'],
+        (old) => (old ?? []).map(s => s.id === id ? { ...s, cadence } : s));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.prev) queryClient.setQueryData(['savedSearches'], ctx.prev); },
+    onSettled: invalidate,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteSavedSearch(id),
+    onMutate: async (id) => {
+      const prev = queryClient.getQueryData<UserSavedSearch[]>(['savedSearches']);
+      queryClient.setQueryData<UserSavedSearch[]>(['savedSearches'],
+        (old) => (old ?? []).filter(s => s.id !== id));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.prev) queryClient.setQueryData(['savedSearches'], ctx.prev); },
+    onSettled: invalidate,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-2xl border border-gray-100 h-24 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (searches.length === 0) {
+    return (
+      <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+        <SearchIcon className="w-14 h-14 text-gray-200 mx-auto mb-3" />
+        <p className="text-gray-600 font-semibold">Chưa có tìm kiếm nào được lưu</p>
+        <p className="text-gray-400 text-sm mt-1">Lưu bộ lọc từ trang danh sách để nhận cảnh báo khi có tin mới phù hợp</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {searches.map((s: UserSavedSearch) => (
+        <div key={s.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-gray-900 truncate">{s.name}</p>
+              <button
+                onClick={() => { onNavigate(filtersToPage(s.filters as SavedFilters)); scrollTop(); }}
+                className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-sm font-semibold mt-1">
+                <SearchIcon className="w-3.5 h-3.5" />Xem lại kết quả
+              </button>
+            </div>
+            <button onClick={() => deleteMutation.mutate(s.id)} title="Xóa tìm kiếm"
+              className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 p-1">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-50">
+            <button
+              onClick={() => toggleMutation.mutate({ id: s.id, alert_enabled: !s.alert_enabled })}
+              className={`inline-flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${s.alert_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {s.alert_enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+              {s.alert_enabled ? 'Đang bật cảnh báo' : 'Đã tắt cảnh báo'}
+            </button>
+
+            <label className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+              Tần suất:
+              <select
+                value={isAlertCadence(s.cadence) ? s.cadence : 'daily'}
+                disabled={!s.alert_enabled}
+                onChange={e => cadenceMutation.mutate({ id: s.id, cadence: e.target.value as AlertCadence })}
+                className="border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50">
+                {Object.entries(CADENCE_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

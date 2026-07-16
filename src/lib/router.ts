@@ -32,7 +32,7 @@ export const ADMIN_PATH = '/quantrihethong';
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
   const num = (v: string | string[] | undefined) => {
     const s = first(v);
@@ -40,7 +40,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
     const n = Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
-  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number } = {};
+  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string } = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
   const district = first(sp?.district);
@@ -50,6 +50,10 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   const sort = first(sp?.sort);
   const minPrice = num(sp?.minPrice);
   const maxPrice = num(sp?.maxPrice);
+  const minArea = num(sp?.minArea);
+  const maxArea = num(sp?.maxArea);
+  const bedrooms = first(sp?.bedrooms);
+  const direction = first(sp?.direction);
   if (area) out.areaId = area;
   if (type) out.typeId = type;
   if (district) out.district = district;
@@ -59,6 +63,10 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   if (sort) out.sort = sort;
   if (minPrice != null) out.minPrice = minPrice;
   if (maxPrice != null) out.maxPrice = maxPrice;
+  if (minArea != null) out.minArea = minArea;
+  if (maxArea != null) out.maxArea = maxArea;
+  if (bedrooms) out.bedrooms = bedrooms;
+  if (direction) out.direction = direction;
   return out;
 }
 
@@ -84,6 +92,10 @@ export function pageToHref(page: Page): string {
       if (page.sort) q.set('sort', page.sort);
       if (page.minPrice != null) q.set('minPrice', String(page.minPrice));
       if (page.maxPrice != null) q.set('maxPrice', String(page.maxPrice));
+      if (page.minArea != null) q.set('minArea', String(page.minArea));
+      if (page.maxArea != null) q.set('maxArea', String(page.maxArea));
+      if (page.bedrooms) q.set('bedrooms', page.bedrooms);
+      if (page.direction) q.set('direction', page.direction);
       const qs = q.toString();
       return qs ? `${base}?${qs}` : base;
     }

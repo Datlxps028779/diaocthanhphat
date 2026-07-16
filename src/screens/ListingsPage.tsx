@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
-  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
+  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag, BookmarkPlus
 } from 'lucide-react';
 import Link from 'next/link';
 import { type Property } from '../lib/supabase';
-import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal } from '../lib/api';
+import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, createSavedSearch } from '../lib/api';
+import { buildSearchName, type SavedFilters } from '../lib/savedSearch';
+import { requestAuth } from '../lib/authModal';
 import { buildPropertyPath, type PropertySort } from '../lib/api/properties';
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
@@ -87,6 +89,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [page, setPage] = useState(1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
+  const [savedOk, setSavedOk] = useState(false);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -132,6 +135,18 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
   });
 
+  const saveSearchMutation = useMutation({
+    mutationFn: (input: { name: string; filters: SavedFilters }) => createSavedSearch(input),
+    onSuccess: () => {
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 2500);
+    },
+    onError: (e) => {
+      // Guest → API ném lỗi yêu cầu đăng nhập; mở modal để họ đăng nhập rồi lưu lại.
+      if (e instanceof Error && e.message.includes('đăng nhập')) requestAuth('login');
+    },
+  });
+
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
   const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
   const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
@@ -170,6 +185,30 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   });
   const properties = result?.data ?? [];
   const total = result?.total ?? 0;
+
+  // Lưu bộ lọc hiện tại thành "tìm kiếm đã lưu". Dùng min/max đã resolve từ range
+  // (không lưu index) để round-trip ổn định. Tên gợi ý từ taxonomy, user sửa được sau.
+  const handleSaveSearch = () => {
+    const savedFilters: SavedFilters = {
+      listingType: listingType || undefined,
+      areaId: areaId || undefined,
+      typeId: typeId || undefined,
+      district: district || undefined,
+      ward: ward || undefined,
+      keyword: debouncedKeyword.trim() || undefined,
+      minPrice: pr.min, maxPrice: pr.max,
+      minArea: ar.min, maxArea: ar.max,
+      bedrooms: bedrooms || undefined,
+      direction: direction || undefined,
+      legal: legal || undefined,
+      sort: sort !== 'newest' ? sort : undefined,
+    };
+    const labels = {
+      areas: Object.fromEntries(areas.map(a => [a.id, a.name])),
+      types: Object.fromEntries(types.map(t => [t.id, t.name])),
+    };
+    saveSearchMutation.mutate({ name: buildSearchName(savedFilters, labels), filters: savedFilters });
+  };
 
   // Tự học: ghi tín hiệu tìm kiếm khi khách chọn khu vực/loại/loại-tin (bỏ qua view
   // mặc định rỗng). localStorage (mọi khách) + đồng bộ tài khoản khi đã đăng nhập.
@@ -486,17 +525,27 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   <option value="views">Xem nhiều nhất</option>
                 </select>
               </div>
-              <div className="flex items-center gap-1">
-                {[
-                  { mode: 'grid' as const, icon: <Grid3X3 className="w-4 h-4" />, label: 'Lưới' },
-                  { mode: 'list' as const, icon: <List className="w-4 h-4" />, label: 'Danh sách' },
-                  { mode: 'map' as const, icon: <MapIcon className="w-4 h-4" />, label: 'Bản đồ' },
-                ].map(v => (
-                  <button key={v.mode} onClick={() => setViewMode(v.mode)} title={v.label}
-                    className={`p-1.5 rounded transition-colors ${viewMode === v.mode ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-gray-600'}`}>
-                    {v.icon}
+              <div className="flex items-center gap-2">
+                {hasActiveFilters && (
+                  <button onClick={handleSaveSearch} disabled={saveSearchMutation.isPending}
+                    title="Lưu bộ lọc này để nhận cảnh báo khi có tin mới phù hợp"
+                    className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60 ${savedOk ? 'bg-emerald-50 text-emerald-700' : 'text-red-600 hover:bg-red-50'}`}>
+                    {savedOk ? <CheckCircle className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+                    <span className="hidden sm:inline">{savedOk ? 'Đã lưu' : 'Lưu tìm kiếm'}</span>
                   </button>
-                ))}
+                )}
+                <div className="flex items-center gap-1">
+                  {[
+                    { mode: 'grid' as const, icon: <Grid3X3 className="w-4 h-4" />, label: 'Lưới' },
+                    { mode: 'list' as const, icon: <List className="w-4 h-4" />, label: 'Danh sách' },
+                    { mode: 'map' as const, icon: <MapIcon className="w-4 h-4" />, label: 'Bản đồ' },
+                  ].map(v => (
+                    <button key={v.mode} onClick={() => setViewMode(v.mode)} title={v.label}
+                      className={`p-1.5 rounded transition-colors ${viewMode === v.mode ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                      {v.icon}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
