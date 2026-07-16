@@ -317,7 +317,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   };
 
   return (
-    <div className="relative">
+    <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6' : 'top-1/2 -translate-y-1/2'}`}>
       {open && (
         <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 right-4 sm:left-auto sm:right-0 sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
