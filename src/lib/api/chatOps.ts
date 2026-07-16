@@ -112,6 +112,13 @@ export async function closeChatSession(sessionId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteChatSessions(sessionIds: string[]): Promise<number> {
+  if (sessionIds.length === 0) return 0;
+  const { data, error } = await supabase.rpc('admin_delete_chat_sessions', { p_ids: sessionIds });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
 export async function getChatStaffCapacity(): Promise<ChatStaffCapacity[]> {
   const { data, error } = await supabase.from('chat_staff_capacity').select('*');
   if (error) throw error;

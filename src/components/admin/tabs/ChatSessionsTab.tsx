@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, MessageCircle, RefreshCw, Send, UserPlus, XCircle } from 'lucide-react';
+import { CheckCircle, MessageCircle, RefreshCw, Send, Trash2, UserPlus, XCircle } from 'lucide-react';
 import type { ChatMessage, ChatSession } from '../../../lib/supabase';
-import { assignChatSession, closeChatSession, getChatMessages, getChatSessions, getTeamMembers, sendStaffChatMessage } from '../../../lib/api';
+import { assignChatSession, closeChatSession, deleteChatSessions, getChatMessages, getChatSessions, getTeamMembers, sendStaffChatMessage } from '../../../lib/api';
 import { assigneesOf, memberLabel, type TeamMember } from '../../../lib/leadAssignment';
 import { useAuth } from '../../../lib/auth';
 
-type Filter = 'all' | 'new' | 'active' | 'attention' | 'closed';
+type Filter = 'all' | 'new' | 'active' | 'attention' | 'closed' | 'spam';
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
@@ -13,7 +13,17 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'new', label: 'Mới' },
   { key: 'active', label: 'Đang xử lý' },
   { key: 'closed', label: 'Đã đóng' },
+  { key: 'spam', label: 'Nghi spam' },
 ];
+
+// Heuristic client-side: phiên chưa có bất kỳ tín hiệu nghiêm túc nào — không tên,
+// không SĐT, không lead, không mô tả nhu cầu, và chưa được tư vấn viên tiếp nhận.
+function isLikelySpam(s: ChatSession): boolean {
+  const noContact = !s.visitor_name?.trim() && !s.visitor_phone?.trim() && !s.lead_id;
+  const noNeed = !s.need_summary?.trim();
+  const notEngaged = s.status !== 'active' && !s.admin_attention && (s.chat_assignments?.length ?? 0) === 0;
+  return noContact && noNeed && notEngaged;
+}
 
 function sessionTitle(session: ChatSession) {
   return session.visitor_name?.trim() || session.leads?.full_name || session.visitor_phone?.trim() || 'Khách từ AI Advisor';
@@ -44,16 +54,19 @@ export function ChatSessionsTab() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const selected = useMemo(() => sessions.find(s => s.id === selectedId) ?? sessions[0] ?? null, [sessions, selectedId]);
 
   const loadSessions = async () => {
     setLoading(true); setError('');
     try {
-      const rows = await getChatSessions(filter);
-      setSessions(rows);
-      if (rows.length > 0 && !rows.some(r => r.id === selectedId)) setSelectedId(rows[0].id);
-      if (rows.length === 0) setSelectedId(null);
+      const rows = await getChatSessions(filter === 'spam' ? 'all' : filter);
+      const visible = filter === 'spam' ? rows.filter(isLikelySpam) : rows;
+      setSessions(visible);
+      setSelectedIds(prev => new Set([...prev].filter(id => visible.some(r => r.id === id))));
+      if (visible.length > 0 && !visible.some(r => r.id === selectedId)) setSelectedId(visible[0].id);
+      if (visible.length === 0) setSelectedId(null);
     } catch (e) {
       setError((e as { message?: string })?.message ?? 'Không tải được phiên chat.');
     } finally { setLoading(false); }
@@ -106,6 +119,32 @@ export function ChatSessionsTab() {
     } finally { setBusy(false); }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = sessions.length > 0 && selectedIds.size === sessions.length;
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(sessions.map(s => s.id)));
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Xóa vĩnh viễn ${selectedIds.size} phiên chat đã chọn? Hành động này không thể hoàn tác.`)) return;
+    setBusy(true); setError('');
+    try {
+      await deleteChatSessions([...selectedIds]);
+      setSelectedIds(new Set());
+      await loadSessions();
+    } catch (e) {
+      setError((e as { message?: string })?.message ?? 'Không xóa được phiên chat.');
+    } finally { setBusy(false); }
+  };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[360px,1fr] gap-4 min-h-[calc(100vh-9rem)]">
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[520px]">
@@ -127,6 +166,20 @@ export function ChatSessionsTab() {
               </button>
             ))}
           </div>
+          {sessions.length > 0 && (
+            <div className="flex items-center justify-between gap-2 mt-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded border-gray-300 text-red-600 focus:ring-red-400" />
+                Chọn tất cả{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              </label>
+              {selectedIds.size > 0 && (
+                <button onClick={deleteSelected} disabled={busy}
+                  className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-1">
+                  <Trash2 className="w-3.5 h-3.5" />Xóa ({selectedIds.size})
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -136,22 +189,26 @@ export function ChatSessionsTab() {
           {sessions.map(s => {
             const assignees = assigneesOf({ lead_assignments: s.chat_assignments }, roster);
             return (
-              <button key={s.id} onClick={() => setSelectedId(s.id)}
-                className={`w-full text-left rounded-xl border p-3 transition-colors ${selected?.id === s.id ? 'border-red-200 bg-red-50/60' : 'border-gray-100 hover:bg-gray-50'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{sessionTitle(s)}</p>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">{s.need_summary || s.last_message || 'Chưa có mô tả nhu cầu'}</p>
+              <div key={s.id}
+                className={`flex items-start gap-2 rounded-xl border p-3 transition-colors ${selected?.id === s.id ? 'border-red-200 bg-red-50/60' : 'border-gray-100 hover:bg-gray-50'} ${selectedIds.has(s.id) ? 'ring-1 ring-red-300' : ''}`}>
+                <input type="checkbox" checked={selectedIds.has(s.id)} onChange={() => toggleSelect(s.id)}
+                  className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-400 flex-shrink-0" aria-label="Chọn phiên chat" />
+                <button onClick={() => setSelectedId(s.id)} className="flex-1 min-w-0 text-left">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 truncate">{sessionTitle(s)}</p>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{s.need_summary || s.last_message || 'Chưa có mô tả nhu cầu'}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 ${s.admin_attention ? 'bg-red-100 text-red-700' : s.status === 'active' ? 'bg-blue-100 text-blue-700' : s.status === 'closed' ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>
+                      {statusLabel(s)}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 ${s.admin_attention ? 'bg-red-100 text-red-700' : s.status === 'active' ? 'bg-blue-100 text-blue-700' : s.status === 'closed' ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>
-                    {statusLabel(s)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-2 text-[11px] text-gray-400">
-                  <span className="truncate">{assignees.length ? assignees.map(a => a.label).join(' · ') : 'Chưa gán NV'}</span>
-                  <span>{new Date(s.last_message_at).toLocaleString('vi-VN')}</span>
-                </div>
-              </button>
+                  <div className="flex items-center justify-between gap-2 mt-2 text-[11px] text-gray-400">
+                    <span className="truncate">{assignees.length ? assignees.map(a => a.label).join(' · ') : 'Chưa gán NV'}</span>
+                    <span>{new Date(s.last_message_at).toLocaleString('vi-VN')}</span>
+                  </div>
+                </button>
+              </div>
             );
           })}
         </div>
