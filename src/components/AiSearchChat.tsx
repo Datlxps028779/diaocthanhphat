@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
+import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
@@ -20,6 +20,23 @@ const GREETING: AdvisorMessage = {
   role: 'assistant',
   text: 'Em là Trợ lý BĐS. Anh/chị mô tả nhu cầu mua/thuê, em sẽ lọc tin phù hợp và có thể gửi thông tin cho tư vấn viên.',
 };
+
+// Mascot AI kiểu "Tako" của TikTok: thân bóng ma bo tròn, tua sóng lượn ở đáy,
+// mắt to thân thiện. Vẽ theo currentColor để kế thừa màu chữ của nút.
+function TakoMascot({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} fill="none" aria-hidden="true">
+      <path
+        d="M24 4c-8.837 0-16 7.163-16 16v14.5c0 1.6 1.9 2.44 3.08 1.36l2.3-2.1a2 2 0 0 1 2.72.02l2.02 1.9a2 2 0 0 0 2.74 0l1.98-1.86a2 2 0 0 1 2.74 0l1.98 1.86a2 2 0 0 0 2.74 0l2.02-1.9a2 2 0 0 1 2.72-.02l2.3 2.1C40.1 36.94 42 36.1 42 34.5V20c0-8.837-7.163-16-16-16Z"
+        fill="currentColor"
+      />
+      <circle cx="18" cy="21" r="3.4" fill="#DC2626" />
+      <circle cx="30" cy="21" r="3.4" fill="#DC2626" />
+      <circle cx="19.1" cy="19.9" r="1.1" fill="#fff" />
+      <circle cx="31.1" cy="19.9" r="1.1" fill="#fff" />
+    </svg>
+  );
+}
 
 export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void }) {
   const [open, setOpen] = useState(false);
@@ -94,6 +111,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setLeadSent(false);
     setSubmittingLead(false);
     setLeadFormExpanded(false);
+    setShowStaffForm(false);
+    setStaffForm({ full_name: '', phone: '' });
+    setRequestingStaff(false);
     chatHandleRef.current = null;
     seenRemoteMessageIds.current = new Set();
     setChatHandle(null);
@@ -270,9 +290,11 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   };
 
   const [requestingStaff, setRequestingStaff] = useState(false);
+  const [showStaffForm, setShowStaffForm] = useState(false);
+  const [staffForm, setStaffForm] = useState({ full_name: '', phone: '' });
 
-  // Khách chủ động xin gặp nhân viên trực chat (không cần SĐT) → mở phiên, đánh dấu
-  // wants_staff, backfill hội thoại rồi chia cho tư vấn viên.
+  // Khách chủ động xin gặp nhân viên trực chat. Tên/SĐT là TÙY CHỌN → mở phiên,
+  // đánh dấu wants_staff, backfill hội thoại rồi chia cho tư vấn viên.
   const requestLiveStaff = async () => {
     if (requestingStaff || chatHandleRef.current) return;
     setRequestingStaff(true);
@@ -280,9 +302,11 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       const need = lastTurn ? summarizeAdvisorNeed(lastTurn) : 'Khách yêu cầu gặp tư vấn viên';
       const handle = await ensureConsultationSession(need, messages);
       if (!handle) throw new Error('no-session');
-      await requestStaffChat(handle);
+      await requestStaffChat(handle, { visitorName: staffForm.full_name.trim() || null, visitorPhone: staffForm.phone.trim() || null });
       await routeChatSession(handle).catch(() => {});
       track(EVENTS.AI_ADVISOR_SEND, { hasText: false, requestStaff: true });
+      setShowStaffForm(false);
+      setStaffForm({ full_name: '', phone: '' });
       setMessages(prev => [...prev, { role: 'system', text: 'Đã gửi yêu cầu gặp tư vấn viên. Anh/chị vui lòng chờ trong giây lát, nhân viên sẽ vào trò chuyện trực tiếp tại đây.' }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Chưa kết nối được tư vấn viên lúc này. Anh/chị có thể để lại số điện thoại để được gọi lại sớm nhất.' }]);
@@ -298,7 +322,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
         <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 right-4 sm:left-auto sm:right-0 sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
             <div>
-              <div className="flex items-center gap-2 font-black text-sm"><Bot className="w-4 h-4" />Trợ lý BĐS</div>
+              <div className="flex items-center gap-2 font-black text-sm"><TakoMascot className="w-5 h-5" />Trợ lý BĐS</div>
               <p className="text-xs text-white/80 mt-1">Tư vấn nhu cầu, gợi ý tin phù hợp và kết nối tư vấn viên.</p>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -411,9 +435,24 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
               </div>
             )}
             {!chatHandle && (
-              <button onClick={requestLiveStaff} disabled={requestingStaff || !taxonomyReady} className="w-full flex items-center justify-center gap-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-xs font-bold rounded-lg py-2 transition-colors">
-                <Phone className="w-3.5 h-3.5" />{requestingStaff ? 'Đang kết nối tư vấn viên…' : 'Gặp nhân viên trực chat'}
-              </button>
+              showStaffForm ? (
+                <div className="border border-emerald-100 bg-emerald-50/40 rounded-xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold text-gray-800">Gặp nhân viên trực chat</p>
+                    <button onClick={() => setShowStaffForm(false)} className="text-[11px] text-gray-500 hover:text-gray-700 flex-shrink-0" aria-label="Đóng">Đóng</button>
+                  </div>
+                  <p className="text-[11px] text-gray-500">Để lại tên và số điện thoại (không bắt buộc) để nhân viên tiện liên hệ.</p>
+                  <input value={staffForm.full_name} onChange={e => setStaffForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Họ tên (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  <input value={staffForm.phone} onChange={e => setStaffForm(f => ({ ...f, phone: e.target.value }))} placeholder="Số điện thoại (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  <button onClick={requestLiveStaff} disabled={requestingStaff} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold text-sm py-2 rounded-lg transition-colors">
+                    {requestingStaff ? 'Đang kết nối tư vấn viên…' : 'Kết nối tư vấn viên'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setShowStaffForm(true)} disabled={!taxonomyReady} className="w-full flex items-center justify-center gap-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-xs font-bold rounded-lg py-2 transition-colors">
+                  <Phone className="w-3.5 h-3.5" />Gặp nhân viên trực chat
+                </button>
+              )
             )}
             <div className="flex gap-2">
               <textarea
@@ -448,8 +487,8 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
         aria-label="Mở trợ lý AI tìm BĐS"
       >
         <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-        <Bot className="w-5 h-5 relative z-[1]" />
-        <Sparkles className="w-3 h-3 absolute top-2 right-2 z-[1] animate-pulse" />
+        <TakoMascot className="w-7 h-7 relative z-[1]" />
+        <Sparkles className="w-3 h-3 absolute top-1.5 right-1.5 z-[1] animate-pulse" />
       </button>
     </div>
   );

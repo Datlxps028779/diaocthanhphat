@@ -52,10 +52,12 @@ export async function linkChatLead(handle: PublicChatHandle, input: { leadId: st
   if (error) throw error;
 }
 
-export async function requestStaffChat(handle: PublicChatHandle): Promise<void> {
+export async function requestStaffChat(handle: PublicChatHandle, contact?: { visitorName?: string | null; visitorPhone?: string | null }): Promise<void> {
   const { error } = await supabase.rpc('public_request_staff', {
     p_session_id: handle.sessionId,
     p_visitor_token: handle.visitorToken,
+    p_visitor_name: contact?.visitorName ?? null,
+    p_visitor_phone: contact?.visitorPhone ?? null,
   });
   if (error) throw error;
 }
