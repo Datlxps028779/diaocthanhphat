@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dripMessage, dripStatusLabel, dripStatusTone, dripStepLabel, pickDripStep, validateNurtureConfig, type DripLead } from './leadDrip';
+import { dripMessage, dripStatusLabel, dripStatusTone, dripStepLabel, pickDripStep, summarizeDripLogs, validateNurtureConfig, type DripLead } from './leadDrip';
 
 const at = (y: number, mo: number, d: number, h = 0) => new Date(y, mo - 1, d, h, 0, 0);
 const iso = (dt: Date) => dt.toISOString();
@@ -66,5 +66,11 @@ describe('leadDrip', () => {
       ok: true,
       value: { enabled: true, endpoint: 'https://fn.example', secret: 'abc' },
     });
+  });
+
+  it('tổng hợp drip log theo status', () => {
+    expect(summarizeDripLogs([])).toEqual({ sent: 0, skipped: 0, failed: 0, total: 0 });
+    const logs = [{ status: 'sent' }, { status: 'sent' }, { status: 'skipped' }, { status: 'failed' }] as const;
+    expect(summarizeDripLogs([...logs])).toEqual({ sent: 2, skipped: 1, failed: 1, total: 4 });
   });
 });

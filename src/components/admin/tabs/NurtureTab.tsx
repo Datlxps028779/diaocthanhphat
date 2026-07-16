@@ -1,9 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, Clock, KeyRound, Play, RefreshCw, Save, Send, ShieldCheck, XCircle } from 'lucide-react';
-import { getNurtureDripConfig, invokeNurtureDrip, updateNurtureDripConfig } from '../../../lib/api';
-import type { NurtureDripConfig } from '../../../lib/supabase';
-import { validateNurtureConfig } from '../../../lib/leadDrip';
+import { getNurtureDripConfig, getRecentDripLogs, invokeNurtureDrip, updateNurtureDripConfig, type DripLogWithLead } from '../../../lib/api';
+import type { LeadDripLog, NurtureDripConfig } from '../../../lib/supabase';
+import { dripStatusLabel, dripStatusTone, dripStepLabel, summarizeDripLogs, validateNurtureConfig } from '../../../lib/leadDrip';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+type LogFilter = 'all' | LeadDripLog['status'];
+
+function badgeClass(status: LeadDripLog['status']): string {
+  const tone = dripStatusTone(status);
+  if (tone === 'green') return 'bg-emerald-100 text-emerald-700';
+  if (tone === 'amber') return 'bg-amber-100 text-amber-700';
+  return 'bg-red-100 text-red-700';
+}
 
 function resultText(code: number): string {
   if (code === 1) return 'Đã gửi lệnh quét tới Edge Function qua pg_net.';
@@ -24,6 +33,23 @@ export function NurtureTab() {
   const [error, setError] = useState('');
   const [confirmRun, setConfirmRun] = useState(false);
   const [lastRun, setLastRun] = useState<{ code: number; at: string } | null>(null);
+  const [logs, setLogs] = useState<DripLogWithLead[]>([]);
+  const [logFilter, setLogFilter] = useState<LogFilter>('all');
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      setLogs(await getRecentDripLogs({ limit: 200 }));
+    } catch {
+      setLogs([]);
+    } finally { setLogsLoading(false); }
+  }, []);
+
+  useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  const counts = useMemo(() => summarizeDripLogs(logs), [logs]);
+  const filteredLogs = useMemo(() => logFilter === 'all' ? logs : logs.filter(l => l.status === logFilter), [logs, logFilter]);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -75,6 +101,7 @@ export function NurtureTab() {
       const at = new Date().toLocaleString('vi-VN');
       setLastRun({ code, at });
       setMessage(resultText(code));
+      await loadLogs();
     } catch (e) {
       setError((e as { message?: string })?.message ?? 'Không chạy được quét nuôi dưỡng.');
     } finally { setRunning(false); setConfirmRun(false); }
@@ -135,6 +162,64 @@ export function NurtureTab() {
           </button>
           {lastRun && <span className="text-xs text-gray-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />Lần chạy cuối: {lastRun.at} · {resultText(lastRun.code)}</span>}
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-black text-gray-900 flex items-center gap-2"><Send className="w-4 h-4 text-red-500" />Nhật ký gửi drip</h2>
+            <p className="text-xs text-gray-500 mt-1">200 lượt gửi gần nhất. Theo dõi lead bị bỏ qua/lỗi để xử lý.</p>
+          </div>
+          <button onClick={loadLogs} disabled={logsLoading} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg disabled:opacity-50" title="Làm mới">
+            <RefreshCw className={`w-4 h-4 ${logsLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { key: 'all' as LogFilter, label: 'Tổng', value: counts.total, tone: 'text-gray-900' },
+            { key: 'sent' as LogFilter, label: 'Đã gửi', value: counts.sent, tone: 'text-emerald-600' },
+            { key: 'skipped' as LogFilter, label: 'Bỏ qua', value: counts.skipped, tone: 'text-amber-600' },
+            { key: 'failed' as LogFilter, label: 'Lỗi', value: counts.failed, tone: 'text-red-600' },
+          ].map(s => (
+            <button key={s.key} onClick={() => setLogFilter(s.key)}
+              className={`text-left rounded-lg p-3 border transition-colors ${logFilter === s.key ? 'border-red-300 bg-red-50/50' : 'border-gray-100 bg-gray-50 hover:border-red-200'}`}>
+              <p className="text-xs text-gray-500">{s.label}</p>
+              <p className={`text-xl font-black ${s.tone}`}>{s.value}</p>
+            </button>
+          ))}
+        </div>
+
+        {logsLoading ? (
+          <div className="py-8 text-center text-gray-400 text-sm">Đang tải nhật ký…</div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 text-sm">Chưa có lượt gửi nào{logFilter !== 'all' ? ` ở trạng thái “${dripStatusLabel(logFilter)}”` : ''}.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-100">
+                  <th className="text-left font-medium py-1.5">Khách</th>
+                  <th className="text-left font-medium">Bước</th>
+                  <th className="text-left font-medium">Trạng thái</th>
+                  <th className="text-left font-medium">Chi tiết</th>
+                  <th className="text-right font-medium">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.map(log => (
+                  <tr key={log.id} className="border-b border-gray-50 last:border-0">
+                    <td className="py-1.5 text-gray-800 font-medium">{log.leads?.full_name || log.leads?.phone || 'Khách'}</td>
+                    <td className="text-gray-600">{dripStepLabel(log.step)}</td>
+                    <td><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass(log.status)}`}>{dripStatusLabel(log.status)}</span></td>
+                    <td className="text-gray-500 max-w-[220px] truncate">{log.detail || '—'}</td>
+                    <td className="text-right text-gray-400">{new Date(log.sent_at).toLocaleString('vi-VN')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-2">

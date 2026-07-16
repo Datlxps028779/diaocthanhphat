@@ -33,3 +33,17 @@ export async function getLeadDripLogs(leadId: string): Promise<LeadDripLog[]> {
   if (error) throw error;
   return (data ?? []) as LeadDripLog[];
 }
+
+export type DripLogWithLead = LeadDripLog & { leads: { id: string; full_name: string; phone: string } | null };
+
+export async function getRecentDripLogs(opts?: { status?: LeadDripLog['status']; limit?: number }): Promise<DripLogWithLead[]> {
+  let q = supabase
+    .from('lead_drip_log')
+    .select('*, leads(id, full_name, phone)')
+    .order('sent_at', { ascending: false })
+    .limit(opts?.limit ?? 100);
+  if (opts?.status) q = q.eq('status', opts.status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as DripLogWithLead[];
+}

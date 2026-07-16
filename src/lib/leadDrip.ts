@@ -88,3 +88,16 @@ export function validateNurtureConfig(input: NurtureConfigInput): { ok: true; va
   if (endpoint && !endpoint.startsWith('https://')) return { ok: false, error: 'Endpoint phải bắt đầu bằng https://.' };
   return { ok: true, value: { enabled: input.enabled, endpoint: endpoint || null, secret: secret || null } };
 }
+
+export interface DripLogCounts {
+  sent: number;
+  skipped: number;
+  failed: number;
+  total: number;
+}
+
+export function summarizeDripLogs(logs: { status: DripStatus }[]): DripLogCounts {
+  const counts: DripLogCounts = { sent: 0, skipped: 0, failed: 0, total: logs.length };
+  for (const l of logs) counts[l.status]++;
+  return counts;
+}
