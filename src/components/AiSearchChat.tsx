@@ -6,7 +6,7 @@ import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks
 import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
 import { getAllProperties } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
-import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
+import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
 
 const EXAMPLES = [
@@ -107,16 +107,22 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     });
   };
 
-  const createChatHandle = async (needSummary: string): Promise<PublicChatHandle | null> => {
+  // Chỉ tạo phiên + đồng bộ khi khách CHỦ ĐỘNG yêu cầu tư vấn (để lại SĐT hoặc gặp
+  // nhân viên). Chat tham khảo giữ ở client, không bắn về admin/staff. Khi bắt đầu tư
+  // vấn thì backfill toàn bộ hội thoại đang có để tư vấn viên nắm ngữ cảnh.
+  const ensureConsultationSession = async (needSummary: string, history: AdvisorMessage[]): Promise<PublicChatHandle | null> => {
     if (chatHandleRef.current) return chatHandleRef.current;
-    const handle = {
-      sessionId: crypto.randomUUID(),
-      visitorToken: crypto.randomUUID(),
-    };
+    const handle = { sessionId: crypto.randomUUID(), visitorToken: crypto.randomUUID() };
     chatHandleRef.current = handle;
     setChatHandle(handle);
     try {
       await startChatSession({ sessionId: handle.sessionId, visitorToken: handle.visitorToken, needSummary });
+      for (const m of history) {
+        if (m.role !== 'user' && m.role !== 'assistant') continue;
+        await appendPublicChatMessage(handle, m.role === 'user' ? 'visitor' : 'assistant', m.text);
+      }
+      const rows = await getPublicChatMessages(handle);
+      rows.forEach(r => seenRemoteMessageIds.current.add(r.id));
       return handle;
     } catch (error) {
       if (chatHandleRef.current?.sessionId === handle.sessionId) {
@@ -127,7 +133,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     }
   };
 
-  const persistChatMessage = async (handle: PublicChatHandle | null, sender: 'visitor' | 'assistant', body: string) => {
+  // Chỉ ghi tiếp khi phiên tư vấn đã mở (đã đồng bộ). Trước đó = chat tham khảo, bỏ qua.
+  const persistOngoingMessage = async (sender: 'visitor' | 'assistant', body: string) => {
+    const handle = chatHandleRef.current;
     if (!handle) return;
     try {
       await appendPublicChatMessage(handle, sender, body);
@@ -149,14 +157,14 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setMessages(prev => [...prev, { role: 'user', text }]);
     track(EVENTS.AI_ADVISOR_SEND, { hasText: true });
 
-    const handle = await createChatHandle(text).catch(() => null);
-    await persistChatMessage(handle, 'visitor', text);
+    // Chat tham khảo: KHÔNG tạo phiên. Chỉ ghi tiếp nếu khách đã mở tư vấn trước đó.
+    await persistOngoingMessage('visitor', text);
 
     const turn = buildAdvisorTurn(text, taxonomy);
     setLastTurn(turn);
     setResults([]);
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
-    await persistChatMessage(handle, 'assistant', turn.reply);
+    await persistOngoingMessage('assistant', turn.reply);
     if (turn.stage === 'collecting_contact') setShowGeneralLeadForm(true);
 
     if (turn.stage !== 'showing_matches') return;
@@ -175,13 +183,13 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
         role: 'assistant',
         text: resultReply,
       }]);
-      await persistChatMessage(handle, 'assistant', resultReply);
+      await persistOngoingMessage('assistant', resultReply);
     } catch {
       if (seq !== requestSeq.current) return;
       setShowGeneralLeadForm(true);
       const errorReply = 'Em chưa tải được danh sách gợi ý lúc này. Anh/chị có thể bấm lọc toàn bộ kết quả hoặc để lại số điện thoại để tư vấn viên hỗ trợ.';
       setMessages(prev => [...prev, { role: 'assistant', text: errorReply }]);
-      await persistChatMessage(handle, 'assistant', errorReply);
+      await persistOngoingMessage('assistant', errorReply);
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
@@ -233,15 +241,17 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       const payload = buildAdvisorLeadPayload(leadForm, lastTurn, leadFor ?? undefined);
       const leadId = crypto.randomUUID();
       await submitLead({ ...payload, id: leadId });
-      if (chatHandle) {
-        await linkChatLead(chatHandle, {
+      // Khách để lại SĐT = chủ động yêu cầu tư vấn → mở phiên, backfill hội thoại rồi chia nhân viên.
+      const handle = await ensureConsultationSession(summarizeAdvisorNeed(lastTurn), messages).catch(() => null);
+      if (handle) {
+        await linkChatLead(handle, {
           leadId,
           visitorName: leadForm.full_name,
           visitorPhone: leadForm.phone,
           needSummary: summarizeAdvisorNeed(lastTurn),
           propertyId: leadFor?.id ?? undefined,
         }).catch(() => {});
-        await routeChatSession(chatHandle).catch(() => {});
+        await routeChatSession(handle).catch(() => {});
       }
       track(EVENTS.LEAD_SUBMIT, { source: 'ai_advisor', hasProperty: !!leadFor, hasMessage: !!leadForm.message.trim() });
       const successReply = 'Đã gửi thông tin, tư vấn viên sẽ liên hệ anh/chị trong thời gian sớm nhất.';
@@ -249,13 +259,36 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       setShowGeneralLeadForm(false);
       setLeadFormExpanded(false);
       setMessages(prev => [...prev, { role: 'assistant', text: successReply }]);
-      await persistChatMessage(chatHandle, 'assistant', successReply);
+      await persistOngoingMessage('assistant', successReply);
       setLeadForm({ full_name: '', phone: '', message: '' });
       setLeadFor(null);
     } catch {
       setLeadError('Chưa gửi được thông tin. Anh/chị thử lại sau ít phút.');
     } finally {
       setSubmittingLead(false);
+    }
+  };
+
+  const [requestingStaff, setRequestingStaff] = useState(false);
+
+  // Khách chủ động xin gặp nhân viên trực chat (không cần SĐT) → mở phiên, đánh dấu
+  // wants_staff, backfill hội thoại rồi chia cho tư vấn viên.
+  const requestLiveStaff = async () => {
+    if (requestingStaff || chatHandleRef.current) return;
+    setRequestingStaff(true);
+    try {
+      const need = lastTurn ? summarizeAdvisorNeed(lastTurn) : 'Khách yêu cầu gặp tư vấn viên';
+      const handle = await ensureConsultationSession(need, messages);
+      if (!handle) throw new Error('no-session');
+      await requestStaffChat(handle);
+      await routeChatSession(handle).catch(() => {});
+      track(EVENTS.AI_ADVISOR_SEND, { hasText: false, requestStaff: true });
+      setMessages(prev => [...prev, { role: 'system', text: 'Đã gửi yêu cầu gặp tư vấn viên. Anh/chị vui lòng chờ trong giây lát, nhân viên sẽ vào trò chuyện trực tiếp tại đây.' }]);
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Chưa kết nối được tư vấn viên lúc này. Anh/chị có thể để lại số điện thoại để được gọi lại sớm nhất.' }]);
+      setShowGeneralLeadForm(true);
+    } finally {
+      setRequestingStaff(false);
     }
   };
 
@@ -336,6 +369,11 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                   {!showLeadCta && (
                     <button onClick={() => openLeadForm()} className="flex-1 min-w-[120px] border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-semibold rounded-lg py-2 transition-colors">
                       Để lại liên hệ
+                    </button>
+                  )}
+                  {!chatHandle && (
+                    <button onClick={requestLiveStaff} disabled={requestingStaff} className="flex-1 min-w-[120px] border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-xs font-semibold rounded-lg py-2 transition-colors">
+                      {requestingStaff ? 'Đang kết nối…' : 'Gặp nhân viên trực chat'}
                     </button>
                   )}
                 </div>

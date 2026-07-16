@@ -52,6 +52,14 @@ export async function linkChatLead(handle: PublicChatHandle, input: { leadId: st
   if (error) throw error;
 }
 
+export async function requestStaffChat(handle: PublicChatHandle): Promise<void> {
+  const { error } = await supabase.rpc('public_request_staff', {
+    p_session_id: handle.sessionId,
+    p_visitor_token: handle.visitorToken,
+  });
+  if (error) throw error;
+}
+
 export async function routeChatSession(handle: PublicChatHandle): Promise<ChatRouteResult | null> {
   const { data, error } = await supabase.rpc('route_chat_session', {
     p_session_id: handle.sessionId,
