@@ -19,7 +19,8 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
       expect(tabs).toContain('users');
       expect(tabs).toContain('settings');
       expect(tabs).toContain('leads');
-      expect(tabs.length).toBeGreaterThanOrEqual(16);
+      expect(tabs).toContain('nurture');
+      expect(tabs.length).toBeGreaterThanOrEqual(19);
     });
 
     it('staff thấy CRM khách hàng + phiên chat + duyệt tin đăng', () => {
@@ -28,7 +29,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
 
     it('staff KHÔNG thấy khu nhạy cảm', () => {
       const tabs = visibleTabs('staff');
-      for (const forbidden of ['users', 'settings', 'cms', 'backup', 'dashboard', 'properties', 'news', 'projects']) {
+      for (const forbidden of ['users', 'settings', 'cms', 'backup', 'dashboard', 'properties', 'news', 'projects', 'nurture']) {
         expect(tabs).not.toContain(forbidden);
       }
     });

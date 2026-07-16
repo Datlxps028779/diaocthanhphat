@@ -1,26 +1,20 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { MapPin, Sparkles } from 'lucide-react';
 import { getAllProperties } from '../lib/api';
 import { buildPropertyPath } from '../lib/api/properties';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
-import { getSignals } from '../lib/tasteStore';
-import { inferTaste, rankRecommendations, hasEnoughSignal, topKey } from '../lib/taste';
+import { useTasteProfile } from '../lib/hooks/useTasteProfile';
+import { rankRecommendations, hasEnoughSignal, topKey } from '../lib/taste';
 import { getRecentlyViewed } from '../lib/recentlyViewed';
 
-// "Gợi ý dành cho bạn" — tự học từ hành vi (tìm kiếm + xem), không cần đăng nhập,
-// không cần khách thao tác. Ẩn hoàn toàn khi chưa đủ tín hiệu (khách mới).
+// "Gợi ý dành cho bạn" — tự học từ hành vi (tìm kiếm + xem), không cần khách thao tác.
+// Hợp nhất tín hiệu thiết bị (localStorage) + tài khoản (khi đăng nhập) qua
+// useTasteProfile. Ẩn hoàn toàn khi chưa đủ tín hiệu (khách mới).
 export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excludeId?: string; title?: string }) {
-  const [profile, setProfile] = useState(() => inferTaste([], Date.now()));
-  const [ready, setReady] = useState(false);
-
-  // Đọc localStorage + suy sở thích SAU mount (tránh lệch SSR/hydration).
-  useEffect(() => {
-    setProfile(inferTaste(getSignals(), Date.now()));
-    setReady(true);
-  }, []);
+  const { profile, ready } = useTasteProfile();
 
   const enough = ready && hasEnoughSignal(profile);
   const { data: areas = [] } = useAreas();

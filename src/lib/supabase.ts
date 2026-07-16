@@ -58,6 +58,8 @@ export type Lead = {
   source: string | null; note: string | null;
   budget: string | null;
   follow_up_at: string | null;
+  last_activity_at: string | null;
+  zalo_user_id: string | null;
   properties?: Pick<Property, 'id' | 'title'> | null;
   lead_assignments?: { user_id: string }[];   // NV cùng phụ trách (nested select)
 };
@@ -71,6 +73,19 @@ export type LeadActivity = {
   id: string; lead_id: string;
   kind: 'created' | 'note' | 'call' | 'stage_change' | 'follow_up';
   body: string | null; author: string | null; created_at: string;
+};
+
+export type LeadDripLog = {
+  id: string; lead_id: string;
+  step: 'd1' | 'd3' | 'd7';
+  channel: 'zalo';
+  status: 'sent' | 'skipped' | 'failed';
+  detail: string | null; sent_at: string;
+};
+
+export type NurtureDripConfig = {
+  id: boolean; enabled: boolean;
+  endpoint: string | null; secret: string | null; updated_at: string;
 };
 
 export type ChatSessionStatus = 'new' | 'active' | 'closed';

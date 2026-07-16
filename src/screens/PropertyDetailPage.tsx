@@ -10,7 +10,7 @@ import {
   Navigation, ExternalLink, Play,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
@@ -97,10 +97,12 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
       recordRecentlyViewed(property);
-      recordSignal('view', {
+      const tasteAttrs = {
         areaId: property.area_id, typeId: property.property_type_id,
         listingType: property.listing_type, price: property.price,
-      });
+      };
+      recordSignal('view', tasteAttrs);
+      pushTasteSignal('view', tasteAttrs).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);

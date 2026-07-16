@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { type Property } from '../lib/supabase';
-import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal } from '../lib/api';
 import { buildPropertyPath, type PropertySort } from '../lib/api/properties';
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
@@ -17,6 +17,7 @@ import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { recordSignal } from '../lib/tasteStore';
+import { ForYou } from '../components/ForYou';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
 import { Breadcrumb } from '../components/Layout';
@@ -171,10 +172,12 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const total = result?.total ?? 0;
 
   // Tự học: ghi tín hiệu tìm kiếm khi khách chọn khu vực/loại/loại-tin (bỏ qua view
-  // mặc định rỗng). Không cần đăng nhập — lưu localStorage để tự gợi ý về sau.
+  // mặc định rỗng). localStorage (mọi khách) + đồng bộ tài khoản khi đã đăng nhập.
   useEffect(() => {
     if (filters.areaId || filters.typeId || filters.listingType) {
-      recordSignal('search', { areaId: filters.areaId || null, typeId: filters.typeId || null, listingType: filters.listingType || null });
+      const attrs = { areaId: filters.areaId || null, typeId: filters.typeId || null, listingType: filters.listingType || null };
+      recordSignal('search', attrs);
+      pushTasteSignal('search', attrs).catch(() => {});
     }
   }, [filters.areaId, filters.typeId, filters.listingType]);
 
@@ -614,6 +617,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                 </button>
               </div>
             )}
+
+            {viewMode !== 'map' && <ForYou />}
           </div>
         </div>
       </div>

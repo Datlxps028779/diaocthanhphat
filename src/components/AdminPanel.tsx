@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -30,6 +30,7 @@ const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
+const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
 
 export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
   const allowedTabs = visibleTabs(role);
@@ -57,6 +58,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'properties', label: 'Bất động sản', icon: <Building2 className="w-4 h-4" />, badge: stats.activeProperties },
     { id: 'leads', label: 'Khách hàng', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
     { id: 'chat-sessions', label: 'Phiên chat', icon: <MessagesSquare className="w-4 h-4" /> },
+    { id: 'nurture', label: 'Nuôi dưỡng', icon: <Send className="w-4 h-4" /> },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
     { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
     { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
@@ -164,6 +166,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'settings' && <SiteSettingsTab />}
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
+          {tab === 'nurture' && <NurtureTab />}
           </Suspense>
         </main>
       </div>

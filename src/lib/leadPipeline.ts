@@ -10,14 +10,15 @@ export interface Stage {
   color: string;   // class Tailwind cho badge (nền + chữ)
   dot: string;     // class chấm màu
   type: StageType;
+  staleDays?: number;  // lead ở stage này quá số ngày không có hoạt động → coi là nguội
 }
 
 export const PIPELINE_STAGES: Stage[] = [
   { key: 'new',         label: 'Mới',          color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-500',    type: 'open' },
-  { key: 'contacted',   label: 'Đã liên hệ',   color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-500',    type: 'open' },
-  { key: 'nurturing',   label: 'Đang chăm sóc', color: 'bg-violet-100 text-violet-700',  dot: 'bg-violet-500',  type: 'open' },
-  { key: 'viewing',     label: 'Hẹn xem',      color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-500',   type: 'open' },
-  { key: 'negotiating', label: 'Đàm phán',     color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-500',  type: 'open' },
+  { key: 'contacted',   label: 'Đã liên hệ',   color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-500',    type: 'open', staleDays: 2 },
+  { key: 'nurturing',   label: 'Đang chăm sóc', color: 'bg-violet-100 text-violet-700',  dot: 'bg-violet-500',  type: 'open', staleDays: 3 },
+  { key: 'viewing',     label: 'Hẹn xem',      color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-500',   type: 'open', staleDays: 2 },
+  { key: 'negotiating', label: 'Đàm phán',     color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-500',  type: 'open', staleDays: 3 },
   { key: 'won',         label: 'Chốt',         color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', type: 'won' },
   { key: 'lost',        label: 'Mất',          color: 'bg-gray-200 text-gray-600',       dot: 'bg-gray-400',    type: 'lost' },
 ];

@@ -68,11 +68,11 @@ export async function addLeadActivity(leadId: string, a: { kind: LeadActivity['k
 
 // Tải gọn field SLA của các lead chưa kết thúc (won/lost) — cho chuông nhắc ở header.
 // Chỉ 3 cột, lọc bỏ terminal ở DB để không kéo toàn bộ lead lịch sử về.
-export async function getOpenLeadSla(): Promise<{ status: Lead['status']; created_at: string; follow_up_at: string | null }[]> {
+export async function getOpenLeadSla(): Promise<{ status: Lead['status']; created_at: string; follow_up_at: string | null; last_activity_at: string | null }[]> {
   const { data } = await supabase.from('leads')
-    .select('status, created_at, follow_up_at')
+    .select('status, created_at, follow_up_at, last_activity_at')
     .not('status', 'in', '(won,lost)');
-  return (data ?? []) as { status: Lead['status']; created_at: string; follow_up_at: string | null }[];
+  return (data ?? []) as { status: Lead['status']; created_at: string; follow_up_at: string | null; last_activity_at: string | null }[];
 }
 
 // Nested select lead_assignments(user_id) để biết NV phụ trách. RLS tự lọc: staff chỉ

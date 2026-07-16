@@ -9,6 +9,7 @@ import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { PropertyPicker } from '../shared/PropertyPicker';
 import { AssigneePicker } from '../shared/AssigneePicker';
 import { FunnelReport } from '../shared/FunnelReport';
+import { AcquisitionFunnel } from '../shared/AcquisitionFunnel';
 import { useAuth } from '../../../lib/auth';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { leadSourceLabel } from '../../../lib/leadSource';
@@ -222,7 +223,12 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         )}
       </div>
 
-      {statusFilter === 'all' && !loading && <FunnelReport leads={leads} roster={roster} />}
+      {statusFilter === 'all' && !loading && (
+        <>
+          <AcquisitionFunnel leads={leads} />
+          <FunnelReport leads={leads} roster={roster} />
+        </>
+      )}
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">

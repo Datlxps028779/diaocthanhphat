@@ -15,3 +15,5 @@ export * from './api/media';
 export * from './api/misc';
 export * from './api/adminUsers';
 export * from './api/chatOps';
+export * from './api/taste';
+export * from './api/nurture';

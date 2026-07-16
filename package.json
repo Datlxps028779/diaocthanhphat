@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude \".claude/**\"",
     "test:watch": "vitest",
     "fix:focus-keywords": "node scripts/fix-focus-keywords.js",
     "migrate": "node scripts/fix-focus-keywords.js"

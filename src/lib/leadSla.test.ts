@@ -58,6 +58,29 @@ describe('leadSla — trạng thái SLA + sắp xếp + chia đều lead', () =>
       const contacted = mk({ status: 'contacted', created_at: iso(at(2026, 7, 1, 0, 0)) });
       expect(leadSlaState(contacted, NOW)).toBe('ok');
     });
+
+    it('contacted quá staleDays không hoạt động → due_soon (nguội cần chăm)', () => {
+      // contacted staleDays=2; hoạt động gần nhất 3 ngày trước → nguội.
+      const stale = mk({ status: 'contacted', created_at: iso(at(2026, 7, 1)), last_activity_at: iso(at(2026, 7, 11, 12, 0)) });
+      expect(leadSlaState(stale, NOW)).toBe('due_soon');
+    });
+
+    it('nurturing hoạt động gần đây (dưới staleDays) → ok', () => {
+      // nurturing staleDays=3; hoạt động 1 ngày trước → còn tươi.
+      const fresh = mk({ status: 'nurturing', created_at: iso(at(2026, 7, 1)), last_activity_at: iso(at(2026, 7, 13, 12, 0)) });
+      expect(leadSlaState(fresh, NOW)).toBe('ok');
+    });
+
+    it('không truyền last_activity_at → không kiểm nguội (tương thích cũ)', () => {
+      const noActivity = mk({ status: 'nurturing', created_at: iso(at(2026, 7, 1)) });
+      expect(leadSlaState(noActivity, NOW)).toBe('ok');
+    });
+
+    it('follow_up_at vẫn ưu tiên hơn kiểm nguội', () => {
+      // Nguội theo activity NHƯNG có hẹn quá giờ → overdue (không phải due_soon).
+      const both = mk({ status: 'contacted', created_at: iso(at(2026, 7, 1)), follow_up_at: iso(at(2026, 7, 14, 10, 0)), last_activity_at: iso(at(2026, 7, 1)) });
+      expect(leadSlaState(both, NOW)).toBe('overdue');
+    });
   });
 
   describe('slaLabel', () => {

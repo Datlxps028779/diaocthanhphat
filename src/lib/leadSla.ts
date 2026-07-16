@@ -1,12 +1,13 @@
 // Logic SLA cho lead (thuần, test được) — dùng ở LeadsTab để tô cảnh báo + sắp xếp.
 // Mọi hàm nhận `now` làm tham số để test tất định, không đọc đồng hồ bên trong.
 
-import { isTerminal, type StageKey } from './leadPipeline';
+import { isTerminal, stageMeta, type StageKey } from './leadPipeline';
 
 export type SlaLead = {
   status: StageKey;
   created_at: string;
   follow_up_at: string | null;
+  last_activity_at?: string | null;  // hoạt động gần nhất; thiếu → bỏ qua kiểm nguội
 };
 
 export type SlaState = 'overdue' | 'due_soon' | 'ok' | 'none';
@@ -42,6 +43,14 @@ export function leadSlaState(lead: SlaLead, now: Date): SlaState {
   if (lead.follow_up_at) {
     const fu = new Date(lead.follow_up_at);
     if (sameLocalDay(fu, now)) return 'due_soon';
+  }
+
+  // Lead mở đã lâu không có hoạt động (quá staleDays của giai đoạn) → nguội, cần chăm.
+  // Chỉ áp khi biết last_activity_at (nếu không truyền → bỏ qua để giữ tương thích cũ).
+  const staleDays = stageMeta(lead.status).staleDays;
+  if (staleDays && lead.last_activity_at) {
+    const last = new Date(lead.last_activity_at).getTime();
+    if (last + staleDays * 86_400_000 <= nowMs) return 'due_soon';
   }
 
   return 'ok';

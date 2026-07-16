@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock, Building2, CalendarPlus } from 'lucide-react';
-import type { Lead, LeadActivity } from '../../../lib/supabase';
-import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm, getTeamMembers, addAssignee, removeAssignee } from '../../../lib/api';
+import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock, Building2, CalendarPlus, Send } from 'lucide-react';
+import type { Lead, LeadActivity, LeadDripLog } from '../../../lib/supabase';
+import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm, getTeamMembers, addAssignee, removeAssignee, getLeadDripLogs } from '../../../lib/api';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { buildTimeline } from '../../../lib/leadTimeline';
 import { assigneesOf, memberLabel, type TeamMember } from '../../../lib/leadAssignment';
+import { dripStatusLabel, dripStatusTone, dripStepLabel } from '../../../lib/leadDrip';
 import { useAuth } from '../../../lib/auth';
 import { PropertyPicker } from '../shared/PropertyPicker';
 import { AssigneePicker } from '../shared/AssigneePicker';
@@ -18,6 +19,13 @@ const KIND_META: Record<LeadActivity['kind'], { label: string; icon: typeof Stic
   follow_up: { label: 'Hẹn gọi lại', icon: Clock },
 };
 
+function dripBadgeClass(status: LeadDripLog['status']): string {
+  const tone = dripStatusTone(status);
+  if (tone === 'green') return 'bg-emerald-100 text-emerald-700';
+  if (tone === 'amber') return 'bg-amber-100 text-amber-700';
+  return 'bg-red-100 text-red-700';
+}
+
 interface Props {
   lead: Lead;
   author: string;               // nhãn admin đang thao tác (ghi vào activity)
@@ -27,6 +35,7 @@ interface Props {
 
 export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
   const [activities, setActivities] = useState<LeadActivity[]>([]);
+  const [dripLogs, setDripLogs] = useState<LeadDripLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Lead['status']>(lead.status);
   const [propertyId, setPropertyId] = useState<string | null>(lead.property_id);
@@ -41,7 +50,12 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
-    setActivities(await getLeadActivities(lead.id));
+    const [activityRows, dripRows] = await Promise.all([
+      getLeadActivities(lead.id),
+      getLeadDripLogs(lead.id).catch(() => []),
+    ]);
+    setActivities(activityRows);
+    setDripLogs(dripRows);
     setLoading(false);
   }, [lead.id]);
 
@@ -212,6 +226,27 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
               Lưu vào nhật ký
             </button>
           </div>
+
+          {dripLogs.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1"><Send className="w-3.5 h-3.5 text-red-500" />Nuôi dưỡng Zalo</p>
+              <div className="space-y-2">
+                {dripLogs.map(log => (
+                  <div key={log.id} className="bg-white rounded-lg border border-gray-100 p-2.5 flex gap-2.5">
+                    <Send className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-700">{dripStepLabel(log.step)}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${dripBadgeClass(log.status)}`}>{dripStatusLabel(log.status)}</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{new Date(log.sent_at).toLocaleString('vi-VN')}</p>
+                      {log.detail && <p className="text-xs text-gray-600 mt-1 break-words">{log.detail}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Timeline tương tác */}
           <div>
