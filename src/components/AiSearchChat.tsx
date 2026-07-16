@@ -371,11 +371,6 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                       Để lại liên hệ
                     </button>
                   )}
-                  {!chatHandle && (
-                    <button onClick={requestLiveStaff} disabled={requestingStaff} className="flex-1 min-w-[120px] border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-xs font-semibold rounded-lg py-2 transition-colors">
-                      {requestingStaff ? 'Đang kết nối…' : 'Gặp nhân viên trực chat'}
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -414,6 +409,11 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                   <button key={example} disabled={!taxonomyReady} onClick={() => send(example)} className="text-[11px] text-gray-600 hover:text-red-600 bg-gray-50 hover:bg-red-50 disabled:opacity-50 rounded-full px-2.5 py-1.5 transition-colors">{example}</button>
                 ))}
               </div>
+            )}
+            {!chatHandle && (
+              <button onClick={requestLiveStaff} disabled={requestingStaff || !taxonomyReady} className="w-full flex items-center justify-center gap-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-xs font-bold rounded-lg py-2 transition-colors">
+                <Phone className="w-3.5 h-3.5" />{requestingStaff ? 'Đang kết nối tư vấn viên…' : 'Gặp nhân viên trực chat'}
+              </button>
             )}
             <div className="flex gap-2">
               <textarea
