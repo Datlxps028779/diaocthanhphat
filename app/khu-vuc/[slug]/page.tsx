@@ -114,11 +114,8 @@ export default async function AreaPage({ params }: Props) {
 
       <SiteChrome currentPage={{ name: 'regions' }}>
         <main className="bg-gray-50">
-          <section
-            className="overflow-hidden bg-gray-950 bg-cover bg-center text-white"
-            style={{ backgroundImage: `linear-gradient(115deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.86) 42%, rgba(69,10,10,0.82) 100%), url(${heroImage})` }}
-          >
-            <div className="mx-auto max-w-7xl px-4 py-12 md:py-16">
+          <section className="overflow-hidden bg-gradient-to-br from-gray-950 via-gray-900 to-red-950 text-white">
+            <div className="mx-auto max-w-7xl px-4 py-10 md:py-14">
               <nav className="mb-6 text-xs text-white/70">
                 <Link href="/" className="hover:text-white">Trang chủ</Link>
                 <span className="mx-2">/</span>
@@ -127,33 +124,33 @@ export default async function AreaPage({ params }: Props) {
                 <span className="text-white">{area.name}</span>
               </nav>
 
-              <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-                <div
-                  className="max-w-3xl border border-white/15 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm md:p-7"
-                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.78)', borderRadius: '1.5rem' }}
-                >
-                  <p className="mb-3 inline-flex rounded-full bg-red-600/90 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white ring-1 ring-white/20">
+              <div className="grid gap-8 items-center" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' }}>
+                <div className="max-w-3xl">
+                  <p className="mb-4 inline-flex rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
                     Khu vực bất động sản
                   </p>
-                  <h1 className="text-3xl font-black leading-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)] md:text-5xl">Bất động sản tại {area.name}</h1>
-                  <p className="mt-4 text-sm font-medium leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] md:text-base">{summary}</p>
+                  <h1 className="text-3xl font-black leading-tight text-white md:text-5xl">Bất động sản tại {area.name}</h1>
+                  <p className="mt-4 text-sm font-medium leading-7 text-white/90 md:text-base">{summary}</p>
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link href={`/mua-ban?area=${area.id}`} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-950/30 hover:bg-red-700">Xem tin mua bán</Link>
                     <Link href={`/cho-thue?area=${area.id}`} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50">Xem tin cho thuê</Link>
-                    <Link href="/khu-vuc" className="rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20">Tất cả khu vực</Link>
+                    <Link href="/khu-vuc" className="rounded-xl border border-white/30 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/10">Tất cả khu vực</Link>
                   </div>
+                  {marketChips.length > 0 && (
+                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                      {marketChips.map(chip => (
+                        <div key={chip.label} className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                          <p className="text-[11px] text-white/60">{chip.label}</p>
+                          <p className="mt-1 text-lg font-black text-white">{chip.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {marketChips.length > 0 && (
-                  <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
-                    {marketChips.map(chip => (
-                      <div key={chip.label}>
-                        <p className="text-[11px] text-white/60">{chip.label}</p>
-                        <p className="mt-1 text-sm font-black text-white md:text-base">{chip.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/10 p-2 shadow-2xl shadow-black/30">
+                  <img src={heroImage} alt={area.name} className="h-64 w-full rounded-2xl object-cover md:h-80" />
+                </div>
               </div>
             </div>
           </section>
