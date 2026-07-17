@@ -746,7 +746,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">Thư viện ảnh</label>
-            <ImageUpload images={form.images} onChange={imgs => setField('images', imgs)} maxImages={15} />
+            <ImageUpload images={form.images} onChange={imgs => setField('images', imgs)} maxImages={15} folder="properties" isAdmin />
           </div>
 
           {/* Media */}

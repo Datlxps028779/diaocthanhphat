@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, GripVertical, Image as ImageIcon, AlertCircle, FolderOpen } from 'lucide-react';
 import { uploadImage } from '../lib/api';
 import { ImageLibraryModal } from './ImageLibraryModal';
+import { appendImageUrls } from '../lib/imageSelection';
 
 interface ImageUploadProps {
   images: string[];
@@ -19,6 +20,19 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
   const [error, setError] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imagesRef = useRef(images);
+
+  useEffect(() => { imagesRef.current = images; }, [images]);
+
+  const appendUrls = useCallback((urls: string[]) => {
+    const result = appendImageUrls(imagesRef.current, urls, maxImages);
+    if (result.added.length > 0) {
+      imagesRef.current = result.images;
+      onChange(result.images);
+    }
+    if (result.skippedOverflow.length > 0) setError(`Chỉ thêm được ${result.added.length} ảnh. Tối đa ${maxImages} ảnh.`);
+    else if (result.skippedDuplicate.length > 0 && result.added.length === 0) setError('Ảnh đã có trong danh sách.');
+  }, [maxImages, onChange]);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -29,14 +43,15 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
     try {
       const toUpload = Array.from(files).slice(0, remaining);
       const urls = await Promise.all(toUpload.map(f => uploadImage(f, folder, isAdmin)));
-      onChange([...images, ...urls]);
+      appendUrls(urls);
+      if (fileRef.current) fileRef.current.value = '';
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Lỗi tải ảnh. Vui lòng thử lại.';
       setError(`${msg} Bạn có thể chọn ảnh từ thư viện hoặc dán link ảnh từ dịch vụ bên ngoài.`);
     } finally {
       setUploading(false);
     }
-  }, [images, maxImages, folder, isAdmin, onChange]);
+  }, [images, maxImages, folder, isAdmin, appendUrls]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -66,7 +81,15 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
     setDragOverIdx(null);
   };
 
-  // Ép buộc luồng: click vào drop zone mở thư viện ảnh
+  const openUploader = () => {
+    if (images.length >= maxImages) {
+      setError(`Tối đa ${maxImages} ảnh`);
+      return;
+    }
+    setError('');
+    fileRef.current?.click();
+  };
+
   const openLibrary = () => {
     if (images.length >= maxImages) {
       setError(`Tối đa ${maxImages} ảnh`);
@@ -85,7 +108,7 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            onClick={openLibrary}
+            onClick={openUploader}
             className={`flex-1 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
               dragOver ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-red-400 hover:bg-gray-50'
             }`}
@@ -105,12 +128,20 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
               </div>
             ) : (
               <>
-                <FolderOpen className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-700">Click để chọn ảnh từ thư viện</p>
-                <p className="text-xs text-gray-400 mt-1">Hoặc kéo thả file vào đây – Tối đa {maxImages} ảnh</p>
+                <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-700">Click để tải ảnh lên</p>
+                <p className="text-xs text-gray-400 mt-1">Hoặc kéo thả file vào đây – ảnh sẽ tự hiện sau khi tải xong</p>
               </>
             )}
           </div>
+          <button
+            type="button"
+            onClick={openLibrary}
+            className="w-28 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+          >
+            <FolderOpen className="mx-auto mb-1 h-5 w-5" />
+            Thư viện
+          </button>
         </div>
       )}
 
@@ -158,7 +189,7 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
             ))}
             {images.length < maxImages && images.length > 0 && (
               <button
-                onClick={openLibrary}
+                onClick={openUploader}
                 className="h-24 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-red-400 hover:text-red-400 transition-colors"
               >
                 <ImageIcon className="w-5 h-5 mb-1" />
@@ -173,12 +204,8 @@ export function ImageUpload({ images, onChange, maxImages = 10, folder = 'proper
       <ImageLibraryModal
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
-        onSelect={(url) => {
-          // Đảm bảo URL được lưu vào state ngay lập tức và preview hiển thị
-          if (!images.includes(url) && images.length < maxImages) {
-            onChange([...images, url]);
-          }
-        }}
+        onSelect={(url) => appendUrls([url])}
+        onSelectMany={appendUrls}
         folder={folder}
         isAdmin={isAdmin}
         multiple

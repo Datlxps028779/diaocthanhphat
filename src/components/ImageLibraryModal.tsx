@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Upload, Trash2, Image as ImageIcon, Search, FolderOpen, HardDrive, AlertCircle } from 'lucide-react';
-import { getUserMedia, deleteUserMedia, getUserMediaUsage, uploadImage } from '../lib/api';
+import { getUserMedia, deleteUserMedia, getUserMediaUsage, uploadImages } from '../lib/api';
 import { type UserMedia } from '../lib/supabase';
 
 interface ImageLibraryModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (url: string) => void;
+  onSelectMany?: (urls: string[]) => void;
   folder?: string;
   isAdmin?: boolean;
   multiple?: boolean;
 }
 
-export function ImageLibraryModal({ open, onClose, onSelect, folder = 'properties', isAdmin = false, multiple = false }: ImageLibraryModalProps) {
+export function ImageLibraryModal({ open, onClose, onSelect, onSelectMany, folder = 'properties', isAdmin = false, multiple = false }: ImageLibraryModalProps) {
   const [medias, setMedias] = useState<UserMedia[]>([]);
   const [usage, setUsage] = useState({ used: 0, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -56,10 +57,14 @@ export function ImageLibraryModal({ open, onClose, onSelect, folder = 'propertie
     setUploading(true);
     setError('');
     try {
-      for (const file of Array.from(files)) {
-        await uploadImage(file, folder, isAdmin);
+      const urls = await uploadImages(Array.from(files), folder, isAdmin);
+      if (urls.length > 0) {
+        if (multiple) (onSelectMany ?? ((selected: string[]) => selected.forEach(onSelect)))(urls);
+        else onSelect(urls[0]);
+        onClose();
+      } else {
+        await load();
       }
-      await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Tải ảnh lên thất bại.';
       setError(`${msg} Bạn có thể chọn ảnh từ thư viện hoặc dán link ảnh từ dịch vụ bên ngoài (Pexels, ImgBB...).`);
@@ -94,7 +99,9 @@ export function ImageLibraryModal({ open, onClose, onSelect, folder = 'propertie
   };
 
   const handleConfirmMultiple = () => {
-    selectedUrls.forEach(url => onSelect(url));
+    const urls = Array.from(selectedUrls);
+    if (onSelectMany) onSelectMany(urls);
+    else urls.forEach(url => onSelect(url));
     onClose();
   };
 
@@ -186,7 +193,7 @@ export function ImageLibraryModal({ open, onClose, onSelect, folder = 'propertie
                 <input
                   type="file"
                   accept="image/*"
-                  multiple
+                  multiple={multiple}
                   className="hidden"
                   onChange={handleUpload}
                 />
