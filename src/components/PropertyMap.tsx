@@ -15,6 +15,7 @@ interface PropertyMapProps {
   centerLng?: number;
   zoom?: number;
   onBoundsChange?: (bounds: MapBounds) => void;
+  showCountBadge?: boolean;
 }
 
 // Price tier config
@@ -171,6 +172,7 @@ export function PropertyMap({
   centerLng = 106.7,
   zoom = 10,
   onBoundsChange,
+  showCountBadge = true,
 }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -250,8 +252,8 @@ export function PropertyMap({
     <div className="relative rounded-2xl overflow-hidden border border-gray-200 shadow-md" style={{ height }}>
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Legend */}
-      <div className="absolute bottom-8 left-3 z-[999] bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-lg border border-gray-100 pointer-events-none">
+      {/* Legend — ẩn trên màn nhỏ để không đè zoom control */}
+      <div className="hidden sm:block absolute bottom-8 left-3 z-[999] bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-lg border border-gray-100 pointer-events-none">
         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">Mức giá</p>
         {[
           { label: '< 1 tỷ',  color: '#15803d' },
@@ -268,10 +270,12 @@ export function PropertyMap({
       </div>
 
       {/* Property count badge */}
-      <div className="absolute top-3 right-3 z-[999] bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg pointer-events-none flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
-        {visibleCount} BĐS
-      </div>
+      {showCountBadge && (
+        <div className="absolute top-3 right-3 z-[999] bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg pointer-events-none flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+          {visibleCount} BĐS
+        </div>
+      )}
 
       {/* Inject popup styles */}
       <style>{`
