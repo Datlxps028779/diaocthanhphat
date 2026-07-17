@@ -10,6 +10,7 @@ const supabaseHost = (() => {
 const nextConfig = {
   reactStrictMode: true,
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       // Supabase Storage
       ...(supabaseHost ? [{ protocol: 'https', hostname: supabaseHost }] : []),

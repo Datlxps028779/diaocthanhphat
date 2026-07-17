@@ -8,6 +8,7 @@ import { estimateValuation, type Valuation } from '../lib/valuation';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { type Page } from '../lib/router';
+import { isValidVnPhone } from '../lib/phone';
 
 // Định giá tham khảo: ước tính khoảng giá theo trung vị giá/m² của BĐS tương đương.
 // KHÔNG phải thẩm định chính thức — kết quả kèm CTA liên hệ để chuyển thành lead.
@@ -53,6 +54,10 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
     e.preventDefault();
     if (!leadName.trim() || !leadPhone.trim()) {
       setLeadErr('Vui lòng điền họ tên và số điện thoại.');
+      return;
+    }
+    if (!isValidVnPhone(leadPhone)) {
+      setLeadErr('Số điện thoại chưa hợp lệ. Vui lòng nhập số di động Việt Nam (VD: 0901234567).');
       return;
     }
     setLeadErr('');
@@ -175,7 +180,7 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
               <input type="text" value={leadName} onChange={e => setLeadName(e.target.value)}
                 placeholder="Họ và tên *"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-red-400 outline-none" />
-              <input type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)}
+              <input type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567" value={leadPhone} onChange={e => setLeadPhone(e.target.value)}
                 placeholder="Số điện thoại *"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-red-400 outline-none" />
               {leadErr && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{leadErr}</p>}

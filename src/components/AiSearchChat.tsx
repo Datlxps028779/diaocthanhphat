@@ -8,6 +8,7 @@ import { getAllProperties } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
+import { isValidVnPhone } from '../lib/phone';
 
 const EXAMPLES = [
   'Nhà Dĩ An dưới 3 tỷ sổ hồng',
@@ -292,11 +293,17 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const [requestingStaff, setRequestingStaff] = useState(false);
   const [showStaffForm, setShowStaffForm] = useState(false);
   const [staffForm, setStaffForm] = useState({ full_name: '', phone: '' });
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   // Khách chủ động xin gặp nhân viên trực chat. Tên/SĐT là TÙY CHỌN → mở phiên,
   // đánh dấu wants_staff, backfill hội thoại rồi chia cho tư vấn viên.
   const requestLiveStaff = async () => {
     if (requestingStaff || chatHandleRef.current) return;
+    if (staffForm.phone.trim() && !isValidVnPhone(staffForm.phone)) {
+      setStaffError('Số điện thoại chưa hợp lệ. Vui lòng nhập số di động Việt Nam.');
+      return;
+    }
+    setStaffError(null);
     setRequestingStaff(true);
     try {
       const need = lastTurn ? summarizeAdvisorNeed(lastTurn) : 'Khách yêu cầu gặp tư vấn viên';
@@ -306,6 +313,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       await routeChatSession(handle).catch(() => {});
       track(EVENTS.AI_ADVISOR_SEND, { hasText: false, requestStaff: true });
       setShowStaffForm(false);
+      setStaffError(null);
       setStaffForm({ full_name: '', phone: '' });
       setMessages(prev => [...prev, { role: 'system', text: 'Đã gửi yêu cầu gặp tư vấn viên. Anh/chị vui lòng chờ trong giây lát, nhân viên sẽ vào trò chuyện trực tiếp tại đây.' }]);
     } catch {
@@ -443,7 +451,8 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                   </div>
                   <p className="text-[11px] text-gray-500">Để lại tên và số điện thoại (không bắt buộc) để nhân viên tiện liên hệ.</p>
                   <input value={staffForm.full_name} onChange={e => setStaffForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Họ tên (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                  <input value={staffForm.phone} onChange={e => setStaffForm(f => ({ ...f, phone: e.target.value }))} placeholder="Số điện thoại (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  <input value={staffForm.phone} onChange={e => setStaffForm(f => ({ ...f, phone: e.target.value }))} type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567" placeholder="Số điện thoại (tuỳ chọn)" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  {staffError && <p className="text-xs text-red-600">{staffError}</p>}
                   <button onClick={requestLiveStaff} disabled={requestingStaff} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold text-sm py-2 rounded-lg transition-colors">
                     {requestingStaff ? 'Đang kết nối tư vấn viên…' : 'Kết nối tư vấn viên'}
                   </button>

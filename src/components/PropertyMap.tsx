@@ -176,58 +176,72 @@ export function PropertyMap({
   const mapRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const container = containerRef.current;
+    if (!container || mapRef.current) return;
 
-    let map: LeafletMap;
+    let cancelled = false;
+    let boundsTimer: ReturnType<typeof setTimeout> | null = null;
 
     import('leaflet').then(module => {
+      if (cancelled || !containerRef.current) return;
       const L = module.default;
       import('leaflet/dist/leaflet.css');
 
-      map = L.map(containerRef.current!, {
+      const el = containerRef.current as HTMLDivElement & { _leaflet_id?: number };
+      if (el._leaflet_id) delete el._leaflet_id;
+      const nextMap = L.map(el, {
         center: [centerLat, centerLng],
         zoom,
         zoomControl: true,
         attributionControl: false,
       });
-      mapRef.current = map;
+      mapRef.current = nextMap;
 
       // Cleaner map tile
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
         subdomains: 'abcd',
-      }).addTo(map);
+      }).addTo(nextMap);
 
-      L.control.attribution({ prefix: '© OpenStreetMap © Carto' }).addTo(map);
+      L.control.attribution({ prefix: '© OpenStreetMap © Carto' }).addTo(nextMap);
 
       const emitBounds = () => {
-        if (!onBoundsChange) return;
-        const b = map.getBounds();
+        if (cancelled || !onBoundsChange) return;
+        const b = nextMap.getBounds();
         onBoundsChange({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() });
       };
 
-      map.on('moveend', emitBounds);
-      map.on('zoomend', emitBounds);
-      setTimeout(emitBounds, 300);
+      nextMap.on('moveend', emitBounds);
+      nextMap.on('zoomend', emitBounds);
+      boundsTimer = setTimeout(emitBounds, 300);
 
-      addMarkers(L, map, properties, onNavigate);
+      addMarkers(L, nextMap, properties, onNavigate);
     });
 
     return () => {
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      cancelled = true;
+      if (boundsTimer) clearTimeout(boundsTimer);
+      if (mapRef.current) {
+        mapRef.current.off();
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    let cancelled = false;
     import('leaflet').then(module => {
+      if (cancelled || mapRef.current !== map) return;
       const L = module.default;
       map.eachLayer(layer => {
         if ((layer as { _isMarker?: boolean })._isMarker) map.removeLayer(layer);
       });
       addMarkers(L, map, properties, onNavigate);
     });
+    return () => { cancelled = true; };
   }, [properties, onNavigate]);
 
   const visibleCount = properties.filter(p => p.latitude && p.longitude).length;

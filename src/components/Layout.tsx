@@ -1,12 +1,15 @@
 'use client';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
-import { AiSearchChat } from './AiSearchChat';
+import { SocialProofToast } from './SocialProofToast';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+
+const AiSearchChat = dynamic(() => import('./AiSearchChat').then(m => m.AiSearchChat), { ssr: false });
 
 interface HeaderProps {
   currentPage: Page;
@@ -265,7 +268,12 @@ export function Footer({ areas, onNavigate }: FooterProps) {
 }
 
 export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void }) {
-  return <AiSearchChat onNavigate={onNavigate} />;
+  return (
+    <>
+      <AiSearchChat onNavigate={onNavigate} />
+      <SocialProofToast />
+    </>
+  );
 }
 
 export function Breadcrumb({ items }: { items: { label: string; onClick?: () => void }[] }) {

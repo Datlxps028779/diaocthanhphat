@@ -2,6 +2,7 @@ import type { Property } from './supabase';
 import { buildPropertyPath, type PropertyFilters } from './api/properties';
 import { parseSearchIntent, normalizeVietnamese, type AiSearchMatch, type SearchTaxonomy } from './aiSearch';
 import type { submitLead } from './api/leads';
+import { isValidVnPhone } from './phone';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
 export interface AdvisorMessage { role: 'user' | 'assistant' | 'staff' | 'system'; text: string; chips?: string[] }
@@ -118,8 +119,7 @@ export function summarizePropertyForAdvisor(p: Property): AdvisorPropertySummary
 export function validateAdvisorLeadContact(input: AdvisorLeadDraft): { valid: boolean; error?: string } {
   const name = input.full_name.trim();
   if (!name) return { valid: false, error: 'Vui lòng nhập họ tên.' };
-  const digits = input.phone.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) return { valid: false, error: 'Vui lòng nhập số điện thoại hợp lệ.' };
+  if (!isValidVnPhone(input.phone)) return { valid: false, error: 'Vui lòng nhập số di động Việt Nam hợp lệ.' };
   return { valid: true };
 }
 

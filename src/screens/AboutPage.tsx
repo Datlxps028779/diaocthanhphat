@@ -10,12 +10,14 @@ import { Breadcrumb } from '../components/Layout';
 import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
+import { isValidVnPhone } from '../lib/phone';
 
 interface AboutPageProps { onNavigate: (p: Page) => void; }
 
 export function AboutPage({ onNavigate }: AboutPageProps) {
   const [form, setForm] = useState({ full_name: '', phone: '', message: '' });
   const [sent, setSent] = useState(false);
+  const [leadError, setLeadError] = useState('');
   const sitePhone = useSetting('phone_hotline', '0901 234 567');
   const siteEmail = useSetting('email', 'info@bdsbinhduong.vn');
   const siteAddress = useSetting('address', '123 Đường số 1, P. Hiệp Thành, TP. Thủ Dầu Một, Bình Dương');
@@ -30,13 +32,21 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
 
   const submitMutation = useMutation({
     mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung', source: 'about_page' }),
-    onSuccess: () => setSent(true),
+    onSuccess: () => { setLeadError(''); setSent(true); },
   });
   const loading = submitMutation.isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.phone) return;
+    if (!form.full_name.trim() || !form.phone.trim()) {
+      setLeadError('Vui lòng nhập họ tên và số điện thoại.');
+      return;
+    }
+    if (!isValidVnPhone(form.phone)) {
+      setLeadError('Số điện thoại chưa hợp lệ. Vui lòng nhập số di động Việt Nam (VD: 0901234567).');
+      return;
+    }
+    setLeadError('');
     submitMutation.mutate(form);
   };
 
@@ -202,12 +212,13 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
                 <input type="text" placeholder="Họ và tên *" value={form.full_name}
                   onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <input type="tel" placeholder="Số điện thoại *" value={form.phone}
+                <input type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567" placeholder="Số điện thoại *" value={form.phone}
                   onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                 <textarea placeholder="Nội dung muốn trao đổi..." value={form.message}
                   onChange={e => setForm(f => ({ ...f, message: e.target.value }))} rows={4}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+                {leadError && <p className="text-red-500 text-sm">{leadError}</p>}
                 <button type="submit" disabled={loading}
                   className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-sm transition-colors">
                   {loading ? 'Đang gửi...' : 'GỬI TIN NHẮN'}

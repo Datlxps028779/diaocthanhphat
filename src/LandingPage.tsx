@@ -273,7 +273,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 const area = areas.find(a => a.name.toLowerCase().includes(title.toLowerCase().slice(0, 6)) || a.slug?.includes(slug));
                 return (
                   <button key={r.n} onClick={() => area ? goListings({ areaId: area.id }) : goListings()} className="relative rounded-2xl overflow-hidden h-44 group text-left w-full">
-                    <img src={img} alt={title} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <Image src={img} alt={title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className={`absolute inset-0 bg-gradient-to-t ${r.color} opacity-75 group-hover:opacity-85 transition-opacity`} />
                     <div className="absolute inset-0 p-5 flex flex-col justify-end">
                       <span className="text-[10px] bg-white/20 text-white font-bold px-2 py-0.5 rounded-full w-fit mb-2">{badge}</span>
@@ -358,8 +358,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
                   className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
                   {a.image_url && (
-                    <div className="overflow-hidden h-44">
-                      <img src={a.image_url} alt={a.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <div className="relative overflow-hidden h-44 bg-gray-100">
+                      <Image src={a.image_url} alt={a.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                     </div>
                   )}
                   <div className="p-4">
@@ -616,11 +616,15 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <img
-          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-          alt={p.title}
-          className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500"
-        />
+        <div className="relative h-44 bg-gray-100">
+          <Image
+            src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
+            alt={p.title}
+            fill
+            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
         {p.badge ? (
           <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>

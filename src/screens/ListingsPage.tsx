@@ -1,12 +1,14 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
-  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
+  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag, Bell
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { type Property } from '../lib/supabase';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, autoSaveSearch } from '../lib/api';
 import { buildSearchName, hasSavedSearchCriteria, type SavedFilters } from '../lib/savedSearch';
@@ -23,7 +25,7 @@ import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
-import { PropertyMap, type MapBounds } from '../components/PropertyMap';
+import type { MapBounds } from '../components/PropertyMap';
 
 interface ListingsPageProps {
   initialFilters?: Partial<{
@@ -38,6 +40,11 @@ interface ListingsPageProps {
 }
 
 type ListingTypeKey = 'mua_ban' | 'cho_thue' | '';
+
+const PropertyMap = dynamic(() => import('../components/PropertyMap').then(m => m.PropertyMap), {
+  ssr: false,
+  loading: () => <div className="h-[600px] bg-gray-100 rounded-xl animate-pulse" />,
+});
 
 const LISTING_TYPES: { key: ListingTypeKey; label: string; icon: React.ReactNode }[] = [
   { key: '', label: 'Tất cả', icon: <Building2 className="w-3.5 h-3.5" /> },
@@ -88,6 +95,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [page, setPage] = useState(1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
+  const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -135,7 +143,13 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
 
   const { mutate: autoSaveCurrentSearch } = useMutation({
     mutationFn: (input: { name: string; filters: SavedFilters }) => autoSaveSearch(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['savedSearches'] }),
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
+      if (saved) {
+        setSavedSearchPrompt(true);
+        setTimeout(() => setSavedSearchPrompt(false), 8000);
+      }
+    },
     onError: (e) => console.warn('[ListingsPage] Auto-save search failed:', e),
   });
 
@@ -538,6 +552,19 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               </div>
             </div>
 
+            {savedSearchPrompt && (
+              <div className="mb-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-start gap-3 text-sm animate-fade-in">
+                <Bell className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-emerald-800">Đã tự lưu nhu cầu tìm kiếm</p>
+                  <p className="text-emerald-700 text-xs mt-0.5">Vào Tài khoản → Tìm kiếm đã lưu để bật cảnh báo khi có tin mới phù hợp.</p>
+                </div>
+                <button onClick={() => setSavedSearchPrompt(false)} className="text-emerald-600 hover:text-emerald-800">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Active filter chips */}
             {hasActiveFilters && (
               <div className="flex flex-wrap gap-2 mb-3">
@@ -583,8 +610,9 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                         <button key={p.id}
                           onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                           className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
-                          <img src={p.image_url ?? ''} alt={p.title} loading="lazy"
-                            className="w-16 h-12 object-cover rounded-lg flex-shrink-0" />
+                          <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                            <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={p.title} fill sizes="64px" className="object-cover" />
+                          </span>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
                             <p className="text-red-600 text-xs font-black mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
@@ -717,8 +745,11 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-          alt={p.title} className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500" />
+        <div className="relative h-44 bg-gray-100">
+          <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
+            alt={p.title} fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
         {p.badge ? (
           <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
@@ -775,7 +806,7 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
       <div className="relative w-48 flex-shrink-0 overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <img src={p.image_url ?? ''} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={p.title} fill sizes="192px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
         {p.listing_type === 'cho_thue' && (
           <span className="absolute top-2 left-2 z-[2] bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}

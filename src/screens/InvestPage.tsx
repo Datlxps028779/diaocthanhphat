@@ -7,6 +7,7 @@ import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
+import { isValidVnPhone } from '../lib/phone';
 
 /* ─────────────────── Static data ─────────────────── */
 
@@ -238,6 +239,10 @@ function ConsultationForm() {
       setError('Vui lòng điền đầy đủ họ tên và số điện thoại.');
       return;
     }
+    if (!isValidVnPhone(phone)) {
+      setError('Số điện thoại chưa hợp lệ. Vui lòng nhập số di động Việt Nam (VD: 0901234567).');
+      return;
+    }
     setError('');
     submitMutation.mutate();
   };
@@ -268,6 +273,9 @@ function ConsultationForm() {
         <label className="block text-sm font-semibold text-red-100 mb-1">Số điện thoại *</label>
         <input
           type="tel"
+          inputMode="tel"
+          pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}"
+          title="Nhập số di động Việt Nam, ví dụ 0901234567"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="0909 123 456"

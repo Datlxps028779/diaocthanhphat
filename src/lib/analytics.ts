@@ -53,4 +53,5 @@ export const EVENTS = {
   AI_ADVISOR_SEND: 'ai_advisor_send',
   AI_ADVISOR_SUGGEST: 'ai_advisor_suggest_properties',
   AI_ADVISOR_PROPERTY_CLICK: 'ai_advisor_property_click',
+  PHONE_REVEAL: 'phone_reveal',
 } as const;

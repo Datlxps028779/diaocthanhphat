@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MapPin, Phone, CheckCircle, Heart, Share2, Shield,
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
@@ -10,8 +10,9 @@ import {
   Navigation, ExternalLink, Play, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
+import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
@@ -38,7 +39,6 @@ interface PropertyDetailPageProps {
 }
 
 export function PropertyDetailPage({ propertyId, onNavigate, initialData }: PropertyDetailPageProps) {
-  const [liked, setLiked] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -92,6 +92,16 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     enabled: !!property,
   });
 
+  // Yêu thích: persist thật qua Supabase (dùng chung logic với card ở list/home),
+  // trước đây chỉ là state cục bộ nên tim bấm xong mất khi rời trang.
+  const queryClient = useQueryClient();
+  const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
+  const liked = !!property && favIds.includes(property.id);
+  const favMutation = useMutation({
+    mutationFn: (id: string) => toggleFavorite(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+  });
+
   // Tăng view tách khỏi fetcher: bắn đúng 1 lần mỗi lần mở trang, theo UUID thật
   // (property.id), không phụ thuộc cache/refetch của React Query.
   const viewedRef = useRef<string | null>(null);
@@ -130,7 +140,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
   const handleContact = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone) return;
+    if (!form.name || !isValidVnPhone(form.phone)) return;
     submitMutation.mutate();
   };
 
@@ -158,7 +168,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
   const handleCallback = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!callbackForm.name || !callbackForm.phone) return;
+    if (!callbackForm.name || !isValidVnPhone(callbackForm.phone)) return;
     callbackMutation.mutate();
   };
 
@@ -276,7 +286,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                   <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded">{property.badge}</span>
                 )}
                 <div className="absolute top-3 right-3 flex gap-2">
-                  <button onClick={() => setLiked(!liked)}
+                  <button onClick={() => property && favMutation.mutate(property.id)} aria-label={liked ? 'Bỏ yêu thích' : 'Lưu yêu thích'}
                     className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
                     <Heart className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
                   </button>
@@ -375,7 +385,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                       <Phone className="w-4 h-4" />{contactPhone}
                     </a>
                   ) : (
-                    <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                    <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
                       <Phone className="w-4 h-4" />Bấm để hiện số
                     </button>
@@ -501,7 +511,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                       placeholder="Họ và tên *" required
                       className="border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                     <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                      placeholder="Số điện thoại *" required
+                      placeholder="Số điện thoại *" required type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567"
                       className="border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                   </div>
                   <input value={form.budget} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))}
@@ -705,7 +715,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                   placeholder="Họ và tên *" required
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                 <input value={callbackForm.phone} onChange={e => setCallbackForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="Số điện thoại *" required type="tel"
+                  placeholder="Số điện thoại *" required type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567"
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                 <select value={callbackForm.timePreset} onChange={e => setCallbackForm(f => ({ ...f, timePreset: e.target.value as CallbackTimePreset }))}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">

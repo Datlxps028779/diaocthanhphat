@@ -3,6 +3,7 @@ import { X, Phone, MessageSquare, ChevronDown, ShieldCheck, Clock, Award } from 
 import { submitLead } from '../lib/api';
 import { useSetting } from '../lib/cms';
 import { track, EVENTS } from '../lib/analytics';
+import { isValidVnPhone } from '../lib/phone';
 
 // Kiểu tối giản cho ContactModal — chỉ cần id, title, price_label
 interface ContactTarget {
@@ -38,6 +39,10 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
     e.preventDefault();
     if (!form.full_name.trim() || !form.phone.trim()) {
       setError('Vui lòng nhập họ tên và số điện thoại.');
+      return;
+    }
+    if (!isValidVnPhone(form.phone)) {
+      setError('Số điện thoại chưa hợp lệ. Vui lòng nhập số di động Việt Nam (VD: 0901234567).');
       return;
     }
     setLoading(true);
@@ -110,6 +115,9 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
               />
               <input
                 type="tel"
+                inputMode="tel"
+                pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}"
+                title="Nhập số di động Việt Nam, ví dụ 0901234567"
                 placeholder="Số điện thoại *"
                 value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
@@ -122,7 +130,6 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 appearance-none bg-white text-gray-700"
                 >
                   <option value="">Khu vực quan tâm</option>
-                  <option>TP. Hồ Chí Minh</option>
                   <option>Bình Dương</option>
                   <option>Đồng Nai</option>
                   <option>Bình Phước</option>
