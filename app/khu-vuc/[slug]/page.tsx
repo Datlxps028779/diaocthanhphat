@@ -127,16 +127,19 @@ export default async function AreaPage({ params }: Props) {
               </nav>
 
               <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-                <div>
-                  <p className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-red-100 ring-1 ring-white/20">
+                <div
+                  className="max-w-3xl border border-white/15 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm md:p-7"
+                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.78)', borderRadius: '1.5rem' }}
+                >
+                  <p className="mb-3 inline-flex rounded-full bg-red-600/90 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white ring-1 ring-white/20">
                     Khu vực bất động sản
                   </p>
-                  <h1 className="max-w-3xl text-3xl font-black leading-tight md:text-5xl">Bất động sản tại {area.name}</h1>
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-white/85 md:text-base">{summary}</p>
+                  <h1 className="text-3xl font-black leading-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)] md:text-5xl">Bất động sản tại {area.name}</h1>
+                  <p className="mt-4 text-sm font-medium leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] md:text-base">{summary}</p>
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link href={`/mua-ban?area=${area.id}`} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-950/30 hover:bg-red-700">Xem tin mua bán</Link>
                     <Link href={`/cho-thue?area=${area.id}`} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50">Xem tin cho thuê</Link>
-                    <Link href="/khu-vuc" className="rounded-xl border border-white/30 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/10">Tất cả khu vực</Link>
+                    <Link href="/khu-vuc" className="rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20">Tất cả khu vực</Link>
                   </div>
                 </div>
 
