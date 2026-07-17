@@ -13,6 +13,7 @@ import {
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
+import { buildZaloHref } from '../lib/zalo';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
@@ -50,6 +51,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [shareCopied, setShareCopied] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
+  const siteZalo = useSetting('zalo_link', '');
+  const responseTime = useSetting('lead_response_time', '30 phút');
+  const agentExperience = useSetting('stat3_number', '7 năm');
 
   // initialData từ server (RSC prefetch) → crawler & first paint có ngay dữ liệu,
   // không nhấp nháy loading. SEO (title/meta/JSON-LD) do generateMetadata + page.tsx lo.
@@ -216,7 +220,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     : null;
 
   const contactPhone = property.contact_phone ?? sitePhone;
-  const contactZalo = property.contact_zalo;
+  const zaloHref = buildZaloHref(property.contact_zalo, siteZalo);
   const hasCoords = property.latitude && property.longitude;
   const gmapsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${property.latitude},${property.longitude}`
@@ -379,6 +383,13 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     className="flex items-center gap-2 border border-amber-400 text-amber-700 font-bold px-5 py-2.5 rounded-xl hover:bg-amber-50 transition-colors text-sm">
                     <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
                   </button>
+                  {zaloHref && (
+                    <a href={zaloHref} target="_blank" rel="noreferrer"
+                      onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_price' })}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
+                      <MessageCircle className="w-4 h-4" />Chat Zalo
+                    </a>
+                  )}
                   {phoneRevealed ? (
                     <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
@@ -502,7 +513,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                 <div className="text-center py-6">
                   <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
                   <p className="font-bold text-gray-900">Đã ghi nhận yêu cầu!</p>
-                  <p className="text-gray-500 text-sm mt-0.5">Nhân viên tư vấn sẽ liên hệ trong 30 phút.</p>
+                  <p className="text-gray-500 text-sm mt-0.5">Nhân viên tư vấn sẽ liên hệ trong {responseTime}.</p>
                 </div>
               ) : (
                 <form onSubmit={handleContact} className="space-y-3">
@@ -576,19 +587,20 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     <Phone className="w-4 h-4" />{contactPhone}
                   </a>
                 ) : (
-                  <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                  <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
                     className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
                     <Phone className="w-4 h-4" />Bấm để hiện số
                   </button>
                 )}
-                {contactZalo && (
-                  <a href={`https://zalo.me/${contactZalo.replace(/\s/g, '')}`} target="_blank" rel="noreferrer"
-                    className="w-full border border-blue-400 text-blue-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
-                    <MessageCircle className="w-4 h-4" />Chat Zalo
+                {zaloHref && (
+                  <a href={zaloHref} target="_blank" rel="noreferrer"
+                    onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_sidebar' })}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                    <MessageCircle className="w-4 h-4" />Chat Zalo ngay
                   </a>
                 )}
                 <p className="text-gray-400 text-xs text-center mt-3 flex items-center justify-center gap-1">
-                  <Shield className="w-3 h-3" />Thông tin bảo mật tuyệt đối
+                  <Shield className="w-3 h-3" />Phản hồi trong {responseTime} · Bảo mật thông tin
                 </p>
               </div>
 
@@ -600,10 +612,18 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                       {(property.contact_name ?? 'NV').charAt(0)}
                     </span>
                   </div>
-                  <div>
-                    <p className="font-bold text-gray-900 text-sm">{property.contact_name ?? 'Nhân viên tư vấn'}</p>
-                    <p className="text-gray-500 text-xs">Chuyên viên BĐS</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-900 text-sm flex items-center gap-1">
+                      {property.contact_name ?? 'Nhân viên tư vấn'}
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                    </p>
+                    <p className="text-gray-500 text-xs">Chuyên viên BĐS · {agentExperience} kinh nghiệm</p>
                   </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-500" />Phản hồi {responseTime}</span>
+                  <span className="text-gray-300">·</span>
+                  <span className="flex items-center gap-1"><FileCheck className="w-3 h-3 text-emerald-500" />Pháp lý minh bạch</span>
                 </div>
                 {phoneRevealed ? (
                   <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
@@ -611,13 +631,14 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     <Phone className="w-3.5 h-3.5" />{contactPhone}
                   </a>
                 ) : (
-                  <button onClick={() => { setPhoneRevealed(true); submitLead({ full_name: 'Xem SĐT', phone: contactPhone, property_id: property?.id, property_title: property?.title, source: 'phone_reveal' }).catch(() => {}); }}
+                  <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
                     className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
                     <Phone className="w-3.5 h-3.5" />Bấm để hiện số
                   </button>
                 )}
-                {contactZalo && (
-                  <a href={`https://zalo.me/${contactZalo}`} target="_blank" rel="noreferrer"
+                {zaloHref && (
+                  <a href={zaloHref} target="_blank" rel="noreferrer"
+                    onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_agent' })}
                     className="mt-2 w-full border border-blue-300 text-blue-600 font-semibold py-2 rounded-xl text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
                     <MessageCircle className="w-3.5 h-3.5" />Nhắn Zalo
                   </a>
@@ -635,8 +656,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     {related.slice(0, 4).map(r => (
                       <button key={r.id} onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}
                         className="flex gap-3 w-full text-left hover:bg-gray-50 rounded-lg p-1.5 transition-colors group">
-                        <img src={r.image_url ?? ''} alt={r.title}
-                          className="w-16 h-12 object-cover rounded-lg flex-shrink-0" />
+                        <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                          <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={r.title} fill sizes="64px" className="object-cover" />
+                        </span>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
                           <p className="text-red-600 text-xs font-bold mt-0.5">{r.price_label}</p>
@@ -673,7 +695,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
               {related.map(r => (
                 <div key={r.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 cursor-pointer group transition-all"
                   onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}>
-                  <img src={r.image_url ?? ''} alt={r.title} className="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div className="relative h-36 bg-gray-100">
+                    <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={r.title} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                  </div>
                   <div className="p-3">
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
                     <p className="text-red-600 text-sm font-black mt-1">{r.price_label}</p>

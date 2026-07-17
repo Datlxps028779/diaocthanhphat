@@ -490,7 +490,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               <a key={b.id} href={b.cta_link ?? '#'} target="_blank" rel="noopener noreferrer"
                 className="mt-4 block rounded-xl overflow-hidden shadow-sm border border-gray-100 group">
                 {b.image_url
-                  ? <img src={b.image_url} alt={b.title} className="w-full object-cover group-hover:opacity-95 transition-opacity" />
+                  ? <img src={b.image_url} alt={b.title} loading="lazy" className="w-full object-cover group-hover:opacity-95 transition-opacity" />
                   : (
                     <div className="p-4 text-center" style={{ backgroundColor: b.bg_color ?? '#dc2626' }}>
                       <p className="text-white font-bold text-sm">{b.title}</p>
