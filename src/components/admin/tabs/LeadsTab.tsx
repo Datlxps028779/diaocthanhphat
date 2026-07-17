@@ -26,6 +26,7 @@ function isoToLocalInput(iso: string | null): string {
 export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'property_callback'>('all');
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -55,8 +56,15 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     getTeamMembers().then(setRoster).catch(() => setRoster([]));
   }, []);
 
+  const sortedLeads = sortLeadsByUrgency(leads, now);
+  const displayedLeads = sourceFilter === 'property_callback'
+    ? sortedLeads.filter(l => l.source === 'property_callback')
+    : sortedLeads;
+  const callbackCount = leads.filter(l => l.source === 'property_callback').length;
+  const overdueCount = leads.filter(l => leadSlaState(l, now) === 'overdue').length;
+
   // Tự chia đều lead CHƯA gán (đang hiển thị) cho các NV theo round-robin (user_id).
-  const unassignedVisible = leads.filter(l => (l.lead_assignments?.length ?? 0) === 0);
+  const unassignedVisible = displayedLeads.filter(l => (l.lead_assignments?.length ?? 0) === 0);
   const handleDistribute = async () => {
     setConfirmDistribute(false);
     const plan = assignmentPlan(unassignedVisible.map(l => l.id), roster.map(m => m.id));
@@ -140,7 +148,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
 
   // Xuất CSV danh sách lead đang hiển thị (theo filter hiện tại).
   const handleExportCsv = () => {
-    const csv = leadsToCsv(leads, roster);
+    const csv = leadsToCsv(displayedLeads, roster);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -156,11 +164,12 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
-  const allIds = leads.map(l => l.id);
+  const allIds = displayedLeads.map(l => l.id);
+  const visibleSelectedIds = allIds.filter(id => selected.has(id));
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
   const clearSelection = () => setSelected(new Set());
-  const selectedIds = () => Array.from(selected);
+  const selectedIds = () => visibleSelectedIds;
   const runBulk = async (fn: () => Promise<number>, label: string) => {
     setBulkBusy(true);
     try {
@@ -174,9 +183,6 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
     } finally { setBulkBusy(false); }
   };
 
-  // Sắp xếp theo độ khẩn (quá hạn → cần gọi hôm nay → mới nhất) + đếm quá hạn.
-  const sortedLeads = sortLeadsByUrgency(leads, now);
-  const overdueCount = leads.filter(l => leadSlaState(l, now) === 'overdue').length;
 
   return (
     <div className="space-y-4">
@@ -195,19 +201,23 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
             {s.label}
           </button>
         ))}
+        <button onClick={() => setSourceFilter(sourceFilter === 'property_callback' ? 'all' : 'property_callback')}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${sourceFilter === 'property_callback' ? 'bg-amber-500 text-white' : 'bg-white border border-amber-200 text-amber-700 hover:border-amber-400'}`}>
+          Yêu cầu gọi lại{callbackCount > 0 ? ` (${callbackCount})` : ''}
+        </button>
         {overdueCount > 0 && (
           <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
             <AlertTriangle className="w-3.5 h-3.5" />{overdueCount} quá hạn
           </span>
         )}
-        {leads.length > 0 && (
+        {displayedLeads.length > 0 && (
           <label className="ml-auto flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
             <input type="checkbox" checked={allSelected} onChange={toggleAll}
               aria-label="Chọn tất cả" className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
             Chọn tất cả
           </label>
         )}
-        <button onClick={load} className={`${leads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
+        <button onClick={load} className={`${displayedLeads.length > 0 ? '' : 'ml-auto'} text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1`}>
           <RefreshCw className="w-3.5 h-3.5" />Làm mới
         </button>
         {roster.length > 0 && unassignedVisible.length > 0 && (
@@ -216,7 +226,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
             <Split className="w-3.5 h-3.5" />Tự chia đều ({unassignedVisible.length})
           </button>
         )}
-        {leads.length > 0 && (
+        {displayedLeads.length > 0 && (
           <button onClick={handleExportCsv} className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
             <Download className="w-3.5 h-3.5" />Xuất CSV
           </button>
@@ -230,9 +240,9 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         </>
       )}
 
-      {selected.size > 0 && (
+      {visibleSelectedIds.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
-          <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
+          <span className="text-sm font-semibold mr-1">Đã chọn {visibleSelectedIds.length}</span>
           <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'contacted'), 'đã liên hệ')}
             className="text-xs font-medium bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">Đã liên hệ</button>
           <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateLeadStatus(selectedIds(), 'won'), 'chốt')}
@@ -248,14 +258,14 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
       )}
 
       {loading ? <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-        : leads.length === 0 ? (
+        : displayedLeads.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-gray-200 text-gray-400">
             <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
             <p className="text-sm">Chưa có khách hàng tiềm năng nào</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {sortedLeads.map(lead => {
+            {displayedLeads.map(lead => {
               const sla = leadSlaState(lead, now);
               const slaBorder = sla === 'overdue' ? 'border-red-400 bg-red-50/40'
                 : sla === 'due_soon' ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200';
@@ -272,6 +282,11 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
                         <span className={`w-1.5 h-1.5 rounded-full ${stageMeta(lead.status).dot}`} />
                         {stageMeta(lead.status).label}
                       </span>
+                      {lead.source === 'property_callback' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                          <CalendarClock className="w-3 h-3" />Yêu cầu gọi lại
+                        </span>
+                      )}
                       {(sla === 'overdue' || sla === 'due_soon') && (
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${sla === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                           <AlertTriangle className="w-3 h-3" />{slaLabel(sla)}
@@ -342,7 +357,7 @@ export function LeadsTab({ onRefreshStats }: { onRefreshStats: () => void }) {
         <ConfirmDialog message="Xóa khách hàng này khỏi danh sách?" onConfirm={() => handleDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
       )}
       {confirmBulkDelete && (
-        <ConfirmDialog message={`Xóa ${selected.size} khách hàng đã chọn? Thao tác không thể hoàn tác.`}
+        <ConfirmDialog message={`Xóa ${visibleSelectedIds.length} khách hàng đã chọn? Thao tác không thể hoàn tác.`}
           onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteLeads(selectedIds()), 'xóa'); }}
           onCancel={() => setConfirmBulkDelete(false)} />
       )}

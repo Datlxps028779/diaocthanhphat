@@ -281,7 +281,7 @@ function SavedSearchesTab({ onNavigate }: { onNavigate: (p: Page) => void }) {
       <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
         <SearchIcon className="w-14 h-14 text-gray-200 mx-auto mb-3" />
         <p className="text-gray-600 font-semibold">Chưa có tìm kiếm nào được lưu</p>
-        <p className="text-gray-400 text-sm mt-1">Lưu bộ lọc từ trang danh sách để nhận cảnh báo khi có tin mới phù hợp</p>
+        <p className="text-gray-400 text-sm mt-1">Khi bạn lọc/tìm trên trang danh sách, hệ thống tự lưu nhu cầu để cảnh báo tin mới phù hợp</p>
       </div>
     );
   }

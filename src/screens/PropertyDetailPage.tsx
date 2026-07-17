@@ -29,6 +29,7 @@ import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery } from '../lib/propertyImages';
+import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 
 interface PropertyDetailPageProps {
   propertyId: string;
@@ -44,7 +45,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
   const [callbackOpen, setCallbackOpen] = useState(false);
-  const [callbackForm, setCallbackForm] = useState({ name: '', phone: '', time: '', note: '' });
+  const [callbackForm, setCallbackForm] = useState<{ name: string; phone: string; timePreset: CallbackTimePreset; customTime: string; note: string }>({ name: '', phone: '', timePreset: 'asap', customTime: '', note: '' });
   const [callbackSent, setCallbackSent] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
@@ -134,19 +135,23 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   };
 
   const callbackMutation = useMutation({
-    mutationFn: () => submitLead({
-      full_name: callbackForm.name,
-      phone: callbackForm.phone,
-      property_id: property?.id,
-      property_title: property?.title,
-      message: [
-        callbackForm.time ? `Khung giờ muốn gọi lại: ${callbackForm.time}` : '',
-        callbackForm.note,
-      ].filter(Boolean).join('\n') || 'Khách yêu cầu gọi lại.',
-      source: 'property_callback',
-    }),
+    mutationFn: () => {
+      const followUpAt = callbackFollowUpAt(callbackForm.timePreset, callbackForm.customTime);
+      return submitLead({
+        full_name: callbackForm.name,
+        phone: callbackForm.phone,
+        property_id: property?.id,
+        property_title: property?.title,
+        message: [
+          `Khung giờ muốn gọi lại: ${callbackTimeLabel(callbackForm.timePreset, callbackForm.customTime)}`,
+          callbackForm.note,
+        ].filter(Boolean).join('\n'),
+        source: 'property_callback',
+        follow_up_at: followUpAt,
+      });
+    },
     onSuccess: () => {
-      track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_callback', hasMessage: !!callbackForm.note.trim() });
+      track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_callback', hasMessage: !!callbackForm.note.trim(), callbackTime: callbackForm.timePreset });
       setCallbackSent(true);
     },
   });
@@ -702,9 +707,19 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                 <input value={callbackForm.phone} onChange={e => setCallbackForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="Số điện thoại *" required type="tel"
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <input value={callbackForm.time} onChange={e => setCallbackForm(f => ({ ...f, time: e.target.value }))}
-                  placeholder="Khung giờ tiện nghe máy (VD: 19:00 hôm nay)"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                <select value={callbackForm.timePreset} onChange={e => setCallbackForm(f => ({ ...f, timePreset: e.target.value as CallbackTimePreset }))}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+                  <option value="asap">Gọi ngay</option>
+                  <option value="30m">Trong 30 phút</option>
+                  <option value="tonight">Tối nay</option>
+                  <option value="tomorrow_morning">Sáng mai</option>
+                  <option value="custom">Chọn giờ khác</option>
+                </select>
+                {callbackForm.timePreset === 'custom' && (
+                  <input value={callbackForm.customTime} onChange={e => setCallbackForm(f => ({ ...f, customTime: e.target.value }))}
+                    required type="datetime-local"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                )}
                 <textarea value={callbackForm.note} onChange={e => setCallbackForm(f => ({ ...f, note: e.target.value }))}
                   placeholder="Ghi chú thêm (ngân sách, nhu cầu, câu hỏi...)" rows={3}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />

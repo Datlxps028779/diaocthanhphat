@@ -58,6 +58,15 @@ export function filtersToPage(f: SavedFilters): Page {
   return { name: 'listings', ...n };
 }
 
+export function hasSavedSearchCriteria(f: SavedFilters): boolean {
+  const n = normalizeFilters(f);
+  return !!(
+    n.listingType || n.areaId || n.typeId || n.district || n.ward || n.keyword ||
+    n.minPrice != null || n.maxPrice != null || n.minArea != null || n.maxArea != null ||
+    n.bedrooms || n.direction || n.legal
+  );
+}
+
 export interface SavedSearchLabels {
   areas?: Record<string, string>;
   types?: Record<string, string>;

@@ -1,5 +1,5 @@
 import { supabase, type UserSavedSearch } from '../supabase';
-import { normalizeFilters, isAlertCadence, type SavedFilters, type AlertCadence } from '../savedSearch';
+import { normalizeFilters, hasSavedSearchCriteria, isAlertCadence, type SavedFilters, type AlertCadence } from '../savedSearch';
 
 // Bộ lọc tìm kiếm đã lưu của người dùng đăng nhập. RLS owner-scoped
 // (auth.uid() = user_id) — guest luôn nhận [] / bị chặn ghi. Slice này chỉ
@@ -32,6 +32,49 @@ export async function createSavedSearch(input: {
       filters: normalizeFilters(input.filters),
       cadence,
     })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as UserSavedSearch;
+}
+
+export async function autoSaveSearch(input: {
+  name: string; filters: SavedFilters; cadence?: AlertCadence;
+}): Promise<UserSavedSearch | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  if (!hasSavedSearchCriteria(input.filters)) return null;
+  const filters = normalizeFilters(input.filters);
+
+  const name = input.name.trim().slice(0, 120);
+  if (!name) return null;
+
+  const cadence = input.cadence && isAlertCadence(input.cadence) ? input.cadence : 'daily';
+  const { data: existing } = await supabase
+    .from('user_saved_searches')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false });
+
+  const same = (existing ?? []).find(s => JSON.stringify(normalizeFilters(s.filters as SavedFilters)) === JSON.stringify(filters));
+  if (same) {
+    const patch: Record<string, unknown> = { name, updated_at: new Date().toISOString() };
+    if (input.cadence && isAlertCadence(input.cadence)) patch.cadence = input.cadence;
+    const { data, error } = await supabase
+      .from('user_saved_searches')
+      .update(patch)
+      .eq('id', same.id)
+      .eq('user_id', user.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as UserSavedSearch;
+  }
+
+  const { data, error } = await supabase
+    .from('user_saved_searches')
+    .insert({ user_id: user.id, name, filters, cadence })
     .select('*')
     .single();
   if (error) throw error;

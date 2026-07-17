@@ -3,12 +3,12 @@ import { stageMeta } from '../leadPipeline';
 import { assigneesOf, type TeamMember } from '../leadAssignment';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
-export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string }): Promise<string | undefined> {
+export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string; follow_up_at?: string }): Promise<string | undefined> {
   const { error } = await supabase.from('leads').insert({
     ...(lead.id ? { id: lead.id } : {}),
     full_name: lead.full_name, phone: lead.phone,
     area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
-    source: lead.source ?? null, budget: lead.budget ?? null,
+    source: lead.source ?? null, budget: lead.budget ?? null, follow_up_at: lead.follow_up_at ?? null,
   });
   if (error) throw error;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

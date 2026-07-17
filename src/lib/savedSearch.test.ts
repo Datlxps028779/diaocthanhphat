@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeFilters, filtersToPage, buildSearchName, isAlertCadence, type SavedFilters,
+  normalizeFilters, filtersToPage, hasSavedSearchCriteria, buildSearchName, isAlertCadence, type SavedFilters,
 } from './savedSearch';
 
 describe('normalizeFilters', () => {
@@ -23,6 +23,19 @@ describe('filtersToPage', () => {
   it('tạo Page listings mang theo filters đã chuẩn hóa', () => {
     const page = filtersToPage({ areaId: 'bd', minPrice: 0, maxPrice: 2, keyword: '' });
     expect(page).toEqual({ name: 'listings', areaId: 'bd', minPrice: 0, maxPrice: 2 });
+  });
+});
+
+describe('hasSavedSearchCriteria', () => {
+  it('nhận filter tìm kiếm thật', () => {
+    expect(hasSavedSearchCriteria({ areaId: 'bd' })).toBe(true);
+    expect(hasSavedSearchCriteria({ keyword: 'nhà phố' })).toBe(true);
+    expect(hasSavedSearchCriteria({ minPrice: 0, maxPrice: 1 })).toBe(true);
+  });
+
+  it('bỏ qua rỗng và sort-only để tránh auto-save rác', () => {
+    expect(hasSavedSearchCriteria({})).toBe(false);
+    expect(hasSavedSearchCriteria({ keyword: '', sort: 'price_asc' })).toBe(false);
   });
 });
 
