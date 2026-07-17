@@ -15,6 +15,7 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { useAuth } from '../lib/auth';
 import { requestAuth } from '../lib/authModal';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
+import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
@@ -37,6 +38,24 @@ const LISTING_TYPE_OPTIONS: { value: ListingType; label: string; desc: string; c
 ];
 
 const isRental = (t: ListingType) => t === 'cho_thue';
+
+const SPEC_LABELS: Record<SpecFieldKey, string> = {
+  area_sqm: 'Diện tích (m²)',
+  bedrooms: 'Số phòng ngủ',
+  bathrooms: 'Số phòng tắm',
+  legal_status: 'Pháp lý',
+  direction: 'Hướng nhà',
+  frontage: 'Mặt tiền (m)',
+  road_width: 'Đường rộng (m)',
+  floor_count: 'Số tầng',
+  floor_number: 'Tầng căn hộ',
+};
+
+const SPEC_PLACEHOLDERS: Partial<Record<SpecFieldKey, string>> = {
+  area_sqm: 'VD: 120',
+  bedrooms: 'VD: 3',
+  bathrooms: 'VD: 2',
+};
 
 export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   const { user, loading: authLoading } = useAuth();
@@ -64,7 +83,15 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '',
   });
 
+  const selectedPropertyType = types.find(t => t.id === form.property_type_id);
+  const visibleSpecFields = getCompatibleSpecFields(selectedPropertyType, 'user_listing');
+  const showSpec = (field: SpecFieldKey) => visibleSpecFields.includes(field);
+
   const set = (k: string, v: string | string[] | ListingType) => setForm(f => ({ ...f, [k]: v }));
+  const setPropertyType = (id: string) => {
+    const nextType = types.find(t => t.id === id);
+    setForm(f => clearIncompatibleSpecValues({ ...f, property_type_id: id }, nextType, 'user_listing'));
+  };
 
   // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query
   const { data: districts = [] } = useDistricts(form.area_id || undefined);
@@ -181,42 +208,43 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   const submitMutation = useMutation({
     mutationFn: async () => {
       // Lọc bỏ các phần tử rỗng/falsy để đảm bảo mảng ảnh chỉ chứa URL hợp lệ
-      const cleanImages = form.images.filter((url): url is string => !!url);
-      const coverId = cleanImages[0] ?? (form.image_url || null);
+      const specForm = selectedPropertyType ? clearIncompatibleSpecValues(form, selectedPropertyType, 'user_listing') : form;
+      const cleanImages = specForm.images.filter((url): url is string => !!url);
+      const coverId = cleanImages[0] ?? (specForm.image_url || null);
       const payload = {
-        listing_type: form.listing_type,
-        title: form.title,
-        description: form.description || null,
-        price: form.price ? parseFloat(form.price) : 0,
-        price_unit: form.price_unit,
-        price_label: form.price_label || null,
-        price_per_month: form.price_per_month ? parseFloat(form.price_per_month) : null,
-        area_sqm: form.area_sqm ? parseFloat(form.area_sqm) : null,
-        address: form.address || null,
-        city: form.city,
-        district: form.district || null,
-        ward: form.ward || null,
-        area_id: form.area_id || null,
-        property_type_id: form.property_type_id || null,
+        listing_type: specForm.listing_type,
+        title: specForm.title,
+        description: specForm.description || null,
+        price: specForm.price ? parseFloat(specForm.price) : 0,
+        price_unit: specForm.price_unit,
+        price_label: specForm.price_label || null,
+        price_per_month: specForm.price_per_month ? parseFloat(specForm.price_per_month) : null,
+        area_sqm: specForm.area_sqm ? parseFloat(specForm.area_sqm) : null,
+        address: specForm.address || null,
+        city: specForm.city,
+        district: specForm.district || null,
+        ward: specForm.ward || null,
+        area_id: specForm.area_id || null,
+        property_type_id: specForm.property_type_id || null,
         image_url: coverId,
         images: cleanImages.length > 0 ? cleanImages : null,
         slug: null,
-        meta_title: form.meta_title || null,
-        meta_description: form.meta_description || null,
-        focus_keywords: form.focus_keywords || null,
-        schema_markup: parseSchema(form.schema_markup),
-        legal_status: form.legal_status || null,
-        bedrooms: form.bedrooms ? parseInt(form.bedrooms) : null,
-        bathrooms: form.bathrooms ? parseInt(form.bathrooms) : null,
-        direction: form.direction || null,
-        contact_name: form.contact_name,
-        contact_phone: form.contact_phone,
-        amenities: form.amenities.length ? form.amenities : null,
-        latitude: form.latitude ? parseFloat(form.latitude) : null,
-        longitude: form.longitude ? parseFloat(form.longitude) : null,
+        meta_title: specForm.meta_title || null,
+        meta_description: specForm.meta_description || null,
+        focus_keywords: specForm.focus_keywords || null,
+        schema_markup: parseSchema(specForm.schema_markup),
+        legal_status: specForm.legal_status || null,
+        bedrooms: specForm.bedrooms ? parseInt(specForm.bedrooms) : null,
+        bathrooms: specForm.bathrooms ? parseInt(specForm.bathrooms) : null,
+        direction: specForm.direction || null,
+        contact_name: specForm.contact_name,
+        contact_phone: specForm.contact_phone,
+        amenities: specForm.amenities.length ? specForm.amenities : null,
+        latitude: specForm.latitude ? parseFloat(specForm.latitude) : null,
+        longitude: specForm.longitude ? parseFloat(specForm.longitude) : null,
         formatted_address: null,
         vr_tour_url: null,
-        video_url: form.video_url || null,
+        video_url: specForm.video_url || null,
         contact_zalo: null,
       };
       if (editId) await updateMyListing(editId, payload);
@@ -381,7 +409,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField label="Loại bất động sản *" error={errors.property_type_id}>
-                  <select value={form.property_type_id} onChange={e => set('property_type_id', e.target.value)} className={selectCls(errors.property_type_id)}>
+                  <select value={form.property_type_id} onChange={e => setPropertyType(e.target.value)} className={selectCls(errors.property_type_id)}>
                     <option value="">-- Chọn loại --</option>
                     {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
@@ -505,29 +533,25 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 </FormField>
               </div>
               <div className="grid sm:grid-cols-3 gap-4">
-                <FormField label="Diện tích (m²)">
-                  <input type="number" value={form.area_sqm} onChange={e => set('area_sqm', e.target.value)}
-                    placeholder="VD: 120" className={inputCls()} />
-                </FormField>
-                <FormField label="Số phòng ngủ">
-                  <input type="number" value={form.bedrooms} onChange={e => set('bedrooms', e.target.value)}
-                    placeholder="VD: 3" className={inputCls()} />
-                </FormField>
-                <FormField label="Số phòng tắm">
-                  <input type="number" value={form.bathrooms} onChange={e => set('bathrooms', e.target.value)}
-                    placeholder="VD: 2" className={inputCls()} />
-                </FormField>
+                {(['area_sqm', 'bedrooms', 'bathrooms'] as const).filter(field => showSpec(field)).map(field => (
+                  <FormField key={field} label={SPEC_LABELS[field]}>
+                    <input type="number" value={String(form[field] ?? '')} onChange={e => set(field, e.target.value)}
+                      placeholder={SPEC_PLACEHOLDERS[field]} className={inputCls()} />
+                  </FormField>
+                ))}
               </div>
-              <FormField label="Hướng nhà">
-                <div className="grid grid-cols-4 gap-2">
-                  {DIRECTIONS.map(d => (
-                    <button key={d} type="button" onClick={() => set('direction', form.direction === d ? '' : d)}
-                      className={`py-2 text-xs rounded-lg border transition-colors ${form.direction === d ? 'bg-red-500 text-white border-red-500' : 'border-gray-200 text-gray-600 hover:border-red-300'}`}>
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </FormField>
+              {showSpec('direction') && (
+                <FormField label="Hướng nhà">
+                  <div className="grid grid-cols-4 gap-2">
+                    {DIRECTIONS.map(d => (
+                      <button key={d} type="button" onClick={() => set('direction', form.direction === d ? '' : d)}
+                        className={`py-2 text-xs rounded-lg border transition-colors ${form.direction === d ? 'bg-red-500 text-white border-red-500' : 'border-gray-200 text-gray-600 hover:border-red-300'}`}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </FormField>
+              )}
             </div>
           )}
 

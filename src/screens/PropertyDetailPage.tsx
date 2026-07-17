@@ -6,14 +6,13 @@ import {
   MapPin, Phone, CheckCircle, Heart, Share2, Shield,
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
-  ChevronLeft, ChevronRight as ChevRight, MessageCircle,
+  ChevronLeft, ChevronRight as ChevRight,
   Navigation, ExternalLink, Play, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
-import { buildZaloHref } from '../lib/zalo';
 import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
@@ -51,7 +50,6 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [shareCopied, setShareCopied] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
-  const siteZalo = useSetting('zalo_link', '');
   const responseTime = useSetting('lead_response_time', '30 phút');
   const agentExperience = useSetting('stat3_number', '7 năm');
 
@@ -220,7 +218,6 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     : null;
 
   const contactPhone = property.contact_phone ?? sitePhone;
-  const zaloHref = buildZaloHref(property.contact_zalo, siteZalo);
   const hasCoords = property.latitude && property.longitude;
   const gmapsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${property.latitude},${property.longitude}`
@@ -383,13 +380,6 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     className="flex items-center gap-2 border border-amber-400 text-amber-700 font-bold px-5 py-2.5 rounded-xl hover:bg-amber-50 transition-colors text-sm">
                     <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
                   </button>
-                  {zaloHref && (
-                    <a href={zaloHref} target="_blank" rel="noreferrer"
-                      onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_price' })}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
-                      <MessageCircle className="w-4 h-4" />Chat Zalo
-                    </a>
-                  )}
                   {phoneRevealed ? (
                     <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
@@ -507,7 +497,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
             {/* Inline contact form */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-red-500" />Đặt lịch xem nhà
+                <CalendarClock className="w-4 h-4 text-red-500" />Đặt lịch xem nhà
               </h2>
               {formSent ? (
                 <div className="text-center py-6">
@@ -592,13 +582,6 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     <Phone className="w-4 h-4" />Bấm để hiện số
                   </button>
                 )}
-                {zaloHref && (
-                  <a href={zaloHref} target="_blank" rel="noreferrer"
-                    onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_sidebar' })}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                    <MessageCircle className="w-4 h-4" />Chat Zalo ngay
-                  </a>
-                )}
                 <p className="text-gray-400 text-xs text-center mt-3 flex items-center justify-center gap-1">
                   <Shield className="w-3 h-3" />Phản hồi trong {responseTime} · Bảo mật thông tin
                 </p>
@@ -635,13 +618,6 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
                     <Phone className="w-3.5 h-3.5" />Bấm để hiện số
                   </button>
-                )}
-                {zaloHref && (
-                  <a href={zaloHref} target="_blank" rel="noreferrer"
-                    onClick={() => track(EVENTS.ZALO_CLICK, { listingId: property?.id ?? '', source: 'property_detail_agent' })}
-                    className="mt-2 w-full border border-blue-300 text-blue-600 font-semibold py-2 rounded-xl text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
-                    <MessageCircle className="w-3.5 h-3.5" />Nhắn Zalo
-                  </a>
                 )}
               </div>
 

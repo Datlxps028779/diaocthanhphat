@@ -38,6 +38,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
         currentPage={currentPage}
         onNavigate={navigate}
         user={user}
+        areas={areas}
         onShowAuth={(mode) => setAuthModal({ mode })}
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />

@@ -6,6 +6,7 @@ import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
+import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
@@ -341,6 +342,30 @@ function AdminPinMap({ lat, lng, searchQuery, onChange }: {
   return <div ref={containerRef} style={{ width: '100%', height: '220px' }} className="rounded-lg overflow-hidden border border-gray-200" />;
 }
 
+const SPEC_LABELS: Record<SpecFieldKey, string> = {
+  area_sqm: 'Diện tích (m²)',
+  bedrooms: 'Phòng ngủ',
+  bathrooms: 'Phòng tắm',
+  frontage: 'Mặt tiền (m)',
+  road_width: 'Đường rộng (m)',
+  floor_count: 'Số tầng',
+  floor_number: 'Tầng căn hộ',
+  legal_status: 'Pháp lý',
+  direction: 'Hướng nhà',
+};
+
+const SPEC_PLACEHOLDERS: Partial<Record<SpecFieldKey, string>> = {
+  area_sqm: '120',
+  bedrooms: '3',
+  bathrooms: '2',
+  frontage: '5',
+  road_width: '8',
+  floor_count: '3',
+  floor_number: '12',
+};
+
+const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
+
 // ─── Property Form ────────────────────────────────────────────────────────────
 function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   property: Property | null; areas: Area[]; types: PropertyType[];
@@ -380,6 +405,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     road_width: property?.road_width ?? '',
     frontage: property?.frontage ?? '',
     floor_count: property?.floor_count ?? '',
+    floor_number: property?.floor_number ?? '',
     latitude: property?.latitude ? String(property.latitude) : '',
     longitude: property?.longitude ? String(property.longitude) : '',
     vr_tour_url: property?.vr_tour_url ?? '',
@@ -393,7 +419,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
   const [mapSearchQuery, setMapSearchQuery] = useState(property?.city ?? '');
+  const [typeError, setTypeError] = useState('');
   const isRent = form.listing_type === 'cho_thue';
+  const selectedPropertyType = types.find(t => t.id === form.property_type_id);
+  const visibleSpecFields = getCompatibleSpecFields(selectedPropertyType, 'admin_property');
+  const showSpec = (field: SpecFieldKey) => visibleSpecFields.includes(field);
   const seoScore = calcSeoScore(form.title, form.description, form.image_url, form.area_sqm, form.price);
 
   // ─── SEO Autofill ───────────────────────────────────────────────────────────
@@ -424,6 +454,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   useEffect(() => { setForm(f => ({ ...f, schema_markup: seo.schemaMarkup })); }, [seo.schemaMarkup]);
 
   const setField = (name: string, value: unknown) => setForm(f => ({ ...f, [name]: value }));
+  const setPropertyType = (id: string) => {
+    const nextType = types.find(t => t.id === id);
+    setTypeError('');
+    setForm(f => clearIncompatibleSpecValues({ ...f, property_type_id: id }, nextType, 'admin_property'));
+  };
 
   const handleAreaChange = useCallback((areaId: string) => {
     const area = areas.find(a => a.id === areaId);
@@ -466,55 +501,61 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   // ─── Handle Save Click an toàn ──────────────────────────────────────────────
   const handleSaveClick = () => {
+    if (!form.property_type_id) {
+      setTypeError('Vui lòng chọn loại BĐS');
+      return;
+    }
+    const specForm = clearIncompatibleSpecValues(form, selectedPropertyType, 'admin_property');
     let parsedSchema: Record<string, unknown> | null = null;
-    if (form.schema_markup && form.schema_markup.trim()) {
-      try { parsedSchema = JSON.parse(form.schema_markup); }
+    if (specForm.schema_markup && specForm.schema_markup.trim()) {
+      try { parsedSchema = JSON.parse(specForm.schema_markup); }
       catch { parsedSchema = null; console.error('[PropertyForm] schema_markup JSON không hợp lệ'); }
     }
     const cs = (v: string) => v?.trim() || null;
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
     onSave({
       // Để trống → createProperty tự sinh slug duy nhất; có nhập → dùng nguyên
-      slug: cs(form.slug),
-      title: form.title,
-      description: cs(form.description),
-      listing_type: form.listing_type,
-      price: Number(form.price) || 0,
-      price_unit: form.price_unit,
-      price_label: cs(form.price_label),
-      price_per_month: cn(form.price_per_month),
-      area_sqm: cn(form.area_sqm),
-      address: cs(form.address),
-      city: form.city,
-      district: cs(form.district),
-      ward: cs(form.ward),
-      area_id: cs(form.area_id),
-      property_type_id: cs(form.property_type_id),
-      image_url: cs(form.image_url),
-      images: form.images.length > 0 ? form.images : null,
-      badge: cs(form.badge),
-      badge_color: form.badge_color || null,
-      legal_status: cs(form.legal_status),
-      is_featured: form.is_featured,
-      is_hot: form.is_hot,
-      is_active: form.is_active,
-      is_verified: form.is_verified,
-      contact_name: cs(form.contact_name),
-      contact_phone: cs(form.contact_phone),
-      contact_zalo: cs(form.contact_zalo),
-      bedrooms: cn(form.bedrooms),
-      bathrooms: cn(form.bathrooms),
-      direction: cs(form.direction),
-      road_width: cn(form.road_width),
-      frontage: cn(form.frontage),
-      floor_count: cn(form.floor_count),
-      latitude: cn(form.latitude),
-      longitude: cn(form.longitude),
-      vr_tour_url: cs(form.vr_tour_url),
-      video_url: cs(form.video_url),
-      meta_title: cs(form.meta_title),
-      meta_description: cs(form.meta_description),
-      focus_keywords: cs(form.focus_keywords),
+      slug: cs(specForm.slug),
+      title: specForm.title,
+      description: cs(specForm.description),
+      listing_type: specForm.listing_type,
+      price: Number(specForm.price) || 0,
+      price_unit: specForm.price_unit,
+      price_label: cs(specForm.price_label),
+      price_per_month: cn(specForm.price_per_month),
+      area_sqm: cn(specForm.area_sqm),
+      address: cs(specForm.address),
+      city: specForm.city,
+      district: cs(specForm.district),
+      ward: cs(specForm.ward),
+      area_id: cs(specForm.area_id),
+      property_type_id: cs(specForm.property_type_id),
+      image_url: cs(specForm.image_url),
+      images: specForm.images.length > 0 ? specForm.images : null,
+      badge: cs(specForm.badge),
+      badge_color: specForm.badge_color || null,
+      legal_status: cs(specForm.legal_status),
+      is_featured: specForm.is_featured,
+      is_hot: specForm.is_hot,
+      is_active: specForm.is_active,
+      is_verified: specForm.is_verified,
+      contact_name: cs(specForm.contact_name),
+      contact_phone: cs(specForm.contact_phone),
+      contact_zalo: cs(specForm.contact_zalo),
+      bedrooms: cn(specForm.bedrooms),
+      bathrooms: cn(specForm.bathrooms),
+      direction: cs(specForm.direction),
+      road_width: cn(specForm.road_width),
+      frontage: cn(specForm.frontage),
+      floor_count: cn(specForm.floor_count),
+      floor_number: cn(specForm.floor_number),
+      latitude: cn(specForm.latitude),
+      longitude: cn(specForm.longitude),
+      vr_tour_url: cs(specForm.vr_tour_url),
+      video_url: cs(specForm.video_url),
+      meta_title: cs(specForm.meta_title),
+      meta_description: cs(specForm.meta_description),
+      focus_keywords: cs(specForm.focus_keywords),
       schema_markup: parsedSchema,
     } as Partial<Property>);
   };
@@ -667,28 +708,28 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           {/* Area + type — fix: dùng id thay vì name */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Loại BĐS</label>
-              <select value={form.property_type_id} onChange={e => setField('property_type_id', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Loại BĐS *</label>
+              <select value={form.property_type_id} onChange={e => setPropertyType(e.target.value)}
+                className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 ${typeError ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
                 <option value="">-- Chọn loại --</option>
                 {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
+              {typeError && <p className="text-xs text-red-500 mt-1">{typeError}</p>}
             </div>
-            {fld('Diện tích (m²)', 'area_sqm', { type: 'number', placeholder: '120' })}
+            {showSpec('area_sqm') && fld('Diện tích (m²)', 'area_sqm', { type: 'number', placeholder: '120' })}
           </div>
 
           {/* Specs */}
           <div className="grid grid-cols-4 gap-3">
-            {fld('Phòng ngủ', 'bedrooms', { type: 'number', placeholder: '3' })}
-            {fld('Phòng tắm', 'bathrooms', { type: 'number', placeholder: '2' })}
-            {fld('Mặt tiền (m)', 'frontage', { type: 'number', placeholder: '5' })}
-            {fld('Đường rộng (m)', 'road_width', { type: 'number', placeholder: '8' })}
+            {(['bedrooms', 'bathrooms', 'floor_count', 'floor_number', 'frontage', 'road_width'] as SpecFieldKey[])
+              .filter(showSpec)
+              .map(field => fld(SPEC_LABELS[field], field, { type: 'number', placeholder: SPEC_PLACEHOLDERS[field] }))}
           </div>
 
           {/* Legal + direction */}
           <div className="grid grid-cols-2 gap-3">
-            {fld('Pháp lý', 'legal_status', { options: LEGAL_OPTIONS })}
-            {fld('Hướng nhà', 'direction', { options: ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'] })}
+            {showSpec('legal_status') && fld('Pháp lý', 'legal_status', { options: LEGAL_OPTIONS })}
+            {showSpec('direction') && fld('Hướng nhà', 'direction', { options: DIRECTIONS })}
           </div>
 
           {/* Contact */}

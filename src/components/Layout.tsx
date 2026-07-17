@@ -3,8 +3,8 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
-import { type Page, scrollTop } from '../lib/router';
-import { SocialProofToast } from './SocialProofToast';
+import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { buildNavigationItems, type NavigationItem } from '../lib/navigation';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -17,12 +17,15 @@ interface HeaderProps {
   user?: SupabaseUser | null;
   onShowAuth?: (mode: 'login' | 'register') => void;
   onLogout?: () => void;
+  areas?: Area[];
 }
 
-export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout }: HeaderProps) {
+export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, areas = [] }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
+  const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState<string | null>(null);
   const nav = useContent('navbar');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
@@ -33,26 +36,20 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout }: 
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
-  const navItems: { label: string; page: Page }[] = [
-    { label: nav.menu_home || 'Trang chủ', page: { name: 'home' } },
-    { label: nav.menu_buy || 'Mua bán', page: { name: 'listings', listingType: 'mua_ban' } },
-    { label: nav.menu_rent || 'Cho thuê', page: { name: 'listings', listingType: 'cho_thue' } },
-    { label: nav.menu_projects || 'Dự án', page: { name: 'projects' } },
-    { label: nav.menu_invest || 'Đầu tư', page: { name: 'invest' } },
-    { label: nav.menu_valuation || 'Định giá', page: { name: 'valuation' } },
-    { label: nav.menu_news || 'Tin tức', page: { name: 'news' } },
-    { label: nav.menu_about || 'Về chúng tôi', page: { name: 'about' } },
-  ];
+  const navItems = buildNavigationItems(nav, areas);
 
-  const isActive = (item: { page: Page }) => {
-    if (item.page.name !== currentPage.name) return false;
-    if (item.page.name === 'listings' && currentPage.name === 'listings') {
+  const isActive = (item: NavigationItem) => {
+    const pageName = item.page?.name ?? item.activePage;
+    if (pageName !== currentPage.name) return false;
+    if (item.page?.name === 'listings' && currentPage.name === 'listings') {
       return item.page.listingType === currentPage.listingType;
     }
     return true;
   };
 
-  const go = (page: Page) => { onNavigate(page); setMobileOpen(false); setUserMenuOpen(false); };
+  const closeMenus = () => { setMobileOpen(false); setUserMenuOpen(false); setDesktopMenuOpen(null); };
+  const go = (page: Page) => { onNavigate(page); closeMenus(); };
+  const hrefFor = (item: NavigationItem) => item.href ?? (item.page ? pageToHref(item.page) : '#');
 
   return (
     <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
@@ -80,11 +77,35 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout }: 
         </button>
 
         <nav className="hidden xl:flex items-center gap-0.5 flex-1 justify-center">
-          {navItems.map(({ label, page }) => (
-            <button key={label} onClick={() => go(page)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive({ page }) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
-              {label}
+          {navItems.map(item => item.children ? (
+            <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
+              <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
+                className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+                {item.label}<ChevronDown className="w-3 h-3" />
+              </button>
+              {desktopMenuOpen === item.key && (
+                <div className="absolute left-0 top-full pt-2 z-50">
+                  <div className="w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
+                    {item.children.map(child => (
+                      <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
+                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : item.page ? (
+            <button key={item.key} onClick={() => go(item.page!)}
+              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+              {item.label}
             </button>
+          ) : (
+            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
+              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+              {item.label}
+            </Link>
           ))}
         </nav>
 
@@ -145,11 +166,33 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout }: 
 
       {mobileOpen && (
         <div className="xl:hidden bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
-          {navItems.map(({ label, page }) => (
-            <button key={label} onClick={() => go(page)}
-              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive({ page }) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
-              {label}
+          {navItems.map(item => item.children ? (
+            <div key={item.key}>
+              <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
+                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+                <span>{item.label}</span><ChevronDown className={`w-4 h-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
+              </button>
+              {mobileSubmenuOpen === item.key && (
+                <div className="ml-3 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
+                  {item.children.map(child => (
+                    <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
+                      className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
+                      {child.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : item.page ? (
+            <button key={item.key} onClick={() => go(item.page!)}
+              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+              {item.label}
             </button>
+          ) : (
+            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
+              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+              {item.label}
+            </Link>
           ))}
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             {user ? (
@@ -271,7 +314,6 @@ export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void
   return (
     <>
       <AiSearchChat onNavigate={onNavigate} />
-      <SocialProofToast />
     </>
   );
 }

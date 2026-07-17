@@ -67,6 +67,9 @@ export function CmsContentTab() {
         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
           <h3 className="font-bold text-gray-900 text-sm">{SECTION_LABELS[activeSection] ?? activeSection}</h3>
           <p className="text-gray-400 text-xs mt-0.5">{sectionItems.length} mục có thể chỉnh sửa</p>
+          {activeSection === 'navbar' && (
+            <p className="text-blue-600 text-xs mt-1">Các mục menu_region_* là nhãn submenu trong “Tìm theo khu vực”; link lấy theo dữ liệu khu vực hiện có.</p>
+          )}
         </div>
         <div className="divide-y divide-gray-100">
           {sectionItems.map(item => (

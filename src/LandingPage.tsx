@@ -465,6 +465,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         currentPage={{ name: 'home' }}
         onNavigate={onNavigate}
         user={user}
+        areas={areas}
         onShowAuth={onShowAuth}
         onLogout={async () => { const { supabase } = await import('./lib/supabase'); await supabase.auth.signOut(); onNavigate({ name: 'home' }); }}
       />
