@@ -1,5 +1,6 @@
 const SOURCE_LABELS: Record<string, string> = {
   property_detail_form: 'Form chi tiết',
+  property_callback: 'Yêu cầu gọi lại',
   phone_reveal: 'Bấm hiện số',
   contact_modal: 'Popup liên hệ',
   invest_page: 'Trang đầu tư',
@@ -11,6 +12,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const SOURCE_ORIGIN: Record<string, string> = {
   property_detail_form: 'form trang chi tiết',
+  property_callback: 'yêu cầu gọi lại trên trang chi tiết',
   phone_reveal: 'bấm hiện số',
   contact_modal: 'popup liên hệ',
   invest_page: 'trang đầu tư',

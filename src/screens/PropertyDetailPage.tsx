@@ -7,7 +7,7 @@ import {
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight, MessageCircle,
-  Navigation, ExternalLink, Play,
+  Navigation, ExternalLink, Play, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
 import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal } from '../lib/api';
@@ -43,6 +43,9 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
+  const [callbackOpen, setCallbackOpen] = useState(false);
+  const [callbackForm, setCallbackForm] = useState({ name: '', phone: '', time: '', note: '' });
+  const [callbackSent, setCallbackSent] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
@@ -128,6 +131,30 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
     e.preventDefault();
     if (!form.name || !form.phone) return;
     submitMutation.mutate();
+  };
+
+  const callbackMutation = useMutation({
+    mutationFn: () => submitLead({
+      full_name: callbackForm.name,
+      phone: callbackForm.phone,
+      property_id: property?.id,
+      property_title: property?.title,
+      message: [
+        callbackForm.time ? `Khung giờ muốn gọi lại: ${callbackForm.time}` : '',
+        callbackForm.note,
+      ].filter(Boolean).join('\n') || 'Khách yêu cầu gọi lại.',
+      source: 'property_callback',
+    }),
+    onSuccess: () => {
+      track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_callback', hasMessage: !!callbackForm.note.trim() });
+      setCallbackSent(true);
+    },
+  });
+
+  const handleCallback = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!callbackForm.name || !callbackForm.phone) return;
+    callbackMutation.mutate();
   };
 
   // Link chia sẻ dạng /bat-dong-san/{slug} chuẩn SEO. Web Share API trên mobile,
@@ -333,6 +360,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
                     <Phone className="w-4 h-4" />Yêu cầu tư vấn
                   </button>
+                  <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
+                    className="flex items-center gap-2 border border-amber-400 text-amber-700 font-bold px-5 py-2.5 rounded-xl hover:bg-amber-50 transition-colors text-sm">
+                    <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
+                  </button>
                   {phoneRevealed ? (
                     <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
@@ -520,6 +551,10 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
                   Yêu cầu tư vấn ngay
                 </button>
+                <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
+                  className="w-full border border-amber-400 text-amber-700 font-bold py-3 rounded-xl text-sm hover:bg-amber-50 transition-colors flex items-center justify-center gap-2 mb-2">
+                  <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
+                </button>
                 {phoneRevealed ? (
                   <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                     className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
@@ -641,6 +676,49 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
       <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />
 
+      {callbackOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setCallbackOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5">
+            <button onClick={() => setCallbackOpen(false)} aria-label="Đóng"
+              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-xl">×</button>
+            {callbackSent ? (
+              <div className="text-center py-8">
+                <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                <p className="font-black text-gray-900">Đã nhận yêu cầu gọi lại!</p>
+                <p className="text-gray-500 text-sm mt-1">Tư vấn viên sẽ liên hệ theo khung giờ bạn mong muốn.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleCallback} className="space-y-3">
+                <div>
+                  <h3 className="font-black text-gray-900 flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-amber-500" />Gọi lại cho tôi
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">Để lại SĐT, chúng tôi sẽ gọi tư vấn đúng lúc bạn tiện nghe máy.</p>
+                </div>
+                <input value={callbackForm.name} onChange={e => setCallbackForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Họ và tên *" required
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                <input value={callbackForm.phone} onChange={e => setCallbackForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="Số điện thoại *" required type="tel"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                <input value={callbackForm.time} onChange={e => setCallbackForm(f => ({ ...f, time: e.target.value }))}
+                  placeholder="Khung giờ tiện nghe máy (VD: 19:00 hôm nay)"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                <textarea value={callbackForm.note} onChange={e => setCallbackForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="Ghi chú thêm (ngân sách, nhu cầu, câu hỏi...)" rows={3}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+                <button type="submit" disabled={callbackMutation.isPending}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-60">
+                  {callbackMutation.isPending ? 'Đang gửi...' : 'Gửi yêu cầu gọi lại'}
+                </button>
+                <p className="text-[11px] text-gray-400 text-center">Thông tin chỉ dùng để tư vấn BĐS này, không chia sẻ bên thứ ba.</p>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Lightbox phóng to ảnh — object-contain để xem đầy đủ, không méo/vỡ hình */}
       {lightboxOpen && (
         <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
@@ -680,12 +758,15 @@ function PropertyLocationMap({ lat, lng, title }: { lat: number; lng: number; ti
   const mapRef = useRef<import('leaflet').Map | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     if (!containerRef.current || mapRef.current) return;
     import('leaflet').then(module => {
+      const el = containerRef.current as (HTMLDivElement & { _leaflet_id?: number }) | null;
+      if (cancelled || !el || mapRef.current || el._leaflet_id) return;
       const L = module.default;
       import('leaflet/dist/leaflet.css');
 
-      const map = L.map(containerRef.current!, {
+      const map = L.map(el, {
         center: [lat, lng],
         zoom: 15,
         zoomControl: true,
@@ -710,12 +791,17 @@ function PropertyLocationMap({ lat, lng, title }: { lat: number; lng: number; ti
         popupAnchor: [0, -44],
       });
 
+      const popup = document.createElement('div');
+      popup.style.cssText = 'font-family:Inter,sans-serif;font-size:12px;font-weight:600;max-width:160px;line-height:1.4';
+      popup.textContent = title;
+
       L.marker([lat, lng], { icon })
-        .bindPopup(`<div style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;max-width:160px;line-height:1.4">${title}</div>`, { closeButton: false })
+        .bindPopup(popup, { closeButton: false })
         .addTo(map)
         .openPopup();
     });
     return () => {
+      cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
   }, [lat, lng, title]); // eslint-disable-line react-hooks/exhaustive-deps
