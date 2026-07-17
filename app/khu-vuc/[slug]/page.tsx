@@ -114,10 +114,10 @@ export default async function AreaPage({ params }: Props) {
 
       <SiteChrome currentPage={{ name: 'regions' }}>
         <main className="bg-gray-50">
-          <section className="relative overflow-hidden bg-gray-900 text-white">
-            <img src={heroImage} alt={area.name} className="absolute inset-0 h-full w-full object-cover opacity-45" />
-            <div className="absolute inset-0 bg-gradient-to-br from-black/85 via-black/65 to-red-950/60" />
-            <div className="relative mx-auto max-w-7xl px-4 py-12 md:py-16">
+          <section className="relative isolate overflow-hidden bg-gray-900 text-white">
+            <img src={heroImage} alt={area.name} className="absolute inset-0 z-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 z-10 bg-gradient-to-br from-black/90 via-black/75 to-red-950/75" />
+            <div className="relative z-20 mx-auto max-w-7xl px-4 py-12 md:py-16">
               <nav className="mb-6 text-xs text-white/70">
                 <Link href="/" className="hover:text-white">Trang chủ</Link>
                 <span className="mx-2">/</span>
