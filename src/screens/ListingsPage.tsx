@@ -70,8 +70,7 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 const EMPTY_PROPS: Property[] = [];
 
 export function ListingsPage({ initialFilters, initialData, onNavigate }: ListingsPageProps) {
-  const [viewportProps, setViewportProps] = useState<Property[]>([]);
-  const mapBoundsRef = useRef<MapBounds | null>(null);
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [district, setDistrict] = useState(initialFilters?.district ?? '');
   const [ward, setWard] = useState(initialFilters?.ward ?? '');
 
@@ -237,18 +236,15 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     queryFn: () => getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
     enabled: viewMode === 'map',
   });
-  // Đồng bộ viewport khi dữ liệu map đổi — CHỈ khi đang ở chế độ map. Trước đây effect
-  // chạy mỗi render (default `[]` tạo ref mới → setState → re-render → lặp vô hạn),
-  // chiếm main thread khiến click điều hướng không kịp chạy router.push.
-  useEffect(() => {
-    if (viewMode !== 'map') return;
-    setViewportProps(filterByBounds(mapProperties, mapBoundsRef.current));
-  }, [mapProperties, viewMode]);
-
+  // Leaflet keeps the first handler, so keep data filtering outside its closure.
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
-    mapBoundsRef.current = bounds;
-    setViewportProps(filterByBounds(mapProperties, bounds));
-  }, [mapProperties]);
+    setMapBounds(bounds);
+  }, []);
+
+  const viewportProps = useMemo(
+    () => filterByBounds(mapProperties, mapBounds),
+    [mapProperties, mapBounds],
+  );
 
   // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
   // so giá trị trước, không dùng cờ boolean (cờ bị StrictMode double-invoke reset
