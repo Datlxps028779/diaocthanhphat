@@ -1,11 +1,147 @@
 import { useState, useEffect } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { SimpleForm } from '../shared/SimpleForm';
+import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 
-// ─── News Tab ─────────────────────────────────────────────────────────────────
+const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
+
+type NewsFormState = SeoFieldsValue & {
+  title: string;
+  slug: string;
+  category: string;
+  author: string;
+  image_url: string;
+  excerpt: string;
+  content: string;
+  is_published: boolean;
+};
+
+function initialForm(article: NewsArticle | null): NewsFormState {
+  return {
+    title: article?.title ?? '',
+    slug: article?.slug ?? '',
+    category: article?.category ?? 'Thị trường',
+    author: article?.author ?? 'Ban biên tập',
+    image_url: article?.image_url ?? '',
+    excerpt: article?.excerpt ?? '',
+    content: article?.content ?? '',
+    is_published: article?.is_published ?? true,
+    meta_title: article?.meta_title ?? '',
+    meta_description: article?.meta_description ?? '',
+    focus_keywords: article?.focus_keywords ?? '',
+    schema_markup: article?.schema_markup ? JSON.stringify(article.schema_markup, null, 2) : '',
+  };
+}
+
+function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
+  const [form, setForm] = useState<NewsFormState>(() => initialForm(article));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
+  const setSeo = (value: SeoFieldsValue) => setForm(f => ({ ...f, ...value }));
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
+    const schema = parseSeoSchema(form.schema_markup, 'news');
+    if (schema.error) { setError(schema.error); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave({
+        title: form.title.trim(),
+        slug: form.slug.trim(),
+        category: form.category,
+        author: form.author.trim() || 'Ban biên tập',
+        image_url: form.image_url.trim() || null,
+        excerpt: form.excerpt.trim() || null,
+        content: form.content.trim() || null,
+        is_published: form.is_published,
+        meta_title: form.meta_title.trim() || null,
+        meta_description: form.meta_description.trim() || null,
+        focus_keywords: form.focus_keywords.trim() || null,
+        schema_markup: schema.schema,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="max-w-5xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white px-6 py-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">{article ? 'Sửa bài viết' : 'Viết bài mới'}</h2>
+          <p className="mt-0.5 text-xs text-gray-400">Tối ưu metadata, schema NewsArticle và trạng thái index.</p>
+        </div>
+        <button onClick={onCancel}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4 p-6">
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề *</label>
+            <input value={form.title} onChange={e => set('title', e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Slug URL</label>
+              <input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="Để trống sẽ tự sinh"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Danh mục</label>
+              <select value={form.category} onChange={e => set('category', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Tác giả</label>
+              <input value={form.author} onChange={e => set('author', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">URL ảnh bìa</label>
+              <input value={form.image_url} onChange={e => set('image_url', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-700">Tóm tắt</label>
+            <textarea value={form.excerpt} onChange={e => set('excerpt', e.target.value)} rows={3}
+              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
+            <textarea value={form.content} onChange={e => set('content', e.target.value)} rows={10}
+              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <input type="checkbox" checked={form.is_published} onChange={e => set('is_published', e.target.checked)} className="accent-red-600" />
+            Đăng công khai
+          </label>
+        </div>
+
+        <aside className="border-l border-gray-100 bg-gray-50 p-5">
+          <SeoFields value={form} onChange={setSeo} target="news" basePath={`/tin-tuc/${form.slug || 'slug'}`} />
+        </aside>
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+        <button onClick={onCancel} className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50">Hủy</button>
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
+          <Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu bài viết'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function NewsTab() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,12 +151,10 @@ export function NewsTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
 
   const load = async () => { setLoading(true); const d = await adminGetAllNews(); setArticles(d); setLoading(false); };
   useEffect(() => { load(); }, []);
 
-  // ─── Bulk helpers ─────────────────────────────────────────────────────────
   const toggleOne = (id: string) => setSelected(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -44,22 +178,11 @@ export function NewsTab() {
     } finally { setBulkBusy(false); }
   };
 
-  const a = editing;
   if (creating || editing) {
     return (
-      <SimpleForm
-        title={a ? 'Sửa bài viết' : 'Viết bài mới'}
-        fields={[
-          { name: 'title', label: 'Tiêu đề *', value: a?.title ?? '', required: true },
-          { name: 'slug', label: 'Slug URL (để trống sẽ tự sinh từ tiêu đề)', value: a?.slug ?? '' },
-          { name: 'category', label: 'Danh mục', value: a?.category ?? 'Thị trường', type: 'select', options: CATEGORIES },
-          { name: 'author', label: 'Tác giả', value: a?.author ?? 'Ban biên tập' },
-          { name: 'image_url', label: 'URL ảnh bìa', value: a?.image_url ?? '' },
-          { name: 'excerpt', label: 'Tóm tắt', value: a?.excerpt ?? '', type: 'textarea' },
-          { name: 'content', label: 'Nội dung đầy đủ', value: a?.content ?? '', type: 'textarea', rows: 8 },
-        ]}
-        onSave={async (data) => {
-          const payload = { ...data, is_published: true };
+      <NewsForm
+        article={editing}
+        onSave={async (payload) => {
           if (creating) await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
           else if (editing) await updateNews(editing.id, payload);
           await load(); setEditing(null); setCreating(false);
@@ -124,9 +247,12 @@ export function NewsTab() {
                       {a.image_url && <img src={a.image_url} alt="" className="w-12 h-9 object-cover rounded-lg flex-shrink-0" />}
                       <div>
                         <p className="font-medium text-gray-900 text-sm line-clamp-1 max-w-xs">{a.title}</p>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {a.is_published ? 'Đã đăng' : 'Nháp'}
-                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {a.is_published ? 'Đã đăng' : 'Nháp'}
+                          </span>
+                          {(a.meta_title || a.meta_description || a.schema_markup) && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">SEO</span>}
+                        </div>
                       </div>
                     </div>
                   </td>

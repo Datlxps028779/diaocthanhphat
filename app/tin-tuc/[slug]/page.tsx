@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { serverGetNewsByIdOrSlug } from '@/lib/supabase-server';
-import { buildNewsMetadata, buildArticleJsonLd, serializeJsonLd } from '@/lib/seo';
+import { buildNewsMetadata, buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { NewsDetailClient } from './NewsDetailClient';
 
 export const revalidate = 3600;
@@ -19,13 +20,15 @@ export default async function NewsArticlePage({ params }: Params) {
   if (!article) notFound();
 
   const jsonLd = buildArticleJsonLd(article);
+  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+    { name: 'Trang chủ', path: '/' },
+    { name: 'Tin tức', path: '/tin-tuc' },
+    { name: article.title, path: `/tin-tuc/${article.slug || article.id}` },
+  ]);
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
-      />
+      <JsonLdScripts schemas={[jsonLd, breadcrumbJsonLd]} />
       {/* NewsPage tra chi tiết theo id (UUID) — truyền article.id đã resolve từ slug */}
       <NewsDetailClient articleId={article.id} />
     </>

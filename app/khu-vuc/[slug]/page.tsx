@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SiteChrome } from '@/components/SiteChrome';
-import { serializeJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { buildBreadcrumbJsonLd } from '@/lib/seo';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats } from '@/lib/supabase-server';
 import {
   areaSummaryFromData,
@@ -109,8 +110,7 @@ export default async function AreaPage({ params }: Props) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }} />
-      {collection && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(collection) }} />}
+      <JsonLdScripts schemas={[breadcrumb, collection]} />
 
       <SiteChrome currentPage={{ name: 'regions' }}>
         <main className="bg-gray-50">

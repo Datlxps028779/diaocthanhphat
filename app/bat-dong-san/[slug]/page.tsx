@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { serverGetPropertyByIdOrSlug } from '@/lib/supabase-server';
-import { buildPropertyMetadata, buildPropertyJsonLd, buildBreadcrumbJsonLd, serializeJsonLd } from '@/lib/seo';
+import { buildPropertyMetadata, buildPropertyJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { PropertyDetailClient } from './PropertyDetailClient';
 
 // ISR: render lại tối đa mỗi giờ (cân tốc độ vs độ tươi). Tin sửa xong crawler thấy
@@ -31,15 +32,7 @@ export default async function PropertyPage({ params }: Params) {
 
   return (
     <>
-      {/* JSON-LD SSR — crawler (Google + AI) đọc ngay trong HTML gốc */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbJsonLd) }}
-      />
+      <JsonLdScripts schemas={[jsonLd, breadcrumbJsonLd]} />
       <PropertyDetailClient propertyId={slug} initialData={property} />
     </>
   );

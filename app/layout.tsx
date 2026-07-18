@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '@/index.css';
 import { serializeJsonLd, buildLocalBusinessJsonLd } from '@/lib/seo';
+import { getSiteUrl } from '@/lib/siteUrl';
 import { serverGetSiteSettings } from '@/lib/supabase-server';
 import { Providers } from './providers';
 import { Analytics } from '@vercel/analytics/next';
@@ -15,7 +16,7 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-const SITE_URL = process.env.SITE_URL || 'https://diaocthanhphat.com';
+const SITE_URL = getSiteUrl();
 const SITE_NAME = 'BĐS Bình Dương';
 
 export const metadata: Metadata = {
@@ -45,8 +46,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const siteJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
+    '@id': `${SITE_URL}/#website`,
     name: SITE_NAME,
     url: SITE_URL,
+    publisher: { '@id': `${SITE_URL}/#organization` },
     potentialAction: {
       '@type': 'SearchAction',
       target: `${SITE_URL}/danh-sach?keyword={search_term_string}`,

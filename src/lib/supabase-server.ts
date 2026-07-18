@@ -119,7 +119,7 @@ export async function serverGetAreaStats(areaId: string): Promise<{ districts: s
 export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArticle | null> {
   const sb = serverClient();
   const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
-  const { data } = await sb.from('news').select('*').eq(col, idOrSlug).maybeSingle();
+  const { data } = await sb.from('news').select('*').eq(col, idOrSlug).eq('is_published', true).maybeSingle();
   return data as NewsArticle | null;
 }
 

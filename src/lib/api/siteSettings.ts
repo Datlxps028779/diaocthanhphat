@@ -16,6 +16,11 @@ export async function updateSiteSetting(key: string, value: string): Promise<voi
   if (error) throw error;
 }
 
+export async function upsertSiteSetting(input: Pick<SiteSetting, 'key' | 'value' | 'label' | 'group_name' | 'type'>): Promise<void> {
+  const { error } = await supabase.from('site_settings').upsert({ ...input, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+
 // ─── CMS: Site Content ────────────────────────────────────────────────────────
 export async function getSiteContentBySection(section: string): Promise<Record<string, string>> {
   const { data } = await supabase.from('site_content').select('key, value').eq('section', section).order('order_index');

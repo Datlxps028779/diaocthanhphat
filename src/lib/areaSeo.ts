@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { Area, Property } from './supabase';
-
-const SITE_URL = process.env.SITE_URL || 'https://diaocthanhphat.com';
+import { absoluteUrl } from './siteUrl';
+import { mergeSchema } from './schemaValidation';
 const SITE_NAME = 'BĐS Bình Dương';
 
 export const MIN_AREA_LISTINGS_FOR_INDEX = 5;
@@ -103,13 +103,15 @@ export function evaluateAreaSeo(input: AreaSeoInput): AreaSeoEvaluation {
 }
 
 export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaSeoEvaluation): Metadata {
-  const title = `Bất động sản ${area.name}`;
-  const description = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
+  const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
+  const title = area.meta_title || `Bất động sản ${area.name}`;
+  const description = area.meta_description || fallbackDescription;
   const path = `/khu-vuc/${area.slug}`;
   const images = area.image_url ? [{ url: area.image_url, width: 1200, height: 630 }] : undefined;
   return {
     title,
     description,
+    keywords: area.focus_keywords || undefined,
     alternates: { canonical: path },
     robots: evaluation.robots,
     openGraph: {
@@ -126,10 +128,11 @@ export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaS
 }
 
 export function buildAreaCollectionJsonLd(area: Area, listings: Pick<Property, 'id' | 'title' | 'slug'>[]): Record<string, unknown> {
-  const areaUrl = `${SITE_URL}/khu-vuc/${area.slug}`;
-  return {
+  const areaUrl = absoluteUrl(`/khu-vuc/${area.slug}`);
+  const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
+    '@id': `${areaUrl}#collection`,
     name: `Bất động sản ${area.name}`,
     url: areaUrl,
     mainEntity: {
@@ -138,8 +141,9 @@ export function buildAreaCollectionJsonLd(area: Area, listings: Pick<Property, '
         '@type': 'ListItem',
         position: i + 1,
         name: p.title,
-        url: `${SITE_URL}/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`,
+        url: absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`),
       })),
     },
   };
+  return mergeSchema(base, area.schema_markup, 'area', ['@context', '@type', '@id', 'name', 'url', 'mainEntity']).schema;
 }

@@ -34,6 +34,8 @@ export async function getPropertiesForSection(section: FeaturedSection): Promise
     .eq('is_active', true);
 
   if (section.filter_area_id) q = q.eq('area_id', section.filter_area_id);
+  if (section.filter_district) q = q.eq('district', section.filter_district);
+  if (section.filter_ward) q = q.eq('ward', section.filter_ward);
   if (section.filter_listing_type && section.filter_listing_type !== '') q = q.eq('listing_type', section.filter_listing_type);
   if (section.filter_property_type_id) q = q.eq('property_type_id', section.filter_property_type_id);
   if (section.filter_is_hot) q = q.eq('is_hot', true);

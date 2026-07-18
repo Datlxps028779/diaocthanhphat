@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
+import { getSiteUrl } from '@/lib/siteUrl';
 
-const SITE_URL = (process.env.SITE_URL || 'https://diaocthanhphat.com').replace(/\/$/, '');
+const SITE_URL = getSiteUrl();
 
 // robots.txt động — Next phục vụ tại /robots.txt. Cho phép AI crawler (SEO AI) +
 // search engine, chặn khu quản trị và trang riêng tư.
@@ -16,7 +17,7 @@ export default function robots(): MetadataRoute.Robots {
           'PerplexityBot', 'Google-Extended', 'Applebot-Extended',
         ],
         allow: '/',
-        disallow: ['/quantrihethong', '/tai-khoan', '/tin-cua-toi'],
+        disallow: ['/quantrihethong', '/tai-khoan', '/tin-cua-toi', '/dat-lai-mat-khau', '/xac-nhan-email'],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

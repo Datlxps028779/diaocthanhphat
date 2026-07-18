@@ -14,6 +14,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export type Area = {
   id: string; name: string; description: string | null;
   image_url: string | null; slug: string; order_index: number; created_at: string;
+  meta_title?: string | null; meta_description?: string | null;
+  focus_keywords?: string | null; schema_markup?: Record<string, unknown> | null;
 };
 export type District = {
   id: string; area_id: string; name: string; slug: string; order_index: number; created_at: string;
@@ -119,7 +121,18 @@ export type ChatStaffCapacity = {
 export type NewsArticle = {
   id: string; title: string; slug: string; excerpt: string | null; content: string | null;
   image_url: string | null; category: string; author: string;
-  is_published: boolean; views: number; created_at: string; updated_at: string;
+  is_published: boolean; views: number;
+  meta_title: string | null; meta_description: string | null;
+  focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
+  created_at: string; updated_at: string;
+};
+
+export type SeoRouteOverride = {
+  path: string;
+  meta_title: string | null; meta_description: string | null; focus_keywords: string | null;
+  canonical_path: string | null; robots_index: boolean | null; robots_follow: boolean | null;
+  schema_markup: Record<string, unknown> | null; updated_by: string | null;
+  created_at: string; updated_at: string;
 };
 export type Project = {
   id: string; name: string; description: string | null;
@@ -178,8 +191,9 @@ export type Banner = {
 export type FeaturedSection = {
   id: string; title: string; subtitle: string | null;
   mode: 'auto' | 'manual';
-  filter_area_id: string | null; filter_listing_type: string | null;
-  filter_property_type_id: string | null; filter_is_hot: boolean; filter_is_featured: boolean;
+  filter_area_id: string | null; filter_district: string | null; filter_ward: string | null;
+  filter_listing_type: string | null; filter_property_type_id: string | null;
+  filter_is_hot: boolean; filter_is_featured: boolean;
   auto_sort: 'newest' | 'views' | 'price_asc' | 'price_desc';
   display_count: number; display_style: 'grid' | 'horizontal';
   is_active: boolean; order_index: number;

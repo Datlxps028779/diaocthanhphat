@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -31,6 +31,7 @@ const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
+const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
 export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
   const allowedTabs = visibleTabs(role);
@@ -70,6 +71,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'featured-sections', label: 'Tin nổi bật', icon: <Layers className="w-4 h-4" /> },
     { id: 'page-builder', label: 'Bố cục trang', icon: <PanelLeft className="w-4 h-4" /> },
     { id: 'pages', label: 'Quản lý trang', icon: <FileText className="w-4 h-4" /> },
+    { id: 'seo-geo', label: 'SEO / GEO', icon: <SearchCode className="w-4 h-4" /> },
     { id: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
     { id: 'backup', label: 'Sao lưu dữ liệu', icon: <Database className="w-4 h-4" /> },
     { id: 'ai-analytics', label: 'AI Phân tích', icon: <TrendingUp className="w-4 h-4" /> },
@@ -167,6 +169,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
           {tab === 'nurture' && <NurtureTab />}
+          {tab === 'seo-geo' && <SeoGeoTab />}
           </Suspense>
         </main>
       </div>

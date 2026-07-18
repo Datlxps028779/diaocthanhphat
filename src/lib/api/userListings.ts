@@ -70,6 +70,8 @@ export async function approveUserListing(id: string): Promise<void> {
     latitude: listing.latitude, longitude: listing.longitude,
     vr_tour_url: listing.vr_tour_url, video_url: listing.video_url,
     formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
+    meta_title: listing.meta_title, meta_description: listing.meta_description,
+    focus_keywords: listing.focus_keywords, schema_markup: listing.schema_markup,
   }).select('id').single();
   if (propErr) throw propErr;
   const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());

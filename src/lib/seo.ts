@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
 import { buildPropertyGallery, FALLBACK_PROPERTY_IMAGE } from './propertyImages';
+import { absoluteUrl, getSiteUrl } from './siteUrl';
+import { mergeSchema } from './schemaValidation';
 
-const SITE_URL = process.env.SITE_URL || 'https://diaocthanhphat.com';
+const SITE_URL = getSiteUrl();
 const SITE_NAME = 'BĐS Bình Dương';
 
 // Serialize JSON-LD an toàn cho <script>. JSON.stringify KHÔNG escape '<' '>' '&'
@@ -32,12 +34,15 @@ export function buildLocalBusinessJsonLd(settings: Record<string, string>): Reco
   const ld: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateAgent',
+    '@id': `${SITE_URL}/#organization`,
     name,
     url: SITE_URL,
-    areaServed: 'Bình Dương, Việt Nam',
-    description: get('footer_description')
+    areaServed: get('geo_area_served') || 'Bình Dương, Việt Nam',
+    description: get('organization_description') || get('footer_description')
       || 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
   };
+  if (get('organization_legal_name')) ld.legalName = get('organization_legal_name');
+  if (get('knows_about')) ld.knowsAbout = get('knows_about').split(',').map(s => s.trim()).filter(Boolean);
   if (get('phone_main')) ld.telephone = get('phone_main');
   if (email) ld.email = email;
   if (logo) ld.logo = logo;
@@ -112,25 +117,25 @@ export function buildPropertyMetadata(p: Property): Metadata {
 // JSON-LD RealEstateListing. Ưu tiên schema_markup nhập tay trong admin; nếu không
 // có thì tự dựng. Render trong page.tsx qua <script type="application/ld+json">.
 export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
-  if (p.schema_markup && typeof p.schema_markup === 'object' && Object.keys(p.schema_markup).length > 0) {
-    return p.schema_markup as Record<string, unknown>;
-  }
-  const url = `${SITE_URL}/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
+  const url = absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`);
   const gallery = buildPropertyGallery(p.image_url, p.images).filter(u => u !== FALLBACK_PROPERTY_IMAGE);
   const video = buildPropertyVideoObject(p);
-  return {
+  const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
+    '@id': `${url}#realestatelisting`,
     name: p.title,
     description: p.description ?? undefined,
     url,
-    ...(gallery.length > 0 ? { image: gallery } : {}),
+    mainEntityOfPage: url,
     datePosted: p.created_at,
+    dateModified: p.updated_at,
+    ...(gallery.length > 0 ? { image: gallery } : {}),
     ...(p.bedrooms != null ? { numberOfRooms: p.bedrooms } : {}),
     ...(p.price ? {
       offers: {
         '@type': 'Offer',
-        price: p.price,
+        price: p.listing_type === 'cho_thue' && p.price_per_month ? p.price_per_month : p.price,
         priceCurrency: 'VND',
         availability: 'https://schema.org/InStock',
       },
@@ -140,6 +145,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     } : {}),
     address: {
       '@type': 'PostalAddress',
+      streetAddress: p.address ?? p.formatted_address ?? undefined,
       addressLocality: p.district ?? undefined,
       addressRegion: p.city ?? 'Bình Dương',
       addressCountry: 'VN',
@@ -149,6 +155,10 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     } : {}),
     ...(video ? { video } : {}),
   };
+
+  return mergeSchema(base, p.schema_markup, 'property', [
+    '@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage', 'datePosted', 'dateModified', 'offers', 'address', 'geo',
+  ]).schema;
 }
 
 function youtubeId(u: string): string | null {
@@ -180,14 +190,14 @@ function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
 
 // ─── News → Metadata ──────────────────────────────────────────────────────────
 export function buildNewsMetadata(a: NewsArticle): Metadata {
-  const title = a.title;
-  const description = a.excerpt || a.title;
+  const title = a.meta_title || a.title;
+  const description = a.meta_description || a.excerpt || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
   const images = a.image_url ? [{ url: a.image_url, width: 1200, height: 630 }] : undefined;
   return {
     title,
     description,
-    keywords: `tin tức bất động sản, ${a.title}`,
+    keywords: a.focus_keywords || `tin tức bất động sản, ${a.title}`,
     alternates: { canonical: path },
     openGraph: {
       type: 'article',
@@ -204,20 +214,24 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
 }
 
 export function buildArticleJsonLd(a: NewsArticle): Record<string, unknown> {
-  const url = `${SITE_URL}/tin-tuc/${a.slug || a.id}`;
-  return {
+  const url = absoluteUrl(`/tin-tuc/${a.slug || a.id}`);
+  const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
+    '@id': `${url}#article`,
     headline: a.title,
-    description: a.excerpt ?? undefined,
+    description: a.excerpt ?? a.meta_description ?? undefined,
     image: a.image_url ?? undefined,
     datePublished: a.created_at,
     dateModified: a.updated_at,
     author: { '@type': 'Organization', name: a.author || SITE_NAME },
-    publisher: { '@type': 'Organization', name: SITE_NAME },
+    publisher: { '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: SITE_NAME },
     mainEntityOfPage: url,
     url,
   };
+  return mergeSchema(base, a.schema_markup, 'news', [
+    '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'publisher',
+  ]).schema;
 }
 
 // BreadcrumbList JSON-LD — Google hiển thị đường dẫn phân cấp trong kết quả tìm

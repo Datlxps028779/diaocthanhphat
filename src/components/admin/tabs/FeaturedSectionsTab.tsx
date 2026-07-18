@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Edit2, Trash2, Search, Save, AlertCircle, ArrowUp, ArrowDown, Layers, Filter, List, LayoutGrid, GripVertical } from 'lucide-react';
-import type { FeaturedSection, FeaturedSectionItem, Property, Area, PropertyType } from '../../../lib/supabase';
-import { adminGetAllProperties, getAreas, getPropertyTypes, adminGetFeaturedSections, adminCreateFeaturedSection, adminUpdateFeaturedSection, adminDeleteFeaturedSection, adminGetSectionItems, adminSetSectionItems } from '../../../lib/api';
+import type { FeaturedSection, FeaturedSectionItem, Property, Area, PropertyType, District, Ward } from '../../../lib/supabase';
+import { adminGetAllProperties, getAreas, getDistricts, getWards, getPropertyTypes, adminGetFeaturedSections, adminCreateFeaturedSection, adminUpdateFeaturedSection, adminDeleteFeaturedSection, adminGetSectionItems, adminSetSectionItems } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ─── FeaturedSectionsTab ──────────────────────────────────────────────────────
 const BLANK_SECTION: Omit<FeaturedSection, 'id' | 'created_at' | 'updated_at'> = {
   title: '', subtitle: null, mode: 'auto',
-  filter_area_id: null, filter_listing_type: null, filter_property_type_id: null,
+  filter_area_id: null, filter_district: null, filter_ward: null,
+  filter_listing_type: null, filter_property_type_id: null,
   filter_is_hot: false, filter_is_featured: false,
   auto_sort: 'newest', display_count: 8, display_style: 'grid',
   is_active: true, order_index: 0,
@@ -25,6 +26,8 @@ export function FeaturedSectionsTab() {
   const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [propSearch, setPropSearch] = useState('');
   const [areas, setAreas] = useState<Area[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
   const [types, setTypes] = useState<PropertyType[]>([]);
 
   const load = () => {
@@ -53,6 +56,16 @@ export function FeaturedSectionsTab() {
     } else {
       setManualItems([]);
     }
+    if (s.filter_area_id) {
+      const nextDistricts = await getDistricts(s.filter_area_id).catch(() => []);
+      setDistricts(nextDistricts);
+      const selectedDistrict = nextDistricts.find(d => d.name === s.filter_district);
+      if (selectedDistrict) setWards(await getWards(selectedDistrict.id).catch(() => []));
+      else setWards([]);
+    } else {
+      setDistricts([]);
+      setWards([]);
+    }
     if (allProperties.length === 0) {
       adminGetAllProperties().then(setAllProperties);
     }
@@ -74,6 +87,8 @@ export function FeaturedSectionsTab() {
         subtitle: editingSection.subtitle ?? null,
         mode: editingSection.mode ?? 'auto',
         filter_area_id: editingSection.filter_area_id ?? null,
+        filter_district: editingSection.filter_district ?? null,
+        filter_ward: editingSection.filter_ward ?? null,
         filter_listing_type: editingSection.filter_listing_type ?? null,
         filter_property_type_id: editingSection.filter_property_type_id ?? null,
         filter_is_hot: editingSection.filter_is_hot ?? false,
@@ -193,6 +208,8 @@ export function FeaturedSectionsTab() {
                   <span className="flex items-center gap-1">{s.display_style === 'grid' ? <LayoutGrid className="w-3 h-3" /> : <List className="w-3 h-3" />}{s.display_style === 'grid' ? 'Dạng lưới' : 'Dạng ngang'}</span>
                   {s.mode === 'auto' && s.filter_is_hot && <span className="text-orange-500 font-semibold">HOT</span>}
                   {s.mode === 'auto' && s.filter_is_featured && <span className="text-amber-600 font-semibold">Nổi bật</span>}
+                  {s.mode === 'auto' && s.filter_district && <span>Q/H: {s.filter_district}</span>}
+                  {s.mode === 'auto' && s.filter_ward && <span>P/X: {s.filter_ward}</span>}
                   {s.mode === 'auto' && s.filter_listing_type && <span>{s.filter_listing_type === 'mua_ban' ? 'Mua bán' : 'Cho thuê'}</span>}
                 </div>
               </div>
@@ -270,10 +287,38 @@ export function FeaturedSectionsTab() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Khu vực</label>
-                    <select value={editingSection.filter_area_id ?? ''} onChange={e => setEditingSection(p => ({ ...p, filter_area_id: e.target.value || null }))}
+                    <select value={editingSection.filter_area_id ?? ''} onChange={async e => {
+                      const areaId = e.target.value || null;
+                      setEditingSection(p => ({ ...p, filter_area_id: areaId, filter_district: null, filter_ward: null }));
+                      if (areaId) { setDistricts(await getDistricts(areaId).catch(() => [])); setWards([]); }
+                      else { setDistricts([]); setWards([]); }
+                    }}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
                       <option value="">Tất cả khu vực</option>
                       {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Quận/Huyện</label>
+                    <select value={editingSection.filter_district ?? ''} onChange={async e => {
+                      const districtName = e.target.value || null;
+                      setEditingSection(p => ({ ...p, filter_district: districtName, filter_ward: null }));
+                      const next = districtName ? districts.find(d => d.name === districtName) : null;
+                      setWards(next ? await getWards(next.id).catch(() => []) : []);
+                    }}
+                      disabled={!editingSection.filter_area_id}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white disabled:bg-gray-100">
+                      <option value="">Tất cả quận/huyện</option>
+                      {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Phường/Xã</label>
+                    <select value={editingSection.filter_ward ?? ''} onChange={e => setEditingSection(p => ({ ...p, filter_ward: e.target.value || null }))}
+                      disabled={!editingSection.filter_district}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white disabled:bg-gray-100">
+                      <option value="">Tất cả phường/xã</option>
+                      {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
                   </div>
                   <div>

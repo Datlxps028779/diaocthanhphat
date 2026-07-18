@@ -99,10 +99,19 @@ describe('buildBreadcrumbJsonLd', () => {
 });
 
 describe('buildPropertyJsonLd', () => {
-  it('trả schema_markup nhập tay nguyên vẹn khi có', () => {
-    const custom = { '@type': 'Thing', name: 'custom' };
+  it('không cho schema_markup tùy ý ghi đè schema BĐS thật', () => {
+    const custom = { '@context': 'https://schema.org', '@type': 'Thing', name: 'custom' };
     const ld = buildPropertyJsonLd(property({ schema_markup: custom }));
-    expect(ld).toEqual(custom);
+    expect(ld['@type']).toBe('RealEstateListing');
+    expect(ld.name).toBe('Nhà phố đẹp');
+    expect(ld.url).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep`);
+  });
+
+  it('custom schema hợp lệ chỉ merge field bổ sung, không ghi đè locked field', () => {
+    const custom = { '@context': 'https://schema.org', '@type': 'RealEstateListing', name: 'custom', additionalType: 'https://schema.org/House' };
+    const ld = buildPropertyJsonLd(property({ schema_markup: custom }));
+    expect(ld.name).toBe('Nhà phố đẹp');
+    expect(ld.additionalType).toBe('https://schema.org/House');
   });
 
   it('RealEstateListing cơ bản: type/name/url/offers/floorSize/address', () => {
@@ -110,6 +119,7 @@ describe('buildPropertyJsonLd', () => {
     expect(ld['@type']).toBe('RealEstateListing');
     expect(ld.name).toBe('Nhà phố đẹp');
     expect(ld.url).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep`);
+    expect(ld['@id']).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep#realestatelisting`);
     expect((ld.offers as Record<string, unknown>).price).toBe(3);
     expect((ld.floorSize as Record<string, unknown>).value).toBe(80);
     expect((ld.address as Record<string, unknown>).addressLocality).toBe('Thủ Dầu Một');

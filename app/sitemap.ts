@@ -1,8 +1,9 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
+import { getSiteUrl } from '@/lib/siteUrl';
 
-const SITE_URL = (process.env.SITE_URL || 'https://diaocthanhphat.com').replace(/\/$/, '');
+const SITE_URL = getSiteUrl();
 
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
 // Revalidate mỗi giờ để tin mới xuất hiện mà không cần rebuild.
