@@ -124,6 +124,7 @@ export type NewsArticle = {
   is_published: boolean; views: number;
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
+  related_ids: string[] | null;
   created_at: string; updated_at: string;
 };
 

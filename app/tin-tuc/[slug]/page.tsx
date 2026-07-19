@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { serverGetNewsByIdOrSlug } from '@/lib/supabase-server';
+import { serverGetNewsByIdOrSlug, serverGetSiteSettings } from '@/lib/supabase-server';
 import { buildNewsMetadata, buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { NewsDetailClient } from './NewsDetailClient';
@@ -19,7 +19,8 @@ export default async function NewsArticlePage({ params }: Params) {
   const article = await serverGetNewsByIdOrSlug(decodeURIComponent(params.slug));
   if (!article) notFound();
 
-  const jsonLd = buildArticleJsonLd(article);
+  const settings = await serverGetSiteSettings();
+  const jsonLd = buildArticleJsonLd(article, settings);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: 'Tin tức', path: '/tin-tuc' },

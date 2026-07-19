@@ -1,22 +1,17 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import DOMPurify from 'isomorphic-dompurify';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
 import { type NewsArticle } from '../lib/supabase';
-import { getNews, getNewsById, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { getNews, getNewsById, getNewsByIds, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { type Page, pageToHref } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
 import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown';
-
-const ARTICLE_SANITIZE = {
-  ALLOWED_TAGS: ['p', 'h2', 'h3', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br'],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel'],
-  ALLOWED_URI_REGEXP: /^(?:https?:|\/)/i,
-};
+import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
+import { pickRelated } from '../lib/relatedNews';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -155,7 +150,7 @@ function ArticleDetail({
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
   const contentIsHtml = isHtmlContent(rawContent);
   const safeHtml = useMemo(
-    () => (contentIsHtml ? DOMPurify.sanitize(rawContent, ARTICLE_SANITIZE) : ''),
+    () => (contentIsHtml ? sanitizeArticleHtml(rawContent) : ''),
     [rawContent, contentIsHtml],
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
@@ -190,7 +185,7 @@ function ArticleDetail({
               {cat}
             </span>
           )}
-          <h1 className="text-2xl md:text-3xl font-bold text-white leading-snug max-w-3xl">{article.title}</h1>
+          <h1 className="article-headline text-2xl md:text-3xl font-bold text-white leading-snug max-w-3xl">{article.title}</h1>
         </div>
       </div>
 
@@ -212,7 +207,7 @@ function ArticleDetail({
 
           {/* Excerpt */}
           {article.excerpt && (
-            <p className="text-gray-600 text-base italic border-l-4 border-red-400 pl-4 mb-6 leading-relaxed">
+            <p className="article-excerpt text-gray-600 text-base italic border-l-4 border-red-400 pl-4 mb-6 leading-relaxed">
               {article.excerpt}
             </p>
           )}
@@ -319,6 +314,14 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     enabled: !!articleId,
   });
 
+  // Bài liên quan chọn tay (có thể khác category) — resolve theo id để đưa vào pool.
+  const manualRelatedIds = activeArticle?.related_ids ?? [];
+  const { data: manualRelated = [] } = useQuery({
+    queryKey: ['news-related', activeArticle?.id, manualRelatedIds.join(',')],
+    queryFn: () => getNewsByIds(manualRelatedIds),
+    enabled: manualRelatedIds.length > 0,
+  });
+
   // Tăng view 1 lần mỗi articleId, độc lập cache/refetch
   const viewedRef = useRef<string | null>(null);
   const viewMutation = useMutation({ mutationFn: (id: string) => incrementNewsView(id) });
@@ -349,7 +352,10 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
 
   // Detail view
   if (activeArticle) {
-    const related = articles.filter((a) => a.id !== activeArticle.id);
+    // Pool = tin đã tải + bài liên quan chọn tay (dedup), rồi xếp: tay trước, tự bù sau.
+    const poolMap = new Map<string, NewsArticle>();
+    for (const a of [...articles, ...manualRelated]) poolMap.set(a.id, a);
+    const related = pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
     return (
       <ArticleDetail
         article={activeArticle}

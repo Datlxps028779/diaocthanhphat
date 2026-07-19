@@ -19,6 +19,7 @@ type NewsFormState = SeoFieldsValue & {
   excerpt: string;
   content: string;
   is_published: boolean;
+  related_ids: string[];
 };
 
 function newsSlug(title: string): string {
@@ -63,16 +64,36 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     meta_description: article?.meta_description ?? '',
     focus_keywords: article?.focus_keywords ?? '',
     schema_markup: article?.schema_markup ? JSON.stringify(article.schema_markup, null, 2) : '',
+    related_ids: article?.related_ids ?? [],
   };
 }
 
-function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
+function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArticle | null; allArticles: NewsArticle[]; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
   const [form, setForm] = useState<NewsFormState>(() => initialForm(article));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [relatedQuery, setRelatedQuery] = useState('');
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
+
+  const candidatePool = allArticles.filter(a => a.id !== article?.id);
+  const byId = new Map(candidatePool.map(a => [a.id, a]));
+  const internalLinks = candidatePool
+    .filter(a => a.is_published && a.slug)
+    .map(a => ({ title: a.title, slug: a.slug }));
+  const addRelated = (id: string) => setForm(f => (f.related_ids.includes(id) ? f : { ...f, related_ids: [...f.related_ids, id] }));
+  const removeRelated = (id: string) => setForm(f => ({ ...f, related_ids: f.related_ids.filter(x => x !== id) }));
+  const moveRelated = (idx: number, dir: -1 | 1) => setForm(f => {
+    const next = [...f.related_ids];
+    const j = idx + dir;
+    if (j < 0 || j >= next.length) return f;
+    [next[idx], next[j]] = [next[j], next[idx]];
+    return { ...f, related_ids: next };
+  });
+  const relatedMatches = relatedQuery.trim()
+    ? candidatePool.filter(a => !form.related_ids.includes(a.id) && a.title.toLowerCase().includes(relatedQuery.trim().toLowerCase())).slice(0, 6)
+    : [];
   const setSeo = (value: SeoFieldsValue) => {
     manualSchemaRef.current = Boolean(value.schema_markup.trim()) && value.schema_markup !== generatedSchemaRef.current;
     setForm(f => ({ ...f, ...value }));
@@ -123,6 +144,7 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
         meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null,
         schema_markup: schema.schema,
+        related_ids: form.related_ids.length ? form.related_ids : null,
       });
     } finally { setSaving(false); }
   };
@@ -182,10 +204,55 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
                 <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
               </button>
             </div>
-            <RichTextEditor value={form.content} onChange={html => set('content', html)} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, chèn ảnh..." />
-            <p className="mt-1 text-[11px] text-gray-400">Bôi đen đoạn văn rồi bấm Đậm/Nghiêng/Tiêu đề để định dạng tại chỗ. Nút Ảnh sẽ tải ảnh lên và chèn thẳng vào bài.</p>
+            <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+            <p className="mt-1 text-[11px] text-gray-400">Bôi đen đoạn văn rồi bấm Đậm/Nghiêng/Tiêu đề/căn lề để định dạng tại chỗ. Nút Ảnh mở thư viện (chọn có sẵn hoặc tải mới) và bắt buộc nhập alt. Nút Nội bộ chèn backlink tới bài khác.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-700">Bài viết liên quan</label>
+            <p className="mb-2 text-[11px] text-gray-400">Chọn tay theo thứ tự hiển thị. Còn thiếu sẽ tự bù bằng bài cùng chủ đề / trùng từ khóa / mới nhất.</p>
+            {form.related_ids.length > 0 && (
+              <ol className="mb-2 space-y-1.5">
+                {form.related_ids.map((id, idx) => {
+                  const a = byId.get(id);
+                  return (
+                    <li key={id} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs">
+                      <span className="font-semibold text-gray-400">{idx + 1}.</span>
+                      <span className="flex-1 truncate text-gray-700">{a ? a.title : '(bài đã xóa)'}</span>
+                      <button type="button" onClick={() => moveRelated(idx, -1)} disabled={idx === 0} className="px-1 text-gray-400 hover:text-gray-700 disabled:opacity-30" aria-label="Lên">↑</button>
+                      <button type="button" onClick={() => moveRelated(idx, 1)} disabled={idx === form.related_ids.length - 1} className="px-1 text-gray-400 hover:text-gray-700 disabled:opacity-30" aria-label="Xuống">↓</button>
+                      <button type="button" onClick={() => removeRelated(id)} className="text-red-500 hover:text-red-700" aria-label="Xóa"><X className="h-3.5 w-3.5" /></button>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <div className="relative">
+              <input
+                value={relatedQuery}
+                onChange={e => setRelatedQuery(e.target.value)}
+                placeholder="Tìm bài theo tiêu đề để thêm..."
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+              {relatedMatches.length > 0 && (
+                <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                  {relatedMatches.map(a => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => { addRelated(a.id); setRelatedQuery(''); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-gray-700 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <span className="flex-1 truncate">{a.title}</span>
+                      <span className="text-[10px] text-gray-400">{a.category}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <input type="checkbox" checked={form.is_published} onChange={e => set('is_published', e.target.checked)} className="accent-red-600" />
             Đăng công khai
@@ -254,6 +321,7 @@ export function NewsTab() {
     return (
       <NewsForm
         article={editing}
+        allArticles={articles}
         onSave={async (payload) => {
           if (creating) await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
           else if (editing) await updateNews(editing.id, payload);

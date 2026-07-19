@@ -14,6 +14,13 @@ export async function getNewsById(id: string): Promise<NewsArticle | null> {
   return data as NewsArticle | null;
 }
 
+// Resolve bài liên quan chọn tay theo id (có thể khác category). Chỉ lấy bài đã đăng.
+export async function getNewsByIds(ids: string[]): Promise<NewsArticle[]> {
+  if (ids.length === 0) return [];
+  const { data } = await supabase.from('news').select('*').in('id', ids).eq('is_published', true);
+  return (data ?? []) as NewsArticle[];
+}
+
 // Tăng view atomic; fallback read-modify-write nếu RPC chưa có trên DB.
 export async function incrementNewsView(id: string): Promise<void> {
   const { error: rpcErr } = await supabase.rpc('increment_news_views', { row_id: id });
