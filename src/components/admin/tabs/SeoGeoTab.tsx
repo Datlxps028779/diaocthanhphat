@@ -4,6 +4,7 @@ import type { SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, SEO_ROUTE_PATHS, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
+import { buildSiteEntitySchema } from '../../../lib/api';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
@@ -146,12 +147,7 @@ export function SeoGeoTab() {
     path: canonicalPath || activePath,
     route_type: schemaTypeFromGuide(activeGuide?.schemaType),
   });
-  const organizationSchema = buildAutoSchema('home', {
-    title: settingValues.organization_legal_name || 'BĐS Bình Dương',
-    description: settingValues.organization_description || 'BĐS Bình Dương',
-    site_name: settingValues.organization_legal_name || 'BĐS Bình Dương',
-    path: '/',
-  });
+  const organizationSchema = useMemo(() => buildSiteEntitySchema(settingsMap), [settingsMap]);
   const organizationPreview = useMemo(() => serializeJsonLd(buildLocalBusinessJsonLd(settingsMap)), [settingsMap]);
   const routePreview = useMemo(() => JSON.stringify(activeRouteSchema, null, 2), [activeRouteSchema]);
   const sitePreview = useMemo(() => schemaToJson(organizationSchema), [organizationSchema]);

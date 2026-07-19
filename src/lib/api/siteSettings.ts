@@ -1,4 +1,25 @@
 import { supabase, type SiteSetting, type SiteContent, type Banner } from '../supabase';
+import { buildAutoSchema, schemaToJson } from '../seoAuto';
+import { parseSchemaJson } from '../schemaValidation';
+
+export function buildSiteEntitySchema(settings: Record<string, string>): Record<string, unknown> {
+  return buildAutoSchema('home', {
+    title: settings.organization_legal_name || 'BĐS Bình Dương',
+    description: settings.organization_description || 'BĐS Bình Dương',
+    focus_keywords: settings.knows_about || settings.geo_area_served || '',
+    site_name: settings.organization_legal_name || 'BĐS Bình Dương',
+    path: '/',
+  });
+}
+
+export function parseSiteEntitySchema(value: string): Record<string, unknown> | null {
+  const parsed = parseSchemaJson(value);
+  return parsed.valid ? parsed.schema : null;
+}
+
+export function siteEntitySchemaJson(settings: Record<string, string>): string {
+  return schemaToJson(buildSiteEntitySchema(settings));
+}
 
 // ─── CMS: Site Settings ───────────────────────────────────────────────────────
 export async function getSiteSettings(): Promise<Record<string, string>> {
