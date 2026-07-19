@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, Save, Settings } from 'lucide-react';
 import type { SiteSetting } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, updateSiteSetting } from '../../../lib/api';
+import { ImageUrlInput } from '../../ImageUpload';
 
 // ─── Site Settings Tab ────────────────────────────────────────────────────────
 export function SiteSettingsTab() {
@@ -36,7 +37,13 @@ export function SiteSettingsTab() {
 
   const GROUP_LABELS: Record<string, string> = {
     general: 'Chung', contact: 'Liên hệ', social: 'Mạng xã hội', seo: 'SEO',
-    footer: 'Footer', hero: 'Hero / Banner', sections: 'Tiêu đề Section',
+    footer: 'Footer', hero: 'Hero / Banner', sections: 'Tiêu đề Section', schema: 'Schema',
+  };
+
+  const isImageSetting = (setting: SiteSetting) => {
+    const key = setting.key.toLowerCase();
+    const label = setting.label.toLowerCase();
+    return setting.type === 'image' || key.includes('image') || key.includes('logo') || key.includes('avatar') || key.includes('banner') || key.includes('og_') || label.includes('ảnh') || label.includes('logo');
   };
 
   if (loading) return <div className="text-center py-12"><div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
@@ -67,7 +74,13 @@ export function SiteSettingsTab() {
               <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">{setting.label}</label>
-                  {setting.type === 'textarea' ? (
+                  {isImageSetting(setting) ? (
+                    <ImageUrlInput
+                      value={editVals[setting.key] ?? ''}
+                      onChange={url => setEditVals(v => ({ ...v, [setting.key]: url }))}
+                      placeholder="Tải ảnh lên hoặc chọn từ thư viện"
+                    />
+                  ) : setting.type === 'textarea' ? (
                     <textarea
                       value={editVals[setting.key] ?? ''}
                       onChange={e => setEditVals(v => ({ ...v, [setting.key]: e.target.value }))}

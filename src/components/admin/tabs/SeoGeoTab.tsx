@@ -13,6 +13,75 @@ const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 
   { key: 'organization_license', label: 'Giấy phép/chứng nhận thật (nếu có)', group_name: 'schema', type: 'text' },
 ];
 
+const ROUTE_GUIDE: Record<string, { title: string; description: string; canonical: string; keywords: string; schemaType: string; note: string }> = {
+  '/': {
+    title: 'BĐS Bình Dương – Mua bán, cho thuê bất động sản uy tín',
+    description: 'Cổng thông tin mua bán, cho thuê bất động sản Bình Dương và khu vực lân cận với tin thật, pháp lý minh bạch, tư vấn tận tâm.',
+    canonical: '/',
+    keywords: 'bất động sản Bình Dương, mua bán nhà đất Bình Dương, cho thuê bất động sản',
+    schemaType: 'WebPage hoặc FAQPage nếu schema bổ sung khớp nội dung đang hiển thị',
+    note: 'Trang chủ nên tập trung thương hiệu, khu vực phục vụ, tin nổi bật và FAQ thật.',
+  },
+  '/danh-sach': {
+    title: 'Danh sách bất động sản Bình Dương mới nhất',
+    description: 'Tìm kiếm nhà đất, đất nền, nhà phố, căn hộ và bất động sản cho thuê tại Bình Dương theo khu vực, giá, diện tích và pháp lý.',
+    canonical: '/danh-sach',
+    keywords: 'danh sách bất động sản, tìm nhà đất Bình Dương, lọc bất động sản',
+    schemaType: 'CollectionPage + ItemList khi có danh sách SSR đủ dữ liệu thật',
+    note: 'Không nhồi từ khóa; ưu tiên mô tả chức năng tìm kiếm và bộ lọc.',
+  },
+  '/mua-ban': {
+    title: 'Mua bán bất động sản Bình Dương chính chủ, pháp lý rõ ràng',
+    description: 'Cập nhật tin mua bán nhà đất Bình Dương: đất nền, nhà phố, căn hộ, biệt thự với giá bán, vị trí và pháp lý minh bạch.',
+    canonical: '/mua-ban',
+    keywords: 'mua bán bất động sản Bình Dương, bán nhà đất Bình Dương, đất nền Bình Dương',
+    schemaType: 'CollectionPage + ItemList',
+    note: 'Chỉ index mạnh khi danh sách có tin thật và được cập nhật đều.',
+  },
+  '/cho-thue': {
+    title: 'Cho thuê bất động sản Bình Dương – nhà, mặt bằng, căn hộ',
+    description: 'Tin cho thuê bất động sản Bình Dương gồm nhà ở, căn hộ, mặt bằng, kho xưởng và phòng trọ với thông tin giá thuê rõ ràng.',
+    canonical: '/cho-thue',
+    keywords: 'cho thuê bất động sản Bình Dương, thuê nhà Bình Dương, thuê mặt bằng Bình Dương',
+    schemaType: 'CollectionPage + ItemList',
+    note: 'Mô tả rõ loại tài sản thuê; không dùng giá/ưu đãi nếu không có dữ liệu thật.',
+  },
+  '/khu-vuc': {
+    title: 'Khu vực bất động sản Bình Dương và vùng lân cận',
+    description: 'Khám phá thị trường bất động sản theo khu vực: Bình Dương, TP.HCM, Đồng Nai, Bình Phước với dữ liệu tin đăng và hạ tầng nổi bật.',
+    canonical: '/khu-vuc',
+    keywords: 'khu vực bất động sản, bất động sản Bình Dương theo khu vực, thị trường nhà đất',
+    schemaType: 'CollectionPage',
+    note: 'Trang khu vực con vẫn phải qua quality gate, thiếu dữ liệu thì noindex.',
+  },
+  '/tin-tuc': {
+    title: 'Tin tức bất động sản Bình Dương, hạ tầng và đầu tư',
+    description: 'Cập nhật tin tức thị trường bất động sản Bình Dương, quy hoạch, hạ tầng, đầu tư và kinh nghiệm mua bán nhà đất.',
+    canonical: '/tin-tuc',
+    keywords: 'tin tức bất động sản Bình Dương, thị trường nhà đất, quy hoạch Bình Dương',
+    schemaType: 'CollectionPage; từng bài dùng NewsArticle riêng',
+    note: 'Bài viết cần author, ngày cập nhật, ảnh, excerpt và nội dung thật.',
+  },
+  '/ve-chung-toi': {
+    title: 'Về BĐS Bình Dương – Đơn vị tư vấn bất động sản địa phương',
+    description: 'Tìm hiểu BĐS Bình Dương, định hướng tư vấn bất động sản địa phương, khu vực phục vụ và cam kết minh bạch thông tin.',
+    canonical: '/ve-chung-toi',
+    keywords: 'BĐS Bình Dương, tư vấn bất động sản Bình Dương, đơn vị nhà đất Bình Dương',
+    schemaType: 'AboutPage hoặc WebPage',
+    note: 'Chỉ ghi giấy phép/chứng nhận/kinh nghiệm nếu có thật.',
+  },
+};
+
+function schemaExample(path: string): string {
+  const type = path === '/tin-tuc' || path === '/mua-ban' || path === '/cho-thue' || path === '/danh-sach' || path === '/khu-vuc' ? 'CollectionPage' : 'WebPage';
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': type,
+    name: ROUTE_GUIDE[path]?.title ?? path,
+    description: ROUTE_GUIDE[path]?.description ?? '',
+  }, null, 2);
+}
+
 function emptySeo(row?: SeoRouteOverride): SeoFieldsValue {
   return {
     meta_title: row?.meta_title ?? '',
@@ -61,6 +130,7 @@ export function SeoGeoTab() {
   const settingsMap = useMemo(() => ({ ...settingValues }), [settingValues]);
   const organizationPreview = useMemo(() => serializeJsonLd(buildLocalBusinessJsonLd(settingsMap)), [settingsMap]);
   const routeValidation = parseSeoSchema(routeSeo.schema_markup, 'route');
+  const activeGuide = ROUTE_GUIDE[activePath];
 
   const saveSettings = async () => {
     setSaving(true);
@@ -73,7 +143,8 @@ export function SeoGeoTab() {
       await load();
     } catch (e) {
       console.error(e);
-      setMessage('Lưu settings thất bại. Kiểm tra quyền admin/RLS.');
+      const detail = e instanceof Error ? e.message : 'Không rõ lỗi';
+      setMessage(`Lưu settings thất bại: ${detail}. Nếu bạn đang dùng tài khoản admin, hãy kiểm tra migration đã seed các key schema và policy site_settings có is_admin().`);
     } finally { setSaving(false); }
   };
 
@@ -154,6 +225,36 @@ export function SeoGeoTab() {
 
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 text-base font-black text-gray-900"><Search className="h-4 w-4 text-red-500" />Route Overrides</h3>
+            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-bold">Nên cấu hình gì cho từng route?</p>
+              <p className="mt-1 text-blue-800">Dùng route override cho các trang tĩnh/danh mục để Google hiểu đúng mục đích trang. Trang chi tiết BĐS, bài viết và khu vực con đã có schema riêng theo dữ liệu thật.</p>
+              {activeGuide && (
+                <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                  <div><span className="font-bold">Title mẫu:</span> {activeGuide.title}</div>
+                  <div><span className="font-bold">Canonical:</span> {activeGuide.canonical}</div>
+                  <div className="md:col-span-2"><span className="font-bold">Description mẫu:</span> {activeGuide.description}</div>
+                  <div><span className="font-bold">Keywords:</span> {activeGuide.keywords}</div>
+                  <div><span className="font-bold">Schema nên dùng:</span> {activeGuide.schemaType}</div>
+                  <div className="md:col-span-2"><span className="font-bold">Lưu ý:</span> {activeGuide.note}</div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeGuide) return;
+                  setCanonicalPath(activeGuide.canonical);
+                  setRouteSeo({
+                    meta_title: activeGuide.title,
+                    meta_description: activeGuide.description,
+                    focus_keywords: activeGuide.keywords,
+                    schema_markup: schemaExample(activePath),
+                  });
+                }}
+                className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
+              >
+                Điền mẫu cho route này
+              </button>
+            </div>
             <div className="mb-4 flex flex-wrap gap-2">
               {SEO_ROUTE_PATHS.map(path => (
                 <button key={path} onClick={() => setActivePath(path)}

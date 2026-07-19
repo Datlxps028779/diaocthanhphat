@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Bold, Italic, Heading2, List, Quote, Image as ImageIcon, Sparkles } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
@@ -17,6 +19,46 @@ type NewsFormState = SeoFieldsValue & {
   content: string;
   is_published: boolean;
 };
+
+function newsSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
+}
+
+function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_url' | 'author' | 'slug'>): Record<string, unknown> {
+  const path = `/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'NewsArticle',
+    headline: form.title,
+    description: form.excerpt || form.title,
+    image: form.image_url || undefined,
+    author: { '@type': 'Organization', name: form.author || 'BĐS Bình Dương' },
+    mainEntityOfPage: path,
+    url: path,
+  };
+}
+
+function ToolbarButton({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
 
 function initialForm(article: NewsArticle | null): NewsFormState {
   return {
@@ -39,8 +81,37 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
   const [form, setForm] = useState<NewsFormState>(() => initialForm(article));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
   const setSeo = (value: SeoFieldsValue) => setForm(f => ({ ...f, ...value }));
+
+  const insertAtCursor = (snippet: string) => {
+    const el = contentRef.current;
+    if (!el) {
+      set('content', `${form.content}${snippet}`);
+      return;
+    }
+    const start = el.selectionStart ?? form.content.length;
+    const end = el.selectionEnd ?? form.content.length;
+    const next = `${form.content.slice(0, start)}${snippet}${form.content.slice(end)}`;
+    set('content', next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + snippet.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  const autoGenerateSeo = () => {
+    const schema = buildNewsSchema(form);
+    setForm(f => ({
+      ...f,
+      meta_title: f.meta_title.trim() || f.title.slice(0, 60),
+      meta_description: f.meta_description.trim() || (f.excerpt || f.content).slice(0, 155),
+      focus_keywords: f.focus_keywords.trim() || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
+      schema_markup: f.schema_markup.trim() || JSON.stringify(schema, null, 2),
+    }));
+  };
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
@@ -51,7 +122,7 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
     try {
       await onSave({
         title: form.title.trim(),
-        slug: form.slug.trim(),
+        slug: form.slug.trim() || newsSlug(form.title),
         category: form.category,
         author: form.author.trim() || 'Ban biên tập',
         image_url: form.image_url.trim() || null,
@@ -105,9 +176,8 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
                 className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-700">URL ảnh bìa</label>
-              <input value={form.image_url} onChange={e => set('image_url', e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Ảnh đại diện bài viết</label>
+              <ImageUrlInput value={form.image_url} onChange={url => set('image_url', url)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" />
             </div>
           </div>
           <div>
@@ -116,9 +186,32 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
-            <textarea value={form.content} onChange={e => set('content', e.target.value)} rows={10}
-              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className="block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
+              <button type="button" onClick={autoGenerateSeo} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">
+                <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
+              </button>
+            </div>
+            <div className="mb-2 flex flex-wrap gap-1 rounded-xl border border-gray-100 bg-gray-50 p-2">
+              <ToolbarButton label="H2" icon={<Heading2 className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n## Tiêu đề phụ\n')} />
+              <ToolbarButton label="Đậm" icon={<Bold className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('**nội dung đậm**')} />
+              <ToolbarButton label="Nghiêng" icon={<Italic className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('*nội dung nghiêng*')} />
+              <ToolbarButton label="Danh sách" icon={<List className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n- Ý 1\n- Ý 2\n')} />
+              <ToolbarButton label="Trích dẫn" icon={<Quote className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n> Trích dẫn nổi bật\n')} />
+              <ToolbarButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n![Mô tả ảnh](https://...)\n')} />
+            </div>
+            <textarea ref={contentRef} value={form.content} onChange={e => set('content', e.target.value)} rows={12}
+              placeholder={'Viết nội dung theo Markdown. Ví dụ:\n## Tiêu đề phụ\nĐoạn văn...\n![Mô tả ảnh](https://...)'}
+              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            <div className="mt-2 rounded-xl border border-dashed border-gray-200 p-3">
+              <p className="mb-2 text-xs font-semibold text-gray-600">Chèn ảnh vào nội dung</p>
+              <ImageUrlInput
+                value=""
+                onChange={url => insertAtCursor(`\n![Ảnh minh họa](${url})\n`)}
+                placeholder="Upload/chọn ảnh rồi tự chèn vào nội dung"
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-gray-400">Hỗ trợ Markdown: ## tiêu đề, **đậm**, *nghiêng*, danh sách, quote, ảnh dạng ![alt](url).</p>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <input type="checkbox" checked={form.is_published} onChange={e => set('is_published', e.target.checked)} className="accent-red-600" />

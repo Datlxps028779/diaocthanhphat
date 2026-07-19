@@ -257,7 +257,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
             {/* Gallery */}
             <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-              <div className="relative aspect-video overflow-hidden group/gallery">
+              <div className="relative aspect-video overflow-hidden group/gallery bg-gray-100">
                 {/* Track trượt ngang cho slide mượt (translateX theo activeImg) */}
                 <div className="flex h-full transition-transform duration-300 ease-out"
                   style={{ transform: `translateX(-${activeImg * 100}%)` }}>
@@ -267,7 +267,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                       aria-label="Phóng to ảnh">
                       <Image src={img} alt={`${property.title} - ảnh ${i + 1}`} fill
                         priority={i === 0}
-                        sizes="(max-width: 768px) 100vw, 66vw" className="object-cover" />
+                        sizes="(max-width: 768px) 100vw, 66vw" className="object-contain" />
                     </button>
                   ))}
                 </div>
@@ -746,7 +746,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
       {/* Lightbox phóng to ảnh — object-contain để xem đầy đủ, không méo/vỡ hình */}
       {lightboxOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
           onClick={() => setLightboxOpen(false)}>
           <button onClick={() => setLightboxOpen(false)} aria-label="Đóng"
             className="absolute top-4 right-4 w-11 h-11 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white text-2xl transition-colors">
@@ -762,12 +762,12 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
             <>
               <button aria-label="Ảnh trước"
                 onClick={e => { e.stopPropagation(); setActiveImg(i => (i - 1 + allImages.length) % allImages.length); }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
+                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
                 <ChevronLeft className="w-6 h-6" />
               </button>
               <button aria-label="Ảnh sau"
                 onClick={e => { e.stopPropagation(); setActiveImg(i => (i + 1) % allImages.length); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
+                className="absolute right-3 sm:right-24 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors">
                 <ChevRight className="w-6 h-6" />
               </button>
             </>

@@ -17,8 +17,19 @@ export async function updateSiteSetting(key: string, value: string): Promise<voi
 }
 
 export async function upsertSiteSetting(input: Pick<SiteSetting, 'key' | 'value' | 'label' | 'group_name' | 'type'>): Promise<void> {
-  const { error } = await supabase.from('site_settings').upsert({ ...input, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-  if (error) throw error;
+  const now = new Date().toISOString();
+  const { data, error: updateError } = await supabase
+    .from('site_settings')
+    .update({ value: input.value, label: input.label, group_name: input.group_name, type: input.type, updated_at: now })
+    .eq('key', input.key)
+    .select('id');
+  if (updateError) throw updateError;
+  if (data && data.length > 0) return;
+
+  const { error: insertError } = await supabase
+    .from('site_settings')
+    .insert({ ...input, created_at: now, updated_at: now });
+  if (insertError) throw insertError;
 }
 
 // ─── CMS: Site Content ────────────────────────────────────────────────────────

@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
 import { type NewsArticle } from '../lib/supabase';
 import { getNews, getNewsById, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
-import { type Page } from '../lib/router';
+import { type Page, pageToHref } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
 
@@ -33,6 +35,131 @@ function estimateReadTime(content: string) {
   return Math.max(1, Math.round(words / 200));
 }
 
+function articleHref(article: Pick<NewsArticle, 'id' | 'slug'>) {
+  return pageToHref({ name: 'news', slug: article.slug || article.id });
+}
+
+function safeUrl(url: string) {
+  const value = url.trim();
+  if (!value) return '';
+  if (value.startsWith('/')) return value;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    if (match[2]) nodes.push(<strong key={`bold-${match.index}`}>{match[2]}</strong>);
+    else if (match[3]) nodes.push(<em key={`italic-${match.index}`}>{match[3]}</em>);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
+function renderMarkdownContent(content: string) {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  let i = 0;
+
+  const isBlockStart = (value: string) =>
+    /^#{1,3}\s+/.test(value) || /^>\s?/.test(value) || /^!\[[^\]]*\]\([^\)]+\)$/.test(value) || /^[-*]\s+/.test(value);
+
+  const pushParagraph = (paragraphLines: string[], key: string) => {
+    const text = paragraphLines.join(' ').replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    blocks.push(
+      <p key={key} className="m-0">
+        {renderInlineMarkdown(text)}
+      </p>,
+    );
+  };
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; continue; }
+
+    if (/^#{1,3}\s+/.test(line)) {
+      const level = line.match(/^#{1,3}/)?.[0].length ?? 2;
+      const text = line.replace(/^#{1,3}\s+/, '').trim();
+      const Tag = (level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3') as 'h1' | 'h2' | 'h3';
+      blocks.push(
+        <Tag
+          key={`heading-${i}`}
+          className={level === 1 ? 'mt-2 text-2xl font-bold text-gray-900' : level === 2 ? 'mt-2 text-xl font-bold text-gray-900' : 'mt-2 text-lg font-semibold text-gray-900'}
+        >
+          {renderInlineMarkdown(text)}
+        </Tag>,
+      );
+      i++;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, '').trim());
+        i++;
+      }
+      blocks.push(
+        <blockquote key={`quote-${i}`} className="rounded-xl border-l-4 border-red-400 bg-red-50 px-4 py-3 text-gray-700">
+          {renderInlineMarkdown(quoteLines.join(' ').trim())}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    if (/^!\[[^\]]*\]\([^\)]+\)$/.test(line)) {
+      const match = line.match(/^!\[([^\]]*)\]\(([^\)]+)\)$/);
+      const src = match ? safeUrl(match[2]) : '';
+      if (src) {
+        blocks.push(
+          <figure key={`img-${i}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <img src={src} alt={match?.[1] || ''} className="h-auto w-full object-cover" />
+          </figure>,
+        );
+      }
+      i++;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/, '').trim());
+        i++;
+      }
+      blocks.push(
+        <ul key={`list-${i}`} className="list-disc space-y-2 pl-5">
+          {items.map((item, index) => <li key={`${i}-${index}`}>{renderInlineMarkdown(item)}</li>)}
+        </ul>,
+      );
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i].trim();
+      if (!current || isBlockStart(current)) break;
+      paragraphLines.push(lines[i].trim());
+      i++;
+    }
+    pushParagraph(paragraphLines, `p-${i}`);
+    if (!paragraphLines.length) i++;
+  }
+
+  return blocks.length > 0 ? blocks : <p className="m-0 text-gray-500">Chưa có nội dung.</p>;
+}
+
 /* ────────────────── Skeletons ────────────────── */
 function SkeletonCard() {
   return (
@@ -51,11 +178,9 @@ function SkeletonCard() {
 /* ────────────────── Article Card ────────────────── */
 function ArticleCard({
   article,
-  onClick,
   large = false,
 }: {
   article: NewsArticle;
-  onClick: () => void;
   large?: boolean;
 }) {
   const imgUrl =
@@ -63,15 +188,13 @@ function ArticleCard({
     'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=600';
   const readMin = estimateReadTime((article as any).content ?? article.excerpt ?? '');
   const cat = (article as any).category ?? '';
+  const href = articleHref(article);
 
   if (large) {
     return (
-      <div
-        className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow cursor-pointer md:flex"
-        onClick={onClick}
-      >
+      <Link href={href} className="block bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow md:flex group">
         <div className="md:w-1/2 h-56 md:h-auto overflow-hidden flex-shrink-0">
-          <img src={imgUrl} alt={article.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+          <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         </div>
         <div className="p-6 flex flex-col justify-between md:w-1/2">
           <div>
@@ -83,7 +206,7 @@ function ArticleCard({
               )}
               <span className="text-xs text-gray-400">Nổi bật</span>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2 line-clamp-3 leading-snug">{article.title}</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-2 line-clamp-3 leading-snug group-hover:text-red-600 transition-colors">{article.title}</h2>
             <p className="text-gray-500 text-sm line-clamp-3">{article.excerpt}</p>
           </div>
           <div className="flex items-center gap-4 mt-4 text-xs text-gray-400">
@@ -93,25 +216,19 @@ function ArticleCard({
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" /> {readMin} phút đọc
             </span>
-            <button
-              className="ml-auto flex items-center gap-1 text-red-600 font-semibold hover:underline text-xs"
-              onClick={(e) => { e.stopPropagation(); onClick(); }}
-            >
+            <span className="ml-auto flex items-center gap-1 text-red-600 font-semibold group-hover:underline text-xs">
               Đọc tiếp <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            </span>
           </div>
         </div>
-      </div>
+      </Link>
     );
   }
 
   return (
-    <div
-      className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow cursor-pointer flex flex-col"
-      onClick={onClick}
-    >
+    <Link href={href} className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col group">
       <div className="h-44 overflow-hidden">
-        <img src={imgUrl} alt={article.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+        <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="p-4 flex flex-col flex-1">
         {cat && (
@@ -119,7 +236,7 @@ function ArticleCard({
             {cat}
           </span>
         )}
-        <h3 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2 leading-snug flex-1">{article.title}</h3>
+        <h3 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2 leading-snug flex-1 group-hover:text-red-600 transition-colors">{article.title}</h3>
         <p className="text-gray-500 text-xs line-clamp-2 mb-3">{article.excerpt}</p>
         <div className="flex items-center justify-between text-xs text-gray-400 mt-auto">
           <span className="flex items-center gap-1">
@@ -129,11 +246,11 @@ function ArticleCard({
             <Clock className="w-3 h-3" /> {readMin} phút
           </span>
         </div>
-        <button className="mt-2 flex items-center gap-1 text-red-600 text-xs font-semibold hover:underline self-end">
+        <span className="mt-2 flex items-center gap-1 text-red-600 text-xs font-semibold group-hover:underline self-end">
           Đọc tiếp <ChevronRight className="w-3 h-3" />
-        </button>
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -142,19 +259,21 @@ function ArticleDetail({
   article,
   related,
   onBack,
-  onArticleClick,
 }: {
   article: NewsArticle;
   related: NewsArticle[];
   onBack: () => void;
-  onArticleClick: (id: string) => void;
 }) {
+  const href = articleHref(article);
+  const canonicalUrl = href;
+  const markdownBlocks = renderMarkdownContent((article as any).content ?? article.excerpt ?? '');
+  const relatedArticles = related.slice(0, 5);
+  const relatedHref = (item: NewsArticle) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
   const content: string = (article as any).content ?? article.excerpt ?? '';
-  const paragraphs = content.split('\n\n').filter(Boolean);
   const tags: string[] = (article as any).tags ?? [];
   const cat = (article as any).category ?? '';
   const readMin = estimateReadTime(content);
@@ -209,10 +328,10 @@ function ArticleDetail({
 
           {/* Content */}
           <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed space-y-4">
-            {paragraphs.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
+            {markdownBlocks}
           </div>
+          <div className="mt-4 text-xs text-gray-400 break-all">URL: {canonicalUrl}</div>
+          <div className="sr-only">{href}</div>
 
           {/* Tags */}
           {tags.length > 0 && (
@@ -244,22 +363,22 @@ function ArticleDetail({
           <div className="bg-white rounded-2xl shadow p-5 sticky top-24">
             <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Bài viết liên quan</h4>
             <div className="space-y-4">
-              {related.slice(0, 5).map((r) => {
+              {relatedArticles.map((r) => {
                 const rImg = (r as any).image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=200';
                 return (
-                  <button
+                  <Link
                     key={r.id}
-                    className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity"
-                    onClick={() => onArticleClick(r.id)}
+                    href={relatedHref(r)}
+                    className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
                   >
                     <img src={rImg} alt={r.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                     <div>
-                      <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug">{r.title}</p>
+                      <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">{r.title}</p>
                       <p className="text-xs text-gray-400 mt-1">
                         {formatDate((r as any).published_at ?? (r as any).created_at ?? '')}
                       </p>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
               {related.length === 0 && (
@@ -325,11 +444,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     newsletterMutation.mutate(newsletterEmail.trim());
   };
 
-  const handleArticleClick = (id: string) => {
-    setArticleId(id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const handleBack = () => {
     setArticleId(undefined);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -343,7 +457,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
         article={activeArticle}
         related={related}
         onBack={handleBack}
-        onArticleClick={handleArticleClick}
       />
     );
   }
@@ -418,7 +531,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                 <div className="mb-8">
                   <ArticleCard
                     article={featured}
-                    onClick={() => handleArticleClick(featured.id)}
                     large
                   />
                 </div>
@@ -431,7 +543,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                     <ArticleCard
                       key={a.id}
                       article={a}
-                      onClick={() => handleArticleClick(a.id)}
                     />
                   ))}
                 </div>
@@ -449,10 +560,10 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                 const img = (a as any).image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=200';
                 const cat = (a as any).category ?? '';
                 return (
-                  <button
+                  <Link
                     key={a.id}
+                    href={articleHref(a)}
                     className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
-                    onClick={() => handleArticleClick(a.id)}
                   >
                     <img src={img} alt={a.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                     <div>
@@ -466,7 +577,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                         {formatDate((a as any).published_at ?? (a as any).created_at ?? '')}
                       </p>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
               {loading && (
