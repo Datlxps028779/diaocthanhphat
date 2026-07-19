@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import DOMPurify from 'isomorphic-dompurify';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
 import { type NewsArticle } from '../lib/supabase';
@@ -9,7 +10,13 @@ import { qk } from '../lib/queryKeys';
 import { type Page, pageToHref } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
-import { renderMarkdownContent } from '../lib/markdown';
+import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown';
+
+const ARTICLE_SANITIZE = {
+  ALLOWED_TAGS: ['p', 'h2', 'h3', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel'],
+  ALLOWED_URI_REGEXP: /^(?:https?:|\/)/i,
+};
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -145,17 +152,22 @@ function ArticleDetail({
 }) {
   const href = articleHref(article);
   const canonicalUrl = href;
-  const markdownBlocks = renderMarkdownContent((article as any).content ?? article.excerpt ?? '');
+  const rawContent: string = (article as any).content ?? article.excerpt ?? '';
+  const contentIsHtml = isHtmlContent(rawContent);
+  const safeHtml = useMemo(
+    () => (contentIsHtml ? DOMPurify.sanitize(rawContent, ARTICLE_SANITIZE) : ''),
+    [rawContent, contentIsHtml],
+  );
+  const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
   const relatedHref = (item: NewsArticle) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
-  const content: string = (article as any).content ?? article.excerpt ?? '';
   const tags: string[] = (article as any).tags ?? [];
   const cat = (article as any).category ?? '';
-  const readMin = estimateReadTime(content);
+  const readMin = estimateReadTime(contentIsHtml ? stripHtml(rawContent) : rawContent);
   const pubDate = formatDate((article as any).published_at ?? (article as any).created_at ?? new Date().toISOString());
 
   return (
@@ -206,9 +218,16 @@ function ArticleDetail({
           )}
 
           {/* Content */}
-          <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed space-y-4">
-            {markdownBlocks}
-          </div>
+          {contentIsHtml ? (
+            <div
+              className="prose prose-gray max-w-none text-gray-700 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: safeHtml }}
+            />
+          ) : (
+            <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed space-y-4">
+              {markdownBlocks}
+            </div>
+          )}
           <div className="mt-4 text-xs text-gray-400 break-all">URL: {canonicalUrl}</div>
           <div className="sr-only">{href}</div>
 

@@ -27,6 +27,113 @@ export function renderInlineMarkdown(text: string): ReactNode[] {
   return nodes;
 }
 
+const HTML_BLOCK_TAG = /<\/?(p|h[1-6]|ul|ol|li|blockquote|img|figure|figcaption|a|strong|em|b|i|br|div|span)\b[^>]*>/i;
+
+export function isHtmlContent(value: string): boolean {
+  return HTML_BLOCK_TAG.test(value);
+}
+
+export function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function inlineMarkdownToHtml(text: string): string {
+  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  let html = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) html += escapeHtml(text.slice(lastIndex, match.index));
+    if (match[2]) html += `<strong>${escapeHtml(match[2])}</strong>`;
+    else if (match[3]) html += `<em>${escapeHtml(match[3])}</em>`;
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) html += escapeHtml(text.slice(lastIndex));
+  return html;
+}
+
+export function markdownToHtml(content: string): string {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const blocks: string[] = [];
+  let i = 0;
+
+  const isBlockStart = (value: string) =>
+    /^#{1,3}\s+/.test(value) || /^>\s?/.test(value) || /^!\[[^\]]*\]\([^\)]+\)$/.test(value) || /^[-*]\s+/.test(value);
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line) { i++; continue; }
+
+    if (/^#{1,3}\s+/.test(line)) {
+      const level = line.match(/^#{1,3}/)?.[0].length ?? 2;
+      const text = line.replace(/^#{1,3}\s+/, '').trim();
+      const tag = level === 1 ? 'h2' : level === 2 ? 'h2' : 'h3';
+      blocks.push(`<${tag}>${inlineMarkdownToHtml(text)}</${tag}>`);
+      i++;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, '').trim());
+        i++;
+      }
+      blocks.push(`<blockquote>${inlineMarkdownToHtml(quoteLines.join(' ').trim())}</blockquote>`);
+      continue;
+    }
+
+    if (/^!\[[^\]]*\]\([^\)]+\)$/.test(line)) {
+      const match = line.match(/^!\[([^\]]*)\]\(([^\)]+)\)$/);
+      const src = match ? safeUrl(match[2]) : '';
+      if (src) blocks.push(`<img src="${escapeHtml(src)}" alt="${escapeHtml(match?.[1] || '')}" />`);
+      i++;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/, '').trim());
+        i++;
+      }
+      blocks.push(`<ul>${items.map(item => `<li>${inlineMarkdownToHtml(item)}</li>`).join('')}</ul>`);
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i].trim();
+      if (!current || isBlockStart(current)) break;
+      paragraphLines.push(lines[i].trim());
+      i++;
+    }
+    const text = paragraphLines.join(' ').replace(/\s+/g, ' ').trim();
+    if (text) blocks.push(`<p>${inlineMarkdownToHtml(text)}</p>`);
+    else if (!paragraphLines.length) i++;
+  }
+
+  return blocks.join('');
+}
+
 export function renderMarkdownContent(content: string) {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];

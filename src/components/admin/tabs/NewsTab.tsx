@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Bold, Italic, Heading2, List, Quote, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
-import { renderMarkdownContent } from '../../../lib/markdown';
+import { RichTextEditor } from '../shared/RichTextEditor';
+import { isHtmlContent, markdownToHtml, stripHtml } from '../../../lib/markdown';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
 
@@ -48,20 +48,8 @@ function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_
   };
 }
 
-function ToolbarButton({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
 function initialForm(article: NewsArticle | null): NewsFormState {
+  const rawContent = article?.content ?? '';
   return {
     title: article?.title ?? '',
     slug: article?.slug ?? '',
@@ -69,7 +57,7 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     author: article?.author ?? 'Ban biên tập',
     image_url: article?.image_url ?? '',
     excerpt: article?.excerpt ?? '',
-    content: article?.content ?? '',
+    content: rawContent ? (isHtmlContent(rawContent) ? rawContent : markdownToHtml(rawContent)) : '',
     is_published: article?.is_published ?? true,
     meta_title: article?.meta_title ?? '',
     meta_description: article?.meta_description ?? '',
@@ -82,19 +70,12 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
   const [form, setForm] = useState<NewsFormState>(() => initialForm(article));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const contentRef = useRef<HTMLTextAreaElement>(null);
-  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
   const setSeo = (value: SeoFieldsValue) => {
     manualSchemaRef.current = Boolean(value.schema_markup.trim()) && value.schema_markup !== generatedSchemaRef.current;
     setForm(f => ({ ...f, ...value }));
-  };
-
-  const rememberSelection = () => {
-    const el = contentRef.current;
-    if (el) selectionRef.current = { start: el.selectionStart, end: el.selectionEnd };
   };
 
   useEffect(() => {
@@ -104,62 +85,18 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
     setForm(f => ({
       ...f,
       meta_title: f.meta_title.trim() || f.title.slice(0, 60),
-      meta_description: f.meta_description.trim() || (f.excerpt || f.content).slice(0, 155),
+      meta_description: f.meta_description.trim() || (f.excerpt || stripHtml(f.content)).slice(0, 155),
       focus_keywords: f.focus_keywords.trim() || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: manualSchemaRef.current ? f.schema_markup : schema,
     }));
   }, [form.title, form.slug, form.category, form.author, form.image_url, form.excerpt, form.content]);
-
-  const insertAtCursor = (snippet: string) => {
-    const el = contentRef.current;
-    const sel = selectionRef.current;
-    const start = el?.selectionStart ?? sel.start;
-    const end = el?.selectionEnd ?? sel.end;
-    const next = `${form.content.slice(0, start)}${snippet}${form.content.slice(end)}`;
-    set('content', next);
-    selectionRef.current = { start: start + snippet.length, end: start + snippet.length };
-    requestAnimationFrame(() => {
-      const target = contentRef.current;
-      if (!target) return;
-      target.focus();
-      const pos = start + snippet.length;
-      target.setSelectionRange(pos, pos);
-    });
-  };
-
-  const wrapSelection = (prefix: string, fallback: string, suffix = prefix) => {
-    const el = contentRef.current;
-    const sel = selectionRef.current;
-    const start = el?.selectionStart ?? sel.start;
-    const end = el?.selectionEnd ?? sel.end;
-    const selectedText = form.content.slice(start, end) || fallback;
-    const snippet = `${prefix}${selectedText}${suffix}`;
-    const next = `${form.content.slice(0, start)}${snippet}${form.content.slice(end)}`;
-    set('content', next);
-    const selectionStart = start + prefix.length;
-    const selectionEnd = selectionStart + selectedText.length;
-    selectionRef.current = { start: selectionStart, end: selectionEnd };
-    requestAnimationFrame(() => {
-      const target = contentRef.current;
-      if (!target) return;
-      target.focus();
-      target.setSelectionRange(selectionStart, selectionEnd);
-    });
-  };
-
-  const insertImage = (url: string) => {
-    const imageUrl = url.trim();
-    if (!imageUrl) return;
-    const snippet = `\n![Ảnh minh họa](${imageUrl})\n`;
-    insertAtCursor(snippet);
-  };
 
   const autoGenerateSeo = () => {
     const schema = buildNewsSchema(form);
     setForm(f => ({
       ...f,
       meta_title: f.meta_title.trim() || f.title.slice(0, 60),
-      meta_description: f.meta_description.trim() || (f.excerpt || f.content).slice(0, 155),
+      meta_description: f.meta_description.trim() || (f.excerpt || stripHtml(f.content)).slice(0, 155),
       focus_keywords: f.focus_keywords.trim() || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: f.schema_markup.trim() || JSON.stringify(schema, null, 2),
     }));
@@ -171,6 +108,7 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
     if (schema.error) { setError(schema.error); return; }
     setSaving(true);
     setError('');
+    const bodyHtml = form.content.replace(/<p>\s*<\/p>/g, '').trim();
     try {
       await onSave({
         title: form.title.trim(),
@@ -179,7 +117,7 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
         author: form.author.trim() || 'Ban biên tập',
         image_url: form.image_url.trim() || null,
         excerpt: form.excerpt.trim() || null,
-        content: form.content.trim() || null,
+        content: bodyHtml || null,
         is_published: form.is_published,
         meta_title: form.meta_title.trim() || null,
         meta_description: form.meta_description.trim() || null,
@@ -244,40 +182,8 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
                 <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
               </button>
             </div>
-            <div className="mb-2 flex flex-wrap gap-1 rounded-xl border border-gray-100 bg-gray-50 p-2">
-              <ToolbarButton label="H2" icon={<Heading2 className="h-3.5 w-3.5" />} onClick={() => wrapSelection('## ', 'Tiêu đề phụ', '')} />
-              <ToolbarButton label="Đậm" icon={<Bold className="h-3.5 w-3.5" />} onClick={() => wrapSelection('**', 'nội dung đậm')} />
-              <ToolbarButton label="Nghiêng" icon={<Italic className="h-3.5 w-3.5" />} onClick={() => wrapSelection('*', 'nội dung nghiêng')} />
-              <ToolbarButton label="Danh sách" icon={<List className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n- Ý 1\n- Ý 2\n')} />
-              <ToolbarButton label="Trích dẫn" icon={<Quote className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n> Trích dẫn nổi bật\n')} />
-              <ToolbarButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n![Mô tả ảnh](https://...)\n')} />
-            </div>
-            <textarea ref={contentRef} value={form.content}
-              onChange={e => { set('content', e.target.value); rememberSelection(); }}
-              onSelect={rememberSelection}
-              onBlur={rememberSelection}
-              onClick={rememberSelection}
-              onKeyUp={rememberSelection}
-              rows={12}
-              placeholder={'Viết nội dung theo Markdown. Ví dụ:\n## Tiêu đề phụ\nĐoạn văn...\n![Mô tả ảnh](https://...)'}
-              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-            {form.content.trim() && (
-              <div className="mt-3 rounded-xl border border-gray-100 bg-white p-4">
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Xem trước nội dung</p>
-                <div className="prose prose-gray max-w-none space-y-3 text-sm text-gray-700">
-                  {renderMarkdownContent(form.content)}
-                </div>
-              </div>
-            )}
-            <div className="mt-2 rounded-xl border border-dashed border-gray-200 p-3">
-              <p className="mb-2 text-xs font-semibold text-gray-600">Chèn ảnh vào nội dung</p>
-              <ImageUrlInput
-                value=""
-                onChange={insertImage}
-                placeholder="Upload/chọn ảnh rồi tự chèn vào nội dung"
-              />
-            </div>
-            <p className="mt-1 text-[11px] text-gray-400">Hỗ trợ Markdown: ## tiêu đề, **đậm**, *nghiêng*, danh sách, quote, ảnh dạng ![alt](url). Bôi đen đoạn văn rồi bấm Đậm/Nghiêng để bọc quanh đoạn đó.</p>
+            <RichTextEditor value={form.content} onChange={html => set('content', html)} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, chèn ảnh..." />
+            <p className="mt-1 text-[11px] text-gray-400">Bôi đen đoạn văn rồi bấm Đậm/Nghiêng/Tiêu đề để định dạng tại chỗ. Nút Ảnh sẽ tải ảnh lên và chèn thẳng vào bài.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
