@@ -3,7 +3,17 @@ import { AlertCircle, CheckCircle, Globe2, RefreshCw, Save, Search, ShieldCheck 
 import type { SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, SEO_ROUTE_PATHS, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
+import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
+
+function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
+  if (!schemaType) return 'WebPage';
+  if (schemaType.includes('CollectionPage')) return 'CollectionPage';
+  if (schemaType.includes('AboutPage')) return 'AboutPage';
+  if (schemaType.includes('WebSite')) return 'WebSite';
+  if (schemaType.includes('FAQPage')) return 'FAQPage';
+  return 'WebPage';
+}
 
 const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 'type'> & { placeholder?: string }> = [
   { key: 'organization_legal_name', label: 'Tên pháp lý doanh nghiệp', group_name: 'schema', type: 'text' },
@@ -128,9 +138,24 @@ export function SeoGeoTab() {
   }, [activePath, routes]);
 
   const settingsMap = useMemo(() => ({ ...settingValues }), [settingValues]);
-  const organizationPreview = useMemo(() => serializeJsonLd(buildLocalBusinessJsonLd(settingsMap)), [settingsMap]);
-  const routeValidation = parseSeoSchema(routeSeo.schema_markup, 'route');
   const activeGuide = ROUTE_GUIDE[activePath];
+  const activeRouteSchema = buildAutoSchema('route', {
+    title: routeSeo.meta_title || activeGuide?.title,
+    description: routeSeo.meta_description || activeGuide?.description,
+    focus_keywords: routeSeo.focus_keywords || activeGuide?.keywords,
+    path: canonicalPath || activePath,
+    route_type: schemaTypeFromGuide(activeGuide?.schemaType),
+  });
+  const organizationSchema = buildAutoSchema('home', {
+    title: settingValues.organization_legal_name || 'BĐS Bình Dương',
+    description: settingValues.organization_description || 'BĐS Bình Dương',
+    site_name: settingValues.organization_legal_name || 'BĐS Bình Dương',
+    path: '/',
+  });
+  const organizationPreview = useMemo(() => serializeJsonLd(buildLocalBusinessJsonLd(settingsMap)), [settingsMap]);
+  const routePreview = useMemo(() => JSON.stringify(activeRouteSchema, null, 2), [activeRouteSchema]);
+  const sitePreview = useMemo(() => schemaToJson(organizationSchema), [organizationSchema]);
+  const routeValidation = parseSeoSchema(routeSeo.schema_markup, 'route');
 
   const saveSettings = async () => {
     setSaving(true);
@@ -276,7 +301,7 @@ export function SeoGeoTab() {
                 <input type="checkbox" checked={robotsFollow} onChange={e => setRobotsFollow(e.target.checked)} className="accent-red-600" /> Follow
               </label>
             </div>
-            <SeoFields value={routeSeo} onChange={setRouteSeo} target="route" basePath={canonicalPath || activePath} />
+            <SeoFields value={routeSeo} onChange={setRouteSeo} target="route" basePath={canonicalPath || activePath} autoSchema={activeRouteSchema} />
             <div className="mt-4 flex justify-end">
               <button onClick={saveRoute} disabled={saving || !!routeValidation.error}
                 className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
@@ -299,6 +324,16 @@ export function SeoGeoTab() {
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <h3 className="mb-3 text-base font-black text-gray-900">Preview Organization JSON-LD</h3>
             <pre className="max-h-[420px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{organizationPreview}</pre>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <h3 className="mb-3 text-base font-black text-gray-900">Preview Route JSON-LD</h3>
+            <pre className="max-h-[320px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{routePreview}</pre>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <h3 className="mb-3 text-base font-black text-gray-900">Preview Site Entity Schema</h3>
+            <pre className="max-h-[320px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{sitePreview}</pre>
           </div>
 
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">

@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star, ShieldCheck } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
 import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
+import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
+import { parseSeoSchema } from '../shared/SeoFields';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
@@ -447,11 +449,40 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     contact_phone: form.contact_phone,
     property_type_name: types.find(t => t.id === form.property_type_id)?.name ?? '',
   });
+  const seoSchemaState = useMemo(() => parseSeoSchema(seo.schemaMarkup, 'property'), [seo.schemaMarkup]);
   // Sync SEO vào form
   useEffect(() => { setForm(f => ({ ...f, meta_title: seo.metaTitle })); }, [seo.metaTitle]);
   useEffect(() => { setForm(f => ({ ...f, meta_description: seo.metaDescription })); }, [seo.metaDescription]);
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
-  useEffect(() => { setForm(f => ({ ...f, schema_markup: seo.schemaMarkup })); }, [seo.schemaMarkup]);
+  useEffect(() => {
+    const autoSchema = buildAutoSchema('property', {
+      title: form.title,
+      description: form.description,
+      image_url: form.image_url,
+      images: form.images,
+      listing_type: form.listing_type,
+      price: form.price,
+      price_unit: form.price_unit,
+      price_per_month: form.price_per_month,
+      city: form.city,
+      district: form.district,
+      area_sqm: form.area_sqm,
+      bedrooms: form.bedrooms,
+      bathrooms: form.bathrooms,
+      address: form.address,
+      latitude: form.latitude,
+      longitude: form.longitude,
+      author: form.contact_name,
+      site_name: form.contact_name,
+      path: `/bat-dong-san/${form.slug || generateSlug(form.title) || 'slug'}`,
+    });
+    setForm(f => {
+      const generated = schemaToJson(autoSchema);
+      const current = f.schema_markup.trim();
+      const previousAuto = seo.schemaMarkup.trim();
+      return { ...f, schema_markup: !current || current === previousAuto ? generated : f.schema_markup };
+    });
+  }, [form.title, form.description, form.image_url, form.images, form.listing_type, form.price, form.price_unit, form.price_per_month, form.city, form.district, form.area_sqm, form.bedrooms, form.bathrooms, form.address, form.latitude, form.longitude, form.contact_name, form.slug]);
 
   const setField = (name: string, value: unknown) => setForm(f => ({ ...f, [name]: value }));
   const setPropertyType = (id: string) => {
@@ -825,9 +856,10 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>
                 <textarea value={seo.schemaMarkup} onChange={e => seo.setSchemaMarkup(e.target.value)} rows={6}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+                  className={`w-full border rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 resize-none ${seoSchemaState.error ? 'border-red-200 bg-red-50 focus:ring-red-300' : 'border-gray-200 focus:ring-red-400'}`} />
+                <p className={`mt-1 text-[10px] ${seoSchemaState.error ? 'text-red-600' : 'text-emerald-600'}`}>{seoSchemaState.error || 'Schema BĐS tự sinh hợp lệ theo dữ liệu đang nhập.'}</p>
               </div>
-              <button type="button" onClick={seo.resetAuto} className="text-xs text-red-600 hover:underline">↻ Tự động điền lại</button>
+              <button type="button" onClick={seo.resetAuto} className="text-xs text-red-600 hover:underline">↻ Tự động điền lại schema/SEO</button>
               <SEOPreview metaTitle={seo.metaTitle} metaDescription={seo.metaDescription} focusKeywords={seo.focusKeywords} />
             </div>
           </div>
