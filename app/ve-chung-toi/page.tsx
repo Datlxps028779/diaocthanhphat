@@ -1,19 +1,30 @@
-import type { Metadata } from 'next';
 import { AboutClient } from '../_clients/pageClients';
-import { serializeJsonLd, staticPageMetadata, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
+import { loadRouteSeo } from '@/lib/routeSeo';
 
-export const metadata: Metadata = staticPageMetadata({
+const PATH = '/ve-chung-toi';
+const fallback = {
   title: 'Về chúng tôi',
   description: 'Giới thiệu về đội ngũ, sứ mệnh và giá trị của chúng tôi trong lĩnh vực bất động sản tại Bình Dương.',
-  path: '/ve-chung-toi',
-});
+  path: PATH,
+  routeType: 'AboutPage' as const,
+  breadcrumb: [
+    { name: 'Trang chủ', path: '/' },
+    { name: 'Về chúng tôi', path: PATH },
+  ],
+};
+
+export async function generateMetadata() {
+  const { metadata } = await loadRouteSeo(PATH, fallback);
+  return metadata;
+}
 export const revalidate = 3600;
 
-export default function Page() {
-  const breadcrumb = buildBreadcrumbJsonLd([{ name: 'Trang chủ', path: '/' }, { name: 'Về chúng tôi', path: '/ve-chung-toi' }]);
+export default async function Page() {
+  const { jsonLd } = await loadRouteSeo(PATH, fallback);
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }} />
+      <JsonLdScripts schemas={jsonLd} />
       <AboutClient />
     </>
   );

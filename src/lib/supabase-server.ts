@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Property, NewsArticle, Area } from './supabase';
+import { unstable_cache } from 'next/cache';
+import type { Property, NewsArticle, Area, SeoRouteOverride } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -147,3 +148,26 @@ export async function serverGetSiteSettings(): Promise<Record<string, string>> {
     return {};
   }
 }
+
+// Đọc 1 dòng seo_route_overrides theo path (RLS public SELECT). Trả null khi lỗi
+// hoặc không có dòng → caller fallback về staticPageMetadata. Bọc unstable_cache
+// để generateMetadata và Page() không đọc DB 2 lần trong cùng request; cache theo
+// path và tag 'seo-route' để ISR revalidate theo revalidate của route.
+export const serverGetSeoRouteOverride = unstable_cache(
+  async (path: string): Promise<SeoRouteOverride | null> => {
+    try {
+      const sb = serverClient();
+      const { data } = await sb
+        .from('seo_route_overrides')
+        .select('*')
+        .eq('path', path)
+        .maybeSingle();
+      return (data as SeoRouteOverride | null) ?? null;
+    } catch {
+      return null;
+    }
+  },
+  ['seo-route-override'],
+  { tags: ['seo-route'] },
+);
+

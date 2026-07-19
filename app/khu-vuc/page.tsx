@@ -1,22 +1,35 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { RegionsClient } from '../_clients/pageClients';
-import { serializeJsonLd, staticPageMetadata, buildBreadcrumbJsonLd } from '@/lib/seo';
 import { serverGetAreas } from '@/lib/supabase-server';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
+import { loadRouteSeo } from '@/lib/routeSeo';
 
-export const metadata: Metadata = staticPageMetadata({
+const PATH = '/khu-vuc';
+const fallback = {
   title: 'Khu vực bất động sản',
   description: 'Bất động sản theo khu vực tại Bình Dương và các tỉnh lân cận. Thông tin quy hoạch, hạ tầng, giá đất.',
-  path: '/khu-vuc',
-});
+  path: PATH,
+  routeType: 'CollectionPage' as const,
+  breadcrumb: [
+    { name: 'Trang chủ', path: '/' },
+    { name: 'Khu vực bất động sản', path: PATH },
+  ],
+};
+
+export async function generateMetadata() {
+  const { metadata } = await loadRouteSeo(PATH, fallback);
+  return metadata;
+}
 export const revalidate = 1800;
 
 export default async function Page() {
-  const [areas] = await Promise.all([serverGetAreas()]);
-  const breadcrumb = buildBreadcrumbJsonLd([{ name: 'Trang chủ', path: '/' }, { name: 'Khu vực bất động sản', path: '/khu-vuc' }]);
+  const [{ jsonLd }, areas] = await Promise.all([
+    loadRouteSeo(PATH, fallback),
+    serverGetAreas(),
+  ]);
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }} />
+      <JsonLdScripts schemas={jsonLd} />
       <RegionsClient />
       {areas.length > 0 && (
         <section className="bg-white border-t border-gray-100">

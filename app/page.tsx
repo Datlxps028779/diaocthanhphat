@@ -1,16 +1,29 @@
 import { HomeClient } from './HomeClient';
-import { serializeJsonLd } from '@/lib/seo';
 import { buildFaqJsonLd } from '@/lib/faq';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
+import { loadRouteSeo } from '@/lib/routeSeo';
+
+const PATH = '/';
+const fallback = {
+  title: 'BĐS Bình Dương – Mua bán, cho thuê bất động sản uy tín',
+  description: 'Cổng thông tin mua bán, cho thuê bất động sản Bình Dương và khu vực lân cận với tin thật, pháp lý minh bạch, tư vấn tận tâm.',
+  path: PATH,
+  routeType: 'WebSite' as const,
+};
 
 // Home revalidate mỗi 30 phút (nội dung động: featured/hot/recent + CMS blocks).
+export async function generateMetadata() {
+  const { metadata } = await loadRouteSeo(PATH, fallback);
+  return metadata;
+}
 export const revalidate = 1800;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { jsonLd } = await loadRouteSeo(PATH, fallback);
+  const schemas = [...jsonLd, buildFaqJsonLd()];
   return (
     <>
-      {/* FAQPage JSON-LD server-render → Google hiện FAQ rich result. Khớp section
-          FAQ hiển thị trong LandingPage (cùng nguồn FAQ_ITEMS). */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildFaqJsonLd()) }} />
+      <JsonLdScripts schemas={schemas} />
       <HomeClient />
     </>
   );
