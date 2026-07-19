@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from 'react';
 import { AlertCircle, CheckCircle, Search } from 'lucide-react';
 import { SEOPreview } from '../../../lib/useSEOAutofill';
 import { parseSchemaJson, validateSchemaMarkup, type SchemaTarget } from '../../../lib/schemaValidation';
@@ -7,6 +8,71 @@ export interface SeoFieldsValue {
   meta_description: string;
   focus_keywords: string;
   schema_markup: string;
+}
+
+function compact(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function deriveName(value: SeoFieldsValue, basePath: string) {
+  const title = compact(value.meta_title);
+  if (title) return title;
+  const keyword = compact(value.focus_keywords).split(',')[0]?.trim();
+  if (keyword) return keyword;
+  const slugLabel = basePath.replace(/^\//, '').replace(/[-_/]+/g, ' ').trim();
+  return slugLabel || 'Trang';
+}
+
+function buildAutoSchema(value: SeoFieldsValue, target: SchemaTarget, basePath: string): Record<string, unknown> {
+  const name = deriveName(value, basePath);
+  const description = compact(value.meta_description) || name;
+  const url = basePath || '/';
+
+  switch (target) {
+    case 'news':
+      return {
+        '@context': 'https://schema.org',
+        '@type': 'NewsArticle',
+        headline: name,
+        description,
+        mainEntityOfPage: url,
+        url,
+      };
+    case 'property':
+      return {
+        '@context': 'https://schema.org',
+        '@type': 'RealEstateListing',
+        name,
+        description,
+        url,
+      };
+    case 'area':
+      return {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name,
+        description,
+        mainEntityOfPage: url,
+        url,
+      };
+    case 'home':
+      return {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name,
+        description,
+        url,
+      };
+    case 'route':
+    default:
+      return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name,
+        description,
+        url,
+      };
+  }
 }
 
 export function parseSeoSchema(value: string, target: SchemaTarget): { schema: Record<string, unknown> | null; error: string | null; warnings: string[] } {
@@ -22,14 +88,42 @@ export function SeoFields({
   onChange,
   target,
   basePath = '/...',
+  autoSchema: externalAutoSchema,
 }: {
   value: SeoFieldsValue;
   onChange: (value: SeoFieldsValue) => void;
   target: SchemaTarget;
   basePath?: string;
+  autoSchema?: Record<string, unknown>;
 }) {
   const schemaState = parseSeoSchema(value.schema_markup, target);
-  const set = (key: keyof SeoFieldsValue, next: string) => onChange({ ...value, [key]: next });
+  const autoSchema = useMemo(
+    () => JSON.stringify(externalAutoSchema ?? buildAutoSchema(value, target, basePath), null, 2),
+    [externalAutoSchema, value.meta_title, value.meta_description, value.focus_keywords, target, basePath],
+  );
+  const onChangeRef = useRef(onChange);
+  const autoModeRef = useRef(value.schema_markup.trim().length === 0);
+  const generatedSchemaRef = useRef(value.schema_markup.trim());
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (!autoModeRef.current) return;
+    if (value.schema_markup.trim() && value.schema_markup !== generatedSchemaRef.current) return;
+    if (generatedSchemaRef.current === autoSchema) return;
+    generatedSchemaRef.current = autoSchema;
+    onChangeRef.current({ ...value, schema_markup: autoSchema });
+  }, [autoSchema, value.schema_markup, value.meta_title, value.meta_description, value.focus_keywords]);
+
+  const set = (key: keyof SeoFieldsValue, next: string) => {
+    if (key === 'schema_markup') {
+      autoModeRef.current = next.trim().length === 0;
+      generatedSchemaRef.current = next.trim();
+    }
+    onChange({ ...value, [key]: next });
+  };
 
   return (
     <div className="space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4">
@@ -78,7 +172,10 @@ export function SeoFields({
           onChange={e => set('schema_markup', e.target.value)}
           rows={7}
           className={`w-full resize-none rounded-lg border px-3 py-2.5 font-mono text-xs focus:outline-none focus:ring-2 ${schemaState.error ? 'border-red-200 bg-red-50 focus:ring-red-300' : 'border-gray-200 focus:ring-red-400'}`}
-          placeholder={`{\n  "@context": "https://schema.org",\n  "@type": "..."\n}`}
+          placeholder={`{
+  "@context": "https://schema.org",
+  "@type": "..."
+}`}
         />
         {value.schema_markup.trim() && (
           <div className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${schemaState.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -86,6 +183,7 @@ export function SeoFields({
             <span>{schemaState.error || 'Schema hợp lệ. Khi render public, các trường quan trọng vẫn lấy từ dữ liệu thật.'}</span>
           </div>
         )}
+        <p className="mt-1 text-[10px] text-gray-400">Schema sẽ tự sinh theo dữ liệu vừa nhập cho đến khi bạn sửa tay vào ô này.</p>
       </div>
 
       <SEOPreview metaTitle={value.meta_title} metaDescription={value.meta_description} focusKeywords={value.focus_keywords} />
