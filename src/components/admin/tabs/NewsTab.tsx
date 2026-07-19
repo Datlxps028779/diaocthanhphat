@@ -6,6 +6,7 @@ import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bu
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
+import { renderMarkdownContent } from '../../../lib/markdown';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
 
@@ -82,12 +83,18 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
   const setSeo = (value: SeoFieldsValue) => {
     manualSchemaRef.current = Boolean(value.schema_markup.trim()) && value.schema_markup !== generatedSchemaRef.current;
     setForm(f => ({ ...f, ...value }));
+  };
+
+  const rememberSelection = () => {
+    const el = contentRef.current;
+    if (el) selectionRef.current = { start: el.selectionStart, end: el.selectionEnd };
   };
 
   useEffect(() => {
@@ -105,41 +112,46 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
 
   const insertAtCursor = (snippet: string) => {
     const el = contentRef.current;
-    if (!el) {
-      set('content', `${form.content}${snippet}`);
-      return;
-    }
-    const start = el.selectionStart ?? form.content.length;
-    const end = el.selectionEnd ?? form.content.length;
+    const sel = selectionRef.current;
+    const start = el?.selectionStart ?? sel.start;
+    const end = el?.selectionEnd ?? sel.end;
     const next = `${form.content.slice(0, start)}${snippet}${form.content.slice(end)}`;
     set('content', next);
+    selectionRef.current = { start: start + snippet.length, end: start + snippet.length };
     requestAnimationFrame(() => {
-      el.focus();
+      const target = contentRef.current;
+      if (!target) return;
+      target.focus();
       const pos = start + snippet.length;
-      el.setSelectionRange(pos, pos);
+      target.setSelectionRange(pos, pos);
     });
   };
 
   const wrapSelection = (prefix: string, fallback: string, suffix = prefix) => {
     const el = contentRef.current;
-    const start = el?.selectionStart ?? form.content.length;
-    const end = el?.selectionEnd ?? form.content.length;
+    const sel = selectionRef.current;
+    const start = el?.selectionStart ?? sel.start;
+    const end = el?.selectionEnd ?? sel.end;
     const selectedText = form.content.slice(start, end) || fallback;
     const snippet = `${prefix}${selectedText}${suffix}`;
     const next = `${form.content.slice(0, start)}${snippet}${form.content.slice(end)}`;
     set('content', next);
+    const selectionStart = start + prefix.length;
+    const selectionEnd = selectionStart + selectedText.length;
+    selectionRef.current = { start: selectionStart, end: selectionEnd };
     requestAnimationFrame(() => {
-      contentRef.current?.focus();
-      const selectionStart = start + prefix.length;
-      const selectionEnd = selectionStart + selectedText.length;
-      contentRef.current?.setSelectionRange(selectionStart, selectionEnd);
+      const target = contentRef.current;
+      if (!target) return;
+      target.focus();
+      target.setSelectionRange(selectionStart, selectionEnd);
     });
   };
 
   const insertImage = (url: string) => {
     const imageUrl = url.trim();
     if (!imageUrl) return;
-    insertAtCursor(`\n![Ảnh minh họa](${imageUrl})\n`);
+    const snippet = `\n![Ảnh minh họa](${imageUrl})\n`;
+    insertAtCursor(snippet);
   };
 
   const autoGenerateSeo = () => {
@@ -240,9 +252,23 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
               <ToolbarButton label="Trích dẫn" icon={<Quote className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n> Trích dẫn nổi bật\n')} />
               <ToolbarButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={() => insertAtCursor('\n![Mô tả ảnh](https://...)\n')} />
             </div>
-            <textarea ref={contentRef} value={form.content} onChange={e => set('content', e.target.value)} rows={12}
+            <textarea ref={contentRef} value={form.content}
+              onChange={e => { set('content', e.target.value); rememberSelection(); }}
+              onSelect={rememberSelection}
+              onBlur={rememberSelection}
+              onClick={rememberSelection}
+              onKeyUp={rememberSelection}
+              rows={12}
               placeholder={'Viết nội dung theo Markdown. Ví dụ:\n## Tiêu đề phụ\nĐoạn văn...\n![Mô tả ảnh](https://...)'}
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            {form.content.trim() && (
+              <div className="mt-3 rounded-xl border border-gray-100 bg-white p-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Xem trước nội dung</p>
+                <div className="prose prose-gray max-w-none space-y-3 text-sm text-gray-700">
+                  {renderMarkdownContent(form.content)}
+                </div>
+              </div>
+            )}
             <div className="mt-2 rounded-xl border border-dashed border-gray-200 p-3">
               <p className="mb-2 text-xs font-semibold text-gray-600">Chèn ảnh vào nội dung</p>
               <ImageUrlInput
@@ -251,7 +277,7 @@ function NewsForm({ article, onSave, onCancel }: { article: NewsArticle | null; 
                 placeholder="Upload/chọn ảnh rồi tự chèn vào nội dung"
               />
             </div>
-            <p className="mt-1 text-[11px] text-gray-400">Hỗ trợ Markdown: ## tiêu đề, **đậm**, *nghiêng*, danh sách, quote, ảnh dạng ![alt](url).</p>
+            <p className="mt-1 text-[11px] text-gray-400">Hỗ trợ Markdown: ## tiêu đề, **đậm**, *nghiêng*, danh sách, quote, ảnh dạng ![alt](url). Bôi đen đoạn văn rồi bấm Đậm/Nghiêng để bọc quanh đoạn đó.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
