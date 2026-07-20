@@ -73,6 +73,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [relatedQuery, setRelatedQuery] = useState('');
+  const [relatedOpen, setRelatedOpen] = useState(false);
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
@@ -91,9 +92,10 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     [next[idx], next[j]] = [next[j], next[idx]];
     return { ...f, related_ids: next };
   });
-  const relatedMatches = relatedQuery.trim()
-    ? candidatePool.filter(a => !form.related_ids.includes(a.id) && a.title.toLowerCase().includes(relatedQuery.trim().toLowerCase())).slice(0, 6)
-    : [];
+  const q = relatedQuery.trim().toLowerCase();
+  const relatedMatches = candidatePool
+    .filter(a => !form.related_ids.includes(a.id) && (!q || a.title.toLowerCase().includes(q)))
+    .slice(0, 8);
   const setSeo = (value: SeoFieldsValue) => {
     manualSchemaRef.current = Boolean(value.schema_markup.trim()) && value.schema_markup !== generatedSchemaRef.current;
     setForm(f => ({ ...f, ...value }));
@@ -232,16 +234,18 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               <input
                 value={relatedQuery}
                 onChange={e => setRelatedQuery(e.target.value)}
-                placeholder="Tìm bài theo tiêu đề để thêm..."
+                onFocus={() => setRelatedOpen(true)}
+                onBlur={() => setTimeout(() => setRelatedOpen(false), 150)}
+                placeholder="Bấm để chọn bài, hoặc gõ tiêu đề để lọc..."
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
               />
-              {relatedMatches.length > 0 && (
+              {relatedOpen && relatedMatches.length > 0 && (
                 <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
                   {relatedMatches.map(a => (
                     <button
                       key={a.id}
                       type="button"
-                      onClick={() => { addRelated(a.id); setRelatedQuery(''); }}
+                      onMouseDown={e => { e.preventDefault(); addRelated(a.id); setRelatedQuery(''); }}
                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-gray-700 hover:bg-red-50 hover:text-red-700"
                     >
                       <span className="flex-1 truncate">{a.title}</span>

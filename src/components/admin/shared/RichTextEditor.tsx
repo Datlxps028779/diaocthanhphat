@@ -71,7 +71,7 @@ function Toolbar({
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
 
-  const applyLink = (rawUrl: string) => {
+  const applyLink = (rawUrl: string, label?: string) => {
     const url = rawUrl.trim();
     if (!url) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
@@ -83,11 +83,17 @@ function Toolbar({
       return;
     }
     const isInternal = safe.startsWith('/');
-    editor.chain().focus().extendMarkRange('link').setLink({
-      href: safe,
-      target: isInternal ? null : '_blank',
-      rel: isInternal ? null : 'nofollow noopener',
-    }).run();
+    const attrs = { href: safe, target: isInternal ? null : '_blank', rel: isInternal ? null : 'nofollow noopener' };
+    // Chưa bôi đen chữ nào → chèn text (tiêu đề bài / URL) rồi gắn link, nếu không link mark sẽ vô hình.
+    if (editor.state.selection.empty) {
+      editor.chain().focus().insertContent({
+        type: 'text',
+        text: label?.trim() || safe,
+        marks: [{ type: 'link', attrs }],
+      }).run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange('link').setLink(attrs).run();
   };
 
   const promptLink = () => {
@@ -130,7 +136,7 @@ function Toolbar({
                 <button
                   key={t.slug}
                   type="button"
-                  onClick={() => { applyLink(`/tin-tuc/${t.slug}`); setInternalOpen(false); }}
+                  onClick={() => { applyLink(`/tin-tuc/${t.slug}`, t.title); setInternalOpen(false); }}
                   className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs text-gray-700 hover:bg-red-50 hover:text-red-700"
                 >
                   {t.title}
