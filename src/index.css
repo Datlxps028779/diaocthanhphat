@@ -71,3 +71,12 @@
 .prose img[data-align="left"]   { margin-left: 0;    margin-right: auto; display: block; }
 .prose img[data-align="center"] { margin-left: auto; margin-right: auto; display: block; }
 .prose img[data-align="right"]  { margin-left: auto; margin-right: 0;    display: block; }
+
+/* Liên kết trong bài viết — phân biệt rõ với nội dung (không có plugin typography) */
+.prose a {
+  color: #dc2626;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+}
+.prose a:hover { color: #b91c1c; }

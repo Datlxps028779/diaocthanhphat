@@ -8,7 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import {
   Bold, Italic, Heading2, Heading3, List, Quote, Link as LinkIcon, Unlink,
-  Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Network, X,
+  Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Search, X,
 } from 'lucide-react';
 import { safeUrl } from '../../../lib/markdown';
 import { ImageLibraryModal } from '../../ImageLibraryModal';
@@ -69,39 +69,69 @@ function Toolbar({
   onImageClick: () => void;
   internalLinks: InternalLinkTarget[];
 }) {
-  const [internalOpen, setInternalOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkText, setLinkText] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkNewTab, setLinkNewTab] = useState(false);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [selHadText, setSelHadText] = useState(false);
 
-  const applyLink = (rawUrl: string, label?: string) => {
-    const url = rawUrl.trim();
-    if (!url) {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-    const safe = safeUrl(url);
+  const openLinkDialog = () => {
+    const { from, to, empty } = editor.state.selection;
+    const selectedText = empty ? '' : editor.state.doc.textBetween(from, to, ' ');
+    const prevHref = (editor.getAttributes('link').href as string | undefined) ?? '';
+    const prevTarget = editor.getAttributes('link').target as string | undefined;
+    setLinkText(selectedText);
+    setLinkUrl(prevHref);
+    setLinkNewTab(prevHref ? prevTarget === '_blank' : false);
+    setSelHadText(Boolean(selectedText));
+    setLinkSearch('');
+    setLinkOpen(true);
+  };
+
+  const closeLinkDialog = () => { setLinkOpen(false); setLinkSearch(''); };
+
+  const pickInternal = (t: InternalLinkTarget) => {
+    setLinkUrl(`/tin-tuc/${t.slug}`);
+    setLinkNewTab(false);
+    setLinkText(prev => (prev.trim() ? prev : t.title));
+    setLinkSearch('');
+  };
+
+  const submitLink = () => {
+    const safe = safeUrl(linkUrl);
     if (!safe) {
-      window.alert('URL không hợp lệ. Chỉ chấp nhận liên kết http(s) hoặc đường dẫn nội bộ.');
+      window.alert('URL không hợp lệ. Chỉ chấp nhận liên kết http(s) hoặc đường dẫn nội bộ (bắt đầu bằng /).');
       return;
     }
     const isInternal = safe.startsWith('/');
-    const attrs = { href: safe, target: isInternal ? null : '_blank', rel: isInternal ? null : 'nofollow noopener' };
-    // Chưa bôi đen chữ nào → chèn text (tiêu đề bài / URL) rồi gắn link, nếu không link mark sẽ vô hình.
-    if (editor.state.selection.empty) {
-      editor.chain().focus().insertContent({
-        type: 'text',
-        text: label?.trim() || safe,
-        marks: [{ type: 'link', attrs }],
-      }).run();
-      return;
+    // Nội bộ: mặc định dofollow + cùng tab (tốt cho internal-linking), cho tick mở tab mới.
+    // Ngoài: luôn _blank + nofollow noopener.
+    const useNewTab = isInternal ? linkNewTab : true;
+    const attrs = {
+      href: safe,
+      target: useNewTab ? '_blank' : null,
+      rel: isInternal ? (useNewTab ? 'noopener' : null) : 'nofollow noopener',
+    };
+    const text = linkText.trim();
+    const chain = editor.chain().focus();
+    if (!selHadText) {
+      chain.insertContent({ type: 'text', text: text || safe, marks: [{ type: 'link', attrs }] });
+    } else if (text) {
+      chain.deleteSelection().insertContent({ type: 'text', text, marks: [{ type: 'link', attrs }] });
+    } else {
+      chain.extendMarkRange('link').setLink(attrs);
     }
-    editor.chain().focus().extendMarkRange('link').setLink(attrs).run();
+    chain.run();
+    closeLinkDialog();
   };
 
-  const promptLink = () => {
-    const previous = editor.getAttributes('link').href as string | undefined;
-    const input = window.prompt('Nhập URL liên kết ngoài (để trống để bỏ liên kết):', previous ?? '');
-    if (input === null) return;
-    applyLink(input);
-  };
+  const removeLink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
+
+  const linkMatches = (linkSearch.trim()
+    ? internalLinks.filter(t => t.title.toLowerCase().includes(linkSearch.trim().toLowerCase()))
+    : internalLinks
+  ).slice(0, 6);
 
   const applyAlign = (dir: AlignDir) => {
     if (editor.isActive('image')) editor.chain().focus().updateAttributes('image', { align: dir }).run();
@@ -111,6 +141,7 @@ function Toolbar({
     editor.isActive('image') ? editor.getAttributes('image').align === dir : editor.isActive({ textAlign: dir });
 
   return (
+    <>
     <div className="flex flex-wrap gap-1 rounded-t-lg border-b border-gray-100 bg-gray-50 p-2">
       <ToolButton label="H2" icon={<Heading2 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
       <ToolButton label="H3" icon={<Heading3 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
@@ -126,33 +157,88 @@ function Toolbar({
       <ToolButton label="" icon={<AlignJustify className="h-3.5 w-3.5" />} active={alignActive('justify')} onClick={() => applyAlign('justify')} />
 
       <span className="mx-1 w-px self-stretch bg-gray-200" aria-hidden />
-      <ToolButton label="Liên kết" icon={<LinkIcon className="h-3.5 w-3.5" />} active={editor.isActive('link')} onClick={promptLink} />
-      {internalLinks.length > 0 && (
-        <div className="relative">
-          <ToolButton label="Nội bộ" icon={<Network className="h-3.5 w-3.5" />} active={internalOpen} onClick={() => setInternalOpen(o => !o)} />
-          {internalOpen && (
-            <div className="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
-              {internalLinks.map(t => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => { applyLink(`/tin-tuc/${t.slug}`, t.title); setInternalOpen(false); }}
-                  className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs text-gray-700 hover:bg-red-50 hover:text-red-700"
-                >
-                  {t.title}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <ToolButton label="Liên kết" icon={<LinkIcon className="h-3.5 w-3.5" />} active={editor.isActive('link')} onClick={openLinkDialog} />
       {editor.isActive('link') && (
-        <ToolButton label="Bỏ liên kết" icon={<Unlink className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()} />
+        <ToolButton label="Bỏ liên kết" icon={<Unlink className="h-3.5 w-3.5" />} onClick={removeLink} />
       )}
 
       <span className="mx-1 w-px self-stretch bg-gray-200" aria-hidden />
       <ToolButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={onImageClick} />
     </div>
+
+    {linkOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={closeLinkDialog}>
+        <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onMouseDown={e => e.stopPropagation()}>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">Chèn / sửa liên kết</h3>
+            <button type="button" onClick={closeLinkDialog}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
+          </div>
+
+          <label className="mb-1 block text-xs font-semibold text-gray-700">Văn bản hiển thị</label>
+          <input
+            autoFocus
+            value={linkText}
+            onChange={e => setLinkText(e.target.value)}
+            placeholder={selHadText ? 'Giữ nguyên đoạn đã bôi đen' : 'Chữ sẽ hiện ra trong bài'}
+            className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+          />
+
+          <label className="mb-1 block text-xs font-semibold text-gray-700">Đường dẫn (URL)</label>
+          <input
+            value={linkUrl}
+            onChange={e => setLinkUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitLink(); } }}
+            placeholder="https://... hoặc /tin-tuc/bai-viet"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+          />
+
+          {internalLinks.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                <Search className="h-3.5 w-3.5" /> Liên kết tới bài viết nội bộ
+              </div>
+              <input
+                value={linkSearch}
+                onChange={e => setLinkSearch(e.target.value)}
+                placeholder="Tìm bài theo tiêu đề..."
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+              {linkMatches.length > 0 && (
+                <div className="mt-1 max-h-40 overflow-auto rounded-lg border border-gray-100">
+                  {linkMatches.map(t => {
+                    const href = `/tin-tuc/${t.slug}`;
+                    const active = linkUrl.trim() === href;
+                    return (
+                      <button
+                        key={t.slug}
+                        type="button"
+                        onClick={() => pickInternal(t)}
+                        className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs ${active ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                      >
+                        <span className="flex-1 truncate">{t.title}</span>
+                        {active && <span className="text-[10px] font-semibold text-red-600">đã chọn</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <label className="mt-3 flex items-center gap-2 text-xs font-medium text-gray-600">
+            <input type="checkbox" checked={linkNewTab} onChange={e => setLinkNewTab(e.target.checked)} className="accent-red-600" />
+            Mở trong tab mới
+          </label>
+          <p className="mt-1 text-[11px] text-gray-400">Link ngoài luôn mở tab mới và gắn nofollow. Link nội bộ mặc định cùng tab, dofollow (tốt cho SEO).</p>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={closeLinkDialog} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Hủy</button>
+            <button type="button" onClick={submitLink} disabled={!linkUrl.trim()} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">Chèn liên kết</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
