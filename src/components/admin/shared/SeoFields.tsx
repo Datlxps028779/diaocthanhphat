@@ -83,6 +83,13 @@ export function SeoFields({
     onChange({ ...value, [key]: next });
   };
 
+  const titleLen = value.meta_title.trim().length;
+  const descLen = value.meta_description.trim().length;
+  const keywordCount = value.focus_keywords.split(',').map(s => s.trim()).filter(Boolean).length;
+  const schemaBytes = new Blob([value.schema_markup]).size;
+  const titleHint = titleLen >= 30 && titleLen <= 65 ? 'Tốt' : titleLen ? 'Cần tối ưu' : 'Bắt buộc';
+  const descHint = descLen >= 120 && descLen <= 160 ? 'Tốt' : descLen ? 'Cần tối ưu' : 'Bắt buộc';
+
   return (
     <div className="space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4">
       <div className="flex items-center gap-2">
@@ -99,6 +106,10 @@ export function SeoFields({
           className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
           placeholder="Tối ưu 50–60 ký tự"
         />
+        <div className="mt-1 flex items-center justify-between text-[10px]">
+          <span className={titleLen >= 30 && titleLen <= 65 ? 'text-emerald-600' : titleLen ? 'text-amber-600' : 'text-red-500'}>{titleHint}</span>
+          <span className="text-gray-400">{titleLen}/65 ký tự</span>
+        </div>
       </div>
 
       <div>
@@ -111,6 +122,10 @@ export function SeoFields({
           className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
           placeholder="Tối ưu 140–155 ký tự"
         />
+        <div className="mt-1 flex items-center justify-between text-[10px]">
+          <span className={descLen >= 120 && descLen <= 160 ? 'text-emerald-600' : descLen ? 'text-amber-600' : 'text-red-500'}>{descHint}</span>
+          <span className="text-gray-400">{descLen}/160 ký tự</span>
+        </div>
       </div>
 
       <div>
@@ -121,6 +136,9 @@ export function SeoFields({
           className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
           placeholder="bất động sản Bình Dương, nhà phố, đất nền..."
         />
+        <p className={`mt-1 text-[10px] ${keywordCount >= 3 ? 'text-emerald-600' : keywordCount ? 'text-amber-600' : 'text-red-500'}`}>
+          {keywordCount ? `${keywordCount} nhóm từ khóa` : 'Bắt buộc có từ khóa'} — nên gồm chủ đề, địa danh, loại nhu cầu.
+        </p>
       </div>
 
       <div>
@@ -138,7 +156,10 @@ export function SeoFields({
             <span>{schemaState.error || 'Schema hợp lệ. Khi render public, các trường quan trọng vẫn lấy từ dữ liệu thật.'}</span>
           </div>
         )}
-        <p className="mt-1 text-[10px] text-gray-400">Schema sẽ tự sinh theo dữ liệu vừa nhập cho đến khi bạn sửa tay vào ô này.</p>
+        <div className="mt-1 flex items-center justify-between text-[10px] text-gray-400">
+          <span>{schemaState.error ? 'Schema cần sửa trước khi đăng.' : 'Schema sẽ tự sinh theo dữ liệu vừa nhập cho đến khi bạn sửa tay vào ô này.'}</span>
+          <span>{schemaBytes}/50000 bytes</span>
+        </div>
       </div>
 
       <SEOPreview metaTitle={value.meta_title} metaDescription={value.meta_description} focusKeywords={value.focus_keywords} />

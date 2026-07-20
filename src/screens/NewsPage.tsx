@@ -162,6 +162,8 @@ function ArticleDetail({
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
   const tags: string[] = (article as any).tags ?? [];
   const cat = (article as any).category ?? '';
+  const geoArea = article.geo_area?.trim();
+  const geoEntity = article.geo_entity?.trim();
   const readMin = estimateReadTime(contentIsHtml ? stripHtml(rawContent) : rawContent);
   const pubDate = formatDate((article as any).published_at ?? (article as any).created_at ?? new Date().toISOString());
 
@@ -210,6 +212,13 @@ function ArticleDetail({
             <p className="article-excerpt text-gray-600 text-base italic border-l-4 border-red-400 pl-4 mb-6 leading-relaxed">
               {article.excerpt}
             </p>
+          )}
+
+          {(geoArea || geoEntity) && (
+            <div className="mb-6 flex flex-wrap gap-2 text-xs">
+              {geoArea && <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">Khu vực: {geoArea}</span>}
+              {geoEntity && <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Chủ thể: {geoEntity}</span>}
+            </div>
           )}
 
           {/* Content */}

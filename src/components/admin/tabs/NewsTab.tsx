@@ -7,6 +7,7 @@ import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { isHtmlContent, markdownToHtml, stripHtml } from '../../../lib/markdown';
+import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
 
@@ -20,6 +21,9 @@ type NewsFormState = SeoFieldsValue & {
   content: string;
   is_published: boolean;
   related_ids: string[];
+  geo_area: string;
+  geo_entity: string;
+  geo_notes: string;
 };
 
 function newsSlug(title: string): string {
@@ -35,8 +39,11 @@ function newsSlug(title: string): string {
     .slice(0, 100);
 }
 
-function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_url' | 'author' | 'slug'>): Record<string, unknown> {
+function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_url' | 'author' | 'slug' | 'geo_area' | 'geo_entity' | 'geo_notes'>): Record<string, unknown> {
   const path = `/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`;
+  const geoArea = form.geo_area.trim();
+  const geoEntity = form.geo_entity.trim();
+  const geoNotes = form.geo_notes.trim();
   return {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -46,6 +53,9 @@ function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_
     author: { '@type': 'Organization', name: form.author || 'BĐS Bình Dương' },
     mainEntityOfPage: path,
     url: path,
+    ...(geoArea ? { articleSection: geoArea, contentLocation: { '@type': 'Place', name: geoArea }, spatialCoverage: { '@type': 'Place', name: geoArea } } : {}),
+    ...(geoEntity ? { about: [{ '@type': 'Thing', name: geoEntity }] } : {}),
+    ...(geoNotes ? { mentions: [{ '@type': 'Thing', name: geoNotes }] } : {}),
   };
 }
 
@@ -65,6 +75,9 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     focus_keywords: article?.focus_keywords ?? '',
     schema_markup: article?.schema_markup ? JSON.stringify(article.schema_markup, null, 2) : '',
     related_ids: article?.related_ids ?? [],
+    geo_area: article?.geo_area ?? '',
+    geo_entity: article?.geo_entity ?? '',
+    geo_notes: article?.geo_notes ?? '',
   };
 }
 
@@ -101,6 +114,27 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     setForm(f => ({ ...f, ...value }));
   };
 
+  const resolvedSlug = form.slug.trim() || newsSlug(form.title);
+  const schemaState = parseSeoSchema(form.schema_markup, 'news');
+  const readiness = evaluateNewsReadiness({
+    title: form.title,
+    slug: resolvedSlug,
+    excerpt: form.excerpt,
+    content: form.content,
+    imageUrl: form.image_url,
+    metaTitle: form.meta_title,
+    metaDescription: form.meta_description,
+    focusKeywords: form.focus_keywords,
+    schemaError: schemaState.error,
+    geoArea: form.geo_area,
+    geoEntity: form.geo_entity,
+    relatedCount: form.related_ids.length,
+  });
+  const wordCount = countWords(plainTextFromContent(form.content));
+  const internalLinkCount = countInternalLinks(form.content);
+  const missingAltCount = countImagesWithoutAlt(form.content);
+  const readinessDisplay = [...readiness.errors, ...readiness.warnings, ...readiness.passes].slice(0, 10);
+
   useEffect(() => {
     const slug = form.slug.trim() || newsSlug(form.title);
     const schema = JSON.stringify(buildNewsSchema({ ...form, slug }), null, 2);
@@ -127,8 +161,11 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
-    const schema = parseSeoSchema(form.schema_markup, 'news');
-    if (schema.error) { setError(schema.error); return; }
+    if (form.is_published && !readiness.canPublish) {
+      setError(`Bài chưa đủ chuẩn để đăng công khai: ${readiness.errors[0]?.message ?? 'thiếu thông tin SEO/GEO bắt buộc.'}`);
+      return;
+    }
+    if (schemaState.error) { setError(schemaState.error); return; }
     setSaving(true);
     setError('');
     const bodyHtml = form.content.replace(/<p>\s*<\/p>/g, '').trim();
@@ -145,8 +182,11 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
         meta_title: form.meta_title.trim() || null,
         meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null,
-        schema_markup: schema.schema,
+        schema_markup: schemaState.schema,
         related_ids: form.related_ids.length ? form.related_ids : null,
+        geo_area: form.geo_area.trim() || null,
+        geo_entity: form.geo_entity.trim() || null,
+        geo_notes: form.geo_notes.trim() || null,
       });
     } finally { setSaving(false); }
   };
@@ -199,6 +239,31 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             <textarea value={form.excerpt} onChange={e => set('excerpt', e.target.value)} rows={3}
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
+
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div className="mb-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-blue-700">GEO / AEO cho bài viết</p>
+              <p className="mt-1 text-[11px] text-blue-700/80">Nhập khu vực và entity thật để Google/AI trích xuất đúng ngữ cảnh địa phương, không chỉ dùng fallback toàn site.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Khu vực mục tiêu *</label>
+                <input value={form.geo_area} onChange={e => set('geo_area', e.target.value)} placeholder="VD: Dĩ An, Bình Dương"
+                  className="w-full rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Entity/chủ thể chính *</label>
+                <input value={form.geo_entity} onChange={e => set('geo_entity', e.target.value)} placeholder="VD: tuyến Vành đai 3, khu công nghiệp VSIP"
+                  className="w-full rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Ghi chú GEO/AEO</label>
+                <textarea value={form.geo_notes} onChange={e => set('geo_notes', e.target.value)} rows={2} placeholder="Các địa danh, hạ tầng, pháp lý, nguồn dữ liệu thật cần được AI hiểu đúng..."
+                  className="w-full resize-none rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+            </div>
+          </div>
+
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
               <label className="block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
@@ -207,6 +272,11 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               </button>
             </div>
             <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+            <div className="mt-2 grid gap-2 text-[11px] text-gray-500 sm:grid-cols-3">
+              <span className="rounded-lg bg-gray-50 px-2 py-1">{wordCount} từ</span>
+              <span className="rounded-lg bg-gray-50 px-2 py-1">{internalLinkCount} link nội bộ</span>
+              <span className={`rounded-lg px-2 py-1 ${missingAltCount ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{missingAltCount} ảnh thiếu alt</span>
+            </div>
             <p className="mt-1 text-[11px] text-gray-400">Bôi đen đoạn văn rồi bấm Đậm/Nghiêng/Tiêu đề/căn lề để định dạng tại chỗ. Nút Ảnh mở thư viện (chọn có sẵn hoặc tải mới) và bắt buộc nhập alt. Nút Nội bộ chèn backlink tới bài khác.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
@@ -263,13 +333,39 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
           </label>
         </div>
 
-        <aside className="border-l border-gray-100 bg-gray-50 p-5">
+        <aside className="border-l border-gray-100 bg-gray-50 p-5 space-y-4">
+          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Trạng thái public-ready</p>
+                <p className="text-sm font-black text-gray-900">{readiness.status === 'ready' ? 'Đủ chuẩn để đăng' : readiness.status === 'needs-work' ? 'Còn điểm cần chỉnh' : 'Đang bị chặn'}</p>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-xs font-bold ${readiness.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : readiness.status === 'needs-work' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
+                {readiness.score}/100
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div className={`h-full rounded-full ${readiness.status === 'ready' ? 'bg-emerald-500' : readiness.status === 'needs-work' ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${readiness.score}%` }} />
+            </div>
+            <div className="mt-3 space-y-2">
+              {readinessDisplay.map(item => (
+                <div key={item.key} className={`rounded-lg border px-3 py-2 text-xs ${item.level === 'error' ? 'border-red-100 bg-red-50 text-red-700' : item.level === 'warning' ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700'}`}>
+                  <div className="font-bold">{item.label}</div>
+                  <div className="mt-0.5 leading-relaxed">{item.message}</div>
+                </div>
+              ))}
+            </div>
+            {readiness.errors.length > 0 && (
+              <p className="mt-3 text-[11px] font-semibold text-red-600">{readiness.errors.length} lỗi bắt buộc phải sửa trước khi đăng công khai.</p>
+            )}
+          </div>
+
           <SeoFields
             value={form}
             onChange={setSeo}
             target="news"
             basePath={`/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`}
-            autoSchema={buildNewsSchema({ ...form, slug: form.slug || newsSlug(form.title) })}
+            autoSchema={buildNewsSchema({ ...form, slug: resolvedSlug })}
           />
         </aside>
       </div>

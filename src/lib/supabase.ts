@@ -125,6 +125,9 @@ export type NewsArticle = {
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
   related_ids: string[] | null;
+  geo_area: string | null;
+  geo_entity: string | null;
+  geo_notes: string | null;
   created_at: string; updated_at: string;
 };
 

@@ -214,13 +214,15 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
   };
 }
 
-export function buildArticleJsonLd(a: NewsArticle, settings?: Record<string, string>): Record<string, unknown> {
+export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string>): Record<string, unknown> {
   const url = absoluteUrl(`/tin-tuc/${a.slug || a.id}`);
   const rawBody = a.content ?? '';
   const plainBody = rawBody ? (isHtmlContent(rawBody) ? stripHtml(rawBody) : rawBody).trim() : '';
   const wordCount = plainBody ? plainBody.split(/\s+/).filter(Boolean).length : 0;
   const keywords = (a.focus_keywords ?? '').split(',').map(s => s.trim()).filter(Boolean);
-  const geoName = (settings?.geo_area_served ?? '').trim() || 'Bình Dương, Việt Nam';
+  const geoName = (a.geo_area?.trim() || settings?.geo_area_served || '').trim() || 'Bình Dương, Việt Nam';
+  const geoEntity = a.geo_entity?.trim() || undefined;
+  const geoNotes = a.geo_notes?.trim() || undefined;
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -238,15 +240,20 @@ export function buildArticleJsonLd(a: NewsArticle, settings?: Record<string, str
     ...(plainBody ? { articleBody: plainBody.slice(0, 5000) } : {}),
     ...(wordCount ? { wordCount } : {}),
     ...(keywords.length ? { keywords } : {}),
+    ...(a.geo_area ? { articleSection: a.geo_area } : {}),
+    ...(geoEntity ? { about: [{ '@type': 'Thing', name: geoEntity }] } : {}),
+    ...(geoNotes ? { mentions: [{ '@type': 'Thing', name: geoNotes }] } : {}),
     speakable: { '@type': 'SpeakableSpecification', cssSelector: ['.article-headline', '.article-excerpt'] },
     contentLocation: { '@type': 'Place', name: geoName },
     spatialCoverage: { '@type': 'Place', name: geoName },
   };
   return mergeSchema(base, a.schema_markup, 'news', [
     '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'publisher',
-    'inLanguage', 'articleBody', 'wordCount',
+    'inLanguage', 'articleBody', 'wordCount', 'contentLocation', 'spatialCoverage', 'articleSection', 'about', 'mentions',
   ]).schema;
 }
+
+export const buildArticleJsonLd = buildNewsJsonLd;
 
 // BreadcrumbList JSON-LD — Google hiển thị đường dẫn phân cấp trong kết quả tìm
 // kiếm thay vì URL trần, tăng CTR. items: [{name, path}] theo thứ tự gốc → hiện tại.
