@@ -3,11 +3,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Home, MapPin, Phone,
-  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle, Plus, X, Zap
+  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle, Plus, X, Zap, Eye
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing, updateMyListing, getMyListing } from '../lib/api';
-import { listingToFormState } from '../lib/listingForm';
+import { listingToFormState, formToProperty } from '../lib/listingForm';
+import { LocationPicker, type GeocodeTarget } from '../components/LocationPicker';
+import { PropertyDetailPage } from './PropertyDetailPage';
 import { buildPropertyFaq, type FaqItem } from '../lib/propertyFaq';
 import { extractErrorMessage } from '../lib/errorMessage';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
@@ -26,7 +28,7 @@ interface PostListingPageProps {
   editId?: string;   // có id = chế độ sửa: nạp tin cũ, submit sẽ update
 }
 
-const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO'];
+const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO', 'Xem trước'];
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
 const AMENITIES_OPTIONS = [
   'Điện nước đầy đủ', 'Đường nhựa', 'An ninh 24/7', 'Gần trường học',
@@ -65,7 +67,12 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   const { data: types = [] } = usePropertyTypes();
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
+  const geocodeNonce = useRef(0);
+  const flyTo = useCallback((query: string, zoom: number) => {
+    if (!query) return;
+    setGeocodeTarget({ query, zoom, nonce: ++geocodeNonce.current });
+  }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
 
@@ -140,7 +147,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         if (!alive) return;
         if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
         setForm(listingToFormState(listing));
-        if (listing.city) setMapSearchQuery(listing.city);
+        if (!listing.latitude && listing.city) {
+          flyTo([listing.ward, listing.district, listing.city].filter(Boolean).join(', '), listing.ward ? 15 : listing.district ? 14 : 13);
+        }
       })
       .catch(() => { if (alive) setLoadError('Không tải được tin đăng để sửa.'); })
       .finally(() => { if (alive) setLoadingEdit(false); });
@@ -151,16 +160,23 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   // form + reset district đã chọn + đồng bộ map search.
   const setArea = useCallback((areaId: string, areaName: string) => {
     setForm(f => ({ ...f, area_id: areaId, city: areaName, district: '', ward: '' }));
-    if (areaName) setMapSearchQuery(areaName);
-  }, []);
+    if (areaName) flyTo(areaName, 13);
+  }, [flyTo]);
 
   const setDistrict = useCallback((district: string) => {
     setForm(f => {
-      const query = [district, f.city].filter(Boolean).join(', ');
-      if (query) setMapSearchQuery(query);
+      flyTo([district, f.city].filter(Boolean).join(', '), 14);
       return { ...f, district, ward: '' };
     });
-  }, []);
+  }, [flyTo]);
+
+  // Chọn xã → zoom sát tới cấp phường/xã (trước đây bản đồ đứng yên).
+  const setWard = useCallback((ward: string) => {
+    setForm(f => {
+      flyTo([ward, f.district, f.city].filter(Boolean).join(', '), 15);
+      return { ...f, ward };
+    });
+  }, [flyTo]);
 
   const setCoords = useCallback((lat: string, lng: string) => {
     setForm(f => ({ ...f, latitude: lat, longitude: lng }));
@@ -507,19 +523,27 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 </FormField>
                 <FormField label="Phường/Xã">
                   {wards.length > 0 ? (
-                    <select value={form.ward} onChange={e => set('ward', e.target.value)} className={selectCls()}>
+                    <select value={form.ward} onChange={e => setWard(e.target.value)} className={selectCls()}>
                       <option value="">-- Chọn phường/xã --</option>
                       {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                     </select>
                   ) : (
-                    <input value={form.ward} onChange={e => set('ward', e.target.value)}
+                    <input value={form.ward} onChange={e => setWard(e.target.value)}
                       placeholder="VD: Bình Chuẩn, An Phú..." className={inputCls()} />
                   )}
                 </FormField>
               </div>
               <FormField label="Địa chỉ chi tiết">
-                <input value={form.address} onChange={e => set('address', e.target.value)}
-                  placeholder="Số nhà, tên đường..." className={inputCls()} />
+                <div className="flex gap-2">
+                  <input value={form.address} onChange={e => set('address', e.target.value)}
+                    placeholder="Số nhà, tên đường..." className={`flex-1 ${inputCls()}`} />
+                  <button type="button"
+                    onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16)}
+                    disabled={!form.address.trim()}
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 text-red-600 font-semibold px-4 rounded-xl text-sm hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    <Search className="w-4 h-4" />Tìm trên bản đồ
+                  </button>
+                </div>
               </FormField>
 
               {/* Pin-drop map */}
@@ -528,15 +552,16 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                   Xác định vị trí trên bản đồ
                   <span className="font-normal text-gray-400 ml-1">(click để thả ghim)</span>
                 </label>
-                <PinDropMap
+                <LocationPicker
                   lat={form.latitude}
                   lng={form.longitude}
-                  searchQuery={mapSearchQuery}
+                  geocodeTarget={geocodeTarget}
                   onChange={setCoords}
+                  onReverseGeocode={addr => set('address', addr)}
                 />
                 <p className="text-gray-400 text-xs mt-1.5 flex items-start gap-1.5">
                   <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                  Chọn Tỉnh/Huyện để bản đồ tự zoom. Click trực tiếp lên bản đồ để đặt ghim và lấy tọa độ tự động.
+                  Chọn Tỉnh/Huyện/Xã để bản đồ tự zoom sát. Bấm "Tìm trên bản đồ" để nhảy tới địa chỉ, hoặc click/kéo ghim để đặt vị trí chính xác — địa chỉ tự cập nhật theo ghim.
                 </p>
               </div>
 
@@ -809,6 +834,19 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
             </div>
           )}
 
+          {/* Step 5: Preview giống hệt trang công khai (bắt buộc trước khi gửi) */}
+          {step === 5 && (
+            <div className="space-y-4">
+              <SectionLabel icon={<Eye className="w-4 h-4 text-red-500" />} label="Xem trước trang tin" />
+              <p className="text-sm text-gray-500">
+                Đây là bản xem trước đúng như tin sẽ hiển thị công khai. Kiểm tra ảnh, giá, thông tin, mô tả và vị trí bản đồ trước khi gửi duyệt.
+              </p>
+              <div className="rounded-xl overflow-hidden border border-gray-200">
+                <PropertyDetailPage preview initialData={formToProperty(form as unknown as Record<string, unknown>, null, types, form.faq)} onNavigate={() => {}} />
+              </div>
+            </div>
+          )}
+
           {/* Lỗi khi gửi tin — đặt ngoài các step để luôn hiển thị cạnh nút submit */}
           {errors.submit && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5 mt-6">
@@ -863,130 +901,3 @@ function parseSchema(raw: string): Record<string, unknown> | null {
 }
 const inputCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400`;
 const selectCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-red-400`;
-
-interface PinDropMapProps {
-  lat: string;
-  lng: string;
-  searchQuery: string;
-  onChange: (lat: string, lng: string) => void;
-}
-
-function PinDropMap({ lat, lng, searchQuery, onChange }: PinDropMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import('leaflet').Map | null>(null);
-  const markerRef = useRef<import('leaflet').Marker | null>(null);
-  const searchRef = useRef('');
-
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-
-    let map: import('leaflet').Map;
-
-    import('leaflet').then(module => {
-      const L = module.default;
-      import('leaflet/dist/leaflet.css');
-
-      map = L.map(containerRef.current!, {
-        center: [10.9804, 106.6519],
-        zoom: 10,
-        zoomControl: true,
-        attributionControl: false,
-      });
-      mapRef.current = map;
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      L.control.attribution({ prefix: '© OpenStreetMap' }).addTo(map);
-
-      const pinIcon = L.divIcon({
-        className: '',
-        html: `<div style="width:28px;height:36px;position:relative;">
-          <svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12z" fill="#dc2626"/>
-            <circle cx="12" cy="12" r="5" fill="white"/>
-          </svg>
-        </div>`,
-        iconSize: [28, 36],
-        iconAnchor: [14, 36],
-      });
-
-      map.on('click', (e: import('leaflet').LeafletMouseEvent) => {
-        const { lat, lng } = e.latlng;
-        if (markerRef.current) {
-          markerRef.current.setLatLng([lat, lng]);
-        } else {
-          markerRef.current = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
-          markerRef.current.on('dragend', () => {
-            if (!markerRef.current) return;
-            const pos = markerRef.current.getLatLng();
-            onChangeRef.current(pos.lat.toFixed(6), pos.lng.toFixed(6));
-          });
-        }
-        onChangeRef.current(lat.toFixed(6), lng.toFixed(6));
-      });
-    });
-
-    return () => {
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; }
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync external lat/lng changes to marker
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !lat || !lng) return;
-    const latN = parseFloat(lat);
-    const lngN = parseFloat(lng);
-    if (isNaN(latN) || isNaN(lngN)) return;
-    import('leaflet').then(module => {
-      const L = module.default;
-      if (markerRef.current) {
-        markerRef.current.setLatLng([latN, lngN]);
-      } else {
-        const pinIcon = L.divIcon({
-          className: '',
-          html: `<div style="width:28px;height:36px;">
-            <svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12z" fill="#dc2626"/>
-              <circle cx="12" cy="12" r="5" fill="white"/>
-            </svg>
-          </div>`,
-          iconSize: [28, 36],
-          iconAnchor: [14, 36],
-        });
-        markerRef.current = L.marker([latN, lngN], { icon: pinIcon, draggable: true }).addTo(map);
-        markerRef.current.on('dragend', () => {
-          if (!markerRef.current) return;
-          const pos = markerRef.current.getLatLng();
-          onChangeRef.current(pos.lat.toFixed(6), pos.lng.toFixed(6));
-        });
-      }
-      map.setView([latN, lngN], Math.max(map.getZoom(), 14));
-    });
-  }, [lat, lng]);
-
-  // Geocode and fly to area when searchQuery changes
-  useEffect(() => {
-    if (!searchQuery || searchQuery === searchRef.current) return;
-    searchRef.current = searchQuery;
-    const map = mapRef.current;
-    if (!map) return;
-
-    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery + ', Vietnam')}&format=json&limit=1`)
-      .then(r => r.json())
-      .then((results: Array<{ lat: string; lon: string }>) => {
-        if (results.length > 0) {
-          map.flyTo([parseFloat(results[0].lat), parseFloat(results[0].lon)], 13, { duration: 1.2 });
-        }
-      })
-      .catch(() => {});
-  }, [searchQuery]);
-
-  return (
-    <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: '280px' }}>
-      <div ref={containerRef} className="w-full h-full" />
-    </div>
-  );
-}

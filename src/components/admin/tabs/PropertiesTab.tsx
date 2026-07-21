@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
 import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
@@ -7,90 +7,12 @@ import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAut
 import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
 import { parseSeoSchema } from '../shared/SeoFields';
 import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
+import { formToProperty } from '../../../lib/listingForm';
+import { LocationPicker, type GeocodeTarget } from '../../LocationPicker';
+import { PropertyDetailPage } from '../../../screens/PropertyDetailPage';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
-
-// Dựng Property tạm từ form state để tái dùng builder public (buildPropertyMetadata +
-// buildPropertyJsonLd) — SEO/GEO form fill khớp 1:1 JSON-LD public /bat-dong-san/[slug].
-// Field số trong form là chuỗi → đổi về number | null; field không có trong form → null.
-function formToProperty(
-  form: Record<string, unknown>,
-  property: Property | null,
-  types: PropertyType[],
-  faq: FaqItem[],
-): Property {
-  const num = (v: unknown) => {
-    if (v === '' || v === null || v === undefined) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const str = (v: unknown) => (v === '' || v === null || v === undefined ? null : String(v));
-  const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : null);
-  const slug = (str(form.slug) || generateSlug(String(form.title ?? '')) || 'slug') as string;
-  const now = new Date().toISOString();
-  const typeId = str(form.property_type_id);
-  const propertyType = types.find(t => t.id === typeId) ?? null;
-  return {
-    id: property?.id ?? 'draft',
-    title: String(form.title ?? ''),
-    description: str(form.description),
-    price: num(form.price) ?? 0,
-    price_unit: String(form.price_unit ?? 'tỷ'),
-    price_label: str(form.price_label),
-    price_per_month: num(form.price_per_month),
-    listing_type: (form.listing_type as Property['listing_type']) ?? 'mua_ban',
-    area_sqm: num(form.area_sqm),
-    address: str(form.address),
-    city: String(form.city ?? ''),
-    district: str(form.district),
-    ward: str(form.ward),
-    area_id: str(form.area_id),
-    district_id: property?.district_id ?? null,
-    property_type_id: typeId,
-    image_url: str(form.image_url),
-    images: arr(form.images),
-    badge: str(form.badge),
-    badge_color: str(form.badge_color),
-    legal_status: str(form.legal_status),
-    is_featured: Boolean(form.is_featured),
-    is_hot: Boolean(form.is_hot),
-    is_active: Boolean(form.is_active),
-    is_verified: Boolean(form.is_verified),
-    views: property?.views ?? 0,
-    contact_name: str(form.contact_name),
-    contact_phone: str(form.contact_phone),
-    bedrooms: num(form.bedrooms),
-    bathrooms: num(form.bathrooms),
-    floor_count: num(form.floor_count),
-    floor_number: num(form.floor_number),
-    direction: str(form.direction),
-    road_width: num(form.road_width),
-    frontage: num(form.frontage),
-    amenities: property?.amenities ?? null,
-    latitude: num(form.latitude),
-    longitude: num(form.longitude),
-    formatted_address: property?.formatted_address ?? null,
-    vr_tour_url: str(form.vr_tour_url),
-    video_url: str(form.video_url),
-    contact_zalo: str(form.contact_zalo),
-    tags: property?.tags ?? null,
-    meta_title: str(form.meta_title),
-    meta_description: str(form.meta_description),
-    focus_keywords: str(form.focus_keywords),
-    schema_markup: null,
-    slug,
-    faq: (() => {
-      const valid = faq
-        .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
-        .filter(it => it.question && it.answer);
-      return valid.length ? valid : null;
-    })(),
-    created_at: property?.created_at ?? now,
-    updated_at: now,
-    property_types: propertyType,
-  };
-}
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
@@ -352,80 +274,6 @@ function calcSeoScore(title: string, description: string, imageUrl: string, area
   return Math.min(score, 100);
 }
 
-// ─── Admin Pin Map ─────────────────────────────────────────────────────────────
-function AdminPinMap({ lat, lng, searchQuery, onChange }: {
-  lat: string; lng: string; searchQuery: string;
-  onChange: (lat: string, lng: string) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import('leaflet').Map | null>(null);
-  const markerRef = useRef<import('leaflet').Marker | null>(null);
-  const searchRef = useRef('');
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    import('leaflet').then(module => {
-      const L = module.default;
-      import('leaflet/dist/leaflet.css');
-      const map = L.map(containerRef.current!, { center: [10.9804, 106.6519], zoom: 10, attributionControl: false });
-      mapRef.current = map;
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      L.control.attribution({ prefix: '© OpenStreetMap' }).addTo(map);
-      const pinIcon = L.divIcon({
-        className: '',
-        html: `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#dc2626"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`,
-        iconSize: [28, 36], iconAnchor: [14, 36],
-      });
-      map.on('click', (e: import('leaflet').LeafletMouseEvent) => {
-        const { lat, lng } = e.latlng;
-        if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
-        else {
-          markerRef.current = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
-          markerRef.current.on('dragend', () => {
-            const pos = markerRef.current!.getLatLng();
-            onChangeRef.current(pos.lat.toFixed(6), pos.lng.toFixed(6));
-          });
-        }
-        onChangeRef.current(lat.toFixed(6), lng.toFixed(6));
-      });
-    });
-    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; } };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !lat || !lng) return;
-    const latN = parseFloat(lat), lngN = parseFloat(lng);
-    if (isNaN(latN) || isNaN(lngN)) return;
-    import('leaflet').then(module => {
-      const L = module.default;
-      if (markerRef.current) {
-        markerRef.current.setLatLng([latN, lngN]);
-      } else {
-        const pinIcon = L.divIcon({ className: '', html: `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#dc2626"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`, iconSize: [28, 36], iconAnchor: [14, 36] });
-        markerRef.current = L.marker([latN, lngN], { icon: pinIcon, draggable: true }).addTo(map);
-        markerRef.current.on('dragend', () => { const pos = markerRef.current!.getLatLng(); onChangeRef.current(pos.lat.toFixed(6), pos.lng.toFixed(6)); });
-      }
-      map.setView([latN, lngN], Math.max(map.getZoom(), 14));
-    });
-  }, [lat, lng]);
-
-  useEffect(() => {
-    if (!searchQuery || searchQuery === searchRef.current) return;
-    searchRef.current = searchQuery;
-    const map = mapRef.current;
-    if (!map) return;
-    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery + ', Vietnam')}&format=json&limit=1`)
-      .then(r => r.json()).then((results: Array<{ lat: string; lon: string }>) => {
-        if (results.length > 0) map.flyTo([parseFloat(results[0].lat), parseFloat(results[0].lon)], 13, { duration: 1.2 });
-      }).catch(() => {});
-  }, [searchQuery]);
-
-  return <div ref={containerRef} style={{ width: '100%', height: '220px' }} className="rounded-lg overflow-hidden border border-gray-200" />;
-}
-
 const SPEC_LABELS: Record<SpecFieldKey, string> = {
   area_sqm: 'Diện tích (m²)',
   bedrooms: 'Phòng ngủ',
@@ -503,7 +351,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
-  const [mapSearchQuery, setMapSearchQuery] = useState(property?.city ?? '');
+  const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
+  const geocodeNonce = useRef(0);
+  const flyTo = useCallback((query: string, zoom: number) => {
+    if (!query) return;
+    setGeocodeTarget({ query, zoom, nonce: ++geocodeNonce.current });
+  }, []);
+  const [showPreview, setShowPreview] = useState(false);
   const [typeError, setTypeError] = useState('');
   const isRent = form.listing_type === 'cho_thue';
   const selectedPropertyType = types.find(t => t.id === form.property_type_id);
@@ -577,11 +431,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     setWards([]);
     if (areaId) {
       getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
-      if (area?.name) setMapSearchQuery(area.name);
+      if (area?.name) flyTo(area.name, 13);
     } else {
       setDistricts([]);
     }
-  }, [areas]);
+  }, [areas, flyTo]);
 
   const handleDistrictChange = useCallback((districtName: string) => {
     setField('district', districtName);
@@ -589,8 +443,14 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     const d = districts.find(x => x.name === districtName);
     if (d) getWards(d.id).then(setWards).catch(() => setWards([]));
     else setWards([]);
-    if (districtName && form.city) setMapSearchQuery(`${districtName}, ${form.city}`);
-  }, [form.city, districts]);
+    flyTo([districtName, form.city].filter(Boolean).join(', '), 14);
+  }, [form.city, districts, flyTo]);
+
+  // Chọn xã → zoom sát tới cấp phường/xã.
+  const handleWardChange = useCallback((wardName: string) => {
+    setField('ward', wardName);
+    flyTo([wardName, form.district, form.city].filter(Boolean).join(', '), 15);
+  }, [form.district, form.city, flyTo]);
 
   useEffect(() => {
     if (property?.area_id) getDistricts(property.area_id).then(setDistricts).catch(() => {});
@@ -792,33 +652,48 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Phường/Xã</label>
               {wards.length > 0 ? (
-                <select value={form.ward} onChange={e => setField('ward', e.target.value)}
+                <select value={form.ward} onChange={e => handleWardChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                   <option value="">-- Chọn phường/xã --</option>
                   {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
                 </select>
               ) : (
-                <input value={form.ward} onChange={e => setField('ward', e.target.value)}
+                <input value={form.ward} onChange={e => handleWardChange(e.target.value)}
                   placeholder="Nhập phường/xã..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               )}
             </div>
           </div>
 
-          {fld('Địa chỉ chi tiết', 'address', { placeholder: 'Số nhà, tên đường...' })}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Địa chỉ chi tiết</label>
+            <div className="flex gap-2">
+              <input value={form.address} onChange={e => setField('address', e.target.value)}
+                placeholder="Số nhà, tên đường..."
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <button type="button"
+                onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16)}
+                disabled={!form.address.trim()}
+                className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 text-red-600 font-semibold px-3 rounded-lg text-sm hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <Search className="w-4 h-4" />Tìm trên bản đồ
+              </button>
+            </div>
+          </div>
 
           {/* Pin-drop map */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-red-500" />
               Xác định vị trí trên bản đồ
-              <span className="font-normal text-gray-400 text-[10px]">(click để đặt ghim)</span>
+              <span className="font-normal text-gray-400 text-[10px]">(chọn xã / bấm "Tìm trên bản đồ" để zoom · click/kéo ghim để đặt vị trí — địa chỉ tự cập nhật)</span>
             </label>
-            <AdminPinMap
+            <LocationPicker
               lat={String(form.latitude)}
               lng={String(form.longitude)}
-              searchQuery={mapSearchQuery}
+              geocodeTarget={geocodeTarget}
               onChange={(lat, lng) => { setField('latitude', lat); setField('longitude', lng); }}
+              onReverseGeocode={addr => setField('address', addr)}
+              height="220px"
             />
             <div className="grid grid-cols-2 gap-3 mt-2">
               <input type="number" step="any" value={String(form.latitude)} onChange={e => setField('latitude', e.target.value)}
@@ -1060,11 +935,40 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
       <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
         <button onClick={onCancel} className="border border-gray-200 text-gray-600 px-5 py-2.5 rounded-lg text-sm hover:bg-gray-100 transition-colors">Hủy</button>
-        <button onClick={handleSaveClick} disabled={saving}
+        <button
+          onClick={() => {
+            if (!form.property_type_id) { setTypeError('Vui lòng chọn loại BĐS'); return; }
+            setShowPreview(true);
+          }}
+          disabled={saving}
           className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm">
-          <Save className="w-4 h-4" />{saving ? 'Đang lưu...' : 'Lưu BĐS'}
+          <Eye className="w-4 h-4" />Xem trước & xuất bản
         </button>
       </div>
+
+      {/* Modal preview bắt buộc — admin xem đúng trang công khai trước khi ghi vào DB */}
+      {showPreview && (
+        <div className="fixed inset-0 z-[9998] flex flex-col bg-black/60">
+          <div className="flex-shrink-0 flex items-center justify-between gap-3 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
+              <Eye className="w-4 h-4 text-red-500" />Xem trước trang tin trước khi xuất bản
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowPreview(false)}
+                className="border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors">
+                Quay lại chỉnh sửa
+              </button>
+              <button onClick={() => { setShowPreview(false); handleSaveClick(); }} disabled={saving}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-60">
+                <CheckCircle className="w-4 h-4" />{saving ? 'Đang lưu...' : 'Xác nhận xuất bản'}
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto bg-gray-50">
+            <PropertyDetailPage preview initialData={formToProperty(form as Record<string, unknown>, property, types, faq)} onNavigate={() => {}} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

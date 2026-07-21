@@ -34,12 +34,15 @@ import { buildPropertyFaq } from '../lib/propertyFaq';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 
 interface PropertyDetailPageProps {
-  propertyId: string;
+  propertyId?: string;
   onNavigate: (p: Page) => void;
   initialData?: Property | null;
+  // Chế độ xem trước từ form đăng/sửa tin: dựng từ initialData, KHÔNG gọi network
+  // chính và KHÔNG bắn side-effect thật (view/taste/lead/favorite/related).
+  preview?: boolean;
 }
 
-export function PropertyDetailPage({ propertyId, onNavigate, initialData }: PropertyDetailPageProps) {
+export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, preview = false }: PropertyDetailPageProps) {
   const [showContact, setShowContact] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -56,12 +59,16 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
   // initialData từ server (RSC prefetch) → crawler & first paint có ngay dữ liệu,
   // không nhấp nháy loading. SEO (title/meta/JSON-LD) do generateMetadata + page.tsx lo.
-  const { data: property = null, isLoading: loading } = useQuery({
+  const { data: queryProperty = null, isLoading: loadingQuery } = useQuery({
     queryKey: qk.property(propertyId),
     queryFn: () => getPropertyByIdOrSlug(propertyId),
-    enabled: !!propertyId,
-    initialData: initialData ?? undefined,
+    enabled: !!propertyId && !preview,
+    initialData: preview ? undefined : (initialData ?? undefined),
   });
+  // Preview đọc thẳng từ initialData (bỏ qua cache dùng chung key rỗng để mỗi lần
+  // xem trước luôn phản ánh đúng form hiện tại); không loading.
+  const property = preview ? (initialData ?? null) : queryProperty;
+  const loading = preview ? false : loadingQuery;
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
   // để giữ đúng thứ tự hooks.
@@ -86,19 +93,20 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const { data: testimonialsRaw = [] } = useQuery({
     queryKey: qk.testimonials(),
     queryFn: getTestimonials,
+    enabled: !preview,
   });
   const testimonials = testimonialsRaw.slice(0, 2);
 
   const { data: related = [] } = useQuery({
     queryKey: qk.relatedProperties(propertyId),
     queryFn: () => getRelatedProperties(property!),
-    enabled: !!property,
+    enabled: !!property && !preview,
   });
 
   // Yêu thích: persist thật qua Supabase (dùng chung logic với card ở list/home),
   // trước đây chỉ là state cục bộ nên tim bấm xong mất khi rời trang.
   const queryClient = useQueryClient();
-  const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
+  const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds, enabled: !preview });
   const liked = !!property && favIds.includes(property.id);
   const favMutation = useMutation({
     mutationFn: (id: string) => toggleFavorite(id),
@@ -110,6 +118,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   const viewedRef = useRef<string | null>(null);
   const viewMutation = useMutation({ mutationFn: (id: string) => incrementPropertyView(id) });
   useEffect(() => {
+    if (preview) return;
     if (property?.id && viewedRef.current !== property.id) {
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
@@ -143,6 +152,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
   const handleContact = (e: React.FormEvent) => {
     e.preventDefault();
+    if (preview) return;
     if (!form.name || !isValidVnPhone(form.phone)) return;
     submitMutation.mutate();
   };
@@ -171,6 +181,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
 
   const handleCallback = (e: React.FormEvent) => {
     e.preventDefault();
+    if (preview) return;
     if (!callbackForm.name || !isValidVnPhone(callbackForm.phone)) return;
     callbackMutation.mutate();
   };
@@ -242,6 +253,13 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   return (
     <div className="min-h-screen bg-gray-50">
 
+      {preview && (
+        <div className="bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 text-center flex items-center justify-center gap-2">
+          <Eye className="w-4 h-4" />
+          Bản xem trước — tin chưa công khai. Kiểm tra kỹ trước khi xuất bản.
+        </div>
+      )}
+
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -290,7 +308,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
                   <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded">{property.badge}</span>
                 )}
                 <div className="absolute top-3 right-3 flex gap-2">
-                  <button onClick={() => property && favMutation.mutate(property.id)} aria-label={liked ? 'Bỏ yêu thích' : 'Lưu yêu thích'}
+                  <button onClick={() => !preview && property && favMutation.mutate(property.id)} aria-label={liked ? 'Bỏ yêu thích' : 'Lưu yêu thích'}
                     className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
                     <Heart className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
                   </button>
@@ -707,8 +725,8 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
           </div>
         )}
 
-        <ForYou excludeId={property.id} />
-        <RecentlyViewed excludeId={property.id} />
+        {!preview && <ForYou excludeId={property.id} />}
+        {!preview && <RecentlyViewed excludeId={property.id} />}
       </div>
 
       <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />
