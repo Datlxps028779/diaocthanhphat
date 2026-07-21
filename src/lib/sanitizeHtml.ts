@@ -14,8 +14,8 @@ function ensureHook() {
 }
 
 export const ARTICLE_SANITIZE = {
-  ALLOWED_TAGS: ['p', 'h2', 'h3', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br'],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'style'],
+  ALLOWED_TAGS: ['p', 'h2', 'h3', 'h4', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'style', 'colspan', 'rowspan'],
   ALLOW_DATA_ATTR: true,
   ALLOWED_URI_REGEXP: /^(?:https?:|\/)/i,
 };
