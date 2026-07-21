@@ -22,5 +22,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "scripts", "deploy_ready", "supabase/functions"]
+  "exclude": ["node_modules", "scripts", "deploy_ready", "supabase/functions", "bds-seo-toolkit"]
 }

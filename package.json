@@ -15,6 +15,7 @@
     "migrate": "node scripts/fix-focus-keywords.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.4",
     "@supabase/supabase-js": "^2.57.4",
     "@tanstack/react-query": "^5.101.2",
     "@tiptap/extension-image": "^2.27.2",

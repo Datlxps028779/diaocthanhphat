@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2 } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
+import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata, buildNewsJsonLd } from '../../../lib/seo';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
@@ -476,6 +477,31 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Modal "Tạo bài bằng AI"
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiKeyword, setAiKeyword] = useState('');
+  const [aiDistrict, setAiDistrict] = useState('');
+  const [aiWard, setAiWard] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiDone, setAiDone] = useState<string | null>(null);
+
+  const runGenerate = async () => {
+    if (!aiKeyword.trim()) { setAiError('Vui lòng nhập từ khoá.'); return; }
+    setAiBusy(true); setAiError(null); setAiDone(null);
+    try {
+      const r = await generateArticleAI({
+        keyword: aiKeyword.trim(),
+        district: aiDistrict.trim() || undefined,
+        ward: aiWard.trim() || undefined,
+      });
+      await load();
+      setAiDone(r.title);
+      setAiKeyword(''); setAiDistrict(''); setAiWard('');
+    } catch (e) {
+      setAiError((e as { message?: string })?.message ?? 'Không tạo được bài viết.');
+    } finally { setAiBusy(false); }
+  };
 
   const load = async () => { setLoading(true); const d = await adminGetAllNews(); setArticles(d); setLoading(false); };
   useEffect(() => { load(); }, []);
@@ -528,7 +554,11 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button onClick={() => { setAiOpen(true); setAiError(null); setAiDone(null); }}
+          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors">
+          <Sparkles className="w-4 h-4" />Tạo bài bằng AI
+        </button>
         <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors">
           <Plus className="w-4 h-4" />Viết bài mới
         </button>
@@ -617,6 +647,70 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         <ConfirmDialog message={`Xóa ${selected.size} bài viết đã chọn? Thao tác không thể hoàn tác.`}
           onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteNews(selectedIds()), 'xóa'); }}
           onCancel={() => setConfirmBulkDelete(false)} />
+      )}
+
+      {aiOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!aiBusy) setAiOpen(false); }}>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-violet-600" />
+                <h2 className="text-lg font-bold text-gray-900">Tạo bài viết bằng AI</h2>
+              </div>
+              <button disabled={aiBusy} onClick={() => setAiOpen(false)} className="disabled:opacity-40">
+                <X className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <p className="text-xs text-gray-500">
+                AI sẽ viết một bài chuẩn SEO/GEO từ từ khoá của bạn và <b>lưu dạng nháp</b>. Bạn đọc lại,
+                chỉnh sửa rồi tự xuất bản. Mất khoảng 30–60 giây.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Từ khoá / chủ đề *</label>
+                <input value={aiKeyword} onChange={e => setAiKeyword(e.target.value)} disabled={aiBusy}
+                  placeholder='vd: giá đất Dĩ An 2026'
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">Khu vực (tùy chọn)</label>
+                  <input value={aiDistrict} onChange={e => setAiDistrict(e.target.value)} disabled={aiBusy}
+                    placeholder='vd: Dĩ An'
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">Phường/xã (tùy chọn)</label>
+                  <input value={aiWard} onChange={e => setAiWard(e.target.value)} disabled={aiBusy}
+                    placeholder='vd: Tân Đông Hiệp'
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
+                </div>
+              </div>
+
+              {aiError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{aiError}</div>}
+              {aiDone && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+                  Đã tạo bản nháp: <b>{aiDone}</b>. Tìm trong danh sách để sửa và xuất bản.
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+              <button disabled={aiBusy} onClick={() => setAiOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+                Đóng
+              </button>
+              <button disabled={aiBusy || !aiKeyword.trim()} onClick={runGenerate}
+                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                {aiBusy
+                  ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Đang viết bài…</>
+                  : <><Wand2 className="h-4 w-4" />Tạo nháp</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
