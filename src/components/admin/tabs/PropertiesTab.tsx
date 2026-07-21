@@ -575,7 +575,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-5xl">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
         <div>

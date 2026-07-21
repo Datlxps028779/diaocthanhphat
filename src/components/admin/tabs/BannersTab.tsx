@@ -70,7 +70,7 @@ export function BannersTab() {
 
   if (creating || editing) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-bold text-gray-900 text-lg">{editing ? 'Sửa banner' : 'Thêm banner mới'}</h2>
           <button onClick={() => { setEditing(null); setCreating(false); }}><X className="w-5 h-5 text-gray-400" /></button>

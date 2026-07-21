@@ -286,7 +286,7 @@ export function PageBuilderTab() {
   const hiddenSections = sections.filter(s => !s.is_visible);
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

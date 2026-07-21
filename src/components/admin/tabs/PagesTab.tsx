@@ -247,7 +247,7 @@ export function PagesTab() {
   if (loading) return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>;
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">

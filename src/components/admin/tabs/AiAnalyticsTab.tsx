@@ -26,7 +26,7 @@ export function AiAnalyticsTab() {
   };
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">

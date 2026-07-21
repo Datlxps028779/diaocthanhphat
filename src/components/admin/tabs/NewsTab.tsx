@@ -230,7 +230,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   };
 
   return (
-    <div className="max-w-5xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white px-6 py-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{article ? 'Sửa bài viết' : 'Viết bài mới'}</h2>
