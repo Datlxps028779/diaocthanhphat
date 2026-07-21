@@ -6,6 +6,7 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
+import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { isHtmlContent, markdownToHtml, stripHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
@@ -25,6 +26,7 @@ type NewsFormState = SeoFieldsValue & {
   geo_area: string;
   geo_entity: string;
   geo_notes: string;
+  faq: FaqItem[];
 };
 
 function newsSlug(title: string): string {
@@ -79,6 +81,7 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     geo_area: article?.geo_area ?? '',
     geo_entity: article?.geo_entity ?? '',
     geo_notes: article?.geo_notes ?? '',
+    faq: article?.faq ?? [],
   };
 }
 
@@ -99,6 +102,16 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     .map(a => ({ title: a.title, slug: a.slug }));
   const addRelated = (id: string) => setForm(f => (f.related_ids.includes(id) ? f : { ...f, related_ids: [...f.related_ids, id] }));
   const removeRelated = (id: string) => setForm(f => ({ ...f, related_ids: f.related_ids.filter(x => x !== id) }));
+  const addFaq = () => setForm(f => ({ ...f, faq: [...f.faq, { question: '', answer: '' }] }));
+  const removeFaq = (idx: number) => setForm(f => ({ ...f, faq: f.faq.filter((_, i) => i !== idx) }));
+  const updateFaq = (idx: number, key: keyof FaqItem, value: string) =>
+    setForm(f => ({ ...f, faq: f.faq.map((it, i) => (i === idx ? { ...it, [key]: value } : it)) }));
+  const suggestFaq = () => setForm(f => {
+    const suggestions = suggestNewsFaq({ title: f.title, category: f.category, geoArea: f.geo_area });
+    const existing = new Set(f.faq.map(it => it.question.trim()));
+    const merged = [...f.faq, ...suggestions.filter(s => !existing.has(s.question.trim()))];
+    return { ...f, faq: merged };
+  });
   const moveRelated = (idx: number, dir: -1 | 1) => setForm(f => {
     const next = [...f.related_ids];
     const j = idx + dir;
@@ -188,6 +201,12 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
         geo_area: form.geo_area.trim() || null,
         geo_entity: form.geo_entity.trim() || null,
         geo_notes: form.geo_notes.trim() || null,
+        faq: (() => {
+          const valid = form.faq
+            .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
+            .filter(it => it.question && it.answer);
+          return valid.length ? valid : null;
+        })(),
       });
     } finally { setSaving(false); }
   };
@@ -262,6 +281,39 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
                 <textarea value={form.geo_notes} onChange={e => set('geo_notes', e.target.value)} rows={2} placeholder="Các địa danh, hạ tầng, pháp lý, nguồn dữ liệu thật cần được AI hiểu đúng..."
                   className="w-full resize-none rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-700">FAQ (AEO / AI search)</p>
+                <p className="mt-1 text-[11px] text-violet-700/80">Câu hỏi – trả lời hiển thị công khai cuối bài và sinh schema FAQPage. Chỉ câu có đủ hỏi + đáp mới được lưu và render.</p>
+              </div>
+              <button type="button" onClick={suggestFaq}
+                className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
+                <Sparkles className="h-3.5 w-3.5" /> Gợi ý câu hỏi
+              </button>
+            </div>
+            <div className="space-y-3">
+              {form.faq.map((item, idx) => (
+                <div key={idx} className="rounded-xl border border-violet-100 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-violet-600">Câu {idx + 1}</span>
+                    <button type="button" onClick={() => removeFaq(idx)} className="text-red-500 hover:text-red-700" aria-label="Xóa câu hỏi">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <input value={item.question} onChange={e => updateFaq(idx, 'question', e.target.value)} placeholder="Câu hỏi..."
+                    className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  <textarea value={item.answer} onChange={e => updateFaq(idx, 'answer', e.target.value)} rows={2} placeholder="Câu trả lời (bắt buộc để lưu)..."
+                    className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                </div>
+              ))}
+              <button type="button" onClick={addFaq}
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">
+                <Plus className="h-3.5 w-3.5" /> Thêm câu hỏi
+              </button>
             </div>
           </div>
 

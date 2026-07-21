@@ -793,8 +793,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 {form.description.length} ký tự (tối thiểu 120)
               </span>
             </label>
-            <textarea value={form.description} onChange={e => setField('description', e.target.value)} rows={5}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+            <textarea value={form.description} onChange={e => setField('description', e.target.value)} rows={12}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-y min-h-[10rem]" />
           </div>
 
           {/* Badge */}

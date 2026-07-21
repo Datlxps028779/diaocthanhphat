@@ -83,17 +83,52 @@ export function staticPageMetadata(opts: { title: string; description: string; p
   };
 }
 
+// Kẹp chuỗi về khoảng SEO mong muốn, cắt theo ranh giới từ + thêm "…" khi vượt max.
+function clampText(text: string, min: number, max: number): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > min ? cut.slice(0, lastSpace) : cut).trim() + '…';
+}
+
+function formatPropertyPrice(p: Property): string {
+  if (p.listing_type === 'cho_thue' && p.price_per_month) return `${p.price_per_month} triệu/tháng`;
+  if (p.price) return `${p.price} ${p.price_unit ?? 'tỷ'}`;
+  return '';
+}
+
 // ─── Property → Metadata (Next.js Metadata API) ───────────────────────────────
 // Thay cho applyPropertySeo cũ (vốn thao tác DOM). Ưu tiên meta_title/description
-// nhập tay, fallback tự sinh. Canonical dùng SITE_URL (server-safe, không window).
+// nhập tay, fallback tự sinh deterministic từ dữ liệu thật (loại BĐS + địa danh +
+// giá + diện tích), kẹp đúng độ dài SEO để tránh thin/duplicate giữa các tin.
 export function buildPropertyMetadata(p: Property): Metadata {
-  const priceStr = p.price ? `${p.price} ${p.price_unit ?? 'tỷ'}` : '';
-  const title = p.meta_title || `${p.title}${priceStr ? ' - ' + priceStr : ''}`;
-  const description = p.meta_description
-    || p.description
-    || `Bất động sản ${p.title} tại ${p.district ?? ''}, ${p.city ?? 'Bình Dương'}. Giá tốt, pháp lý minh bạch. Liên hệ ngay!`;
-  const keywords = p.focus_keywords
-    || `bất động sản, ${p.city ?? 'Bình Dương'}, ${p.district ?? ''}, ${p.title}`;
+  const priceStr = formatPropertyPrice(p);
+  const typeLabel = p.property_types?.name?.trim() || '';
+  const location = [p.district?.trim(), p.city?.trim() || 'Bình Dương'].filter(Boolean).join(', ');
+  const listingVerb = p.listing_type === 'cho_thue' ? 'Cho thuê' : 'Bán';
+
+  const fallbackTitle = clampText(
+    [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), p.title, priceStr ? `giá ${priceStr}` : '']
+      .filter(Boolean).join(' - '),
+    45, 65,
+  );
+  const title = p.meta_title?.trim() || fallbackTitle;
+
+  const descParts = [
+    `${typeLabel || 'Bất động sản'} ${p.title}${location ? ` tại ${location}` : ''}.`,
+    p.area_sqm ? `Diện tích ${p.area_sqm}m².` : '',
+    p.bedrooms ? `${p.bedrooms} phòng ngủ.` : '',
+    priceStr ? `Giá ${priceStr}.` : '',
+    p.legal_status?.trim() ? `Pháp lý ${p.legal_status.trim()}.` : '',
+    'Liên hệ xem nhà và tư vấn miễn phí.',
+  ].filter(Boolean).join(' ');
+  const description = p.meta_description?.trim()
+    || (p.description?.trim() ? clampText(p.description, 120, 160) : clampText(descParts, 120, 160));
+
+  const keywords = p.focus_keywords?.trim()
+    || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
+      .filter(Boolean).join(', ');
   const path = `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
   const images = p.image_url ? [{ url: p.image_url, width: 1200, height: 630 }] : undefined;
 
@@ -121,6 +156,11 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   const url = absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`);
   const gallery = buildPropertyGallery(p.image_url, p.images).filter(u => u !== FALLBACK_PROPERTY_IMAGE);
   const video = buildPropertyVideoObject(p);
+  // GEO/local: dựng tên địa danh từ dữ liệu thật (phường → quận → thành phố). Chỉ
+  // thêm contentLocation/spatialCoverage/about/areaServed khi có dữ liệu, không bịa.
+  const placeParts = [p.ward, p.district, p.city].map(s => s?.trim()).filter(Boolean) as string[];
+  const geoName = placeParts.join(', ');
+  const localityEntity = (p.district?.trim() || p.ward?.trim() || '');
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
@@ -154,11 +194,18 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     ...(p.latitude && p.longitude ? {
       geo: { '@type': 'GeoCoordinates', latitude: p.latitude, longitude: p.longitude },
     } : {}),
+    ...(geoName ? {
+      contentLocation: { '@type': 'Place', name: geoName },
+      spatialCoverage: { '@type': 'Place', name: geoName },
+    } : {}),
+    ...(localityEntity ? { about: [{ '@type': 'Place', name: localityEntity }] } : {}),
+    ...(p.city?.trim() || p.district?.trim() ? { areaServed: (p.district?.trim() || p.city?.trim()) } : {}),
     ...(video ? { video } : {}),
   };
 
   return mergeSchema(base, p.schema_markup, 'property', [
     '@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage', 'datePosted', 'dateModified', 'offers', 'address', 'geo',
+    'contentLocation', 'spatialCoverage', 'about', 'areaServed',
   ]).schema;
 }
 

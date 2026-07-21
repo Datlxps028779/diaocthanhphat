@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { serverGetPropertyByIdOrSlug } from '@/lib/supabase-server';
 import { buildPropertyMetadata, buildPropertyJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { buildPropertyFaq, buildFaqJsonLd } from '@/lib/propertyFaq';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { PropertyDetailClient } from './PropertyDetailClient';
 
@@ -29,10 +30,13 @@ export default async function PropertyPage({ params }: Params) {
     { name: property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán', path: listingHref },
     { name: property.title, path: `/bat-dong-san/${(property.slug && property.slug.trim()) || property.id}` },
   ]);
+  // FAQPage chỉ emit khi có FAQ thật (khớp khối FAQ visible trong PropertyDetailPage).
+  const faqJsonLd = buildFaqJsonLd(buildPropertyFaq(property));
+  const schemas = [jsonLd, breadcrumbJsonLd, ...(faqJsonLd ? [faqJsonLd] : [])];
 
   return (
     <>
-      <JsonLdScripts schemas={[jsonLd, breadcrumbJsonLd]} />
+      <JsonLdScripts schemas={schemas} />
       <PropertyDetailClient propertyId={slug} initialData={property} />
     </>
   );

@@ -30,6 +30,7 @@ import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery } from '../lib/propertyImages';
+import { buildPropertyFaq } from '../lib/propertyFaq';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 
 interface PropertyDetailPageProps {
@@ -212,6 +213,7 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   );
 
   const allImages = buildPropertyGallery(property.image_url, property.images);
+  const faq = buildPropertyFaq(property);
 
   const pricePerSqm = property.area_sqm
     ? ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0)
@@ -415,6 +417,25 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Mô tả chi tiết</h2>
                 <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{property.description}</p>
+              </div>
+            )}
+
+            {/* FAQ — tự sinh từ dữ liệu thật (giá/vị trí/diện tích/pháp lý/hướng).
+                Khớp 1:1 với FAQPage JSON-LD ở page.tsx (chuẩn Google/AEO). */}
+            {faq.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 className="font-bold text-gray-900 text-base mb-3">Câu hỏi thường gặp</h2>
+                <div className="divide-y divide-gray-100">
+                  {faq.map((item, i) => (
+                    <details key={i} className="group py-3 first:pt-0 last:pb-0">
+                      <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-sm font-semibold text-gray-900">
+                        {item.question}
+                        <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 transition-transform group-open:rotate-90" />
+                      </summary>
+                      <p className="mt-2 text-sm text-gray-600 leading-relaxed">{item.answer}</p>
+                    </details>
+                  ))}
+                </div>
               </div>
             )}
 

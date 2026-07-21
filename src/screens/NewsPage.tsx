@@ -247,6 +247,24 @@ function ArticleDetail({
             </div>
           )}
 
+          {/* FAQ — admin nhập tay, khớp 1:1 với FAQPage JSON-LD ở page.tsx */}
+          {article.faq && article.faq.length > 0 && (
+            <div className="mt-10 pt-6 border-t border-gray-200">
+              <h2 className="font-bold text-gray-900 text-lg mb-4">Câu hỏi thường gặp</h2>
+              <div className="divide-y divide-gray-100">
+                {article.faq.map((item, i) => (
+                  <details key={i} className="group py-3 first:pt-0">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-sm font-semibold text-gray-900">
+                      {item.question}
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 transition-transform group-open:rotate-90" />
+                    </summary>
+                    <p className="mt-2 text-sm text-gray-600 leading-relaxed">{item.answer}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* CTA Banner */}
           <div className="mt-10 bg-gradient-to-r from-red-700 to-red-500 rounded-2xl p-6 text-white text-center">
             <h3 className="text-lg font-bold mb-2">Bạn cần tư vấn về bất động sản?</h3>

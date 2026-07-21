@@ -128,6 +128,7 @@ export type NewsArticle = {
   geo_area: string | null;
   geo_entity: string | null;
   geo_notes: string | null;
+  faq: { question: string; answer: string }[] | null;
   created_at: string; updated_at: string;
 };
 

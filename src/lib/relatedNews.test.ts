@@ -8,7 +8,7 @@ const article = (o: Partial<NewsArticle> & { id: string }): NewsArticle => ({
   title: o.id, slug: o.id, excerpt: null, content: null, image_url: null,
   category: 'Thị trường', author: 'Ban biên tập', is_published: true, views: 0,
   meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null,
-  related_ids: null, geo_area: null, geo_entity: null, geo_notes: null, created_at: '2026-07-18T00:00:00Z', updated_at: '2026-07-18T00:00:00Z',
+  related_ids: null, geo_area: null, geo_entity: null, geo_notes: null, faq: null, created_at: '2026-07-18T00:00:00Z', updated_at: '2026-07-18T00:00:00Z',
   ...o,
 });
 
