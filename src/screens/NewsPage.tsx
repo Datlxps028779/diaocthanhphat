@@ -269,13 +269,10 @@ function ArticleDetail({
           {article.citations && article.citations.length > 0 && (
             <div className="mt-10 pt-6 border-t border-gray-200">
               <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
-              <ul className="space-y-2">
+              <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
                 {article.citations.map((c, i) => (
-                  <li key={i} className="text-sm">
-                    <a href={c.url} target="_blank" rel="nofollow noopener noreferrer"
-                      className="text-red-600 hover:text-red-700 hover:underline break-words">
-                      {c.title || c.url}
-                    </a>
+                  <li key={i} className="text-sm text-gray-700 break-words">
+                    {c.title || c.url}
                   </li>
                 ))}
               </ul>
