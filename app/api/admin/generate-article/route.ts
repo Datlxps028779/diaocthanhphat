@@ -45,15 +45,8 @@ export async function POST(req: NextRequest) {
   try {
     article = await generateArticle({ keyword, district: district || undefined, ward: ward || undefined });
   } catch (e) {
-    const err = e as { code?: string; message?: string; status?: number; error?: unknown };
-    // Log nguyên trạng lỗi từ upstream (Anthropic/proxy) — hiện trong Vercel → Logs/Functions.
-    // status của SDK = HTTP code từ proxy (vd 401 = proxy từ chối key), error = body chi tiết.
-    console.error('[articleGen] lỗi sinh bài', JSON.stringify({
-      code: err.code,
-      httpStatus: err.status,
-      message: err.message,
-      upstream: err.error,
-    }));
+    const err = e as { code?: string; message?: string; status?: number };
+    console.error('[articleGen] lỗi sinh bài:', err.status ?? '', err.message);
     const status = err.code === 'NO_API_KEY' ? 503 : 502;
     return NextResponse.json({ error: err.message || 'Không sinh được bài viết.' }, { status });
   }

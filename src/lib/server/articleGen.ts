@@ -99,17 +99,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   // baseURL: dùng proxy bên thứ 3 nếu đặt ANTHROPIC_BASE_URL, else endpoint Anthropic mặc định.
   const baseURL = process.env.ANTHROPIC_BASE_URL || undefined;
 
-  // Log chẩn đoán (KHÔNG lộ giá trị key): thấy được trong Vercel → Logs/Functions.
-  // Giúp phân biệt: key không được inject vào runtime vs key có nhưng proxy từ chối.
-  console.info('[articleGen] cấu hình', JSON.stringify({
-    keyPresent: !!apiKey,
-    keyLen: apiKey.length,
-    keyPrefix: apiKey.slice(0, 6),
-    keyHasWhitespace: /\s/.test(apiKey),
-    baseURL: baseURL ?? '(mặc định Anthropic)',
-    model: MODEL,
-  }));
-
   const client = new Anthropic({
     apiKey,
     ...(baseURL ? { baseURL } : {}),
@@ -117,21 +106,6 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     // Bearer. Gateway bên thứ 3 (leeh.dev) đọc key qua Authorization nên phải thêm thủ công;
     // proxy đọc x-api-key vẫn không bị ảnh hưởng.
     ...(baseURL ? { defaultHeaders: { Authorization: `Bearer ${apiKey}` } } : {}),
-    // Custom fetch CHỈ để chẩn đoán: log URL đích + tên các header gửi đi (KHÔNG lộ value)
-    // → biết chắc x-api-key có tới proxy không. Xoá sau khi xong.
-    fetch: async (url, init) => {
-      try {
-        const h = new Headers(init?.headers as HeadersInit | undefined);
-        const headerKeys = Array.from(h.keys());
-        console.info('[articleGen] outbound', JSON.stringify({
-          url: String(url),
-          headerKeys,
-          hasApiKey: headerKeys.includes('x-api-key'),
-          hasAuth: headerKeys.includes('authorization'),
-        }));
-      } catch { /* log không được thì bỏ qua, không chặn request */ }
-      return fetch(url, init);
-    },
   });
 
   // Stream để tránh request timeout khi output dài; lấy message hoàn chỉnh ở cuối.

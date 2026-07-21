@@ -477,6 +477,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   // Modal "Tạo bài bằng AI"
   const [aiOpen, setAiOpen] = useState(false);
   const [aiKeyword, setAiKeyword] = useState('');
@@ -519,7 +520,12 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
-  const allIds = articles.map(a => a.id);
+  const publishedCount = articles.filter(a => a.is_published).length;
+  const draftCount = articles.length - publishedCount;
+  const filtered = articles.filter(a =>
+    statusFilter === 'all' ? true : statusFilter === 'published' ? a.is_published : !a.is_published,
+  );
+  const allIds = filtered.map(a => a.id);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
   const clearSelection = () => setSelected(new Set());
@@ -583,6 +589,24 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         </div>
       )}
 
+      <div className="flex flex-wrap gap-2">
+        {([
+          { key: 'all', label: 'Tất cả', count: articles.length },
+          { key: 'published', label: 'Đã đăng', count: publishedCount },
+          { key: 'draft', label: 'Nháp', count: draftCount },
+        ] as const).map(f => (
+          <button key={f.key} onClick={() => { setStatusFilter(f.key); clearSelection(); }}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium border transition-colors ${
+              statusFilter === f.key
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+            }`}>
+            {f.label}
+            <span className={`text-xs rounded-full px-1.5 ${statusFilter === f.key ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>{f.count}</span>
+          </button>
+        ))}
+      </div>
+
       {loading ? <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <table className="w-full text-sm">
@@ -600,7 +624,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {articles.map(a => (
+              {filtered.map(a => (
                 <tr key={a.id} className={`transition-colors ${selected.has(a.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleOne(a.id)}
@@ -639,7 +663,14 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
               ))}
             </tbody>
           </table>
-          {articles.length === 0 && <div className="text-center py-8 text-gray-400 text-sm">Chưa có bài viết nào</div>}
+          {filtered.length === 0 && (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              {articles.length === 0 ? 'Chưa có bài viết nào'
+                : statusFilter === 'draft' ? 'Không có bài nháp nào'
+                : statusFilter === 'published' ? 'Không có bài đã đăng nào'
+                : 'Chưa có bài viết nào'}
+            </div>
+          )}
         </div>
       )}
       {confirmDelete && <ConfirmDialog message="Xóa bài viết này?" onConfirm={async () => { await deleteNews(confirmDelete); setConfirmDelete(null); await load(); }} onCancel={() => setConfirmDelete(null)} />}
