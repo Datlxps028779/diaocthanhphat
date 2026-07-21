@@ -7,7 +7,9 @@ import { buildSlug } from '@/lib/slug';
 // ANTHROPIC_API_KEY + service_role không bao giờ tới client. Bắt buộc caller là admin.
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // research-free vẫn cần chỗ cho 1 lần gọi Claude output dài
+// Bài dài (900-1400 từ) + model thinking chậm → cần nhiều thời gian. Vercel Pro cho tới 300s;
+// gói Hobby tự kẹp về trần 60s (không lỗi build) — khi đó phải đổi model nhanh hơn để kịp.
+export const maxDuration = 300;
 
 // Slug duy nhất: buildSlug(title) rồi nối -2/-3... nếu đã tồn tại trong news.
 async function uniqueSlug(admin: ReturnType<typeof adminClient>, title: string): Promise<string> {
