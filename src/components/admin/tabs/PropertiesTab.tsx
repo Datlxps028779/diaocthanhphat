@@ -1,16 +1,96 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star, ShieldCheck } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Save, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
 import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
-import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
+import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
 import { parseSeoSchema } from '../shared/SeoFields';
-import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
 import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
+
+// Dựng Property tạm từ form state để tái dùng builder public (buildPropertyMetadata +
+// buildPropertyJsonLd) — SEO/GEO form fill khớp 1:1 JSON-LD public /bat-dong-san/[slug].
+// Field số trong form là chuỗi → đổi về number | null; field không có trong form → null.
+function formToProperty(
+  form: Record<string, unknown>,
+  property: Property | null,
+  types: PropertyType[],
+  faq: FaqItem[],
+): Property {
+  const num = (v: unknown) => {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const str = (v: unknown) => (v === '' || v === null || v === undefined ? null : String(v));
+  const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : null);
+  const slug = (str(form.slug) || generateSlug(String(form.title ?? '')) || 'slug') as string;
+  const now = new Date().toISOString();
+  const typeId = str(form.property_type_id);
+  const propertyType = types.find(t => t.id === typeId) ?? null;
+  return {
+    id: property?.id ?? 'draft',
+    title: String(form.title ?? ''),
+    description: str(form.description),
+    price: num(form.price) ?? 0,
+    price_unit: String(form.price_unit ?? 'tỷ'),
+    price_label: str(form.price_label),
+    price_per_month: num(form.price_per_month),
+    listing_type: (form.listing_type as Property['listing_type']) ?? 'mua_ban',
+    area_sqm: num(form.area_sqm),
+    address: str(form.address),
+    city: String(form.city ?? ''),
+    district: str(form.district),
+    ward: str(form.ward),
+    area_id: str(form.area_id),
+    district_id: property?.district_id ?? null,
+    property_type_id: typeId,
+    image_url: str(form.image_url),
+    images: arr(form.images),
+    badge: str(form.badge),
+    badge_color: str(form.badge_color),
+    legal_status: str(form.legal_status),
+    is_featured: Boolean(form.is_featured),
+    is_hot: Boolean(form.is_hot),
+    is_active: Boolean(form.is_active),
+    is_verified: Boolean(form.is_verified),
+    views: property?.views ?? 0,
+    contact_name: str(form.contact_name),
+    contact_phone: str(form.contact_phone),
+    bedrooms: num(form.bedrooms),
+    bathrooms: num(form.bathrooms),
+    floor_count: num(form.floor_count),
+    floor_number: num(form.floor_number),
+    direction: str(form.direction),
+    road_width: num(form.road_width),
+    frontage: num(form.frontage),
+    amenities: property?.amenities ?? null,
+    latitude: num(form.latitude),
+    longitude: num(form.longitude),
+    formatted_address: property?.formatted_address ?? null,
+    vr_tour_url: str(form.vr_tour_url),
+    video_url: str(form.video_url),
+    contact_zalo: str(form.contact_zalo),
+    tags: property?.tags ?? null,
+    meta_title: str(form.meta_title),
+    meta_description: str(form.meta_description),
+    focus_keywords: str(form.focus_keywords),
+    schema_markup: null,
+    slug,
+    faq: (() => {
+      const valid = faq
+        .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
+        .filter(it => it.question && it.answer);
+      return valid.length ? valid : null;
+    })(),
+    created_at: property?.created_at ?? now,
+    updated_at: now,
+    property_types: propertyType,
+  };
+}
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
@@ -457,35 +537,29 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   useEffect(() => { setForm(f => ({ ...f, meta_title: seo.metaTitle })); }, [seo.metaTitle]);
   useEffect(() => { setForm(f => ({ ...f, meta_description: seo.metaDescription })); }, [seo.metaDescription]);
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
+  // Schema auto = đúng builder public (buildPropertyJsonLd, đã GEO contentLocation/
+  // spatialCoverage/about/areaServed + video + offers VND). Khớp 1:1 JSON-LD public page.
   useEffect(() => {
-    const autoSchema = buildAutoSchema('property', {
-      title: form.title,
-      description: form.description,
-      image_url: form.image_url,
-      images: form.images,
-      listing_type: form.listing_type,
-      price: form.price,
-      price_unit: form.price_unit,
-      price_per_month: form.price_per_month,
-      city: form.city,
-      district: form.district,
-      area_sqm: form.area_sqm,
-      bedrooms: form.bedrooms,
-      bathrooms: form.bathrooms,
-      address: form.address,
-      latitude: form.latitude,
-      longitude: form.longitude,
-      author: form.contact_name,
-      site_name: form.contact_name,
-      path: `/bat-dong-san/${form.slug || generateSlug(form.title) || 'slug'}`,
-    });
+    const temp = formToProperty(form as Record<string, unknown>, property, types, faq);
+    const autoSchema = buildPropertyJsonLd(temp);
     setForm(f => {
-      const generated = schemaToJson(autoSchema);
+      const generated = JSON.stringify(autoSchema, null, 2);
       const current = f.schema_markup.trim();
       const previousAuto = seo.schemaMarkup.trim();
       return { ...f, schema_markup: !current || current === previousAuto ? generated : f.schema_markup };
     });
-  }, [form.title, form.description, form.image_url, form.images, form.listing_type, form.price, form.price_unit, form.price_per_month, form.city, form.district, form.area_sqm, form.bedrooms, form.bathrooms, form.address, form.latitude, form.longitude, form.contact_name, form.slug]);
+  }, [form.title, form.description, form.image_url, form.images, form.listing_type, form.price, form.price_unit, form.price_per_month, form.city, form.district, form.ward, form.area_sqm, form.bedrooms, form.bathrooms, form.address, form.latitude, form.longitude, form.contact_name, form.legal_status, form.direction, form.video_url, form.slug, faq, property, types]);
+
+  // Nút "Điền mẫu từ dữ liệu": dựng record tạm → fill meta (buildPropertyMetadata) + schema
+  // (buildPropertyJsonLd) đầy đủ GEO. Setter của useSEOAutofill tự mark touched → ghi đè an toàn.
+  const fillPropertyFromData = () => {
+    const temp = formToProperty(form as Record<string, unknown>, property, types, faq);
+    const meta = buildPropertyMetadata(temp);
+    seo.setMetaTitle((meta.title as string).slice(0, 60));
+    seo.setMetaDescription((meta.description as string).slice(0, 155));
+    seo.setFocusKeywords((meta.keywords as string) || '');
+    seo.setSchemaMarkup(JSON.stringify(buildPropertyJsonLd(temp), null, 2));
+  };
 
   const setField = (name: string, value: unknown) => setForm(f => ({ ...f, [name]: value }));
   const setPropertyType = (id: string) => {
@@ -872,24 +946,19 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center gap-2">
               <Search className="w-4 h-4 text-red-500" />Cấu hình SEO
             </h3>
-            <div className="mb-3">
-              <AiSeoDraftPanel
-                targetType="property"
-                targetId={property?.id}
-                disabled={!property?.id}
-                disabledHint="Lưu BĐS trước để AI đọc đầy đủ dữ liệu rồi mới sinh draft SEO/GEO."
-                onApply={(draft, emptyOnly) => {
-                  const pick = (cur: string, next?: string) => (emptyOnly && cur.trim() ? cur : (next ?? cur));
-                  seo.setMetaTitle(pick(seo.metaTitle, draft.meta_title));
-                  seo.setMetaDescription(pick(seo.metaDescription, draft.meta_description));
-                  seo.setFocusKeywords(pick(seo.focusKeywords, draft.focus_keywords));
-                  if (draft.schema_markup && Object.keys(draft.schema_markup).length > 0) {
-                    if (!(emptyOnly && seo.schemaMarkup.trim())) {
-                      seo.setSchemaMarkup(JSON.stringify(draft.schema_markup, null, 2));
-                    }
-                  }
-                }}
-              />
+            <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
+                    <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO / schema
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-700/80">Sinh title/description/keywords + RealEstateListing JSON-LD (GEO contentLocation/spatialCoverage/about/areaServed + offers + video) từ dữ liệu BĐS thật. Bấm nút để điền, hoặc sửa tay bất kỳ ô nào.</p>
+                </div>
+                <button type="button" onClick={fillPropertyFromData}
+                  className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">
+                  <Wand2 className="h-3.5 w-3.5" /> Điền mẫu từ dữ liệu
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
               <div>

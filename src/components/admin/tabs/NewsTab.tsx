@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles } from 'lucide-react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2 } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
+import { buildNewsMetadata, buildNewsJsonLd } from '../../../lib/seo';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
-import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
 import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { RichTextEditor } from '../shared/RichTextEditor';
-import { isHtmlContent, markdownToHtml, stripHtml } from '../../../lib/markdown';
+import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
@@ -42,23 +42,39 @@ function newsSlug(title: string): string {
     .slice(0, 100);
 }
 
-function buildNewsSchema(form: Pick<NewsFormState, 'title' | 'excerpt' | 'image_url' | 'author' | 'slug' | 'geo_area' | 'geo_entity' | 'geo_notes'>): Record<string, unknown> {
-  const path = `/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`;
-  const geoArea = form.geo_area.trim();
-  const geoEntity = form.geo_entity.trim();
-  const geoNotes = form.geo_notes.trim();
+// Dựng NewsArticle tạm từ form state để tái dùng builder public (buildNewsMetadata +
+// buildNewsJsonLd) — đảm bảo SEO/GEO form fill khớp 1:1 JSON-LD public /tin-tuc/[slug].
+// Các field không có trong form (id, views, related_ids...) → giá trị tạm an toàn.
+function formToNewsArticle(form: NewsFormState, article: NewsArticle | null): NewsArticle {
+  const slug = form.slug.trim() || newsSlug(form.title) || 'slug';
+  const now = new Date().toISOString();
   return {
-    '@context': 'https://schema.org',
-    '@type': 'NewsArticle',
-    headline: form.title,
-    description: form.excerpt || form.title,
-    image: form.image_url || undefined,
-    author: { '@type': 'Organization', name: form.author || 'BĐS Bình Dương' },
-    mainEntityOfPage: path,
-    url: path,
-    ...(geoArea ? { articleSection: geoArea, contentLocation: { '@type': 'Place', name: geoArea }, spatialCoverage: { '@type': 'Place', name: geoArea } } : {}),
-    ...(geoEntity ? { about: [{ '@type': 'Thing', name: geoEntity }] } : {}),
-    ...(geoNotes ? { mentions: [{ '@type': 'Thing', name: geoNotes }] } : {}),
+    id: article?.id ?? 'draft',
+    title: form.title.trim(),
+    slug,
+    excerpt: form.excerpt.trim() || null,
+    content: form.content,
+    image_url: form.image_url.trim() || null,
+    category: form.category,
+    author: form.author.trim() || 'Ban biên tập',
+    is_published: form.is_published,
+    views: article?.views ?? 0,
+    meta_title: form.meta_title.trim() || null,
+    meta_description: form.meta_description.trim() || null,
+    focus_keywords: form.focus_keywords.trim() || null,
+    schema_markup: null,
+    related_ids: form.related_ids.length ? form.related_ids : null,
+    geo_area: form.geo_area.trim() || null,
+    geo_entity: form.geo_entity.trim() || null,
+    geo_notes: form.geo_notes.trim() || null,
+    faq: (() => {
+      const valid = form.faq
+        .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
+        .filter(it => it.question && it.answer);
+      return valid.length ? valid : null;
+    })(),
+    created_at: article?.created_at ?? now,
+    updated_at: now,
   };
 }
 
@@ -150,26 +166,28 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const readinessDisplay = [...readiness.errors, ...readiness.warnings, ...readiness.passes].slice(0, 10);
 
   useEffect(() => {
-    const slug = form.slug.trim() || newsSlug(form.title);
-    const schema = JSON.stringify(buildNewsSchema({ ...form, slug }), null, 2);
+    const temp = formToNewsArticle(form, article);
+    const schema = JSON.stringify(buildNewsJsonLd(temp), null, 2);
     generatedSchemaRef.current = schema;
+    const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
-      meta_title: f.meta_title.trim() || f.title.slice(0, 60),
-      meta_description: f.meta_description.trim() || (f.excerpt || stripHtml(f.content)).slice(0, 155),
-      focus_keywords: f.focus_keywords.trim() || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
+      meta_title: f.meta_title.trim() || (meta.title as string).slice(0, 60),
+      meta_description: f.meta_description.trim() || (meta.description as string).slice(0, 155),
+      focus_keywords: f.focus_keywords.trim() || (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: manualSchemaRef.current ? f.schema_markup : schema,
     }));
-  }, [form.title, form.slug, form.category, form.author, form.image_url, form.excerpt, form.content]);
+  }, [form.title, form.slug, form.category, form.author, form.image_url, form.excerpt, form.content, form.geo_area, form.geo_entity, form.geo_notes, article]);
 
   const autoGenerateSeo = () => {
-    const schema = buildNewsSchema(form);
+    const temp = formToNewsArticle(form, article);
+    const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
-      meta_title: f.meta_title.trim() || f.title.slice(0, 60),
-      meta_description: f.meta_description.trim() || (f.excerpt || stripHtml(f.content)).slice(0, 155),
-      focus_keywords: f.focus_keywords.trim() || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
-      schema_markup: f.schema_markup.trim() || JSON.stringify(schema, null, 2),
+      meta_title: (meta.title as string).slice(0, 60),
+      meta_description: (meta.description as string).slice(0, 155),
+      focus_keywords: (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
+      schema_markup: JSON.stringify(buildNewsJsonLd(temp), null, 2),
     }));
   };
 
@@ -413,35 +431,27 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             )}
           </div>
 
-          <AiSeoDraftPanel
-            targetType="news"
-            targetId={article?.id}
-            disabled={!article?.id}
-            disabledHint="Lưu bài viết trước để AI đọc đầy đủ nội dung rồi mới sinh draft SEO/GEO."
-            onApply={(draft, emptyOnly) => {
-              const pick = (cur: string, next?: string) => (emptyOnly && cur.trim() ? cur : (next ?? cur));
-              manualSchemaRef.current = true;
-              setForm(f => ({
-                ...f,
-                meta_title: pick(f.meta_title, draft.meta_title),
-                meta_description: pick(f.meta_description, draft.meta_description),
-                focus_keywords: pick(f.focus_keywords, draft.focus_keywords),
-                geo_area: pick(f.geo_area, draft.geo_area),
-                geo_entity: pick(f.geo_entity, draft.geo_entity),
-                geo_notes: pick(f.geo_notes, draft.geo_notes),
-                schema_markup: draft.schema_markup && Object.keys(draft.schema_markup).length > 0
-                  ? (emptyOnly && f.schema_markup.trim() ? f.schema_markup : JSON.stringify(draft.schema_markup, null, 2))
-                  : f.schema_markup,
-              }));
-            }}
-          />
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
+                  <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO / schema
+                </p>
+                <p className="mt-1 text-[11px] text-amber-700/80">Sinh title/description/keywords + NewsArticle JSON-LD (GEO contentLocation/spatialCoverage/about/mentions + speakable) từ dữ liệu bài viết thật. Bấm nút bên cạnh nội dung để điền, hoặc sửa tay bất kỳ ô nào.</p>
+              </div>
+              <button type="button" onClick={autoGenerateSeo}
+                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">
+                <Wand2 className="h-3.5 w-3.5" /> Điền mẫu từ dữ liệu
+              </button>
+            </div>
+          </div>
 
           <SeoFields
             value={form}
             onChange={setSeo}
             target="news"
             basePath={`/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`}
-            autoSchema={buildNewsSchema({ ...form, slug: resolvedSlug })}
+            autoSchema={buildNewsJsonLd(formToNewsArticle(form, article))}
           />
         </aside>
       </div>

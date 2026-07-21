@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react';
-import type { Area, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
+import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck, Wand2 } from 'lucide-react';
+import type { Area, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, SEO_ROUTE_PATHS, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
+import { areaSummaryFromData, buildAreaCollectionJsonLd, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
-import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
-import { applyDraftToSeoFields } from '../shared/applyAiDraft';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
   if (!schemaType) return 'WebPage';
@@ -148,6 +148,9 @@ export function SeoGeoTab() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeAreaId, setActiveAreaId] = useState('');
   const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '' });
+  const [areaListings, setAreaListings] = useState<Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[]>([]);
+  const [areaIndexable, setAreaIndexable] = useState<boolean | null>(null);
+  const [areaGateReasons, setAreaGateReasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -187,6 +190,56 @@ export function SeoGeoTab() {
     });
   }, [activeAreaId, areas]);
 
+  // Nạp listings thật của khu vực để schema + quality gate khớp public page
+  // (/khu-vuc/[slug]). Thiếu dữ liệu → evaluateAreaSeo ra noindex, admin thấy ngay.
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeAreaId) { setAreaListings([]); setAreaIndexable(null); setAreaGateReasons([]); return; }
+    (async () => {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('id,title,slug,district,property_type_id')
+        .eq('is_active', true)
+        .eq('area_id', activeAreaId)
+        .limit(50);
+      if (cancelled) return;
+      if (error) { setAreaListings([]); setAreaIndexable(null); setAreaGateReasons([]); return; }
+      const listings = (data ?? []) as Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[];
+      setAreaListings(listings);
+      const area = areas.find(a => a.id === activeAreaId);
+      if (area) {
+        const districts = Array.from(new Set(listings.map(l => l.district).filter(Boolean))) as string[];
+        const propertyTypes = Array.from(new Set(listings.map(l => l.property_type_id).filter(Boolean))) as string[];
+        const ev = evaluateAreaSeo({ area, activeListings: listings, districts, propertyTypes, hasDescription: !!area.description?.trim() });
+        setAreaIndexable(ev.indexable);
+        setAreaGateReasons(ev.reasons);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeAreaId, areas]);
+
+  const activeArea = areas.find(a => a.id === activeAreaId);
+
+  const fillAreaFromData = () => {
+    if (!activeArea) return;
+    const detail = getAreaDetails(activeArea.slug);
+    const summary = areaSummaryFromData(activeArea, detail);
+    const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
+    setAreaSeo({
+      meta_title: activeArea.meta_title?.trim() || `Bất động sản ${activeArea.name}`,
+      meta_description: activeArea.meta_description?.trim() || fallbackDescription,
+      focus_keywords: activeArea.focus_keywords?.trim() || `${activeArea.name}, bất động sản ${activeArea.name}`,
+      schema_markup: schemaToJson(buildAreaCollectionJsonLd(activeArea, areaListings.map(l => ({ id: l.id, title: l.title, slug: l.slug })))),
+    });
+    if (areaIndexable !== null) {
+      setRobotsIndex(areaIndexable);
+      setRobotsFollow(true);
+    }
+    setMessage(areaIndexable === false
+      ? `Đã điền mẫu. Lưu ý: khu vực CHƯA qua quality gate (${areaGateReasons.join(', ')}) — nên giữ noindex cho đến khi đủ dữ liệu thật.`
+      : 'Đã điền mẫu SEO/GEO từ dữ liệu khu vực.');
+  };
+
   const settingsMap = useMemo(() => ({ ...settingValues }), [settingValues]);
   const activeGuide = ROUTE_GUIDE[activePath];
   const activeRouteSchema = buildAutoSchema('route', {
@@ -201,6 +254,15 @@ export function SeoGeoTab() {
   const routePreview = useMemo(() => JSON.stringify(activeRouteSchema, null, 2), [activeRouteSchema]);
   const sitePreview = useMemo(() => schemaToJson(organizationSchema), [organizationSchema]);
   const routeValidation = parseSeoSchema(routeSeo.schema_markup, 'route');
+  // Schema deterministic cho area = đúng builder public (CollectionPage + ItemList từ listings thật),
+  // fallback buildAutoSchema('area') khi chưa nạp listings. Truyền vào autoSchema của SeoFields.
+  const areaAutoSchema = useMemo(() => {
+    if (!activeArea) return buildAutoSchema('area', { path: '/khu-vuc' });
+    if (areaListings.length > 0) {
+      return buildAreaCollectionJsonLd(activeArea, areaListings.map(l => ({ id: l.id, title: l.title, slug: l.slug })));
+    }
+    return buildAutoSchema('area', { title: `Bất động sản ${activeArea.name}`, path: `/khu-vuc/${activeArea.slug}` });
+  }, [activeArea, areaListings]);
 
   const saveSettings = async () => {
     setSaving(true);
@@ -244,7 +306,6 @@ export function SeoGeoTab() {
   };
 
   const areaValidation = parseSeoSchema(areaSeo.schema_markup, 'area');
-  const activeArea = areas.find(a => a.id === activeAreaId);
 
   const saveArea = async () => {
     if (!activeAreaId) { setMessage('Chọn khu vực trước khi lưu.'); return; }
@@ -371,13 +432,6 @@ export function SeoGeoTab() {
                 <input type="checkbox" checked={robotsFollow} onChange={e => setRobotsFollow(e.target.checked)} className="accent-red-600" /> Follow
               </label>
             </div>
-            <div className="mb-4">
-              <AiSeoDraftPanel
-                targetType="route"
-                path={activePath}
-                onApply={(draft, emptyOnly) => setRouteSeo(prev => applyDraftToSeoFields(prev, draft, emptyOnly))}
-              />
-            </div>
             <SeoFields value={routeSeo} onChange={setRouteSeo} target="route" basePath={canonicalPath || activePath} autoSchema={activeRouteSchema} />
             <div className="mt-4 flex justify-end">
               <button onClick={saveRoute} disabled={saving || !!routeValidation.error}
@@ -400,14 +454,24 @@ export function SeoGeoTab() {
             </div>
             {activeAreaId ? (
               <>
-                <div className="mb-4">
-                  <AiSeoDraftPanel
-                    targetType="area"
-                    targetId={activeAreaId}
-                    onApply={(draft, emptyOnly) => setAreaSeo(prev => applyDraftToSeoFields(prev, draft, emptyOnly))}
-                  />
+                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold">Điền mẫu từ dữ liệu khu vực</p>
+                      <p className="mt-1 text-blue-800">Sinh title/description/keywords + schema CollectionPage (ItemList từ {areaListings.length} tin đăng thật) đúng chuẩn public page. Robots tự khớp quality gate.</p>
+                    </div>
+                    <button type="button" onClick={fillAreaFromData}
+                      className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                      <Wand2 className="h-3.5 w-3.5" /> Điền mẫu cho khu vực này
+                    </button>
+                  </div>
+                  {areaIndexable === false && (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      Khu vực chưa qua quality gate: {areaGateReasons.join(', ')}. Nên giữ noindex cho đến khi đủ {5} tin đăng thật + mô tả riêng.
+                    </p>
+                  )}
                 </div>
-                <SeoFields value={areaSeo} onChange={setAreaSeo} target="area" basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} />
+                <SeoFields value={areaSeo} onChange={setAreaSeo} target="area" basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} autoSchema={areaAutoSchema} />
                 <div className="mt-4 flex justify-end">
                   <button onClick={saveArea} disabled={saving || !!areaValidation.error}
                     className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
