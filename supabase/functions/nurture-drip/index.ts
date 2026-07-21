@@ -130,6 +130,7 @@ Deno.serve(async (req: Request) => {
     if (!step) continue;
     results.eligible++;
 
+    const rendered = renderTemplate(step.message_template, lead);
     let status: "sent" | "skipped" | "failed" = "skipped";
     let detail = "missing_zalo_token_or_user_id";
 
@@ -141,7 +142,7 @@ Deno.serve(async (req: Request) => {
         const resp = await fetch("https://openapi.zalo.me/v2.0/oa/message", {
           method: "POST",
           headers: { "Content-Type": "application/json", "access_token": zaloToken },
-          body: JSON.stringify({ recipient: { user_id: lead.zalo_user_id }, message: { text: renderTemplate(step.message_template, lead) } }),
+          body: JSON.stringify({ recipient: { user_id: lead.zalo_user_id }, message: { text: rendered } }),
         });
         status = resp.ok ? "sent" : "failed";
         detail = resp.ok ? "ok" : `zalo_failed:${resp.status}`;
@@ -152,7 +153,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (status !== "skipped" || !seen.logged.has(step.id)) {
-      await db.from("lead_drip_log").insert({ lead_id: lead.id, step: step.id, channel: step.channel, status, detail });
+      await db.from("lead_drip_log").insert({ lead_id: lead.id, step: step.id, channel: step.channel, status, detail, message: rendered });
     }
     results[status]++;
   }

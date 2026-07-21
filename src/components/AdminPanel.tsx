@@ -42,6 +42,13 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
   const [tab, setTabRaw] = useState<AdminTab>(defaultTab);
   // Chặn chuyển sang tab ngoài quyền (staff gõ tay / initialTab lạ).
   const setTab = (t: AdminTab) => { if (allowedTabs.includes(t)) setTabRaw(t); };
+  // Điều hướng "sửa item X ở tab Y" từ nơi khác (vd Entity Audit trong SeoGeoTab).
+  const [pendingEdit, setPendingEdit] = useState<{ tab: AdminTab; id: string } | null>(null);
+  const editEntity = (target: AdminTab, id: string) => {
+    if (!allowedTabs.includes(target)) return;
+    setPendingEdit({ tab: target, id });
+    setTabRaw(target);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0, activeProperties: 0, featuredProperties: 0, hotProperties: 0,
@@ -151,14 +158,14 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
         <main className="flex-1 overflow-auto p-6">
           <Suspense fallback={<div className="p-8 text-center text-gray-400">Đang tải...</div>}>
           {tab === 'dashboard' && <DashboardTab stats={stats} setTab={setTab} />}
-          {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} />}
+          {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} focusEditId={pendingEdit?.tab === 'properties' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
           {tab === 'leads' && <LeadsTab onRefreshStats={loadStats} />}
           {tab === 'chat-sessions' && <ChatSessionsTab />}
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}
           {tab === 'users' && <UsersTab />}
           {tab === 'staff' && <StaffTab />}
           {tab === 'projects' && <ProjectsTab />}
-          {tab === 'news' && <NewsTab />}
+          {tab === 'news' && <NewsTab focusEditId={pendingEdit?.tab === 'news' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
           {tab === 'testimonials' && <TestimonialsTab />}
           {tab === 'cms' && <CmsContentTab />}
           {tab === 'banners' && <BannersTab />}
@@ -169,7 +176,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
           {tab === 'nurture' && <NurtureTab />}
-          {tab === 'seo-geo' && <SeoGeoTab />}
+          {tab === 'seo-geo' && <SeoGeoTab onEditEntity={editEntity} />}
           </Suspense>
         </main>
       </div>

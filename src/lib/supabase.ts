@@ -85,7 +85,7 @@ export type LeadDripLog = {
   step: string;
   channel: DripChannel;
   status: 'sent' | 'skipped' | 'failed';
-  detail: string | null; sent_at: string;
+  detail: string | null; message: string | null; sent_at: string;
 };
 
 export type NurtureDripStep = {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck, Wand2 } from 'lucide-react';
-import type { Area, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
+import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck, Wand2, X } from 'lucide-react';
+import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
+import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, SEO_ROUTE_PATHS, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
@@ -136,7 +137,7 @@ function emptySeo(row?: SeoRouteOverride): SeoFieldsValue {
   };
 }
 
-export function SeoGeoTab() {
+export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id: string) => void } = {}) {
   const [settingValues, setSettingValues] = useState<Record<string, string>>({});
   const [routes, setRoutes] = useState<SeoRouteOverride[]>([]);
   const [activePath, setActivePath] = useState<string>(SEO_ROUTE_PATHS[0]);
@@ -144,7 +145,8 @@ export function SeoGeoTab() {
   const [canonicalPath, setCanonicalPath] = useState('');
   const [robotsIndex, setRobotsIndex] = useState(true);
   const [robotsFollow, setRobotsFollow] = useState(true);
-  const [audit, setAudit] = useState<{ properties: unknown[]; news: unknown[]; areas: unknown[] } | null>(null);
+  const [audit, setAudit] = useState<{ properties: Property[]; news: NewsArticle[]; areas: Area[] } | null>(null);
+  const [auditModal, setAuditModal] = useState<'properties' | 'news' | 'areas' | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeAreaId, setActiveAreaId] = useState('');
   const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '' });
@@ -489,9 +491,9 @@ export function SeoGeoTab() {
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-base font-black text-gray-900"><ShieldCheck className="h-4 w-4 text-emerald-500" />Entity Audit</h3>
             <div className="grid gap-3">
-              <AuditCard label="Tin BĐS cần bổ sung" count={audit?.properties.length ?? 0} hint="Thiếu ảnh, mô tả, meta hoặc geo." />
-              <AuditCard label="Bài viết cần tối ưu" count={audit?.news.length ?? 0} hint="Thiếu excerpt, ảnh hoặc meta description." />
-              <AuditCard label="Khu vực cần làm dày" count={audit?.areas.length ?? 0} hint="Thiếu mô tả/meta; vẫn phải qua quality gate trước khi index." />
+              <AuditCard label="Tin BĐS cần bổ sung" count={audit?.properties.length ?? 0} hint="Thiếu ảnh, mô tả, meta hoặc geo." onClick={audit?.properties.length ? () => setAuditModal('properties') : undefined} />
+              <AuditCard label="Bài viết cần tối ưu" count={audit?.news.length ?? 0} hint="Thiếu excerpt, ảnh hoặc meta description." onClick={audit?.news.length ? () => setAuditModal('news') : undefined} />
+              <AuditCard label="Khu vực cần làm dày" count={audit?.areas.length ?? 0} hint="Thiếu mô tả/meta; vẫn phải qua quality gate trước khi index." onClick={audit?.areas.length ? () => setAuditModal('areas') : undefined} />
             </div>
           </div>
 
@@ -516,18 +518,112 @@ export function SeoGeoTab() {
           </div>
         </aside>
       </div>
+
+      {auditModal && audit && (
+        <AuditModal
+          kind={auditModal}
+          audit={audit}
+          onClose={() => setAuditModal(null)}
+          onEditProperty={id => { setAuditModal(null); onEditEntity?.('properties', id); }}
+          onEditNews={id => { setAuditModal(null); onEditEntity?.('news', id); }}
+          onEditArea={id => { setAuditModal(null); setActiveAreaId(id); }}
+        />
+      )}
     </div>
   );
 }
 
-function AuditCard({ label, count, hint }: { label: string; count: number; hint: string }) {
+function AuditCard({ label, count, hint, onClick }: { label: string; count: number; hint: string; onClick?: () => void }) {
+  const clickable = !!onClick;
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      className={`w-full rounded-xl border border-gray-100 bg-gray-50 p-4 text-left transition-colors ${clickable ? 'cursor-pointer hover:border-amber-300 hover:bg-amber-50/40' : 'cursor-default'}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-bold text-gray-900">{label}</p>
         <span className={`rounded-full px-2.5 py-1 text-xs font-black ${count > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{count}</span>
       </div>
       <p className="mt-1 text-xs text-gray-500">{hint}</p>
+      {clickable && <p className="mt-1 text-[11px] font-semibold text-amber-600">Bấm để xem &amp; sửa →</p>}
+    </button>
+  );
+}
+
+const PROP_CHECKS: { key: keyof Property; label: string }[] = [
+  { key: 'image_url', label: 'Ảnh' },
+  { key: 'description', label: 'Mô tả' },
+  { key: 'meta_description', label: 'Meta description' },
+  { key: 'latitude', label: 'Vĩ độ' },
+  { key: 'longitude', label: 'Kinh độ' },
+];
+const NEWS_CHECKS: { key: keyof NewsArticle; label: string }[] = [
+  { key: 'excerpt', label: 'Excerpt' },
+  { key: 'image_url', label: 'Ảnh' },
+  { key: 'meta_description', label: 'Meta description' },
+];
+const AREA_CHECKS: { key: keyof Area; label: string }[] = [
+  { key: 'description', label: 'Mô tả' },
+  { key: 'meta_description', label: 'Meta description' },
+];
+
+function missingFields<T>(row: T, checks: { key: keyof T; label: string }[]): string[] {
+  return checks.filter(c => {
+    const v = row[c.key];
+    return v === null || v === undefined || v === '';
+  }).map(c => c.label);
+}
+
+function AuditModal({ kind, audit, onClose, onEditProperty, onEditNews, onEditArea }: {
+  kind: 'properties' | 'news' | 'areas';
+  audit: { properties: Property[]; news: NewsArticle[]; areas: Area[] };
+  onClose: () => void;
+  onEditProperty: (id: string) => void;
+  onEditNews: (id: string) => void;
+  onEditArea: (id: string) => void;
+}) {
+  const title = kind === 'properties' ? 'Tin BĐS cần bổ sung' : kind === 'news' ? 'Bài viết cần tối ưu' : 'Khu vực cần làm dày';
+  const rows: { id: string; name: string; missing: string[]; onEdit: () => void }[] =
+    kind === 'properties'
+      ? audit.properties.map(p => ({ id: p.id, name: p.title || p.slug || p.id, missing: missingFields(p, PROP_CHECKS), onEdit: () => onEditProperty(p.id) }))
+      : kind === 'news'
+      ? audit.news.map(n => ({ id: n.id, name: n.title || n.slug || n.id, missing: missingFields(n, NEWS_CHECKS), onEdit: () => onEditNews(n.id) }))
+      : audit.areas.map(a => ({ id: a.id, name: a.name || a.slug || a.id, missing: missingFields(a, AREA_CHECKS), onEdit: () => onEditArea(a.id) }));
+
+  return (
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div>
+            <h3 className="text-base font-black text-gray-900">{title}</h3>
+            <p className="text-xs text-gray-500">{rows.length} mục đang thiếu dữ liệu · bấm “Sửa” để chỉnh trực tiếp.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex-1 overflow-auto p-3">
+          {rows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">Không còn mục nào thiếu.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rows.map(r => (
+                <li key={r.id} className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 p-3 hover:border-amber-200">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-800">{r.name}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {r.missing.map(m => (
+                        <span key={m} className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Thiếu {m}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={r.onEdit} className="flex-shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">Sửa</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

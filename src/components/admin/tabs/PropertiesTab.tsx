@@ -15,7 +15,7 @@ import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
-export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void }) {
+export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [types, setTypes] = useState<PropertyType[]>([]);
@@ -38,6 +38,14 @@ export function PropertiesTab({ onStatsRefresh }: { onStatsRefresh?: () => void 
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // Mở thẳng form sửa khi được điều hướng từ Entity Audit (SeoGeoTab).
+  useEffect(() => {
+    if (!focusEditId || loading) return;
+    const target = properties.find(p => p.id === focusEditId);
+    if (target) { setEditing(target); setCreating(false); }
+    onFocusHandled?.();
+  }, [focusEditId, loading, properties]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = properties.filter(p =>
     (!search || p.title.toLowerCase().includes(search.toLowerCase()) || p.city.toLowerCase().includes(search.toLowerCase())) &&

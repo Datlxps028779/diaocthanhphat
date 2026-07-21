@@ -41,18 +41,18 @@ export async function adminGetSeoAudit(): Promise<{
       .select('*')
       .eq('is_active', true)
       .or('image_url.is.null,description.is.null,meta_description.is.null,latitude.is.null,longitude.is.null')
-      .limit(30),
+      .limit(200),
     supabase
       .from('news')
       .select('*')
       .eq('is_published', true)
       .or('excerpt.is.null,image_url.is.null,meta_description.is.null')
-      .limit(30),
+      .limit(200),
     supabase
       .from('areas')
       .select('*')
       .or('description.is.null,meta_description.is.null')
-      .limit(30),
+      .limit(200),
   ]);
   if (propertiesRes.error) throw propertiesRes.error;
   if (newsRes.error) throw newsRes.error;

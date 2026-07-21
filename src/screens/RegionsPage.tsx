@@ -10,6 +10,7 @@ import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { PropertyMap } from '../components/PropertyMap';
+import { ForYou } from '../components/ForYou';
 import { AREA_DETAILS } from '../lib/areaSeo';
 
 function SkeletonCard() {
@@ -304,6 +305,8 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
 
         {/* Comparison table */}
         {!loading && areas.length > 0 && <ComparisonTable areas={areas} />}
+
+        <ForYou />
       </div>
 
       {/* CTA */}

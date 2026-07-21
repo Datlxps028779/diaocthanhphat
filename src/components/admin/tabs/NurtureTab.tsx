@@ -486,6 +486,7 @@ export function NurtureTab() {
                   <th className="text-left font-medium py-1.5">Khách</th>
                   <th className="text-left font-medium">Bước</th>
                   <th className="text-left font-medium">Trạng thái</th>
+                  <th className="text-left font-medium">Nội dung</th>
                   <th className="text-left font-medium">Chi tiết</th>
                   <th className="text-right font-medium">Thời gian</th>
                 </tr>
@@ -496,6 +497,7 @@ export function NurtureTab() {
                     <td className="py-1.5 text-gray-800 font-medium">{log.leads?.full_name || log.leads?.phone || 'Khách'}</td>
                     <td className="text-gray-600">{dripStepLabel(log.step, steps)}</td>
                     <td><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass(log.status)}`}>{dripStatusLabel(log.status)}</span></td>
+                    <td className="text-gray-600 max-w-[320px] truncate" title={log.message || ''}>{log.message || '—'}</td>
                     <td className="text-gray-500 max-w-[220px] truncate">{log.detail || '—'}</td>
                     <td className="text-right text-gray-400">{new Date(log.sent_at).toLocaleString('vi-VN')}</td>
                   </tr>

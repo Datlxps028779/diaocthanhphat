@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
+import { ForYou } from '../components/ForYou';
 import { useSetting } from '../lib/cms';
 
 const PHASE_OPTIONS = ['Tất cả', 'Đang mở bán', 'Sắp ra mắt', 'Đã bàn giao'];
@@ -305,6 +306,7 @@ export function ProjectsPage({ onNavigate, initialPhase }: { onNavigate: (p: Pag
             ))}
           </div>
         )}
+        <ForYou />
       </div>
 
       {/* CTA Banner */}

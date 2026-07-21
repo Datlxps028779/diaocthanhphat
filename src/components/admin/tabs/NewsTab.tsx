@@ -467,7 +467,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   );
 }
 
-export function NewsTab() {
+export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string; onFocusHandled?: () => void } = {}) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NewsArticle | null>(null);
@@ -479,6 +479,14 @@ export function NewsTab() {
 
   const load = async () => { setLoading(true); const d = await adminGetAllNews(); setArticles(d); setLoading(false); };
   useEffect(() => { load(); }, []);
+
+  // Mở thẳng form sửa khi được điều hướng từ Entity Audit (SeoGeoTab).
+  useEffect(() => {
+    if (!focusEditId || loading) return;
+    const target = articles.find(a => a.id === focusEditId);
+    if (target) { setEditing(target); setCreating(false); }
+    onFocusHandled?.();
+  }, [focusEditId, loading, articles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleOne = (id: string) => setSelected(prev => {
     const next = new Set(prev);
