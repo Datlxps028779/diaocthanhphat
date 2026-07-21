@@ -98,6 +98,18 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
 
   // baseURL: dùng proxy bên thứ 3 nếu đặt ANTHROPIC_BASE_URL, else endpoint Anthropic mặc định.
   const baseURL = process.env.ANTHROPIC_BASE_URL || undefined;
+
+  // Log chẩn đoán (KHÔNG lộ giá trị key): thấy được trong Vercel → Logs/Functions.
+  // Giúp phân biệt: key không được inject vào runtime vs key có nhưng proxy từ chối.
+  console.info('[articleGen] cấu hình', JSON.stringify({
+    keyPresent: !!apiKey,
+    keyLen: apiKey.length,
+    keyPrefix: apiKey.slice(0, 6),
+    keyHasWhitespace: /\s/.test(apiKey),
+    baseURL: baseURL ?? '(mặc định Anthropic)',
+    model: MODEL,
+  }));
+
   const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
 
   // Stream để tránh request timeout khi output dài; lấy message hoàn chỉnh ở cuối.
