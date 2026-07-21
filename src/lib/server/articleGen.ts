@@ -110,7 +110,25 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     model: MODEL,
   }));
 
-  const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  const client = new Anthropic({
+    apiKey,
+    ...(baseURL ? { baseURL } : {}),
+    // Custom fetch CHỈ để chẩn đoán: log URL đích + tên các header gửi đi (KHÔNG lộ value)
+    // → biết chắc x-api-key có tới proxy không. Xoá sau khi xong.
+    fetch: async (url, init) => {
+      try {
+        const h = new Headers(init?.headers as HeadersInit | undefined);
+        const headerKeys = Array.from(h.keys());
+        console.info('[articleGen] outbound', JSON.stringify({
+          url: String(url),
+          headerKeys,
+          hasApiKey: headerKeys.includes('x-api-key'),
+          hasAuth: headerKeys.includes('authorization'),
+        }));
+      } catch { /* log không được thì bỏ qua, không chặn request */ }
+      return fetch(url, init);
+    },
+  });
 
   // Stream để tránh request timeout khi output dài; lấy message hoàn chỉnh ở cuối.
   const stream = client.messages.stream({
