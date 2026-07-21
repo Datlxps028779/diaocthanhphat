@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Phone, MapPin, Wallet, StickyNote, PhoneCall, GitBranch, UserPlus, Clock, Building2, CalendarPlus, Send } from 'lucide-react';
-import type { Lead, LeadActivity, LeadDripLog } from '../../../lib/supabase';
-import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm, getTeamMembers, addAssignee, removeAssignee, getLeadDripLogs } from '../../../lib/api';
+import type { Lead, LeadActivity, LeadDripLog, NurtureDripStep } from '../../../lib/supabase';
+import { getLeadActivities, addLeadActivity, updateLeadStatus, updateLeadCrm, getTeamMembers, addAssignee, removeAssignee, getLeadDripLogs, getDripSteps } from '../../../lib/api';
 import { PIPELINE_STAGES, stageMeta } from '../../../lib/leadPipeline';
 import { buildTimeline } from '../../../lib/leadTimeline';
 import { assigneesOf, memberLabel, type TeamMember } from '../../../lib/leadAssignment';
@@ -36,6 +36,7 @@ interface Props {
 export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [dripLogs, setDripLogs] = useState<LeadDripLog[]>([]);
+  const [dripSteps, setDripSteps] = useState<NurtureDripStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Lead['status']>(lead.status);
   const [propertyId, setPropertyId] = useState<string | null>(lead.property_id);
@@ -50,12 +51,14 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
-    const [activityRows, dripRows] = await Promise.all([
+    const [activityRows, dripRows, stepRows] = await Promise.all([
       getLeadActivities(lead.id),
       getLeadDripLogs(lead.id).catch(() => []),
+      getDripSteps().catch(() => []),
     ]);
     setActivities(activityRows);
     setDripLogs(dripRows);
+    setDripSteps(stepRows);
     setLoading(false);
   }, [lead.id]);
 
@@ -236,7 +239,7 @@ export function LeadDetailDrawer({ lead, author, onClose, onChanged }: Props) {
                     <Send className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-gray-700">{dripStepLabel(log.step)}</span>
+                        <span className="text-xs font-semibold text-gray-700">{dripStepLabel(log.step, dripSteps)}</span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${dripBadgeClass(log.status)}`}>{dripStatusLabel(log.status)}</span>
                       </div>
                       <p className="text-[10px] text-gray-400 mt-0.5">{new Date(log.sent_at).toLocaleString('vi-VN')}</p>

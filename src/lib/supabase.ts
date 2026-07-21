@@ -78,17 +78,32 @@ export type LeadActivity = {
   body: string | null; author: string | null; created_at: string;
 };
 
+export type DripChannel = 'zalo' | 'sms' | 'email';
+
 export type LeadDripLog = {
   id: string; lead_id: string;
-  step: 'd1' | 'd3' | 'd7';
-  channel: 'zalo';
+  step: string;
+  channel: DripChannel;
   status: 'sent' | 'skipped' | 'failed';
   detail: string | null; sent_at: string;
 };
 
+export type NurtureDripStep = {
+  id: string;
+  delay_days: number;
+  channel: DripChannel;
+  message_template: string;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type NurtureDripConfig = {
   id: boolean; enabled: boolean;
-  endpoint: string | null; secret: string | null; updated_at: string;
+  endpoint: string | null; secret: string | null;
+  eligible_statuses: string[]; require_phone: boolean;
+  updated_at: string;
 };
 
 export type ChatSessionStatus = 'new' | 'active' | 'closed';
