@@ -1,0 +1,7 @@
+project_id = "itgxladqskdcbwsbmuyi"
+
+# nurture-drip được gọi bởi DB cron qua pg_net (chỉ gửi header x-drip-secret,
+# không có JWT). Function tự bảo vệ bằng NURTURE_DRIP_SECRET nên tắt cổng JWT
+# của Supabase — nếu bật, mọi lần quét sẽ bị chặn 401 trước khi chạm code.
+[functions.nurture-drip]
+verify_jwt = false
