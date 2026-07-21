@@ -113,6 +113,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
   const client = new Anthropic({
     apiKey,
     ...(baseURL ? { baseURL } : {}),
+    // Gửi key qua CẢ HAI header: x-api-key (chuẩn Anthropic, SDK tự thêm) và Authorization
+    // Bearer. Gateway bên thứ 3 (leeh.dev) đọc key qua Authorization nên phải thêm thủ công;
+    // proxy đọc x-api-key vẫn không bị ảnh hưởng.
+    ...(baseURL ? { defaultHeaders: { Authorization: `Bearer ${apiKey}` } } : {}),
     // Custom fetch CHỈ để chẩn đoán: log URL đích + tên các header gửi đi (KHÔNG lộ value)
     // → biết chắc x-api-key có tới proxy không. Xoá sau khi xong.
     fetch: async (url, init) => {
