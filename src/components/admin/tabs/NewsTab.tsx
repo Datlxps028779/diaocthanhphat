@@ -5,6 +5,7 @@ import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bu
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
+import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { isHtmlContent, markdownToHtml, stripHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
@@ -359,6 +360,29 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               <p className="mt-3 text-[11px] font-semibold text-red-600">{readiness.errors.length} lỗi bắt buộc phải sửa trước khi đăng công khai.</p>
             )}
           </div>
+
+          <AiSeoDraftPanel
+            targetType="news"
+            targetId={article?.id}
+            disabled={!article?.id}
+            disabledHint="Lưu bài viết trước để AI đọc đầy đủ nội dung rồi mới sinh draft SEO/GEO."
+            onApply={(draft, emptyOnly) => {
+              const pick = (cur: string, next?: string) => (emptyOnly && cur.trim() ? cur : (next ?? cur));
+              manualSchemaRef.current = true;
+              setForm(f => ({
+                ...f,
+                meta_title: pick(f.meta_title, draft.meta_title),
+                meta_description: pick(f.meta_description, draft.meta_description),
+                focus_keywords: pick(f.focus_keywords, draft.focus_keywords),
+                geo_area: pick(f.geo_area, draft.geo_area),
+                geo_entity: pick(f.geo_entity, draft.geo_entity),
+                geo_notes: pick(f.geo_notes, draft.geo_notes),
+                schema_markup: draft.schema_markup && Object.keys(draft.schema_markup).length > 0
+                  ? (emptyOnly && f.schema_markup.trim() ? f.schema_markup : JSON.stringify(draft.schema_markup, null, 2))
+                  : f.schema_markup,
+              }));
+            }}
+          />
 
           <SeoFields
             value={form}

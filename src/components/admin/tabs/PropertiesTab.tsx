@@ -6,6 +6,7 @@ import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { parseSeoSchema } from '../shared/SeoFields';
+import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
@@ -818,6 +819,25 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center gap-2">
               <Search className="w-4 h-4 text-red-500" />Cấu hình SEO
             </h3>
+            <div className="mb-3">
+              <AiSeoDraftPanel
+                targetType="property"
+                targetId={property?.id}
+                disabled={!property?.id}
+                disabledHint="Lưu BĐS trước để AI đọc đầy đủ dữ liệu rồi mới sinh draft SEO/GEO."
+                onApply={(draft, emptyOnly) => {
+                  const pick = (cur: string, next?: string) => (emptyOnly && cur.trim() ? cur : (next ?? cur));
+                  seo.setMetaTitle(pick(seo.metaTitle, draft.meta_title));
+                  seo.setMetaDescription(pick(seo.metaDescription, draft.meta_description));
+                  seo.setFocusKeywords(pick(seo.focusKeywords, draft.focus_keywords));
+                  if (draft.schema_markup && Object.keys(draft.schema_markup).length > 0) {
+                    if (!(emptyOnly && seo.schemaMarkup.trim())) {
+                      seo.setSchemaMarkup(JSON.stringify(draft.schema_markup, null, 2));
+                    }
+                  }
+                }}
+              />
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">

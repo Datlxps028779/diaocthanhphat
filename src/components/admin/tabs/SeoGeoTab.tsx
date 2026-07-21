@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Globe2, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react';
-import type { SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, SEO_ROUTE_PATHS, upsertSiteSetting } from '../../../lib/api';
+import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react';
+import type { Area, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
+import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, SEO_ROUTE_PATHS, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
+import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
+import { applyDraftToSeoFields } from '../shared/applyAiDraft';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
   if (!schemaType) return 'WebPage';
@@ -81,6 +83,38 @@ const ROUTE_GUIDE: Record<string, { title: string; description: string; canonica
     schemaType: 'AboutPage hoặc WebPage',
     note: 'Chỉ ghi giấy phép/chứng nhận/kinh nghiệm nếu có thật.',
   },
+  '/so-sanh': {
+    title: 'So sánh bất động sản Bình Dương theo giá, diện tích, pháp lý',
+    description: 'So sánh các bất động sản đã chọn tại Bình Dương theo giá, diện tích, giá/m², pháp lý, hướng nhà và tiện ích hiển thị từ dữ liệu thật.',
+    canonical: '/so-sanh',
+    keywords: 'so sánh bất động sản Bình Dương, so sánh nhà đất, so sánh giá nhà đất',
+    schemaType: 'WebPage',
+    note: 'Không tạo schema đánh giá/rating; chỉ mô tả công cụ so sánh dữ liệu người dùng đã chọn.',
+  },
+  '/dinh-gia': {
+    title: 'Định giá bất động sản Bình Dương theo dữ liệu tham khảo',
+    description: 'Ước tính khoảng giá nhà đất Bình Dương theo thông tin tài sản và dữ liệu tham khảo, hỗ trợ người mua bán có thêm cơ sở so sánh.',
+    canonical: '/dinh-gia',
+    keywords: 'định giá bất động sản Bình Dương, ước tính giá nhà đất, định giá nhà đất',
+    schemaType: 'WebPage',
+    note: 'Tránh cam kết giá chính xác; nội dung phải nói rõ đây là tham khảo, không thay thế thẩm định chính thức.',
+  },
+  '/du-an': {
+    title: 'Dự án bất động sản Bình Dương và khu vực lân cận',
+    description: 'Tổng hợp dự án bất động sản, khu đô thị và khu dân cư tại Bình Dương, ưu tiên thông tin vị trí, pháp lý và tiến độ có dữ liệu thật.',
+    canonical: '/du-an',
+    keywords: 'dự án bất động sản Bình Dương, khu đô thị Bình Dương, dự án nhà đất',
+    schemaType: 'CollectionPage',
+    note: 'Chỉ nêu chủ đầu tư, tiến độ, pháp lý khi có dữ liệu xác thực trong dự án.',
+  },
+  '/dau-tu': {
+    title: 'Đầu tư bất động sản Bình Dương – công cụ ROI và tư vấn',
+    description: 'Phân tích cơ hội đầu tư bất động sản Bình Dương với công cụ tính ROI, dòng tiền và góc nhìn rủi ro dựa trên dữ liệu người dùng nhập.',
+    canonical: '/dau-tu',
+    keywords: 'đầu tư bất động sản Bình Dương, tính ROI bất động sản, đầu tư nhà đất',
+    schemaType: 'WebPage',
+    note: 'Không hứa lợi nhuận; mọi con số ROI phải đến từ input/công cụ hiển thị hoặc ghi rõ là ước tính.',
+  },
 };
 
 function schemaExample(path: string): string {
@@ -111,20 +145,25 @@ export function SeoGeoTab() {
   const [robotsIndex, setRobotsIndex] = useState(true);
   const [robotsFollow, setRobotsFollow] = useState(true);
   const [audit, setAudit] = useState<{ properties: unknown[]; news: unknown[]; areas: unknown[] } | null>(null);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [activeAreaId, setActiveAreaId] = useState('');
+  const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   const load = async () => {
     setLoading(true);
-    const [settingsData, routeData, auditData] = await Promise.all([
+    const [settingsData, routeData, auditData, areasData] = await Promise.all([
       adminGetAllSiteSettings(),
       adminGetSeoRouteOverrides().catch(() => []),
       adminGetSeoAudit().catch(() => ({ properties: [], news: [], areas: [] })),
+      getAreas().catch(() => []),
     ]);
     setSettingValues(Object.fromEntries(settingsData.map(s => [s.key, s.value ?? ''])));
     setRoutes(routeData);
     setAudit(auditData);
+    setAreas(areasData);
     setLoading(false);
   };
 
@@ -137,6 +176,16 @@ export function SeoGeoTab() {
     setRobotsIndex(row?.robots_index ?? true);
     setRobotsFollow(row?.robots_follow ?? true);
   }, [activePath, routes]);
+
+  useEffect(() => {
+    const area = areas.find(a => a.id === activeAreaId);
+    setAreaSeo({
+      meta_title: area?.meta_title ?? '',
+      meta_description: area?.meta_description ?? '',
+      focus_keywords: area?.focus_keywords ?? '',
+      schema_markup: area?.schema_markup ? JSON.stringify(area.schema_markup, null, 2) : '',
+    });
+  }, [activeAreaId, areas]);
 
   const settingsMap = useMemo(() => ({ ...settingValues }), [settingValues]);
   const activeGuide = ROUTE_GUIDE[activePath];
@@ -191,6 +240,31 @@ export function SeoGeoTab() {
     } catch (e) {
       console.error(e);
       setMessage('Lưu route override thất bại. Kiểm tra migration/RLS.');
+    } finally { setSaving(false); }
+  };
+
+  const areaValidation = parseSeoSchema(areaSeo.schema_markup, 'area');
+  const activeArea = areas.find(a => a.id === activeAreaId);
+
+  const saveArea = async () => {
+    if (!activeAreaId) { setMessage('Chọn khu vực trước khi lưu.'); return; }
+    const parsed = parseSeoSchema(areaSeo.schema_markup, 'area');
+    if (parsed.error) { setMessage(parsed.error); return; }
+    setSaving(true);
+    setMessage('');
+    try {
+      await updateArea(activeAreaId, {
+        meta_title: areaSeo.meta_title.trim() || null,
+        meta_description: areaSeo.meta_description.trim() || null,
+        focus_keywords: areaSeo.focus_keywords.trim() || null,
+        schema_markup: parsed.schema,
+      });
+      setMessage(`Đã lưu SEO cho khu vực ${activeArea?.name ?? ''}.`);
+      const nextAreas = await getAreas().catch(() => areas);
+      setAreas(nextAreas);
+    } catch (e) {
+      console.error(e);
+      setMessage('Lưu SEO khu vực thất bại. Kiểm tra migration/RLS.');
     } finally { setSaving(false); }
   };
 
@@ -297,6 +371,13 @@ export function SeoGeoTab() {
                 <input type="checkbox" checked={robotsFollow} onChange={e => setRobotsFollow(e.target.checked)} className="accent-red-600" /> Follow
               </label>
             </div>
+            <div className="mb-4">
+              <AiSeoDraftPanel
+                targetType="route"
+                path={activePath}
+                onApply={(draft, emptyOnly) => setRouteSeo(prev => applyDraftToSeoFields(prev, draft, emptyOnly))}
+              />
+            </div>
             <SeoFields value={routeSeo} onChange={setRouteSeo} target="route" basePath={canonicalPath || activePath} autoSchema={activeRouteSchema} />
             <div className="mt-4 flex justify-end">
               <button onClick={saveRoute} disabled={saving || !!routeValidation.error}
@@ -304,6 +385,39 @@ export function SeoGeoTab() {
                 <Save className="h-4 w-4" /> Lưu route
               </button>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 flex items-center gap-2 text-base font-black text-gray-900"><MapPin className="h-4 w-4 text-red-500" />SEO / GEO khu vực</h3>
+            <p className="mb-4 text-sm text-gray-500">Chỉnh metadata và schema cho từng trang khu vực <code className="rounded bg-gray-100 px-1">/khu-vuc/[slug]</code>. Trang khu vực vẫn phải đủ dữ liệu thật trước khi index.</p>
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Chọn khu vực</label>
+              <select value={activeAreaId} onChange={e => setActiveAreaId(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                <option value="">-- Chọn khu vực --</option>
+                {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            {activeAreaId ? (
+              <>
+                <div className="mb-4">
+                  <AiSeoDraftPanel
+                    targetType="area"
+                    targetId={activeAreaId}
+                    onApply={(draft, emptyOnly) => setAreaSeo(prev => applyDraftToSeoFields(prev, draft, emptyOnly))}
+                  />
+                </div>
+                <SeoFields value={areaSeo} onChange={setAreaSeo} target="area" basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} />
+                <div className="mt-4 flex justify-end">
+                  <button onClick={saveArea} disabled={saving || !!areaValidation.error}
+                    className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
+                    <Save className="h-4 w-4" /> Lưu SEO khu vực
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-400">Chọn một khu vực để chỉnh SEO/GEO.</p>
+            )}
           </div>
         </section>
 

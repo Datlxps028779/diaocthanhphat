@@ -1,19 +1,30 @@
-import type { Metadata } from 'next';
 import { ValuationClient } from '../_clients/pageClients';
-import { serializeJsonLd, staticPageMetadata, buildBreadcrumbJsonLd } from '@/lib/seo';
+import { JsonLdScripts } from '@/components/JsonLdScripts';
+import { loadRouteSeo } from '@/lib/routeSeo';
 
-export const metadata: Metadata = staticPageMetadata({
+const PATH = '/dinh-gia';
+const fallback = {
   title: 'Định giá bất động sản',
   description: 'Ước tính nhanh khoảng giá nhà đất, bất động sản tại Bình Dương và khu vực lân cận dựa trên dữ liệu giao dịch tương đương.',
-  path: '/dinh-gia',
-});
+  path: PATH,
+  routeType: 'WebPage' as const,
+  breadcrumb: [
+    { name: 'Trang chủ', path: '/' },
+    { name: 'Định giá bất động sản', path: PATH },
+  ],
+};
+
+export async function generateMetadata() {
+  const { metadata } = await loadRouteSeo(PATH, fallback);
+  return metadata;
+}
 export const revalidate = 3600;
 
-export default function Page() {
-  const breadcrumb = buildBreadcrumbJsonLd([{ name: 'Trang chủ', path: '/' }, { name: 'Định giá bất động sản', path: '/dinh-gia' }]);
+export default async function Page() {
+  const { jsonLd } = await loadRouteSeo(PATH, fallback);
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }} />
+      <JsonLdScripts schemas={jsonLd} />
       <ValuationClient />
     </>
   );
