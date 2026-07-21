@@ -16,7 +16,7 @@ function property(overrides: Partial<Property> = {}): Property {
     floor_count: null, floor_number: null, direction: null, road_width: null, frontage: null,
     amenities: null, latitude: null, longitude: null, formatted_address: null,
     vr_tour_url: null, video_url: null, contact_zalo: null, tags: null,
-    meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null,
+    meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null, faq: null,
     slug: 'nha-pho-dep', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };

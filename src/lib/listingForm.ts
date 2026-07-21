@@ -15,6 +15,7 @@ export interface ListingFormState {
   contact_name: string; contact_phone: string; amenities: string[];
   latitude: string; longitude: string;
   meta_title: string; meta_description: string; focus_keywords: string; schema_markup: string;
+  faq: { question: string; answer: string }[];
 }
 
 const s = (v: string | null | undefined) => v ?? '';
@@ -42,5 +43,6 @@ export function listingToFormState(l: UserListing): ListingFormState {
     meta_title: s(l.meta_title), meta_description: s(l.meta_description),
     focus_keywords: s(l.focus_keywords),
     schema_markup: l.schema_markup ? JSON.stringify(l.schema_markup, null, 2) : '',
+    faq: l.faq ?? [],
   };
 }

@@ -67,6 +67,7 @@ function property(id: string, typeId = 'type-a', district = 'Thủ Dầu Một')
     meta_description: null,
     focus_keywords: null,
     schema_markup: null,
+    faq: null,
     slug: `nha-dat-${id}`,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',

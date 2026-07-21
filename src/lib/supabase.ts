@@ -46,6 +46,7 @@ export type Property = {
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
   slug: string | null;
+  faq: { question: string; answer: string }[] | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;
 };
@@ -171,6 +172,7 @@ export type UserListing = {
   contact_zalo: string | null;
   slug: string | null; meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
+  faq: { question: string; answer: string }[] | null;
   property_id: string | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;

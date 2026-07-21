@@ -213,7 +213,8 @@ export function PropertyDetailPage({ propertyId, onNavigate, initialData }: Prop
   );
 
   const allImages = buildPropertyGallery(property.image_url, property.images);
-  const faq = buildPropertyFaq(property);
+  // Ưu tiên FAQ nhập tay; nếu chưa có thì tự-sinh từ dữ liệu thật.
+  const faq = property.faq && property.faq.length > 0 ? property.faq : buildPropertyFaq(property);
 
   const pricePerSqm = property.area_sqm
     ? ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0)

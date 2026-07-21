@@ -3,11 +3,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Home, MapPin, Phone,
-  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle
+  CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle, Plus, X, Zap
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing, updateMyListing, getMyListing } from '../lib/api';
 import { listingToFormState } from '../lib/listingForm';
+import { buildPropertyFaq, type FaqItem } from '../lib/propertyFaq';
 import { extractErrorMessage } from '../lib/errorMessage';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
@@ -81,6 +82,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     contact_name: '', contact_phone: '', amenities: [] as string[],
     latitude: '', longitude: '',
     meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '',
+    faq: [] as FaqItem[],
   });
 
   const selectedPropertyType = types.find(t => t.id === form.property_type_id);
@@ -179,6 +181,16 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     }));
   };
 
+  const addFaq = () => setForm(f => ({ ...f, faq: [...f.faq, { question: '', answer: '' }] }));
+  const removeFaq = (idx: number) => setForm(f => ({ ...f, faq: f.faq.filter((_, i) => i !== idx) }));
+  const updateFaq = (idx: number, key: keyof FaqItem, value: string) =>
+    setForm(f => ({ ...f, faq: f.faq.map((it, i) => (i === idx ? { ...it, [key]: value } : it)) }));
+  const suggestFaq = () => setForm(f => {
+    const generated = buildPropertyFaq(f);
+    const existing = new Set(f.faq.map(it => it.question.trim()));
+    return { ...f, faq: [...f.faq, ...generated.filter(g => !existing.has(g.question.trim()))] };
+  });
+
   const validateStep = () => {
     const errs: Record<string, string> = {};
     if (step === 0) {
@@ -246,6 +258,12 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         vr_tour_url: null,
         video_url: specForm.video_url || null,
         contact_zalo: null,
+        faq: (() => {
+          const valid = specForm.faq
+            .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
+            .filter(it => it.question && it.answer);
+          return valid.length ? valid : null;
+        })(),
       };
       if (editId) await updateMyListing(editId, payload);
       else await submitUserListing(payload);
@@ -609,9 +627,43 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                   placeholder={isRental(form.listing_type)
                     ? 'Mô tả vị trí, nội thất, tiện ích xung quanh, yêu cầu thuê...'
                     : 'Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán...'}
-                  rows={5}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+                  rows={12}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-y min-h-[10rem]" />
               </FormField>
+
+              {/* FAQ nhập tay — hiển thị cuối trang chi tiết + sinh schema FAQPage */}
+              <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-violet-700">Câu hỏi thường gặp (FAQ)</p>
+                    <p className="mt-1 text-[11px] text-violet-700/80">Giúp khách nhanh nắm thông tin và tăng khả năng xuất hiện trên Google/AI. Bấm "Gợi ý hỏi + đáp" để tự sinh từ thông tin tin đăng rồi chỉnh lại. Chỉ câu đủ hỏi + đáp mới được lưu.</p>
+                  </div>
+                  <button type="button" onClick={suggestFaq}
+                    className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
+                    <Zap className="h-3.5 w-3.5" /> Gợi ý hỏi + đáp
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {form.faq.map((item, idx) => (
+                    <div key={idx} className="rounded-xl border border-violet-100 bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-violet-600">Câu {idx + 1}</span>
+                        <button type="button" onClick={() => removeFaq(idx)} className="text-red-500 hover:text-red-700" aria-label="Xóa câu hỏi">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <input value={item.question} onChange={e => updateFaq(idx, 'question', e.target.value)} placeholder="Câu hỏi..."
+                        className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                      <textarea value={item.answer} onChange={e => updateFaq(idx, 'answer', e.target.value)} rows={2} placeholder="Câu trả lời (bắt buộc để lưu)..."
+                        className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                    </div>
+                  ))}
+                  <button type="button" onClick={addFaq}
+                    className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">
+                    <Plus className="h-3.5 w-3.5" /> Thêm câu hỏi
+                  </button>
+                </div>
+              </div>
 
               <div>
                 <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Tiện ích</label>

@@ -7,6 +7,7 @@ import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAut
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { parseSeoSchema } from '../shared/SeoFields';
 import { AiSeoDraftPanel } from '../shared/AiSeoDraftPanel';
+import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
@@ -418,6 +419,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     focus_keywords: property?.focus_keywords ?? '',
     schema_markup: property?.schema_markup ? JSON.stringify(property.schema_markup, null, 2) : '',
   });
+  const [faq, setFaq] = useState<FaqItem[]>(property?.faq ?? []);
 
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -589,8 +591,25 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       meta_description: cs(specForm.meta_description),
       focus_keywords: cs(specForm.focus_keywords),
       schema_markup: parsedSchema,
+      faq: (() => {
+        const valid = faq
+          .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
+          .filter(it => it.question && it.answer);
+        return valid.length ? valid : null;
+      })(),
     } as Partial<Property>);
   };
+
+  const addFaq = () => setFaq(prev => [...prev, { question: '', answer: '' }]);
+  const removeFaq = (idx: number) => setFaq(prev => prev.filter((_, i) => i !== idx));
+  const updateFaq = (idx: number, key: keyof FaqItem, value: string) =>
+    setFaq(prev => prev.map((it, i) => (i === idx ? { ...it, [key]: value } : it)));
+  const suggestFaq = () => setFaq(prev => {
+    const generated = buildPropertyFaq(form);
+    const existing = new Set(prev.map(it => it.question.trim()));
+    const merged = [...prev, ...generated.filter(g => !existing.has(g.question.trim()))];
+    return merged;
+  });
 
   const fld = (lbl: string, key: string, opts?: { type?: string; placeholder?: string; rows?: number; options?: string[] }) => (
     <div>
@@ -795,6 +814,40 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             </label>
             <textarea value={form.description} onChange={e => setField('description', e.target.value)} rows={12}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-y min-h-[10rem]" />
+          </div>
+
+          {/* FAQ nhập tay — ưu tiên hơn FAQ tự-sinh khi render public */}
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-700">Câu hỏi thường gặp (FAQ)</p>
+                <p className="mt-1 text-[11px] text-violet-700/80">Hiển thị cuối trang chi tiết + sinh schema FAQPage. Để trống sẽ tự sinh từ dữ liệu tin. Chỉ câu đủ hỏi + đáp mới được lưu.</p>
+              </div>
+              <button type="button" onClick={suggestFaq}
+                className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
+                <Zap className="h-3.5 w-3.5" /> Gợi ý hỏi + đáp
+              </button>
+            </div>
+            <div className="space-y-3">
+              {faq.map((item, idx) => (
+                <div key={idx} className="rounded-xl border border-violet-100 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-violet-600">Câu {idx + 1}</span>
+                    <button type="button" onClick={() => removeFaq(idx)} className="text-red-500 hover:text-red-700" aria-label="Xóa câu hỏi">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <input value={item.question} onChange={e => updateFaq(idx, 'question', e.target.value)} placeholder="Câu hỏi..."
+                    className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  <textarea value={item.answer} onChange={e => updateFaq(idx, 'answer', e.target.value)} rows={2} placeholder="Câu trả lời (bắt buộc để lưu)..."
+                    className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                </div>
+              ))}
+              <button type="button" onClick={addFaq}
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">
+                <Plus className="h-3.5 w-3.5" /> Thêm câu hỏi
+              </button>
+            </div>
           </div>
 
           {/* Badge */}

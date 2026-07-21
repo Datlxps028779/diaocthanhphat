@@ -1,25 +1,46 @@
-import type { Property } from './supabase';
-
 export interface FaqItem {
   question: string;
   answer: string;
 }
 
-function priceAnswer(p: Property): string {
-  if (p.listing_type === 'cho_thue' && p.price_per_month) return `${p.price_per_month} triệu/tháng`;
-  if (p.price) return `${p.price} ${p.price_unit ?? 'tỷ'}`;
+// Input linh hoạt để dùng chung cho Property record (server render) lẫn form state
+// (admin/đăng tin). Chấp nhận string|number vì form giữ số dạng chuỗi.
+export interface PropertyFaqInput {
+  title?: string | null;
+  listing_type?: string | null;
+  price?: string | number | null;
+  price_unit?: string | null;
+  price_per_month?: string | number | null;
+  ward?: string | null;
+  district?: string | null;
+  city?: string | null;
+  area_sqm?: string | number | null;
+  bedrooms?: string | number | null;
+  bathrooms?: string | number | null;
+  legal_status?: string | null;
+  direction?: string | null;
+}
+
+function str(v: string | number | null | undefined): string {
+  return v == null ? '' : String(v).trim();
+}
+
+function priceAnswer(p: PropertyFaqInput): string {
+  if (p.listing_type === 'cho_thue' && str(p.price_per_month)) return `${str(p.price_per_month)} triệu/tháng`;
+  if (str(p.price)) return `${str(p.price)} ${str(p.price_unit) || 'tỷ'}`;
   return '';
 }
 
-function locationLabel(p: Property): string {
-  return [p.ward, p.district, p.city].map(s => s?.trim()).filter(Boolean).join(', ');
+function locationLabel(p: PropertyFaqInput): string {
+  return [p.ward, p.district, p.city].map(s => str(s)).filter(Boolean).join(', ');
 }
 
-// FAQ tự-sinh cho chi tiết BĐS — CHỈ từ field thật trong record. Câu nào thiếu dữ
-// liệu thì bỏ, không bịa. Trả [] khi không đủ dữ liệu để có FAQ thật.
-export function buildPropertyFaq(p: Property): FaqItem[] {
+// FAQ tự-sinh cho chi tiết BĐS — CHỈ từ field thật. Sinh cả câu hỏi lẫn câu trả
+// lời (an toàn vì đáp lấy trực tiếp từ dữ liệu). Câu nào thiếu dữ liệu thì bỏ,
+// không bịa. Trả [] khi không đủ dữ liệu để có FAQ thật.
+export function buildPropertyFaq(p: PropertyFaqInput): FaqItem[] {
   const items: FaqItem[] = [];
-  const name = p.title?.trim() || 'Bất động sản này';
+  const name = str(p.title) || 'Bất động sản này';
   const listingVerb = p.listing_type === 'cho_thue' ? 'cho thuê' : 'bán';
 
   const price = priceAnswer(p);
@@ -39,9 +60,9 @@ export function buildPropertyFaq(p: Property): FaqItem[] {
   }
 
   const specs: string[] = [];
-  if (p.area_sqm) specs.push(`diện tích ${p.area_sqm}m²`);
-  if (p.bedrooms) specs.push(`${p.bedrooms} phòng ngủ`);
-  if (p.bathrooms) specs.push(`${p.bathrooms} phòng tắm`);
+  if (str(p.area_sqm)) specs.push(`diện tích ${str(p.area_sqm)}m²`);
+  if (str(p.bedrooms)) specs.push(`${str(p.bedrooms)} phòng ngủ`);
+  if (str(p.bathrooms)) specs.push(`${str(p.bathrooms)} phòng tắm`);
   if (specs.length > 0) {
     items.push({
       question: `${name} có diện tích và bố trí như thế nào?`,
@@ -49,17 +70,17 @@ export function buildPropertyFaq(p: Property): FaqItem[] {
     });
   }
 
-  if (p.legal_status?.trim()) {
+  if (str(p.legal_status)) {
     items.push({
       question: `Tình trạng pháp lý của ${name} ra sao?`,
-      answer: `Pháp lý: ${p.legal_status.trim()}.`,
+      answer: `Pháp lý: ${str(p.legal_status)}.`,
     });
   }
 
-  if (p.direction?.trim()) {
+  if (str(p.direction)) {
     items.push({
       question: `${name} có hướng nào?`,
-      answer: `Hướng ${p.direction.trim()}.`,
+      answer: `Hướng ${str(p.direction)}.`,
     });
   }
 

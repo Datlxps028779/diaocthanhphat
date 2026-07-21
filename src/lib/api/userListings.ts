@@ -72,6 +72,7 @@ export async function approveUserListing(id: string): Promise<void> {
     formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
     meta_title: listing.meta_title, meta_description: listing.meta_description,
     focus_keywords: listing.focus_keywords, schema_markup: listing.schema_markup,
+    faq: listing.faq,
   }).select('id').single();
   if (propErr) throw propErr;
   const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());

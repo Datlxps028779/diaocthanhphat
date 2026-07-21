@@ -31,7 +31,9 @@ export default async function PropertyPage({ params }: Params) {
     { name: property.title, path: `/bat-dong-san/${(property.slug && property.slug.trim()) || property.id}` },
   ]);
   // FAQPage chỉ emit khi có FAQ thật (khớp khối FAQ visible trong PropertyDetailPage).
-  const faqJsonLd = buildFaqJsonLd(buildPropertyFaq(property));
+  // Ưu tiên FAQ nhập tay; nếu chưa có thì tự-sinh từ dữ liệu thật.
+  const faqItems = property.faq && property.faq.length > 0 ? property.faq : buildPropertyFaq(property);
+  const faqJsonLd = buildFaqJsonLd(faqItems);
   const schemas = [jsonLd, breadcrumbJsonLd, ...(faqJsonLd ? [faqJsonLd] : [])];
 
   return (
