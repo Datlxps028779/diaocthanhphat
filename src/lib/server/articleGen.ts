@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { fetchPexelsImage } from './pexels';
 
 // Sinh bài viết SEO/GEO bằng Claude cho bảng `news`. Chạy SERVER-SIDE (ANTHROPIC_API_KEY
 // không bao giờ tới client). Port logic lõi từ bds-seo-toolkit/lib/anthropic.js nhưng:
@@ -7,6 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 //  - Ép JSON qua PROMPT + parse text (proxy-agnostic, tương thích model thinking) — KHÔNG
 //    dùng forced tool_use vì tool_choice bắt buộc không kết hợp được extended thinking,
 //    và proxy bên thứ 3 chưa chắc hỗ trợ đầy đủ tool_use.
+//  - Ảnh minh hoạ lấy từ Pexels (Claude không sinh ảnh); citation cho E-E-A-T + GEO.
 
 const MODEL = process.env.ARTICLE_GEN_MODEL || 'claude-sonnet-5';
 const MAX_TOKENS = Number(process.env.ARTICLE_GEN_MAX_TOKENS || '8000');
@@ -21,6 +23,10 @@ export type GeneratedArticle = {
   keywords: string[];
   faq: { question: string; answer: string }[];
   geoArea: string;
+  geoEntity: string;
+  geoNotes: string;
+  citations: { title: string; url: string }[];
+  imageUrl: string;
 };
 
 export type GenerateArticleInput = {
@@ -39,7 +45,7 @@ function buildSystemPrompt(): string {
     '- Mở đầu bằng mục "Câu trả lời nhanh" trả lời trực tiếp ý định tìm kiếm trong 2-3 câu.',
     '- Có ít nhất 2 mục <h2>, dùng <h3> cho tiểu mục. Đoạn văn ngắn, dễ đọc.',
     '- Bám khu vực cụ thể (thành phố/phường) khi được cung cấp.',
-    '- Ít nhất 3 câu hỏi FAQ, trả lời ngắn gọn, đúng trọng tâm.',
+    '- Ít nhất 3 câu hỏi FAQ, trả lời ngắn gọn, đúng trọng tâm — ĐẶT RIÊNG ở khoá "faq", KHÔNG đưa vào thân bài.',
     '- KHÔNG bịa số liệu quá cụ thể (giá chính xác, phần trăm) nếu không chắc; nói theo khoảng/xu hướng.',
     '- KHÔNG sao chép văn phong hay nội dung của bất kỳ nguồn nào; viết mới hoàn toàn.',
     '- Văn phong khách quan, không hứa hẹn lợi nhuận, không lời khuyên đầu tư mang tính cam kết.',
@@ -52,12 +58,19 @@ function buildSystemPrompt(): string {
     '  "metaTitle": "Thẻ title SEO, ≤ 60 ký tự",',
     '  "metaDescription": "Meta description, 140-160 ký tự, có từ khoá",',
     '  "excerpt": "Tóm tắt 1-2 câu hiển thị ở danh sách",',
-    '  "contentHtml": "Thân bài HTML sạch: mở đầu <h2>Câu trả lời nhanh</h2> + <p>, rồi <h2>/<h3>/<p>/<ul>/<table>. KHÔNG <script>, KHÔNG JSON-LD, KHÔNG <h1> lặp tiêu đề",',
+    '  "contentHtml": "Thân bài HTML sạch: mở đầu <h2>Câu trả lời nhanh</h2> + <p>, rồi <h2>/<h3>/<p>/<ul>/<table>. KHÔNG <script>, KHÔNG JSON-LD, KHÔNG <h1> lặp tiêu đề. TUYỆT ĐỐI KHÔNG chèn mục FAQ / Câu hỏi thường gặp vào thân bài — FAQ nằm RIÊNG ở khoá faq",',
     '  "category": "Danh mục ngắn, vd Thị trường / Pháp lý / Đầu tư",',
     '  "keywords": ["3-6", "từ khoá", "liên quan"],',
     '  "faq": [{"question": "...", "answer": "..."}],',
-    '  "geoArea": "Khu vực địa lý chính, vd Dĩ An, Bình Dương"',
+    '  "geoArea": "Khu vực địa lý chính, vd Dĩ An, Bình Dương",',
+    '  "geoEntity": "Thực thể địa lý cụ thể nhất bài nói tới: tên tuyến đường/KCN/dự án/phường, vd Vành đai 3, KCN VSIP, phường Dĩ An",',
+    '  "geoNotes": "Ngữ cảnh địa phương phụ: khu lân cận, tiện ích, mốc quy hoạch liên quan (1 câu ngắn)",',
+    '  "citations": [{"title": "Tên nguồn", "url": "https://..."}]',
     '}',
+    'Ghi chú các khoá GEO/nguồn:',
+    '- geoEntity, geoNotes: điền entity + ngữ cảnh THẬT của khu vực (giúp Google/AI hiểu đúng địa phương).',
+    '- citations: 2-4 nguồn tham khảo THẬT và uy tín (cổng thông tin tỉnh/huyện, quy hoạch, báo lớn, cơ quan',
+    '  nhà nước). CHỈ ghi URL bạn TỰ TIN là có thật; KHÔNG bịa link. Nếu không chắc nguồn nào, để mảng rỗng [].',
     'Giá trị chuỗi phải escape đúng chuẩn JSON (dấu " bên trong dùng \\").',
   ].join('\n');
 }
@@ -132,6 +145,12 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     throw new Error('Bài viết sinh ra thiếu tiêu đề hoặc nội dung. Thử lại.');
   }
 
+  const geoArea = (out.geoArea || input.district || '').trim();
+
+  // Ảnh minh hoạ từ Pexels theo từ khoá + khu vực. Thiếu key/lỗi → '' (không chặn tạo bài).
+  const imageQuery = [input.keyword, input.district].filter(Boolean).join(' ');
+  const pexels = await fetchPexelsImage(imageQuery);
+
   return {
     title: out.title.trim(),
     metaTitle: (out.metaTitle || out.title).trim(),
@@ -145,6 +164,14 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
           .filter(f => f && typeof f.question === 'string' && typeof f.answer === 'string' && f.question.trim() && f.answer.trim())
           .map(f => ({ question: f.question.trim(), answer: f.answer.trim() }))
       : [],
-    geoArea: (out.geoArea || input.district || '').trim(),
+    geoArea,
+    geoEntity: (out.geoEntity || '').trim(),
+    geoNotes: (out.geoNotes || '').trim(),
+    citations: Array.isArray(out.citations)
+      ? out.citations
+          .filter(c => c && typeof c.url === 'string' && /^https?:\/\//i.test(c.url.trim()))
+          .map(c => ({ title: (c.title || c.url).trim(), url: c.url.trim() }))
+      : [],
+    imageUrl: pexels?.url ?? '',
   };
 }

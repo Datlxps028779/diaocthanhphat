@@ -67,6 +67,10 @@ export async function POST(req: NextRequest) {
       focus_keywords: article.keywords.length ? article.keywords.join(', ') : null,
       faq: article.faq.length ? article.faq : null,
       geo_area: article.geoArea || null,
+      geo_entity: article.geoEntity || null,
+      geo_notes: article.geoNotes || null,
+      citations: article.citations.length ? article.citations : null,
+      image_url: article.imageUrl || null,
     })
     .select('id, slug, title')
     .single();

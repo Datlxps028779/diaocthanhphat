@@ -265,6 +265,23 @@ function ArticleDetail({
             </div>
           )}
 
+          {/* Nguồn tham khảo — khớp 1:1 với schema citation ở page.tsx (tránh cloaking) */}
+          {article.citations && article.citations.length > 0 && (
+            <div className="mt-10 pt-6 border-t border-gray-200">
+              <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
+              <ul className="space-y-2">
+                {article.citations.map((c, i) => (
+                  <li key={i} className="text-sm">
+                    <a href={c.url} target="_blank" rel="nofollow noopener noreferrer"
+                      className="text-red-600 hover:text-red-700 hover:underline break-words">
+                      {c.title || c.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* CTA Banner */}
           <div className="mt-10 bg-gradient-to-r from-red-700 to-red-500 rounded-2xl p-6 text-white text-center">
             <h3 className="text-lg font-bold mb-2">Bạn cần tư vấn về bất động sản?</h3>

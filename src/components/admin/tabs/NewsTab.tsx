@@ -28,6 +28,7 @@ type NewsFormState = SeoFieldsValue & {
   geo_entity: string;
   geo_notes: string;
   faq: FaqItem[];
+  citations: { title: string; url: string }[];
 };
 
 function newsSlug(title: string): string {
@@ -74,6 +75,12 @@ function formToNewsArticle(form: NewsFormState, article: NewsArticle | null): Ne
         .filter(it => it.question && it.answer);
       return valid.length ? valid : null;
     })(),
+    citations: (() => {
+      const valid = form.citations
+        .map(c => ({ title: c.title.trim(), url: c.url.trim() }))
+        .filter(c => c.url && /^https?:\/\//i.test(c.url));
+      return valid.length ? valid : null;
+    })(),
     created_at: article?.created_at ?? now,
     updated_at: now,
   };
@@ -99,6 +106,7 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     geo_entity: article?.geo_entity ?? '',
     geo_notes: article?.geo_notes ?? '',
     faq: article?.faq ?? [],
+    citations: article?.citations ?? [],
   };
 }
 
@@ -129,6 +137,10 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     const merged = [...f.faq, ...suggestions.filter(s => !existing.has(s.question.trim()))];
     return { ...f, faq: merged };
   });
+  const addCitation = () => setForm(f => ({ ...f, citations: [...f.citations, { title: '', url: '' }] }));
+  const removeCitation = (idx: number) => setForm(f => ({ ...f, citations: f.citations.filter((_, i) => i !== idx) }));
+  const updateCitation = (idx: number, key: 'title' | 'url', value: string) =>
+    setForm(f => ({ ...f, citations: f.citations.map((c, i) => (i === idx ? { ...c, [key]: value } : c)) }));
   const moveRelated = (idx: number, dir: -1 | 1) => setForm(f => {
     const next = [...f.related_ids];
     const j = idx + dir;
@@ -224,6 +236,12 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
           const valid = form.faq
             .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
             .filter(it => it.question && it.answer);
+          return valid.length ? valid : null;
+        })(),
+        citations: (() => {
+          const valid = form.citations
+            .map(c => ({ title: c.title.trim(), url: c.url.trim() }))
+            .filter(c => c.url && /^https?:\/\//i.test(c.url));
           return valid.length ? valid : null;
         })(),
       });
@@ -336,6 +354,33 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             </div>
           </div>
 
+          <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
+            <div className="mb-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-sky-700">Nguồn tham khảo (E-E-A-T / GEO)</p>
+              <p className="mt-1 text-[11px] text-sky-700/80">Nguồn thật, uy tín (cổng thông tin tỉnh/huyện, quy hoạch, báo lớn). Hiển thị công khai cuối bài và sinh schema citation. Chỉ nguồn có URL http(s) hợp lệ mới được lưu.</p>
+            </div>
+            <div className="space-y-3">
+              {form.citations.map((c, idx) => (
+                <div key={idx} className="rounded-xl border border-sky-100 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-sky-600">Nguồn {idx + 1}</span>
+                    <button type="button" onClick={() => removeCitation(idx)} className="text-red-500 hover:text-red-700" aria-label="Xóa nguồn">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <input value={c.title} onChange={e => updateCitation(idx, 'title', e.target.value)} placeholder="Tên nguồn (vd: Cổng TTĐT tỉnh Bình Dương)..."
+                    className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400" />
+                  <input value={c.url} onChange={e => updateCitation(idx, 'url', e.target.value)} placeholder="https://... (bắt buộc để lưu)"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400" />
+                </div>
+              ))}
+              <button type="button" onClick={addCitation}
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50">
+                <Plus className="h-3.5 w-3.5" /> Thêm nguồn
+              </button>
+            </div>
+          </div>
+
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
               <label className="block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
@@ -433,12 +478,12 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
           </div>
 
           <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
                   <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO / schema
                 </p>
-                <p className="mt-1 text-[11px] text-amber-700/80">Sinh title/description/keywords + NewsArticle JSON-LD (GEO contentLocation/spatialCoverage/about/mentions + speakable) từ dữ liệu bài viết thật. Bấm nút bên cạnh nội dung để điền, hoặc sửa tay bất kỳ ô nào.</p>
+                <p className="mt-1 break-words text-[11px] text-amber-700/80">Sinh title/description/keywords + NewsArticle JSON-LD (GEO contentLocation/spatialCoverage/about/mentions + speakable) từ dữ liệu bài viết thật. Bấm nút bên cạnh nội dung để điền, hoặc sửa tay bất kỳ ô nào.</p>
               </div>
               <button type="button" onClick={autoGenerateSeo}
                 className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">

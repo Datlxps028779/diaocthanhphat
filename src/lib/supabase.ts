@@ -145,6 +145,7 @@ export type NewsArticle = {
   geo_entity: string | null;
   geo_notes: string | null;
   faq: { question: string; answer: string }[] | null;
+  citations: { title: string; url: string }[] | null;
   created_at: string; updated_at: string;
 };
 

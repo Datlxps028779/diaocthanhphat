@@ -270,6 +270,9 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
   const geoName = (a.geo_area?.trim() || settings?.geo_area_served || '').trim() || 'Bình Dương, Việt Nam';
   const geoEntity = a.geo_entity?.trim() || undefined;
   const geoNotes = a.geo_notes?.trim() || undefined;
+  const citations = (a.citations ?? [])
+    .filter(c => c && c.url && /^https?:\/\//i.test(c.url))
+    .map(c => ({ '@type': 'CreativeWork', name: c.title || c.url, url: c.url }));
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -290,13 +293,14 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
     ...(a.geo_area ? { articleSection: a.geo_area } : {}),
     ...(geoEntity ? { about: [{ '@type': 'Thing', name: geoEntity }] } : {}),
     ...(geoNotes ? { mentions: [{ '@type': 'Thing', name: geoNotes }] } : {}),
+    ...(citations.length ? { citation: citations } : {}),
     speakable: { '@type': 'SpeakableSpecification', cssSelector: ['.article-headline', '.article-excerpt'] },
     contentLocation: { '@type': 'Place', name: geoName },
     spatialCoverage: { '@type': 'Place', name: geoName },
   };
   return mergeSchema(base, a.schema_markup, 'news', [
     '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'publisher',
-    'inLanguage', 'articleBody', 'wordCount', 'contentLocation', 'spatialCoverage', 'articleSection', 'about', 'mentions',
+    'inLanguage', 'articleBody', 'wordCount', 'contentLocation', 'spatialCoverage', 'articleSection', 'about', 'mentions', 'citation',
   ]).schema;
 }
 
