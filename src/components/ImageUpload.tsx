@@ -218,9 +218,11 @@ interface ImageUrlInputProps {
   value: string;
   onChange: (url: string) => void;
   placeholder?: string;
+  folder?: string;
+  isAdmin?: boolean;
 }
 
-export function ImageUrlInput({ value, onChange, placeholder = 'https://...' }: ImageUrlInputProps) {
+export function ImageUrlInput({ value, onChange, placeholder = 'https://...', folder = 'properties', isAdmin = false }: ImageUrlInputProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -230,7 +232,7 @@ export function ImageUrlInput({ value, onChange, placeholder = 'https://...' }: 
     setUploading(true);
     setError('');
     try {
-      const url = await uploadImage(file);
+      const url = await uploadImage(file, folder, isAdmin);
       onChange(url);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Tải ảnh lên thất bại.';
@@ -275,12 +277,13 @@ export function ImageUrlInput({ value, onChange, placeholder = 'https://...' }: 
           className="hidden"
           onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
-        <ImageLibraryModal
-          open={libraryOpen}
-          onClose={() => setLibraryOpen(false)}
-          onSelect={(url) => { onChange(url); setError(''); }}
-          isAdmin
-        />
+          <ImageLibraryModal
+            open={libraryOpen}
+            onClose={() => setLibraryOpen(false)}
+            onSelect={(url) => { onChange(url); setError(''); }}
+            folder={folder}
+            isAdmin={isAdmin}
+          />
       </div>
       {/* Preview ảnh ngay lập tức */}
       {value && (

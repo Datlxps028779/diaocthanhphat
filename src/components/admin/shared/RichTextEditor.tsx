@@ -142,7 +142,7 @@ function Toolbar({
 
   return (
     <>
-    <div className="flex flex-wrap gap-1 rounded-t-lg border-b border-gray-100 bg-gray-50 p-2">
+    <div className="sticky top-0 z-20 flex flex-wrap gap-1 rounded-t-lg border-b border-gray-100 bg-gray-50/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-gray-50/80">
       <ToolButton label="H2" icon={<Heading2 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
       <ToolButton label="H3" icon={<Heading3 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
       <ToolButton label="Đậm" icon={<Bold className="h-3.5 w-3.5" />} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />

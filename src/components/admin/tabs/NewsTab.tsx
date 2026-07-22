@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2 } from 'lucide-react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
 import { generateArticleAI } from '../../../lib/api/articleGen';
@@ -8,9 +8,11 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
+import { autofillNewsFaq, autofillNewsGeo } from '../../../lib/newsAutofill';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
+import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 
 const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
 
@@ -116,6 +118,10 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const [error, setError] = useState('');
   const [relatedQuery, setRelatedQuery] = useState('');
   const [relatedOpen, setRelatedOpen] = useState(false);
+  const [contentMode, setContentMode] = useState<'visual' | 'html'>('visual');
+  const [markdownOpen, setMarkdownOpen] = useState(false);
+  const [markdownDraft, setMarkdownDraft] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
@@ -132,15 +138,48 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const updateFaq = (idx: number, key: keyof FaqItem, value: string) =>
     setForm(f => ({ ...f, faq: f.faq.map((it, i) => (i === idx ? { ...it, [key]: value } : it)) }));
   const suggestFaq = () => setForm(f => {
-    const suggestions = suggestNewsFaq({ title: f.title, category: f.category, geoArea: f.geo_area });
+    // Ưu tiên sinh cả hỏi + đáp từ nội dung đã nhập; nếu chưa có nội dung thì gợi ý câu hỏi trống.
+    const fromContent = autofillNewsFaq(f.content, { title: f.title, category: f.category, geoArea: f.geo_area });
+    const suggestions = fromContent.length ? fromContent : suggestNewsFaq({ title: f.title, category: f.category, geoArea: f.geo_area });
     const existing = new Set(f.faq.map(it => it.question.trim()));
     const merged = [...f.faq, ...suggestions.filter(s => !existing.has(s.question.trim()))];
     return { ...f, faq: merged };
+  });
+  const autofillGeo = () => setForm(f => {
+    const geo = autofillNewsGeo(f.content, f.title);
+    return {
+      ...f,
+      geo_area: f.geo_area.trim() || geo.geoArea,
+      geo_entity: f.geo_entity.trim() || geo.geoEntity,
+      geo_notes: f.geo_notes.trim() || geo.geoNotes,
+    };
   });
   const addCitation = () => setForm(f => ({ ...f, citations: [...f.citations, { title: '', url: '' }] }));
   const removeCitation = (idx: number) => setForm(f => ({ ...f, citations: f.citations.filter((_, i) => i !== idx) }));
   const updateCitation = (idx: number, key: 'title' | 'url', value: string) =>
     setForm(f => ({ ...f, citations: f.citations.map((c, i) => (i === idx ? { ...c, [key]: value } : c)) }));
+  const applyMarkdown = (markdown: string) => {
+    const value = markdown.trim();
+    if (!value) { setError('Vui lòng dán nội dung Markdown hoặc chọn file .md.'); return; }
+    set('content', markdownToHtml(value));
+    setMarkdownDraft('');
+    setMarkdownOpen(false);
+    setContentMode('visual');
+    setError('');
+  };
+  const handleMarkdownFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    const allowed = name.endsWith('.md') || name.endsWith('.markdown') || name.endsWith('.txt') || ['text/markdown', 'text/plain'].includes(file.type);
+    if (!allowed) { setError('Chỉ hỗ trợ file .md, .markdown hoặc .txt.'); return; }
+    if (file.size > 1024 * 1024) { setError('File Markdown tối đa 1MB để tránh treo trình soạn thảo.'); return; }
+    const reader = new FileReader();
+    reader.onerror = () => setError('Không đọc được file Markdown. Vui lòng thử lại.');
+    reader.onload = () => applyMarkdown(typeof reader.result === 'string' ? reader.result : '');
+    reader.readAsText(file);
+  };
   const moveRelated = (idx: number, dir: -1 | 1) => setForm(f => {
     const next = [...f.related_ids];
     const j = idx + dir;
@@ -204,16 +243,16 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     }));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (forceDraft = false) => {
     if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
-    if (form.is_published && !readiness.canPublish) {
+    if (!forceDraft && form.is_published && !readiness.canPublish) {
       setError(`Bài chưa đủ chuẩn để đăng công khai: ${readiness.errors[0]?.message ?? 'thiếu thông tin SEO/GEO bắt buộc.'}`);
       return;
     }
     if (schemaState.error) { setError(schemaState.error); return; }
     setSaving(true);
     setError('');
-    const bodyHtml = form.content.replace(/<p>\s*<\/p>/g, '').trim();
+    const bodyHtml = sanitizeArticleHtml(form.content.replace(/<p>\s*<\/p>/g, '').trim());
     try {
       await onSave({
         title: form.title.trim(),
@@ -223,7 +262,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
         image_url: form.image_url.trim() || null,
         excerpt: form.excerpt.trim() || null,
         content: bodyHtml || null,
-        is_published: form.is_published,
+        is_published: forceDraft ? false : form.is_published,
         meta_title: form.meta_title.trim() || null,
         meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null,
@@ -288,7 +327,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-700">Ảnh đại diện bài viết</label>
-              <ImageUrlInput value={form.image_url} onChange={url => set('image_url', url)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" />
+              <ImageUrlInput value={form.image_url} onChange={url => set('image_url', url)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="news" isAdmin />
             </div>
           </div>
           <div>
@@ -298,9 +337,15 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
           </div>
 
           <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-            <div className="mb-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-blue-700">GEO / AEO cho bài viết</p>
-              <p className="mt-1 text-[11px] text-blue-700/80">Nhập khu vực và entity thật để Google/AI trích xuất đúng ngữ cảnh địa phương, không chỉ dùng fallback toàn site.</p>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-700">GEO / AEO cho bài viết</p>
+                <p className="mt-1 text-[11px] text-blue-700/80">Nhập khu vực và entity thật để Google/AI trích xuất đúng ngữ cảnh địa phương, không chỉ dùng fallback toàn site.</p>
+              </div>
+              <button type="button" onClick={autofillGeo}
+                className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-blue-100 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-200">
+                <Sparkles className="h-3.5 w-3.5" /> Tự sinh từ nội dung
+              </button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -329,7 +374,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               </div>
               <button type="button" onClick={suggestFaq}
                 className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
-                <Sparkles className="h-3.5 w-3.5" /> Gợi ý câu hỏi
+                <Sparkles className="h-3.5 w-3.5" /> Tự sinh từ nội dung
               </button>
             </div>
             <div className="space-y-3">
@@ -382,19 +427,74 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
           </div>
 
           <div>
-            <div className="mb-1 flex items-center justify-between gap-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <label className="block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
-              <button type="button" onClick={autoGenerateSeo} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">
-                <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                  <button type="button" onClick={() => setContentMode('visual')}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-bold ${contentMode === 'visual' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    Visual
+                  </button>
+                  <button type="button" onClick={() => setContentMode('html')}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-bold ${contentMode === 'html' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <Code2 className="h-3.5 w-3.5" /> View code
+                  </button>
+                </div>
+                <button type="button" onClick={() => setMarkdownOpen(v => !v)} className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
+                  <FileText className="h-3.5 w-3.5" /> Dán Markdown
+                </button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                  <Upload className="h-3.5 w-3.5" /> Import .md
+                </button>
+                <button type="button" onClick={autoGenerateSeo} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">
+                  <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
+                </button>
+              </div>
             </div>
-            <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+            <input ref={fileInputRef} type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" className="hidden" onChange={handleMarkdownFile} />
+            {markdownOpen && (
+              <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-blue-800">Dán nội dung Markdown</p>
+                    <p className="text-[11px] text-blue-700/80">Chuyển .md thành HTML và thay toàn bộ nội dung hiện tại.</p>
+                  </div>
+                  <button type="button" onClick={() => { setMarkdownOpen(false); setMarkdownDraft(''); }} className="text-blue-500 hover:text-blue-700" aria-label="Đóng Markdown">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <textarea
+                  value={markdownDraft}
+                  onChange={e => setMarkdownDraft(e.target.value)}
+                  rows={8}
+                  spellCheck={false}
+                  placeholder={'## Tiêu đề mục\n\nĐoạn văn...\n\n- Ý chính 1\n- Ý chính 2'}
+                  className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 font-mono text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button type="button" onClick={() => { setMarkdownOpen(false); setMarkdownDraft(''); }} className="rounded-lg border border-blue-100 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Hủy</button>
+                  <button type="button" onClick={() => applyMarkdown(markdownDraft)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">Chuyển vào editor</button>
+                </div>
+              </div>
+            )}
+            {contentMode === 'visual' ? (
+              <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+            ) : (
+              <textarea
+                value={form.content}
+                onChange={e => set('content', e.target.value)}
+                rows={22}
+                spellCheck={false}
+                placeholder={'<h2>Tiêu đề mục</h2>\n<p>Nội dung đoạn văn...</p>'}
+                className="min-h-[420px] w-full rounded-lg border border-gray-200 bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-gray-100 shadow-inner focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+            )}
             <div className="mt-2 grid gap-2 text-[11px] text-gray-500 sm:grid-cols-3">
               <span className="rounded-lg bg-gray-50 px-2 py-1">{wordCount} từ</span>
               <span className="rounded-lg bg-gray-50 px-2 py-1">{internalLinkCount} link nội bộ</span>
               <span className={`rounded-lg px-2 py-1 ${missingAltCount ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{missingAltCount} ảnh thiếu alt</span>
             </div>
-            <p className="mt-1 text-[11px] text-gray-400">Bôi đen đoạn văn rồi bấm Đậm/Nghiêng/Tiêu đề/căn lề để định dạng tại chỗ. Nút Ảnh mở thư viện (chọn có sẵn hoặc tải mới) và bắt buộc nhập alt. Nút Nội bộ chèn backlink tới bài khác.</p>
+            <p className="mt-1 text-[11px] text-gray-400">Visual dùng thanh công cụ định dạng; View code cho phép dán HTML trực tiếp. HTML lạ có thể được TipTap chuẩn hóa khi quay lại Visual.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
 
@@ -504,7 +604,11 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
 
       <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
         <button onClick={onCancel} className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50">Hủy</button>
-        <button onClick={handleSave} disabled={saving}
+        <button onClick={() => handleSave(true)} disabled={saving}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60">
+          <Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu nháp'}
+        </button>
+        <button onClick={() => handleSave(false)} disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
           <Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu bài viết'}
         </button>
