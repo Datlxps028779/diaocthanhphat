@@ -237,15 +237,32 @@ function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
 }
 
 // ─── News → Metadata ──────────────────────────────────────────────────────────
+// Meta description tự sinh từ đoạn đầu bài khi admin bỏ trống excerpt/meta_description.
+function newsDescriptionFromBody(content?: string | null): string {
+  const raw = (content ?? '').trim();
+  if (!raw) return '';
+  const plain = (isHtmlContent(raw) ? stripHtml(raw) : raw).replace(/\s+/g, ' ').trim();
+  if (!plain) return '';
+  return plain.length > 155 ? `${plain.slice(0, 152).trimEnd()}…` : plain;
+}
+
+// Keywords tự sinh: gộp khu vực/entity GEO để bám địa phương, tránh keyword generic.
+function newsKeywordsFallback(a: NewsArticle): string {
+  const parts = [a.title, a.geo_area, a.geo_entity, a.category, 'tin tức bất động sản']
+    .map(p => (p ?? '').trim())
+    .filter(Boolean);
+  return [...new Set(parts)].join(', ');
+}
+
 export function buildNewsMetadata(a: NewsArticle): Metadata {
   const title = a.meta_title || a.title;
-  const description = a.meta_description || a.excerpt || a.title;
+  const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
   const images = a.image_url ? [{ url: a.image_url, width: 1200, height: 630 }] : undefined;
   return {
     title,
     description,
-    keywords: a.focus_keywords || `tin tức bất động sản, ${a.title}`,
+    keywords: a.focus_keywords || newsKeywordsFallback(a),
     alternates: { canonical: path },
     openGraph: {
       type: 'article',

@@ -284,9 +284,11 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 focus-within:ring-2 focus-within:ring-red-400">
+    <div className="overflow-hidden rounded-lg border border-gray-200 focus-within:ring-2 focus-within:ring-red-400">
       <Toolbar editor={editor} internalLinks={internalLinks} onImageClick={() => setLibOpen(true)} />
-      <EditorContent editor={editor} />
+      <div className="max-h-[65vh] overflow-y-auto">
+        <EditorContent editor={editor} />
+      </div>
 
       <ImageLibraryModal
         open={libOpen}
