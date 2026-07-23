@@ -721,7 +721,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               {related.map(r => (
                 <div key={r.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 cursor-pointer group transition-all"
                   onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}>
-                  <div className="relative h-36 bg-gray-100">
+                  <div className="relative aspect-[4/3] bg-gray-100">
                     <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={r.title} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3">

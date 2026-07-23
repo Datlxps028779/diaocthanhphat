@@ -38,3 +38,10 @@ export function friendlyAuthLinkError(raw: string | undefined | null): string {
   }
   return AUTH_LINK_FALLBACK;
 }
+
+// Nhận diện lỗi đăng nhập khi tài khoản chưa xác nhận email (Supabase trả
+// "Email not confirmed"). Tách riêng để UI hiện nút "Gửi lại email xác nhận".
+export function isEmailNotConfirmedError(raw: string | undefined | null): boolean {
+  if (!raw) return false;
+  return raw.toLowerCase().includes('email not confirmed');
+}

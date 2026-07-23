@@ -809,7 +809,7 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <div className="relative h-44 bg-gray-100">
+        <div className="relative aspect-[4/3] bg-gray-100">
           <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
             alt={p.title} fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-500" />

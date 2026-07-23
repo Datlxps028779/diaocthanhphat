@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
-import { signIn, signUp, requestPasswordReset, getCurrentRole } from '../lib/api';
-import { interpretSignUpResult } from '../lib/authFlow';
+import { signIn, signUp, requestPasswordReset, resendConfirmation, getCurrentRole } from '../lib/api';
+import { interpretSignUpResult, isEmailNotConfirmedError } from '../lib/authFlow';
 import { isElevatedRole } from '../lib/authGuard';
 
 interface UserAuthModalProps {
@@ -26,10 +26,14 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
   // Luồng quên mật khẩu: forgotMode = đang ở form nhập email; resetSent = đã gửi mail.
   const [forgotMode, setForgotMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  // Đăng nhập nhưng tài khoản chưa xác nhận email → hiện nút gửi lại link xác nhận.
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUnconfirmed(false);
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -64,7 +68,12 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Có lỗi xảy ra';
-      if (msg.includes('already registered') || msg.includes('already been registered')) {
+      if (isEmailNotConfirmedError(msg)) {
+        // Tài khoản có thật nhưng chưa bấm link xác nhận → cho gửi lại email.
+        setUnconfirmed(true);
+        setResendState('idle');
+        setError('Tài khoản chưa được xác nhận. Vui lòng kiểm tra email và bấm liên kết kích hoạt.');
+      } else if (msg.includes('already registered') || msg.includes('already been registered')) {
         setError('Email này đã được đăng ký. Vui lòng đăng nhập.');
       } else if (msg.includes('Invalid login credentials')) {
         setError('Email hoặc mật khẩu không đúng.');
@@ -72,6 +81,18 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
         setError(msg);
       }
     } finally { setLoading(false); }
+  };
+
+  const handleResendConfirm = async () => {
+    if (!email.trim()) { setError('Vui lòng nhập email.'); return; }
+    setResendState('sending');
+    try {
+      await resendConfirmation(email);
+      setResendState('sent');
+    } catch {
+      // Supabase chống dò email: coi như đã gửi để không lộ email nào tồn tại.
+      setResendState('sent');
+    }
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -208,6 +229,20 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2.5">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
                 </div>
+              )}
+
+              {mode === 'login' && unconfirmed && (
+                resendState === 'sent' ? (
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl px-3 py-2.5">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    Đã gửi lại email xác nhận. Kiểm tra hộp thư (cả mục Spam).
+                  </div>
+                ) : (
+                  <button type="button" onClick={handleResendConfirm} disabled={resendState === 'sending'}
+                    className="w-full border border-red-200 text-red-600 hover:bg-red-50 font-semibold py-2.5 rounded-xl text-xs transition-colors disabled:opacity-60">
+                    {resendState === 'sending' ? 'Đang gửi...' : 'Gửi lại email xác nhận'}
+                  </button>
+                )
               )}
 
               <button type="submit" disabled={loading}

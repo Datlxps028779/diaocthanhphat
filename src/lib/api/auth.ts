@@ -28,6 +28,14 @@ export async function signIn(email: string, password: string) {
 }
 export async function signOut() { await supabase.auth.signOut(); }
 
+// Gửi lại email xác nhận đăng ký khi user chưa kích hoạt tài khoản (mail lạc/hết hạn).
+// Dùng cùng emailRedirectTo như signUp để link quay về /xac-nhan-email đúng host.
+export async function resendConfirmation(email: string) {
+  const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/xac-nhan-email` : undefined;
+  const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo } });
+  if (error) throw error;
+}
+
 // Gửi email đặt lại mật khẩu. redirectTo trỏ về /dat-lai-mat-khau (cùng cơ chế host
 // như xác nhận email) — user bấm link trong mail sẽ vào trang đó với session recovery
 // tạm, rồi gọi updatePassword. Lưu ý: Supabase bật chống dò email nên hàm này KHÔNG
