@@ -61,6 +61,17 @@ describe('parseSearchIntent', () => {
     expect(r.filters.legal).toBe('Sổ hồng');
   });
 
+  it('ngân sách "tôi có 500 triệu" → maxPrice (0.5 tỷ), không bỏ qua giá', () => {
+    const r = parseSearchIntent('tôi có 500 triệu muốn mua nhà ở Dĩ An', taxonomy);
+    expect(r.filters.maxPrice).toBe(0.5);
+    expect(r.filters.district).toBe('Dĩ An');
+  });
+
+  it('bare "nhà 2 tỷ Dĩ An" (không từ khoá) → coi là giá trần', () => {
+    const r = parseSearchIntent('nhà 2 tỷ Dĩ An', taxonomy);
+    expect(r.filters.maxPrice).toBe(2);
+  });
+
   it('đất nền Bến Cát trên 100m2 gần VSIP → type + district + minArea, residual giữ VSIP', () => {
     const r = parseSearchIntent('đất nền Bến Cát trên 100m2 gần VSIP', taxonomy);
     expect(r.filters.typeId).toBe('type-dat');

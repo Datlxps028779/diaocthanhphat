@@ -76,6 +76,13 @@ function extractPrice(queryNorm: string): { min?: number; max?: number; unit?: '
   if (under) return { max: Number(under[2]), unit: under[3] as 'ty' | 'trieu', phrase: under[0] };
   const above = queryNorm.match(/\b(tren|tu)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
   if (above) return { min: Number(above[2]), unit: above[3] as 'ty' | 'trieu', phrase: above[0] };
+  // Cụm chỉ NGÂN SÁCH ("tôi có 500 triệu", "ngân sách 2 tỷ", "tầm/khoảng/với X")
+  // → hiểu là giá trần (max). Trước đây không bắt → không lọc giá → gợi cả BĐS vượt xa túi tiền.
+  const budget = queryNorm.match(/\b(co|toi co|minh co|ngan sach|tam|khoang|voi|trong tam)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
+  if (budget) return { max: Number(budget[2]), unit: budget[3] as 'ty' | 'trieu', phrase: budget[0] };
+  // Fallback: bất kỳ "X triệu/tỷ" đứng một mình cũng coi là ngân sách trần (bối cảnh tìm/tư vấn).
+  const bare = queryNorm.match(/(\d+(?:\.\d+)?)\s*(ty|trieu)/);
+  if (bare) return { max: Number(bare[1]), unit: bare[2] as 'ty' | 'trieu', phrase: bare[0] };
   return null;
 }
 
