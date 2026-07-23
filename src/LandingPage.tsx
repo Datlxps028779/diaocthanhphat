@@ -361,7 +361,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
                   {a.image_url && (
                     <div className="relative overflow-hidden h-44 bg-gray-100">
-                      <Image src={a.image_url} alt={a.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <Image src={a.image_url} alt={a.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain group-hover:scale-105 transition-transform duration-500" />
                     </div>
                   )}
                   <div className="p-4">

@@ -1,11 +1,11 @@
-# Hướng dẫn Deploy diaocthanhphat.com
+# Hướng dẫn Deploy chonhaviet.com
 
 ## Kiến trúc hệ thống
 
 ```
 ┌─────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
 │  Frontend (Hosting) │────▶│  Supabase Backend (Cloud) │◀────│  Admin Panel        │
-│  diaocthanhphat.com │     │  tcmpswlabzeqtuwdjjfe     │     │  /quantrihethong    │
+│  chonhaviet.com │     │  tcmpswlabzeqtuwdjjfe     │     │  /quantrihethong    │
 │  HTML/CSS/JS tĩnh   │     │  Database + Auth + API    │     │  (trong Frontend)   │
 └─────────────────────┘     └──────────────────────────┘     └─────────────────────┘
 ```
@@ -67,7 +67,7 @@ npm run build
 ### 2.2. Upload lên hosting
 **Cách A: Qua File Manager (cPanel/Hostinger)**
 1. Đăng nhập cPanel/Hostinger
-2. Vào **File Manager** → `public_html` (hoặc thư mục domain `diaocthanhphat.com`)
+2. Vào **File Manager** → `public_html` (hoặc thư mục domain `chonhaviet.com`)
 3. Upload file ZIP chứa toàn bộ nội dung `deploy_ready/1_Frontend_Production/`
 4. Giải nén vào `public_html`
 
@@ -84,7 +84,7 @@ File `.htaccess` đã được include trong build, đảm bảo:
 
 ### 2.4. Cấu hình SSL/HTTPS
 1. Vào cPanel → **SSL/TLS** → **Let's Encrypt**
-2. Kích hoạt SSL cho `diaocthanhphat.com`
+2. Kích hoạt SSL cho `chonhaviet.com`
 3. Bật **Force HTTPS Redirect**
 
 ---
@@ -93,7 +93,7 @@ File `.htaccess` đã được include trong build, đảm bảo:
 
 ### 3.1. Kiểm tra frontend
 ```
-https://diaocthanhphat.com
+https://chonhaviet.com
 ```
 - Trang chủ hiển thị đúng
 - Menu điều hướng hoạt động
@@ -101,7 +101,7 @@ https://diaocthanhphat.com
 
 ### 3.2. Kiểm tra Admin Panel
 ```
-https://diaocthanhphat.com/quantrihethong
+https://chonhaviet.com/quantrihethong
 ```
 - Đăng nhập bằng tài khoản admin
 - Vào **Bất động sản** → **Thêm BĐS** hoặc **Sửa**
@@ -120,7 +120,7 @@ Nếu trả về JSON (không lỗi) → PostgREST đã nhận biết cột mớ
 ## Bước 4: Tạo tài khoản Admin
 
 ### 4.1. Đăng ký tài khoản
-1. Vào `https://diaocthanhphat.com` → **Đăng nhập** → **Đăng ký**
+1. Vào `https://chonhaviet.com` → **Đăng nhập** → **Đăng ký**
 2. Điền email, password, tên, SĐT
 3. Hoàn tất đăng ký
 
@@ -131,7 +131,7 @@ Nếu trả về JSON (không lỗi) → PostgREST đã nhận biết cột mớ
 4. Save
 
 ### 4.3. Đăng nhập admin
-1. Vào `https://diaocthanhphat.com/quantrihethong`
+1. Vào `https://chonhaviet.com/quantrihethong`
 2. Đăng nhập bằng email/password đã đăng ký
 3. Vào Admin Panel → quản lý BĐS, tin tức, dự án...
 

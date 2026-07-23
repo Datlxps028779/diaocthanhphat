@@ -74,8 +74,8 @@ function ArticleCard({
   if (large) {
     return (
       <Link href={href} className="block bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow md:flex group">
-        <div className="md:w-1/2 h-56 md:h-auto overflow-hidden flex-shrink-0">
-          <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <div className="md:w-1/2 h-56 md:h-auto overflow-hidden flex-shrink-0 bg-gray-100">
+          <img src={imgUrl} alt={article.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
         </div>
         <div className="p-6 flex flex-col justify-between md:w-1/2">
           <div>
@@ -108,8 +108,8 @@ function ArticleCard({
 
   return (
     <Link href={href} className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col group">
-      <div className="h-44 overflow-hidden">
-        <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+      <div className="h-44 overflow-hidden bg-gray-100">
+        <img src={imgUrl} alt={article.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="p-4 flex flex-col flex-1">
         {cat && (

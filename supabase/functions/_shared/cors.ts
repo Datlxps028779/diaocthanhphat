@@ -2,6 +2,8 @@
 // origin) — chỉ chấp nhận domain thật + preview Vercel. Nếu origin không khớp,
 // trả về domain production làm mặc định (không lộ, chỉ chặn trình duyệt bên thứ ba).
 const ALLOWED_ORIGINS = [
+  "https://chonhaviet.com",
+  "https://www.chonhaviet.com",
   "https://diaocthanhphat.com",
   "https://www.diaocthanhphat.com",
   "https://diaocthanhphat.vercel.app",

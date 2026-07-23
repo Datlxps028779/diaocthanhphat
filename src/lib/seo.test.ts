@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildLocalBusinessJsonLd, staticPageMetadata, buildBreadcrumbJsonLd, buildPropertyJsonLd } from './seo';
 import type { Property } from './supabase';
 
-const SITE_URL = 'https://diaocthanhphat.com';
+const SITE_URL = 'https://chonhaviet.com';
 
 function property(overrides: Partial<Property> = {}): Property {
   return {

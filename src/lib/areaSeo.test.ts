@@ -129,6 +129,6 @@ describe('buildAreaCollectionJsonLd', () => {
     expect(ld['@type']).toBe('CollectionPage');
     expect(items).toHaveLength(2);
     expect(items[0].position).toBe(1);
-    expect(items[0].url).toBe('https://diaocthanhphat.com/bat-dong-san/nha-dat-1');
+    expect(items[0].url).toBe('https://chonhaviet.com/bat-dong-san/nha-dat-1');
   });
 });
