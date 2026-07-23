@@ -1,4 +1,16 @@
 import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia } from '../supabase';
+import { buildSlug } from '../slug';
+
+// Tên file chuẩn SEO: {folder}/{slug mô tả}-{hậu tố ngắn}.{ext} thay vì rác ngẫu nhiên.
+// Ưu tiên caption (vd tiêu đề tin), else tên file gốc, else folder. Google đánh giá
+// tên file theo mức mô tả — tên có từ khoá tốt hơn "1721739600-x8f2k.jpg". Giữ hậu tố
+// ngẫu nhiên để không đụng độ (upsert:false).
+function seoFilename(file: File, folder: string, caption?: string): string {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const base = file.name.replace(/\.[^.]+$/, '');
+  const slug = buildSlug(caption?.trim() || base || folder);
+  return `${folder}/${slug}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+}
 
 // ─── Image Upload ─────────────────────────────────────────────────────────────
 // Chỉ cho phép ảnh raster an toàn. Chặn SVG/HTML — chúng có thể chứa <script> →
@@ -26,7 +38,7 @@ export async function getMaxFileSize(): Promise<number> {
 }
 
 // Upload ảnh với bucket phân tách: admin-uploads hoặc user-uploads
-export async function uploadImage(file: File, folder = 'properties', isAdmin = false): Promise<string> {
+export async function uploadImage(file: File, folder = 'properties', isAdmin = false, caption?: string): Promise<string> {
   assertSafeImage(file);
   // Kiểm tra dung lượng file
   const maxSize = await getMaxFileSize();
@@ -38,9 +50,8 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
   // Chọn bucket phù hợp
   const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
 
-  // Tạo tên file duy nhất
-  const ext = file.name.split('.').pop();
-  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  // Tên file chuẩn SEO (slug mô tả + hậu tố chống trùng)
+  const filename = seoFilename(file, folder, caption);
 
   // upsert:false — tên đã random nên không đụng độ; tránh ghi đè file người khác.
   const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
@@ -84,8 +95,7 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   const { data: { user } } = await supabase.auth.getUser();
 
   for (const file of files) {
-    const ext = file.name.split('.').pop();
-    const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const filename = seoFilename(file, folder);
     const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
     if (error) throw error;
     const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
