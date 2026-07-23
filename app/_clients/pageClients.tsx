@@ -53,11 +53,11 @@ export function RegionsClient() {
   );
 }
 
-export function NewsListClient({ initialArticles }: { initialArticles?: NewsArticle[] }) {
+export function NewsListClient({ initialArticles, initialCategory }: { initialArticles?: NewsArticle[]; initialCategory?: string }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'news' }}>
-      <NewsPage onNavigate={navigate} initialArticles={initialArticles} />
+      <NewsPage onNavigate={navigate} initialArticles={initialArticles} initialCategory={initialCategory} />
     </SiteChrome>
   );
 }

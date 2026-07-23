@@ -9,6 +9,7 @@ import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
 import { areaSummaryFromData, buildAreaCollectionJsonLd, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
+import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
   if (!schemaType) return 'WebPage';
@@ -426,6 +427,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Canonical path</label>
                 <input value={canonicalPath} onChange={e => setCanonicalPath(e.target.value)} placeholder={activePath}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                <PublicUrlPreview path={canonicalPath || activePath} />
               </div>
               <label className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-700">
                 <input type="checkbox" checked={robotsIndex} onChange={e => setRobotsIndex(e.target.checked)} className="accent-red-600" /> Index

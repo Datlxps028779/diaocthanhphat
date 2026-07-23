@@ -29,3 +29,15 @@ export function canonicalPath(path: string): string {
   }
   return path.startsWith('/') ? path : `/${path}`;
 }
+
+// URL công khai để hiển thị/mở trong admin. Ưu tiên origin trình duyệt hiện tại
+// (để nút "Mở" trỏ đúng môi trường admin đang đứng — localhost hay production),
+// fallback SITE_URL khi chạy SSR. Trả '' khi path rỗng để UI ẩn khối preview.
+export function publicBrowserUrl(path: string): string {
+  if (!path) return '';
+  const p = canonicalPath(path);
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${p}`;
+  }
+  return absoluteUrl(p);
+}

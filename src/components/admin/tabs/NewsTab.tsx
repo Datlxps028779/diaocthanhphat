@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload } from 'lucide-react';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
 import { generateArticleAI } from '../../../lib/api/articleGen';
@@ -10,6 +10,7 @@ import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFie
 import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { autofillNewsFaq, autofillNewsGeo } from '../../../lib/newsAutofill';
 import { RichTextEditor } from '../shared/RichTextEditor';
+import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
@@ -197,6 +198,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   };
 
   const resolvedSlug = form.slug.trim() || newsSlug(form.title);
+  const publicPath = resolvedSlug ? `/tin-tuc/${resolvedSlug}` : '';
   const schemaState = parseSeoSchema(form.schema_markup, 'news');
   const readiness = evaluateNewsReadiness({
     title: form.title,
@@ -310,6 +312,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               <label className="mb-1 block text-xs font-semibold text-gray-700">Slug URL</label>
               <input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="Để trống sẽ tự sinh"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <PublicUrlPreview path={publicPath} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-700">Danh mục</label>
@@ -784,6 +787,12 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                       {a.image_url && <img src={a.image_url} alt="" className="w-12 h-9 object-cover rounded-lg flex-shrink-0" />}
                       <div>
                         <p className="font-medium text-gray-900 text-sm line-clamp-1 max-w-xs">{a.title}</p>
+                        <a href={`/tin-tuc/${a.slug || a.id}`} target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-red-600 hover:text-red-700 hover:underline max-w-xs truncate">
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">/tin-tuc/{a.slug || a.id}</span>
+                        </a>
                         <div className="mt-1 flex flex-wrap gap-1">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                             {a.is_published ? 'Đã đăng' : 'Nháp'}

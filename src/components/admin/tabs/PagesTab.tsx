@@ -2,12 +2,21 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle, Save, ArrowDown, FileText } from 'lucide-react';
 import type { ManagedPage, PageBlock } from '../../../lib/supabase';
 import { adminGetAllManagedPages, adminCreateManagedPage, adminUpdateManagedPage, adminDeleteManagedPage, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock } from '../../../lib/api';
+import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 
 // ─── Pages Tab ────────────────────────────────────────────────────────────────
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
   text: 'Văn bản ngắn', textarea: 'Đoạn văn', image: 'URL ảnh',
   number: 'Số', color: 'Màu', list: 'Danh sách (mỗi dòng 1 mục)',
+};
+
+// Map slug trang quản lý → route công khai tĩnh (khớp pageToHref trong router.ts).
+const PAGE_PUBLIC_PATH: Record<string, string> = {
+  about: '/ve-chung-toi',
+  invest: '/dau-tu',
+  regions: '/khu-vuc',
+  news: '/tin-tuc',
 };
 
 const SECTION_LABELS: Record<string, Record<string, string>> = {
@@ -176,9 +185,10 @@ function PageContentEditor({ page, onBack }: { page: ManagedPage; onBack: () => 
         <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
           <ArrowDown className="w-4 h-4 rotate-90" />
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="text-lg font-black text-gray-900">{page.title}</h2>
           <p className="text-gray-500 text-xs">Chỉnh sửa toàn bộ nội dung trang — thay đổi được lưu ngay lập tức</p>
+          {PAGE_PUBLIC_PATH[page.slug] && <PublicUrlPreview path={PAGE_PUBLIC_PATH[page.slug]} />}
         </div>
         <div className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${page.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
           {page.is_active ? 'Đang hiển thị' : 'Ẩn'}

@@ -11,6 +11,7 @@ import { formToProperty } from '../../../lib/listingForm';
 import { LocationPicker, type GeocodeTarget } from '../../LocationPicker';
 import { PropertyDetailPage } from '../../../screens/PropertyDetailPage';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
 
@@ -877,6 +878,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                     className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1">Để trống sẽ tự tạo từ tiêu đề (kèm mã ngắn đảm bảo duy nhất). URL: /bat-dong-san/{form.slug || (generateSlug(form.title) ? generateSlug(form.title) + '-xxxx' : 'slug')}</p>
+                <PublicUrlPreview path={(form.slug || property?.slug || property?.id) ? `/bat-dong-san/${form.slug || property?.slug || property?.id}` : ''} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>

@@ -77,7 +77,10 @@ export function pageToHref(page: Page): string {
     case 'home': return '/';
     case 'property': return `/bat-dong-san/${(page.slug && page.slug.trim()) || page.id}`;
     case 'news':
-      return page.slug ? `/tin-tuc/${page.slug}` : (page.articleId ? `/tin-tuc/${page.articleId}` : '/tin-tuc');
+      if (page.slug) return `/tin-tuc/${page.slug}`;
+      if (page.articleId) return `/tin-tuc/${page.articleId}`;
+      if (page.category && page.category !== 'Tất cả') return `/tin-tuc?category=${encodeURIComponent(page.category)}`;
+      return '/tin-tuc';
     case 'listings': {
       const base = page.listingType === 'mua_ban' ? '/mua-ban'
         : page.listingType === 'cho_thue' ? '/cho-thue'

@@ -21,15 +21,17 @@ export async function generateMetadata() {
 }
 export const revalidate = 1800;
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams?: { category?: string | string[] } }) {
   const [{ jsonLd }, articles] = await Promise.all([
     loadRouteSeo(PATH, fallback),
     serverGetNews(),
   ]);
+  const rawCat = searchParams?.category;
+  const initialCategory = (Array.isArray(rawCat) ? rawCat[0] : rawCat) || undefined;
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <NewsListClient initialArticles={articles} />
+      <NewsListClient initialArticles={articles} initialCategory={initialCategory} />
     </>
   );
 }

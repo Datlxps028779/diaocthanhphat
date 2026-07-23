@@ -327,8 +327,8 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles }: { onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[] }) {
-  const [category, setCategory] = useState('Tất cả');
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[]; initialCategory?: string }) {
+  const [category, setCategory] = useState(initialCategory && CATEGORIES.includes(initialCategory) ? initialCategory : 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
@@ -440,8 +440,9 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
       <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-2">
           {CATEGORIES.map((cat) => (
-            <button
+            <Link
               key={cat}
+              href={pageToHref({ name: 'news', category: cat })}
               onClick={() => setCategory(cat)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 category === cat
@@ -450,7 +451,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
               }`}
             >
               {cat}
-            </button>
+            </Link>
           ))}
         </div>
       </div>
