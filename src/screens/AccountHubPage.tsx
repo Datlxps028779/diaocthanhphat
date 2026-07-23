@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, Bell, BellOff, Search as SearchIcon } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
@@ -33,6 +33,26 @@ const TABS: { id: AccountHubTab; label: string; icon: React.ReactNode }[] = [
 // /tin-cua-toi mở tab 'listings', /tai-khoan mở tab 'favorites' (qua initialTab).
 export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountHubPageProps) {
   const [tab, setTab] = useState<AccountHubTab>(initialTab);
+  // Route /tin-cua-toi & /tai-khoan là static nên không đọc searchParams ở server —
+  // seed tab từ ?tab= phía client sau khi mount (tránh lệch hydration). seeded chặn
+  // effect ghi URL chạy trước khi seed xong (khỏi ghi đè ?tab= thật bằng tab mặc định).
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const t = new URLSearchParams(window.location.search).get('tab');
+      if (t && TABS.some(x => x.id === t)) setTab(t as AccountHubTab);
+    }
+    setSeeded(true);
+  }, []);
+  useEffect(() => {
+    if (!seeded || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', tab);
+    const next = `${window.location.pathname}?${params.toString()}`;
+    if (window.location.pathname + window.location.search !== next) {
+      window.history.replaceState(null, '', next);
+    }
+  }, [tab, seeded]);
 
   return (
     <div className="min-h-screen bg-gray-50">

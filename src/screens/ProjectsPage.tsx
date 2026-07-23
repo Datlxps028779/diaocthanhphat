@@ -138,8 +138,8 @@ function ProjectCard({
   );
 }
 
-export function ProjectsPage({ onNavigate, initialPhase }: { onNavigate: (p: Page) => void; initialPhase?: string }) {
-  const [selectedArea, setSelectedArea] = useState<string>('all');
+export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavigate: (p: Page) => void; initialPhase?: string; initialArea?: string }) {
+  const [selectedArea, setSelectedArea] = useState<string>(initialArea ?? 'all');
   const [selectedPhase, setSelectedPhase] = useState<string>(initialPhase ?? 'Tất cả');
   const [contactProject, setContactProject] = useState<Project | null>(null);
   const phone = useSetting('phone_hotline', '0901 234 567');
@@ -154,6 +154,19 @@ export function ProjectsPage({ onNavigate, initialPhase }: { onNavigate: (p: Pag
   useEffect(() => {
     scrollTop();
   }, []);
+
+  // Đồng bộ khu vực/giai đoạn → URL (?area=<slug>&phase=<label>) qua replaceState,
+  // không router.push → không refetch route. F5/chia sẻ link giữ đúng bộ lọc.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const href = pageToHref({
+      name: 'projects',
+      areaId: selectedArea !== 'all' ? selectedArea : undefined,
+      phase: selectedPhase !== 'Tất cả' ? selectedPhase : undefined,
+    });
+    const current = window.location.pathname + window.location.search;
+    if (current !== href) window.history.replaceState(null, '', href);
+  }, [selectedArea, selectedPhase]);
 
   const filtered = projects.filter((p) => {
     const phase = p.phase ?? 'Đang mở bán';

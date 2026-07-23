@@ -30,15 +30,17 @@ import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
-export function Breadcrumb({ items }: { items: { label: string; onClick?: () => void }[] }) {
+export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
     <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-4 flex-wrap">
       {items.map((item, i) => (
         <span key={i} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-gray-300">/</span>}
-          {item.onClick
-            ? <button onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</button>
-            : <span className="text-gray-800 font-medium">{item.label}</span>}
+          {item.href
+            ? <Link href={item.href} onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</Link>
+            : item.onClick
+              ? <button onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</button>
+              : <span className="text-gray-800 font-medium">{item.label}</span>}
         </span>
       ))}
     </nav>
@@ -193,13 +195,13 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   legal: g(`cat${i}_legal`, ''),
                 };
                 return (
-                  <button key={i} onClick={() => onNavigate(quickCategoryToPage(cfg))}
+                  <Link key={i} href={pageToHref(quickCategoryToPage(cfg))}
                     className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-red-400 hover:bg-red-50 transition-all group">
                     <div className="w-10 h-10 bg-red-50 group-hover:bg-red-100 rounded-full flex items-center justify-center text-red-600 transition-colors">
                       <CategoryIcon name={iconName} className="w-5 h-5" />
                     </div>
                     <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{label}</span>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -223,10 +225,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                     <h2 className="inline-block text-xl font-black text-gray-900">{section.title}</h2>
                     {section.subtitle && <p className="text-gray-500 text-sm mt-1">{section.subtitle}</p>}
                   </div>
-                  <button onClick={() => goListings(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {})}
+                  <Link href={pageToHref({ name: 'listings', ...(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {}) })}
                     className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
                     Xem tất cả<ChevronRight className="w-4 h-4" />
-                  </button>
+                  </Link>
                 </div>
                 {section.display_style === 'horizontal' ? (
                   <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
@@ -272,7 +274,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 const slug = sec('region_banners')(`region${r.n}_slug`, r.dslug);
                 const area = areas.find(a => a.name.toLowerCase().includes(title.toLowerCase().slice(0, 6)) || a.slug?.includes(slug));
                 return (
-                  <button key={r.n} onClick={() => area ? goListings({ areaId: area.id }) : goListings()} className="relative rounded-2xl overflow-hidden h-44 group text-left w-full">
+                  <Link key={r.n} href={pageToHref({ name: 'listings', ...(area ? { areaId: area.id } : {}) })} className="relative rounded-2xl overflow-hidden h-44 group text-left w-full block">
                     <Image src={img} alt={title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className={`absolute inset-0 bg-gradient-to-t ${r.color} opacity-75 group-hover:opacity-85 transition-opacity`} />
                     <div className="absolute inset-0 p-5 flex flex-col justify-end">
@@ -281,7 +283,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       <p className="text-white/90 text-xs font-semibold">{subtitle}</p>
                       <p className="text-white/70 text-[11px] mt-0.5">{desc}</p>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </div>

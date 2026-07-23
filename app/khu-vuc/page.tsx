@@ -22,15 +22,16 @@ export async function generateMetadata() {
 }
 export const revalidate = 1800;
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const [{ jsonLd }, areas] = await Promise.all([
     loadRouteSeo(PATH, fallback),
     serverGetAreas(),
   ]);
+  const areaParam = Array.isArray(searchParams?.area) ? searchParams?.area[0] : searchParams?.area;
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <RegionsClient />
+      <RegionsClient initialAreaId={areaParam} />
       {areas.length > 0 && (
         <section className="bg-white border-t border-gray-100">
           <div className="max-w-7xl mx-auto px-4 py-8">

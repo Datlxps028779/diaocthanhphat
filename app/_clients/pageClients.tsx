@@ -15,7 +15,7 @@ import type { Property, NewsArticle } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
-  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number };
+  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number };
   initialData?: { data: Property[]; total: number };
 }) {
   const navigate = useNavigate();
@@ -26,11 +26,11 @@ export function ListingsClient({ listingType, filters, initialData }: {
   );
 }
 
-export function ProjectsClient() {
+export function ProjectsClient({ initialArea, initialPhase }: { initialArea?: string; initialPhase?: string } = {}) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'projects' }}>
-      <ProjectsPage onNavigate={navigate} />
+      <ProjectsPage onNavigate={navigate} initialArea={initialArea} initialPhase={initialPhase} />
     </SiteChrome>
   );
 }
@@ -44,11 +44,11 @@ export function InvestClient() {
   );
 }
 
-export function RegionsClient() {
+export function RegionsClient({ initialAreaId }: { initialAreaId?: string } = {}) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'regions' }}>
-      <RegionsPage onNavigate={navigate} />
+      <RegionsPage onNavigate={navigate} initialAreaId={initialAreaId} />
     </SiteChrome>
   );
 }

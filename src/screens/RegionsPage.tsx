@@ -141,6 +141,15 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
     }
   }, [initialAreaId, areas]);
 
+  // Đồng bộ khu vực đang xem chi tiết → URL (?area=<slug>) qua replaceState, không
+  // router.push → không refetch route. F5/chia sẻ link giữ đúng khu vực đang mở.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const next = selectedArea ? `/khu-vuc?area=${encodeURIComponent(selectedArea.slug)}` : '/khu-vuc';
+    const current = window.location.pathname + window.location.search;
+    if (current !== next) window.history.replaceState(null, '', next);
+  }, [selectedArea]);
+
   const mapProps = selectedArea
     ? allMapProps.filter(p => p.area_id === selectedArea.id)
     : allMapProps;

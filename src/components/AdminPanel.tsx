@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
+import { ADMIN_PATH } from '../lib/router';
 import { SlaBell } from './admin/shared/SlaBell';
 import { ChatOpsBell } from './admin/shared/ChatOpsBell';
 
@@ -34,21 +35,45 @@ const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ def
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
 export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
-  const allowedTabs = visibleTabs(role);
+  // Memo hoá theo role → tham chiếu ổn định cho dep của effect popstate bên dưới.
+  const allowedTabs = useMemo(() => visibleTabs(role), [role]);
   // Tab mặc định: initialTab nếu hợp quyền, else tab đầu tiên staff/admin được thấy.
   const defaultTab: AdminTab = (initialTab && allowedTabs.includes(initialTab as AdminTab))
     ? (initialTab as AdminTab)
     : (allowedTabs[0] ?? 'dashboard');
   const [tab, setTabRaw] = useState<AdminTab>(defaultTab);
+  // Đồng bộ URL theo tab qua history API (KHÔNG router.push để tránh remount panel
+  // + kiểm tra role lại). F5/chia sẻ link giữ đúng mục. mode='push' tạo mục lịch sử
+  // để nút Back lùi tab-qua-tab; mode='replace' cho lần chuẩn hoá URL khi mở.
+  const syncTabUrl = (t: AdminTab, mode: 'push' | 'replace' = 'push') => {
+    if (typeof window === 'undefined') return;
+    const next = `${ADMIN_PATH}/${t}`;
+    if (window.location.pathname === next) return;
+    if (mode === 'push') window.history.pushState(null, '', next);
+    else window.history.replaceState(null, '', next);
+  };
   // Chặn chuyển sang tab ngoài quyền (staff gõ tay / initialTab lạ).
-  const setTab = (t: AdminTab) => { if (allowedTabs.includes(t)) setTabRaw(t); };
+  const setTab = (t: AdminTab) => { if (allowedTabs.includes(t)) { setTabRaw(t); syncTabUrl(t); } };
   // Điều hướng "sửa item X ở tab Y" từ nơi khác (vd Entity Audit trong SeoGeoTab).
   const [pendingEdit, setPendingEdit] = useState<{ tab: AdminTab; id: string } | null>(null);
   const editEntity = (target: AdminTab, id: string) => {
     if (!allowedTabs.includes(target)) return;
     setPendingEdit({ tab: target, id });
     setTabRaw(target);
+    syncTabUrl(target);
   };
+  // Chuẩn hoá URL ngay khi mở panel (vd vào /quantrihethong trần → /quantrihethong/{defaultTab}).
+  useEffect(() => { syncTabUrl(defaultTab, 'replace'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Nút Back/Forward của trình duyệt: đọc lại tab từ URL, không đổi URL (tránh vòng lặp).
+  useEffect(() => {
+    const onPop = () => {
+      if (typeof window === 'undefined') return;
+      const seg = window.location.pathname.replace(`${ADMIN_PATH}/`, '').split('/')[0];
+      if (seg && allowedTabs.includes(seg as AdminTab)) setTabRaw(seg as AdminTab);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [allowedTabs]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0, activeProperties: 0, featuredProperties: 0, hotProperties: 0,

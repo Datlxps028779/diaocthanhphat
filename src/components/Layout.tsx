@@ -48,7 +48,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   };
 
   const closeMenus = () => { setMobileOpen(false); setUserMenuOpen(false); setDesktopMenuOpen(null); };
-  const go = (page: Page) => { onNavigate(page); closeMenus(); };
+  void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const hrefFor = (item: NavigationItem) => item.href ?? (item.page ? pageToHref(item.page) : '#');
 
   return (
@@ -66,7 +66,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
-        <button onClick={() => go({ name: 'home' })} className="flex items-center gap-2.5 flex-shrink-0">
+        <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
           <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
             <Home className="w-5 h-5 text-white" />
           </div>
@@ -74,7 +74,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             <div className="text-red-600 font-black text-sm tracking-tight">{siteName}</div>
             <div className="text-gray-400 text-[9px] tracking-wider uppercase">{siteSub}</div>
           </div>
-        </button>
+        </Link>
 
         <nav className="hidden xl:flex items-center gap-0.5 flex-1 justify-center">
           {navItems.map(item => item.children ? (
@@ -96,11 +96,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                 </div>
               )}
             </div>
-          ) : item.page ? (
-            <button key={item.key} onClick={() => go(item.page!)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
-              {item.label}
-            </button>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
               className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
@@ -122,14 +117,14 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               </button>
               {userMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 min-w-[180px]">
-                  <button onClick={() => go({ name: 'my-listings' })}
+                  <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus}
                     className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                     <User className="w-4 h-4 text-gray-400" />Tin đăng của tôi
-                  </button>
-                  <button onClick={() => go({ name: 'post-listing' })}
+                  </Link>
+                  <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
                     className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                     <Tag className="w-4 h-4 text-gray-400" />Đăng tin mới
-                  </button>
+                  </Link>
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button onClick={onLogout}
                       className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
@@ -152,10 +147,10 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </>
           )}
           {user && (
-            <button onClick={() => go({ name: 'post-listing' })}
+            <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
               className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors flex items-center gap-1">
               <Plus className="w-3.5 h-3.5" />Đăng tin
-            </button>
+            </Link>
           )}
         </div>
 
@@ -183,11 +178,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                 </div>
               )}
             </div>
-          ) : item.page ? (
-            <button key={item.key} onClick={() => go(item.page!)}
-              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
-              {item.label}
-            </button>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
               className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
@@ -197,8 +187,8 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             {user ? (
               <>
-                <button onClick={() => go({ name: 'my-listings' })} className="flex-1 border border-red-500 text-red-600 text-xs font-semibold py-2 rounded-lg">Tin của tôi</button>
-                <button onClick={() => go({ name: 'post-listing' })} className="flex-1 bg-red-600 text-white text-xs font-semibold py-2 rounded-lg">Đăng tin</button>
+                <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus} className="flex-1 border border-red-500 text-red-600 text-xs font-semibold py-2 rounded-lg text-center">Tin của tôi</Link>
+                <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus} className="flex-1 bg-red-600 text-white text-xs font-semibold py-2 rounded-lg text-center">Đăng tin</Link>
               </>
             ) : (
               <>
@@ -221,7 +211,7 @@ interface FooterProps {
 }
 
 export function Footer({ areas, onNavigate }: FooterProps) {
-  const go = (page: Page) => { onNavigate(page); scrollTop(); };
+  void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const footer = useContent('footer');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const phone = useSetting('phone_main', '0901 234 567');
@@ -264,7 +254,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
           <ul className="grid grid-cols-1 gap-1.5">
             {links.map(({ label, page }) => (
               <li key={label}>
-                <button onClick={() => go(page)} className="text-gray-400 hover:text-red-400 text-xs transition-colors">{label}</button>
+                <Link href={pageToHref(page)} onClick={() => scrollTop()} className="text-gray-400 hover:text-red-400 text-xs transition-colors">{label}</Link>
               </li>
             ))}
           </ul>
@@ -318,15 +308,17 @@ export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void
   );
 }
 
-export function Breadcrumb({ items }: { items: { label: string; onClick?: () => void }[] }) {
+export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
     <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-4 flex-wrap">
       {items.map((item, i) => (
         <span key={i} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-gray-300">/</span>}
-          {item.onClick
-            ? <button onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</button>
-            : <span className="text-gray-800 font-medium">{item.label}</span>}
+          {item.href
+            ? <Link href={item.href} onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</Link>
+            : item.onClick
+              ? <button onClick={item.onClick} className="hover:text-red-600 transition-colors">{item.label}</button>
+              : <span className="text-gray-800 font-medium">{item.label}</span>}
         </span>
       ))}
     </nav>

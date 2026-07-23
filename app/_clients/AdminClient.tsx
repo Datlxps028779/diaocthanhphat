@@ -15,7 +15,7 @@ const Spinner = ({ dark }: { dark?: boolean }) => (
   </div>
 );
 
-export function AdminClient() {
+export function AdminClient({ initialTab }: { initialTab?: string } = {}) {
   const { user, loading: authLoading } = useAuth();
   const [role, setRole] = useState<Role | null>(null);
   const [roleChecked, setRoleChecked] = useState(false);
@@ -39,7 +39,7 @@ export function AdminClient() {
   void entered;
   return (
     <Suspense fallback={<Spinner dark />}>
-      <AdminPanel role={role!} onLogout={async () => { await supabase.auth.signOut(); }} />
+      <AdminPanel role={role!} initialTab={initialTab} onLogout={async () => { await supabase.auth.signOut(); }} />
     </Suspense>
   );
 }

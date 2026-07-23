@@ -6,7 +6,7 @@ export type Page =
       areaId?: string; typeId?: string; district?: string; ward?: string; keyword?: string;
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
-      isFeatured?: boolean; isHot?: boolean; sort?: string;
+      isFeatured?: boolean; isHot?: boolean; sort?: string; page?: number;
     }
   | { name: 'property'; id: string; slug?: string }
   | { name: 'projects'; areaId?: string; phase?: string }
@@ -32,7 +32,7 @@ export const ADMIN_PATH = '/quantrihethong';
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
   const num = (v: string | string[] | undefined) => {
     const s = first(v);
@@ -40,7 +40,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
     const n = Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
-  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string } = {};
+  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number } = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
   const district = first(sp?.district);
@@ -54,6 +54,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   const maxArea = num(sp?.maxArea);
   const bedrooms = first(sp?.bedrooms);
   const direction = first(sp?.direction);
+  const page = num(sp?.page);
   if (area) out.areaId = area;
   if (type) out.typeId = type;
   if (district) out.district = district;
@@ -67,6 +68,18 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   if (maxArea != null) out.maxArea = maxArea;
   if (bedrooms) out.bedrooms = bedrooms;
   if (direction) out.direction = direction;
+  if (page != null && page > 1) out.page = page;
+  return out;
+}
+
+// Chiều nghịch của phần 'projects' trong pageToHref: ?area=<slug>&phase=<label>.
+export function parseProjectParams(sp: RawSearchParams): { area?: string; phase?: string } {
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
+  const out: { area?: string; phase?: string } = {};
+  const area = first(sp?.area);
+  const phase = first(sp?.phase);
+  if (area) out.area = area;
+  if (phase) out.phase = phase;
   return out;
 }
 
@@ -99,10 +112,17 @@ export function pageToHref(page: Page): string {
       if (page.maxArea != null) q.set('maxArea', String(page.maxArea));
       if (page.bedrooms) q.set('bedrooms', page.bedrooms);
       if (page.direction) q.set('direction', page.direction);
+      if (page.page != null && page.page > 1) q.set('page', String(page.page));
       const qs = q.toString();
       return qs ? `${base}?${qs}` : base;
     }
-    case 'projects': return '/du-an';
+    case 'projects': {
+      const q = new URLSearchParams();
+      if (page.areaId) q.set('area', page.areaId);
+      if (page.phase) q.set('phase', page.phase);
+      const qs = q.toString();
+      return qs ? `/du-an?${qs}` : '/du-an';
+    }
     case 'invest': return '/dau-tu';
     case 'regions': return '/khu-vuc';
     case 'about': return '/ve-chung-toi';

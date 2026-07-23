@@ -18,7 +18,7 @@ import { CompareButton } from '../components/CompareButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
-import { type Page, scrollTop } from '../lib/router';
+import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -32,7 +32,7 @@ interface ListingsPageProps {
     listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
     minPrice: number; maxPrice: number; minArea: number; maxArea: number;
     bedrooms: string; direction: string; legal: string;
-    isFeatured: boolean; isHot: boolean; sort: PropertySort;
+    isFeatured: boolean; isHot: boolean; sort: PropertySort; page: number;
   }>;
   // Dữ liệu SSR seed sẵn cho view mặc định → crawler thấy list ngay trong HTML gốc.
   initialData?: { data: Property[]; total: number };
@@ -91,7 +91,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [legal, setLegal] = useState(initialFilters?.legal ?? '');
   const [sort, setSort] = useState<PropertySort>((initialFilters?.sort as PropertySort) ?? 'newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialFilters?.page ?? 1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
@@ -229,6 +229,34 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       pushTasteSignal('search', attrs).catch(() => {});
     }
   }, [filters.areaId, filters.typeId, filters.listingType]);
+
+  // Đồng bộ bộ lọc → URL một chiều qua replaceState (KHÔNG router.push → không refetch
+  // route/scroll). F5 hoặc chia sẻ link giữ nguyên trạng thái lọc. Dùng debouncedKeyword
+  // để không đổi URL mỗi lần gõ phím. price/area lưu dạng index nên phát ra min/max thật.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const href = pageToHref({
+      name: 'listings',
+      listingType: listingType || undefined,
+      areaId: areaId || undefined,
+      typeId: typeId || undefined,
+      district: district || undefined,
+      ward: ward || undefined,
+      keyword: debouncedKeyword.trim() || undefined,
+      minPrice: priceIdx > 0 ? pr.min : undefined,
+      maxPrice: priceIdx > 0 ? pr.max : undefined,
+      minArea: areaIdx > 0 ? ar.min : undefined,
+      maxArea: areaIdx > 0 ? ar.max : undefined,
+      bedrooms: bedrooms || undefined,
+      direction: direction || undefined,
+      legal: legal || undefined,
+      sort: sort !== 'newest' ? (sort as string) : undefined,
+      page: page > 1 ? page : undefined,
+    });
+    const current = window.location.pathname + window.location.search;
+    if (current !== href) window.history.replaceState(null, '', href);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max]);
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({

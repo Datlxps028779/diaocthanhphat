@@ -1,4 +1,5 @@
 import { ProjectsClient } from '../_clients/pageClients';
+import { parseProjectParams } from '@/lib/router';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
 
@@ -20,12 +21,13 @@ export async function generateMetadata() {
 }
 export const revalidate = 1800;
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const { jsonLd } = await loadRouteSeo(PATH, fallback);
+  const { area, phase } = parseProjectParams(searchParams);
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <ProjectsClient />
+      <ProjectsClient initialArea={area} initialPhase={phase} />
     </>
   );
 }
