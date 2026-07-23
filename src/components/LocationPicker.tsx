@@ -129,20 +129,42 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
   }, [lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // geocodeTarget đổi (nonce mới) → geocode chuỗi rồi flyTo với zoom yêu cầu.
+  // Nominatim geocode rất kém với địa chỉ đường phố chi tiết ở VN (số nhà + tên
+  // đường thường trả 0 kết quả). Nên thử query đầy đủ trước; nếu rỗng, bỏ dần token
+  // cụ thể nhất (đầu chuỗi: số nhà/đường → phường → quận) lùi về mức tìm được, và
+  // zoom xa dần cho khớp độ chính xác thực. Cách nhau ~500ms để tôn trọng rate-limit.
   useEffect(() => {
     if (!geocodeTarget || !geocodeTarget.query) return;
     if (geocodeTarget.nonce === lastNonceRef.current) return;
     lastNonceRef.current = geocodeTarget.nonce;
     const map = mapRef.current;
     if (!map) return;
-    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geocodeTarget.query + ', Vietnam')}&format=json&limit=1`)
-      .then(r => r.json())
-      .then((results: Array<{ lat: string; lon: string }>) => {
-        if (results.length > 0 && mapRef.current) {
-          mapRef.current.flyTo([parseFloat(results[0].lat), parseFloat(results[0].lon)], geocodeTarget.zoom, { duration: 1.2 });
+
+    const parts = geocodeTarget.query.split(',').map(s => s.trim()).filter(Boolean);
+    let cancelled = false;
+
+    const tryGeocode = async (tokens: string[]): Promise<void> => {
+      if (cancelled || tokens.length === 0 || !mapRef.current) return;
+      const q = `${tokens.join(', ')}, Vietnam`;
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`);
+        const results: Array<{ lat: string; lon: string }> = await r.json();
+        if (cancelled || !mapRef.current) return;
+        if (results.length > 0) {
+          const dropped = parts.length - tokens.length;
+          const zoom = dropped === 0 ? geocodeTarget.zoom : Math.max(geocodeTarget.zoom - dropped, 12);
+          mapRef.current.flyTo([parseFloat(results[0].lat), parseFloat(results[0].lon)], zoom, { duration: 1.2 });
+          return;
         }
-      })
-      .catch(() => {});
+      } catch { /* bỏ qua, thử token thô hơn */ }
+      if (tokens.length > 1) {
+        await new Promise(res => setTimeout(res, 500));
+        await tryGeocode(tokens.slice(1));
+      }
+    };
+
+    tryGeocode(parts);
+    return () => { cancelled = true; };
   }, [geocodeTarget]);
 
   return (
