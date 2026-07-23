@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Upload, Trash2, Image as ImageIcon, Search, FolderOpen, HardDrive, AlertCircle } from 'lucide-react';
-import { getUserMedia, deleteUserMedia, getUserMediaUsage, uploadImages } from '../lib/api';
+import { X, Upload, Trash2, Image as ImageIcon, Search, FolderOpen, HardDrive, AlertCircle, FolderPlus } from 'lucide-react';
+import { getUserMedia, deleteUserMedia, getUserMediaUsage, uploadImages, listMediaFolders } from '../lib/api';
+import { buildSlug } from '../lib/slug';
 import { type UserMedia } from '../lib/supabase';
 
 interface ImageLibraryModalProps {
@@ -23,33 +24,57 @@ export function ImageLibraryModal({ open, onClose, onSelect, onSelectMany, folde
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'upload'>('library');
   const [error, setError] = useState('');
+  // Thư mục đang xem/upload. Khởi tạo theo prop folder; đổi khi user chọn thư mục khác.
+  const [currentFolder, setCurrentFolder] = useState(folder);
+  const [folders, setFolders] = useState<string[]>([]);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolder, setNewFolder] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [data, usageData] = await Promise.all([
-        getUserMedia(folder),
+      const [data, usageData, folderList] = await Promise.all([
+        getUserMedia(currentFolder),
         getUserMediaUsage(),
+        listMediaFolders(),
       ]);
       setMedias(data);
       setUsage(usageData);
+      // Gộp thư mục hiện có + thư mục đang chọn (kể cả khi chưa có ảnh nào).
+      setFolders(Array.from(new Set([currentFolder, ...folderList])).filter(Boolean).sort());
     } catch {
       setMedias([]);
       setError('Không tải được thư viện ảnh. Vui lòng thử lại.');
     }
     setLoading(false);
-  }, [folder]);
+  }, [currentFolder]);
 
   useEffect(() => {
     if (open) {
-      load();
+      setCurrentFolder(folder);
       setSelectedUrls(new Set());
       setSearch('');
       setView('library');
       setError('');
+      setCreatingFolder(false);
+      setNewFolder('');
     }
+  }, [open, folder]);
+
+  useEffect(() => {
+    if (open) load();
   }, [open, load]);
+
+  const handleCreateFolder = () => {
+    const slug = buildSlug(newFolder);
+    if (!slug || slug === 'bat-dong-san') { setNewFolder(''); setCreatingFolder(false); return; }
+    setFolders(prev => Array.from(new Set([slug, ...prev])).sort());
+    setCurrentFolder(slug);
+    setNewFolder('');
+    setCreatingFolder(false);
+    setView('upload'); // thư mục mới trống → mở luôn tải lên
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -57,7 +82,7 @@ export function ImageLibraryModal({ open, onClose, onSelect, onSelectMany, folde
     setUploading(true);
     setError('');
     try {
-      const urls = await uploadImages(Array.from(files), folder, isAdmin);
+      const urls = await uploadImages(Array.from(files), currentFolder, isAdmin);
       if (urls.length > 0) {
         if (multiple) (onSelectMany ?? ((selected: string[]) => selected.forEach(onSelect)))(urls);
         else onSelect(urls[0]);
@@ -147,6 +172,39 @@ export function ImageLibraryModal({ open, onClose, onSelect, onSelectMany, folde
               <div className="h-full bg-red-400 rounded-full transition-all" style={{ width: `${Math.min(usagePercent, 100)}%` }} />
             </div>
           </div>
+        </div>
+
+        {/* Thanh thư mục: chọn thư mục để lọc/upload + tạo thư mục mới */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50/60 flex-wrap">
+          <FolderOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <select
+            value={currentFolder}
+            onChange={e => setCurrentFolder(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-400 max-w-[200px]"
+          >
+            {folders.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+          {creatingFolder ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={newFolder}
+                onChange={e => setNewFolder(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setCreatingFolder(false); setNewFolder(''); } }}
+                placeholder="Tên thư mục..."
+                className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-red-400 w-40"
+              />
+              <button onClick={handleCreateFolder} className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors">Tạo</button>
+              <button onClick={() => { setCreatingFolder(false); setNewFolder(''); }} className="px-2 py-1.5 text-gray-500 text-xs hover:text-gray-800">Hủy</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCreatingFolder(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 border border-gray-200 bg-white hover:border-red-400 hover:text-red-600 text-gray-600 text-xs font-medium rounded-lg transition-colors"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />Tạo thư mục
+            </button>
+          )}
         </div>
 
         {/* Toolbar */}

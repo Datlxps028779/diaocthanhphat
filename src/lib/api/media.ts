@@ -214,6 +214,24 @@ export async function getUserMedia(folder?: string): Promise<UserMedia[]> {
   return (data ?? []) as UserMedia[];
 }
 
+// Liệt kê các thư mục ảnh (giá trị folder phân biệt). Admin thấy mọi thư mục, user
+// thường chỉ thấy của mình. Thư mục là nhãn chuỗi trên user_media — "tạo thư mục" chỉ
+// là chọn nhãn mới để upload vào, thư mục hiện diện khi có ảnh đầu tiên.
+export async function listMediaFolders(): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const isAdmin = (profile as { role: string } | null)?.role === 'admin';
+  let q = supabase.from('user_media').select('folder');
+  if (!isAdmin) q = q.eq('user_id', user.id);
+  const { data } = await q;
+  const set = new Set<string>();
+  for (const row of (data ?? []) as { folder: string | null }[]) {
+    if (row.folder?.trim()) set.add(row.folder.trim());
+  }
+  return Array.from(set).sort();
+}
+
 // Xóa ảnh khỏi storage + xóa record metadata
 export async function deleteUserMedia(id: string): Promise<void> {
   const { data: media, error: fetchErr } = await supabase
