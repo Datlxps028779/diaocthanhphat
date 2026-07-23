@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 import { getSiteUrl } from '@/lib/siteUrl';
+import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 
 const SITE_URL = getSiteUrl();
 
@@ -20,6 +21,11 @@ const STATIC: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/dinh-gia`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/so-sanh`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/tin-tuc`, changeFrequency: 'daily', priority: 0.7 },
+  ...NEWS_CATEGORY_SLUGS.map((slug) => ({
+    url: `${SITE_URL}/tin-tuc/danh-muc/${slug}`,
+    changeFrequency: 'weekly' as const,
+    priority: 0.55,
+  })),
   { url: `${SITE_URL}/ve-chung-toi`, changeFrequency: 'monthly', priority: 0.5 },
 ];
 

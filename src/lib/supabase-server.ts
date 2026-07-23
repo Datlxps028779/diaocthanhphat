@@ -124,12 +124,14 @@ export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArt
   return data as NewsArticle | null;
 }
 
-export async function serverGetNews(limit = 20): Promise<NewsArticle[]> {
+export async function serverGetNews(limit = 20, category?: string): Promise<NewsArticle[]> {
   const sb = serverClient();
-  const { data } = await sb
+  let q = sb
     .from('news').select('*')
     .eq('is_published', true)
     .order('created_at', { ascending: false }).limit(limit);
+  if (category && category !== 'Tất cả') q = q.eq('category', category);
+  const { data } = await q;
   return (data ?? []) as NewsArticle[];
 }
 

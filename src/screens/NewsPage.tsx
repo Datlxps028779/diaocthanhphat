@@ -135,6 +135,31 @@ function ArticleCard({
   );
 }
 
+/* ────────────────── Horizontal Card (khối phụ cạnh bài nổi bật) ────────────────── */
+function HorizontalCard({ article }: { article: NewsArticle }) {
+  const imgUrl =
+    (article as any).image_url ||
+    'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
+  const cat = (article as any).category ?? '';
+  const href = articleHref(article);
+  return (
+    <Link href={href} className="flex gap-3 bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow p-2.5 group">
+      <div className="w-24 h-20 rounded-lg overflow-hidden shrink-0">
+        <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+      </div>
+      <div className="min-w-0 flex flex-col justify-center">
+        {cat && (
+          <span className={`self-start px-1.5 py-0.5 rounded text-[10px] font-semibold mb-1 ${categoryBadge(cat)}`}>{cat}</span>
+        )}
+        <h4 className="font-semibold text-gray-900 text-sm line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">{article.title}</h4>
+        <span className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+          <Calendar className="w-3 h-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 /* ────────────────── Article Detail ────────────────── */
 function ArticleDetail({
   article,
@@ -145,8 +170,6 @@ function ArticleDetail({
   related: NewsArticle[];
   onBack: () => void;
 }) {
-  const href = articleHref(article);
-  const canonicalUrl = href;
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
   const contentIsHtml = isHtmlContent(rawContent);
   const safeHtml = useMemo(
@@ -232,9 +255,6 @@ function ArticleDetail({
               {markdownBlocks}
             </div>
           )}
-          <div className="mt-4 text-xs text-gray-400 break-all">URL: {canonicalUrl}</div>
-          <div className="sr-only">{href}</div>
-
           {/* Tags */}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-8 pt-6 border-t border-gray-200">
@@ -341,11 +361,14 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   const newsCategory = category === 'Tất cả' ? undefined : category;
+  // Category mà server đã prefetch initialArticles (route /tin-tuc → 'Tất cả',
+  // route /tin-tuc/danh-muc/{slug} → nhãn danh mục). Seed SSR khi view khớp đúng
+  // cái server fetch để không nháy loading (kể cả trang danh mục).
+  const seedCategory = initialCategory && CATEGORIES.includes(initialCategory) ? initialCategory : 'Tất cả';
   const { data: articles = [], isLoading: loading } = useQuery({
     queryKey: qk.news(newsCategory),
     queryFn: () => getNews(newsCategory),
-    // Seed SSR khi ở category mặc định (server prefetch toàn bộ tin mới nhất).
-    initialData: !newsCategory && initialArticles ? initialArticles : undefined,
+    initialData: category === seedCategory && initialArticles ? initialArticles : undefined,
   });
 
   // activeArticle derive từ detail query — set articleId để mở, undefined để đóng
@@ -388,7 +411,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
 
   const handleBack = () => {
     setArticleId(undefined);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    onNavigate({ name: 'news' }); // điều hướng thật → URL về /tin-tuc, không kẹt ở /tin-tuc/{slug}
   };
 
   // Detail view
@@ -406,8 +429,27 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     );
   }
 
+  // Layout tạp chí: 1 bài nổi bật lớn + 3 bài phụ cạnh bên, phần còn lại xuống lưới.
   const featured = articles[0];
-  const rest = articles.slice(1);
+  const heroSide = articles.slice(1, 4);
+  const gridArticles = articles.slice(4);
+
+  // Khi xem "Tất cả": nhóm phần lưới theo danh mục (giữ thứ tự CATEGORIES, bỏ nhóm rỗng).
+  // Khi xem 1 danh mục cụ thể: để nguyên 1 lưới phẳng.
+  const showGroups = category === 'Tất cả';
+  const grouped = useMemo(() => {
+    if (!showGroups) return [];
+    const byCat = new Map<string, NewsArticle[]>();
+    for (const a of gridArticles) {
+      const c = (a as any).category ?? 'Khác';
+      if (!byCat.has(c)) byCat.set(c, []);
+      byCat.get(c)!.push(a);
+    }
+    const ordered = CATEGORIES.filter(c => c !== 'Tất cả').filter(c => byCat.has(c));
+    const extras = Array.from(byCat.keys()).filter(c => !CATEGORIES.includes(c));
+    return [...ordered, ...extras].map(c => ({ category: c, items: byCat.get(c)! }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridArticles, showGroups]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -438,7 +480,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
 
       {/* Category filter */}
       <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-2">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-2">
           {CATEGORIES.map((cat) => (
             <Link
               key={cat}
@@ -453,6 +495,9 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
               {cat}
             </Link>
           ))}
+          {!loading && articles.length > 0 && (
+            <span className="ml-auto text-xs text-gray-400">{articles.length} bài viết</span>
+          )}
         </div>
       </div>
 
@@ -461,9 +506,14 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
         <div className="flex-1 min-w-0">
           {loading ? (
             <div className="space-y-6">
-              <div className="bg-white rounded-2xl overflow-hidden shadow animate-pulse h-64" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white rounded-2xl overflow-hidden shadow animate-pulse h-72" />
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-24 animate-pulse shadow-sm" />)}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             </div>
           ) : articles.length === 0 ? (
@@ -472,26 +522,48 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
             </div>
           ) : (
             <>
-              {/* Featured */}
+              {/* Khối nổi bật: 1 bài lớn (2/3) + 3 bài phụ dạng ngang (1/3) */}
               {featured && (
-                <div className="mb-8">
-                  <ArticleCard
-                    article={featured}
-                    large
-                  />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                  <div className="lg:col-span-2">
+                    <ArticleCard article={featured} large />
+                  </div>
+                  {heroSide.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      {heroSide.map((a) => <HorizontalCard key={a.id} article={a} />)}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Grid */}
-              {rest.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {rest.map((a) => (
-                    <ArticleCard
-                      key={a.id}
-                      article={a}
-                    />
-                  ))}
-                </div>
+              {/* Phần lưới: nhóm theo danh mục khi xem "Tất cả", ngược lại 1 lưới phẳng */}
+              {showGroups ? (
+                grouped.map((group) => (
+                  <section key={group.category} className="mb-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <span className={`w-1 h-5 rounded-full ${categoryBadge(group.category).split(' ')[0]}`} />
+                        {group.category}
+                      </h2>
+                      <Link
+                        href={pageToHref({ name: 'news', category: group.category })}
+                        onClick={() => setCategory(group.category)}
+                        className="text-sm text-red-600 font-semibold hover:underline flex items-center gap-1"
+                      >
+                        Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {group.items.map((a) => <ArticleCard key={a.id} article={a} />)}
+                    </div>
+                  </section>
+                ))
+              ) : (
+                gridArticles.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {gridArticles.map((a) => <ArticleCard key={a.id} article={a} />)}
+                  </div>
+                )
               )}
             </>
           )}

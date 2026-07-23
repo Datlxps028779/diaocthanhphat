@@ -1,3 +1,5 @@
+import { categoryToSlug } from './newsCategories';
+
 export type Page =
   | { name: 'home' }
   | {
@@ -92,7 +94,11 @@ export function pageToHref(page: Page): string {
     case 'news':
       if (page.slug) return `/tin-tuc/${page.slug}`;
       if (page.articleId) return `/tin-tuc/${page.articleId}`;
-      if (page.category && page.category !== 'Tất cả') return `/tin-tuc?category=${encodeURIComponent(page.category)}`;
+      if (page.category && page.category !== 'Tất cả') {
+        const catSlug = categoryToSlug(page.category);
+        if (catSlug) return `/tin-tuc/danh-muc/${catSlug}`;
+        return `/tin-tuc?category=${encodeURIComponent(page.category)}`;
+      }
       return '/tin-tuc';
     case 'listings': {
       const base = page.listingType === 'mua_ban' ? '/mua-ban'
