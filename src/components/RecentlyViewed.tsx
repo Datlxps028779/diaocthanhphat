@@ -23,7 +23,7 @@ export function RecentlyViewed({ excludeId, title = 'Đã xem gần đây' }: { 
         {items.map(p => (
           <Link key={p.id} href={buildPropertyPath(p)}
             className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-            <div className="relative h-40 overflow-hidden">
+            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
               <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
                 alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               {p.listing_type === 'cho_thue' && (

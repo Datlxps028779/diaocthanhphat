@@ -130,7 +130,9 @@ export function buildPropertyMetadata(p: Property): Metadata {
     || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
       .filter(Boolean).join(', ');
   const path = `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
-  const images = p.image_url ? [{ url: p.image_url, width: 1200, height: 630 }] : undefined;
+  // OG image: luôn có ảnh (fallback khi tin thiếu ảnh) + ép URL tuyệt đối. Zalo/FB
+  // bỏ qua ảnh nếu không phải absolute URL rõ ràng → share ra không hiện thumbnail.
+  const ogImage = absoluteUrl(p.image_url?.trim() || FALLBACK_PROPERTY_IMAGE);
 
   return {
     title,
@@ -141,12 +143,12 @@ export function buildPropertyMetadata(p: Property): Metadata {
       type: 'article',
       title,
       description,
-      url: path,
+      url: absoluteUrl(path),
       siteName: SITE_NAME,
       locale: 'vi_VN',
-      images,
+      images: [{ url: ogImage, width: 1200, height: 630 }],
     },
-    twitter: { card: 'summary_large_image', title, description, images: p.image_url ? [p.image_url] : undefined },
+    twitter: { card: 'summary_large_image', title, description, images: [ogImage] },
   };
 }
 
@@ -258,7 +260,8 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
   const title = a.meta_title || a.title;
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
-  const images = a.image_url ? [{ url: a.image_url, width: 1200, height: 630 }] : undefined;
+  // OG image: luôn có ảnh (fallback khi bài thiếu ảnh) + ép URL tuyệt đối cho Zalo/FB.
+  const ogImage = absoluteUrl(a.image_url?.trim() || FALLBACK_PROPERTY_IMAGE);
   return {
     title,
     description,
@@ -268,13 +271,13 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
       type: 'article',
       title,
       description,
-      url: path,
+      url: absoluteUrl(path),
       siteName: SITE_NAME,
       locale: 'vi_VN',
-      images,
+      images: [{ url: ogImage, width: 1200, height: 630 }],
       publishedTime: a.created_at,
     },
-    twitter: { card: 'summary_large_image', title, description, images: a.image_url ? [a.image_url] : undefined },
+    twitter: { card: 'summary_large_image', title, description, images: [ogImage] },
   };
 }
 

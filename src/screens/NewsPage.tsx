@@ -193,10 +193,8 @@ function ArticleDetail({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
-      <div
-        className="relative h-64 md:h-96 flex items-end"
-        style={{ backgroundImage: `url('${imgUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-      >
+      <div className="relative h-64 md:h-96 flex items-end overflow-hidden bg-gray-900">
+        <img src={imgUrl} alt={article.title} className="absolute inset-0 w-full h-full object-cover object-center" />
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/40 to-transparent" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 w-full pb-8">
           <button
