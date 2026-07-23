@@ -143,8 +143,8 @@ function HorizontalCard({ article }: { article: NewsArticle }) {
   const cat = (article as any).category ?? '';
   const href = articleHref(article);
   return (
-    <Link href={href} className="flex gap-3 bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow p-2.5 group">
-      <div className="w-24 h-20 rounded-lg overflow-hidden shrink-0">
+    <Link href={href} className="flex gap-3 h-full bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow p-2.5 group">
+      <div className="w-24 min-h-[5rem] rounded-lg overflow-hidden shrink-0">
         <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="min-w-0 flex flex-col justify-center">
@@ -434,6 +434,17 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   const heroSide = articles.slice(1, 4);
   const gridArticles = articles.slice(4);
 
+  // Sidebar "Xem nhiều nhất": sắp theo lượt xem, LOẠI các bài đã hiện ở khối nổi bật
+  // trên cùng (featured + 3 phụ) để không lặp nội dung. Rơi về bài mới nếu chưa có view.
+  const heroIds = new Set([featured, ...heroSide].filter(Boolean).map((a) => a.id));
+  const mostViewed = useMemo(() => {
+    return [...articles]
+      .filter((a) => !heroIds.has(a.id))
+      .sort((a, b) => ((b as any).views ?? 0) - ((a as any).views ?? 0))
+      .slice(0, 5);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articles]);
+
   // Khi xem "Tất cả": nhóm phần lưới theo danh mục (giữ thứ tự CATEGORIES, bỏ nhóm rỗng).
   // Khi xem 1 danh mục cụ thể: để nguyên 1 lưới phẳng.
   const showGroups = category === 'Tất cả';
@@ -522,15 +533,20 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
             </div>
           ) : (
             <>
-              {/* Khối nổi bật: 1 bài lớn (2/3) + 3 bài phụ dạng ngang (1/3) */}
+              {/* Khối nổi bật: 1 bài lớn (2/3) + tối đa 3 bài phụ (1/3) giãn đều theo
+                  chiều cao bài lớn để không hở khoảng trống. */}
               {featured && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8 lg:items-stretch">
                   <div className="lg:col-span-2">
                     <ArticleCard article={featured} large />
                   </div>
                   {heroSide.length > 0 && (
-                    <div className="flex flex-col gap-3">
-                      {heroSide.map((a) => <HorizontalCard key={a.id} article={a} />)}
+                    <div className="flex flex-col gap-3 lg:h-full">
+                      {heroSide.map((a) => (
+                        <div key={a.id} className="lg:flex-1 lg:min-h-0">
+                          <HorizontalCard article={a} />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -572,27 +588,27 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
         {/* Sidebar */}
         <aside className="hidden lg:block w-72 shrink-0 mt-0">
           <div className="bg-white rounded-2xl shadow p-5 sticky top-24">
-            <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Bài viết nổi bật</h4>
+            <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide flex items-center gap-1.5">
+              <Eye className="w-4 h-4 text-red-500" /> Xem nhiều nhất
+            </h4>
             <div className="space-y-4">
-              {articles.slice(0, 5).map((a) => {
+              {mostViewed.map((a, i) => {
                 const img = (a as any).image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=200';
-                const cat = (a as any).category ?? '';
+                const views = (a as any).views ?? 0;
                 return (
                   <Link
                     key={a.id}
                     href={articleHref(a)}
                     className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
                   >
-                    <img src={img} alt={a.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
-                    <div>
-                      {cat && (
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${categoryBadge(cat)}`}>{cat}</span>
-                      )}
-                      <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug mt-0.5 group-hover:text-red-600 transition-colors">
+                    <span className="text-lg font-black text-gray-200 leading-none w-5 shrink-0 text-center pt-0.5">{i + 1}</span>
+                    <img src={img} alt={a.title} className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">
                         {a.title}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {formatDate((a as any).published_at ?? (a as any).created_at ?? '')}
+                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                        <Eye className="w-3 h-3" /> {views.toLocaleString('vi-VN')} lượt xem
                       </p>
                     </div>
                   </Link>
@@ -602,7 +618,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="flex gap-3 animate-pulse">
-                      <div className="w-16 h-16 bg-gray-200 rounded-lg shrink-0" />
+                      <div className="w-14 h-14 bg-gray-200 rounded-lg shrink-0" />
                       <div className="flex-1 space-y-2">
                         <div className="h-3 bg-gray-200 rounded" />
                         <div className="h-3 bg-gray-200 rounded w-4/5" />
@@ -610,6 +626,9 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                     </div>
                   ))}
                 </div>
+              )}
+              {!loading && mostViewed.length === 0 && (
+                <p className="text-gray-400 text-sm">Chưa có bài viết nào khác.</p>
               )}
             </div>
 
