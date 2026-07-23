@@ -27,6 +27,7 @@ function property(id: string, typeId = 'type-a', district = 'Thủ Dầu Một')
     price_unit: 'tỷ',
     price_label: null,
     price_per_month: null,
+    loan_support: null,
     listing_type: 'mua_ban',
     area_sqm: 80,
     address: null,

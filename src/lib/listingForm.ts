@@ -9,6 +9,7 @@ export interface ListingFormState {
   title: string; description: string;
   price: string; price_unit: string; price_label: string;
   price_per_month: string;
+  loan_support: string;
   area_sqm: string; address: string; city: string; district: string; ward: string;
   area_id: string; property_type_id: string;
   image_url: string; images: string[];
@@ -32,6 +33,7 @@ export function listingToFormState(l: UserListing): ListingFormState {
     title: s(l.title), description: s(l.description),
     price: n(l.price), price_unit: s(l.price_unit) || 'tỷ', price_label: s(l.price_label),
     price_per_month: n(l.price_per_month),
+    loan_support: n(l.loan_support),
     area_sqm: n(l.area_sqm), address: s(l.address), city: s(l.city),
     district: s(l.district), ward: s(l.ward),
     area_id: s(l.area_id), property_type_id: s(l.property_type_id),
@@ -78,6 +80,7 @@ export function formToProperty(
     price_unit: String(form.price_unit ?? 'tỷ'),
     price_label: str(form.price_label),
     price_per_month: num(form.price_per_month),
+    loan_support: num(form.loan_support),
     listing_type: (form.listing_type as Property['listing_type']) ?? 'mua_ban',
     area_sqm: num(form.area_sqm),
     address: str(form.address),

@@ -8,7 +8,7 @@ function makeListing(over: Partial<UserListing> = {}): UserListing {
     id: 'l1', user_id: 'u1', status: 'approved', reject_reason: null, expires_at: null,
     title: 'Bán nhà', description: null,
     price: 0, price_unit: 'tỷ', price_label: null,
-    listing_type: 'mua_ban', price_per_month: null,
+    listing_type: 'mua_ban', price_per_month: null, loan_support: null,
     area_sqm: null, address: null, city: '', district: null, ward: null,
     area_id: null, property_type_id: null,
     image_url: null, images: null, legal_status: null,

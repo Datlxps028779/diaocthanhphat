@@ -7,7 +7,7 @@ const SITE_URL = 'https://diaocthanhphat.com';
 function property(overrides: Partial<Property> = {}): Property {
   return {
     id: 'p1', title: 'Nhà phố đẹp', description: 'Mô tả nhà phố.',
-    price: 3, price_unit: 'tỷ', price_label: null, price_per_month: null,
+    price: 3, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
     listing_type: 'mua_ban', area_sqm: 80, address: null, city: 'Bình Dương',
     district: 'Thủ Dầu Một', ward: null, area_id: null, district_id: null, property_type_id: null,
     image_url: null, images: null, badge: null, badge_color: null, legal_status: null,

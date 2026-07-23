@@ -391,6 +391,16 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   <p className="text-gray-500 text-xs mb-0.5">Mức giá</p>
                   <p className="text-3xl font-black text-red-600">{property.price_label ?? `${property.price} ${property.price_unit}`}</p>
                   {pricePerSqm && <p className="text-gray-400 text-xs mt-0.5">≈ {pricePerSqm} triệu/m²</p>}
+                  {property.listing_type !== 'cho_thue' && property.loan_support != null && property.loan_support > 0 && property.loan_support < property.price && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                        Trả trước: {(property.price - property.loan_support).toFixed(2).replace(/\.00$/, '')} {property.price_unit}
+                      </span>
+                      <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        Chủ hỗ trợ vay: {property.loan_support} {property.price_unit}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={() => setShowContact(true)}

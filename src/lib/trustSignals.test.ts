@@ -5,7 +5,7 @@ import { buildTrustSignals, isVerified } from './trustSignals';
 function property(overrides: Partial<Property> = {}): Property {
   return {
     id: 'p1', title: 'Nhà đẹp', description: null,
-    price: 3, price_unit: 'tỷ', price_label: null, price_per_month: null,
+    price: 3, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
     listing_type: 'mua_ban', area_sqm: 80, address: null, city: 'Bình Dương',
     district: null, ward: null, area_id: null, district_id: null, property_type_id: null,
     image_url: null, images: null, badge: null, badge_color: null, legal_status: null,

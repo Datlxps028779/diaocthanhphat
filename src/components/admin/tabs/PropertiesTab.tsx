@@ -321,6 +321,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     price_unit: property?.price_unit ?? 'tỷ',
     price_label: property?.price_label ?? '',
     price_per_month: property?.price_per_month ?? '',
+    loan_support: property?.loan_support ?? '',
     area_sqm: property?.area_sqm ?? '',
     address: property?.address ?? '',
     city: property?.city ?? '',
@@ -500,6 +501,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       price_unit: specForm.price_unit,
       price_label: cs(specForm.price_label),
       price_per_month: cn(specForm.price_per_month),
+      loan_support: cn(specForm.loan_support),
       area_sqm: cn(specForm.area_sqm),
       address: cs(specForm.address),
       city: specForm.city,
@@ -633,6 +635,20 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             </div>
             {fld('Nhãn giá', 'price_label', { placeholder: '2.5 tỷ, Thỏa thuận...' })}
           </div>
+
+          {!isRent && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ hỗ trợ vay ngân hàng ({form.price_unit})</label>
+              <input type="number" value={String(form.loan_support)} onChange={e => setField('loan_support', e.target.value)}
+                placeholder="VD: 3.5 (số tiền chủ hỗ trợ vay 3 bên)"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              {Number(form.price) > 0 && Number(form.loan_support) > 0 && Number(form.loan_support) < Number(form.price) && (
+                <p className="text-xs text-emerald-600 mt-1 font-medium">
+                  Khách trả trước: {(Number(form.price) - Number(form.loan_support)).toFixed(2)} {form.price_unit} · Hỗ trợ vay: {Number(form.loan_support)} {form.price_unit}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Province → District cascade */}
           <div className="grid grid-cols-2 gap-3">

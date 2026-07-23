@@ -26,7 +26,7 @@ const taxonomy = { areas, districts, wards, propertyTypes };
 function property(overrides: Partial<Property> = {}): Property {
   return {
     id: 'p1', title: 'Nhà phố Dĩ An', description: null,
-    price: 2.8, price_unit: 'tỷ', price_label: null, price_per_month: null,
+    price: 2.8, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
     listing_type: 'mua_ban', area_sqm: 80, address: null, city: 'Bình Dương', district: 'Dĩ An', ward: null,
     area_id: 'area-bd', district_id: null, property_type_id: 'type-nha-pho',
     image_url: 'https://x/a.jpg', images: null, badge: null, badge_color: null, legal_status: 'Sổ hồng',

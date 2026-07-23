@@ -81,6 +81,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     title: '', description: '',
     price: '', price_unit: 'tỷ', price_label: '',
     price_per_month: '',
+    loan_support: '',
     area_sqm: '', address: '', city: '', district: '', ward: '',
     area_id: '', property_type_id: '',
     image_url: '', images: [] as string[],
@@ -247,6 +248,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         price_unit: specForm.price_unit,
         price_label: specForm.price_label || null,
         price_per_month: specForm.price_per_month ? parseFloat(specForm.price_per_month) : null,
+        loan_support: specForm.loan_support ? parseFloat(specForm.loan_support) : null,
         area_sqm: specForm.area_sqm ? parseFloat(specForm.area_sqm) : null,
         address: specForm.address || null,
         city: specForm.city,
@@ -490,6 +492,15 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                   <FormField label="Nhãn giá">
                     <input value={form.price_label} onChange={e => set('price_label', e.target.value)}
                       placeholder="VD: 2.5 tỷ" className={inputCls()} />
+                  </FormField>
+                  <FormField label={`Chủ hỗ trợ vay ngân hàng (${form.price_unit})`} className="sm:col-span-3">
+                    <input type="number" value={form.loan_support} onChange={e => set('loan_support', e.target.value)}
+                      placeholder="VD: 3.5 (số tiền chủ hỗ trợ vay 3 bên)" className={inputCls()} />
+                    {form.price && form.loan_support && parseFloat(form.loan_support) > 0 && parseFloat(form.loan_support) < parseFloat(form.price) && (
+                      <p className="text-xs text-emerald-600 mt-1 font-medium">
+                        Khách trả trước: {(parseFloat(form.price) - parseFloat(form.loan_support)).toFixed(2)} {form.price_unit} · Hỗ trợ vay: {parseFloat(form.loan_support)} {form.price_unit}
+                      </p>
+                    )}
                   </FormField>
                 </div>
               )}
