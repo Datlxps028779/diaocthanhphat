@@ -270,9 +270,21 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     setMapBounds(bounds);
   }, []);
 
+  // Thu hẹp marker theo quận/xã đã chọn (query map chỉ lọc được khu vực/loại). Càng
+  // lọc cụ thể → càng ít marker → bản đồ tự fit sát hơn. So khớp tên không phân biệt hoa/thường.
+  const scopedMapProperties = useMemo(() => {
+    const d = district.trim().toLowerCase();
+    const w = ward.trim().toLowerCase();
+    if (!d && !w) return mapProperties;
+    return mapProperties.filter(p =>
+      (!d || (p.district ?? '').trim().toLowerCase() === d) &&
+      (!w || (p.ward ?? '').trim().toLowerCase() === w)
+    );
+  }, [mapProperties, district, ward]);
+
   const viewportProps = useMemo(
-    () => filterByBounds(mapProperties, mapBounds),
-    [mapProperties, mapBounds],
+    () => filterByBounds(scopedMapProperties, mapBounds),
+    [scopedMapProperties, mapBounds],
   );
 
   // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
@@ -620,11 +632,12 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                 {/* Khung bản đồ chiều cao responsive — panel sản phẩm phủ góc phải (desktop) */}
                 <div className="relative h-[70vh] min-h-[420px] max-h-[680px]">
                   <PropertyMap
-                    properties={mapProperties}
+                    properties={scopedMapProperties}
                     onNavigate={onNavigate}
                     height="100%"
                     onBoundsChange={handleBoundsChange}
                     showCountBadge={false}
+                    fitToMarkers
                   />
 
                   {/* Panel overlay góc phải — chỉ desktop, luôn hiển thị */}

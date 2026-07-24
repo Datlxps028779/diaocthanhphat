@@ -104,7 +104,7 @@ async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ dat
 export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId?: string }): Promise<Property[]> {
   let q = supabase
     .from('properties')
-    .select('id, title, price, price_label, price_unit, city, district, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id')
+    .select('id, title, price, price_label, price_unit, city, district, ward, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id')
     .eq('is_active', true)
     .not('latitude', 'is', null);
   if (filters?.areaId) q = q.eq('area_id', filters.areaId);

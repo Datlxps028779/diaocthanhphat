@@ -16,6 +16,9 @@ interface PropertyMapProps {
   zoom?: number;
   onBoundsChange?: (bounds: MapBounds) => void;
   showCountBadge?: boolean;
+  // Tự thu bản đồ khít vào các marker đang hiển thị. Khi lọc theo khu vực/quận/xã,
+  // bản đồ tự zoom về đúng vùng có tin — càng lọc cụ thể càng zoom sát.
+  fitToMarkers?: boolean;
 }
 
 // Price tier config
@@ -173,6 +176,7 @@ export function PropertyMap({
   zoom = 10,
   onBoundsChange,
   showCountBadge = true,
+  fitToMarkers = false,
 }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -242,9 +246,23 @@ export function PropertyMap({
         if ((layer as { _isMarker?: boolean })._isMarker) map.removeLayer(layer);
       });
       addMarkers(L, map, properties, onNavigate);
+
+      // Tự thu bản đồ khít các marker đang hiển thị: lọc khu vực/quận/xã càng cụ
+      // thể thì vùng nhìn càng sát. Một điểm → panTo + zoom gần; nhiều điểm →
+      // fitBounds có padding. Không marker thì giữ nguyên view.
+      if (fitToMarkers) {
+        const pts = properties
+          .filter(p => p.latitude != null && p.longitude != null)
+          .map(p => [p.latitude!, p.longitude!] as [number, number]);
+        if (pts.length === 1) {
+          map.setView(pts[0], 15, { animate: true });
+        } else if (pts.length > 1) {
+          map.fitBounds(L.latLngBounds(pts), { padding: [48, 48], maxZoom: 16, animate: true });
+        }
+      }
     });
     return () => { cancelled = true; };
-  }, [properties, onNavigate]);
+  }, [properties, onNavigate, fitToMarkers]);
 
   const visibleCount = properties.filter(p => p.latitude && p.longitude).length;
 
