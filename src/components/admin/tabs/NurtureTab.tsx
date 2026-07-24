@@ -510,6 +510,9 @@ export function NurtureTab() {
 
       {confirmRun && (
         <ConfirmDialog
+          title="Chạy quét nuôi dưỡng"
+          confirmLabel="Chạy quét"
+          tone="primary"
           message="Chạy quét nuôi dưỡng ngay? Hệ thống sẽ gọi Edge Function; nếu đủ token và zalo_user_id có thể gửi Zalo thật."
           onConfirm={runNow}
           onCancel={() => setConfirmRun(false)}
