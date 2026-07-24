@@ -85,7 +85,6 @@ function knowledgeTypeRank(e: AiChatKnowledge): number {
   const type = e.knowledge_type ?? 'priority_qa';
   if (type === 'priority_qa') return 400;
   if (type === 'background') return 250;
-  if (type === 'rule') return 150;
   return 0;
 }
 
@@ -98,7 +97,7 @@ function splitKnowledgeTerms(entry: AiChatKnowledge): string[] {
 }
 
 function scoreKnowledge(text: string, entry: AiChatKnowledge): KnowledgeMatch | null {
-  if (entry.is_active === false || entry.knowledge_type === 'test_case') return null;
+  if (entry.is_active === false || entry.knowledge_type === 'test_case' || entry.knowledge_type === 'rule') return null;
   const q = normalizeAdvisorQuery(text);
   const terms = splitKnowledgeTerms(entry);
   if (!terms.length) return null;
@@ -148,6 +147,16 @@ function asksForUnsupportedFact(text: string): boolean {
   return /\b(tang bao nhieu|bao nhieu phan tram|%|quy hoach|loi chac|chac loi|cam ket loi|lai suat bao nhieu|gia thi truong hien tai)\b/.test(q);
 }
 
+function mustNotAnswerHit(text: string, entry?: AiChatKnowledge | null): boolean {
+  if (!entry?.must_not_answer?.trim()) return false;
+  const q = normalizeAdvisorQuery(text);
+  return entry.must_not_answer
+    .split(/[,\n.;]/)
+    .map(normalizeAdvisorQuery)
+    .filter(term => term.length >= 4)
+    .some(term => q.includes(term));
+}
+
 function safetyNoteFor(entry?: AiChatKnowledge | null): string {
   return entry?.guardrail?.trim() || 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.';
 }
@@ -190,7 +199,21 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
   const f = intent.filters;
   const hasConcreteFilter = f.minPrice != null || f.maxPrice != null || !!f.district
     || !!f.ward || !!f.areaId || !!f.typeId || f.minArea != null || f.maxArea != null;
-  const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input);
+  const mustNotAnswer = mustNotAnswerHit(input, kb);
+  const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input) || mustNotAnswer;
+
+  if (mustNotAnswer) {
+    return {
+      reply: `${unknownMessage(opts?.messages)}\n\n${handoffMessage(opts?.messages)}`,
+      filters: {},
+      residualKeyword: input.trim(),
+      matched: [],
+      stage: 'collecting_contact',
+      safetyNote: safetyNoteFor(kb),
+      ...(kb ? { knowledgeSource: kb.knowledge_type ?? 'priority_qa' } : {}),
+      handoffRequired: true,
+    };
+  }
 
   if (asksForUnsupportedFact(input) && !kb && !sensitive) {
     return {

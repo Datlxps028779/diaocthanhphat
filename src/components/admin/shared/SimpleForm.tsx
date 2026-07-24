@@ -16,10 +16,19 @@ export function SimpleForm({ title, fields, areaId, areas, onSave, onCancel }: {
 
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(form); } catch (e) { console.error("[AdminPanel]", e); } finally { setSaving(false); }
+    setError('');
+    try {
+      await onSave(form);
+    } catch (e) {
+      console.error("[AdminPanel]", e);
+      setError((e as { message?: string })?.message ?? 'Lưu thất bại. Vui lòng thử lại.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -57,6 +66,7 @@ export function SimpleForm({ title, fields, areaId, areas, onSave, onCancel }: {
           </div>
         ))}
       </div>
+      {error && <p className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-gray-100">
         <button onClick={onCancel} className="border border-gray-200 text-gray-600 px-5 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors">Hủy</button>
         <button onClick={handleSave} disabled={saving}

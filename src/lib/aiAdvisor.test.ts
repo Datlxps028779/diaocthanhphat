@@ -135,7 +135,7 @@ describe('advisor helpers', () => {
 const kbEntries: AiChatKnowledge[] = [
   { id: 'kb-loan', topic: 'Vay ngân hàng', knowledge_type: 'background', keywords: 'vay, vay ngân hàng, trả góp', typo_variants: 'vay ngan hangg, vay nh, lai xuat', answer: 'Bên em hỗ trợ vay qua ngân hàng liên kết nhưng không tự bịa lãi suất.', priority: 10, handoff_required: true, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
   { id: 'kb-fee', topic: 'Phí môi giới', knowledge_type: 'priority_qa', keywords: 'phí, phí môi giới, hoa hồng', answer: 'Người mua xem tin và liên hệ tư vấn viên hoàn toàn miễn phí.', priority: 5, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
-  { id: 'kb-legal', topic: 'Pháp lý sổ hồng', knowledge_type: 'background', keywords: 'sổ hồng, pháp lý, công chứng', typo_variants: 'sỗ hòng, so hongg, fap ly', answer: 'Anh/chị cần kiểm tra hồ sơ gốc, quy hoạch và điều kiện công chứng trước khi đặt cọc.', priority: 20, handoff_required: true, guardrail: 'Không khẳng định pháp lý nếu chưa xem hồ sơ.', is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-legal', topic: 'Pháp lý sổ hồng', knowledge_type: 'background', keywords: 'sổ hồng, pháp lý, công chứng', typo_variants: 'sỗ hòng, so hongg, fap ly', answer: 'Anh/chị cần kiểm tra hồ sơ gốc, quy hoạch và điều kiện công chứng trước khi đặt cọc.', priority: 20, handoff_required: true, guardrail: 'Không khẳng định pháp lý nếu chưa xem hồ sơ.', must_not_answer: 'an toàn chắc chắn, quy hoạch chắc chắn', is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
   { id: 'kb-rule', topic: 'Không bịa số liệu', knowledge_type: 'rule', keywords: 'quy hoạch, tăng bao nhiêu phần trăm, lãi suất bao nhiêu', answer: 'Chưa có dữ liệu xác thực thì phải nói chưa đủ dữ liệu và chuyển tư vấn viên.', priority: 100, handoff_required: true, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
   { id: 'kb-test', topic: 'Test không dùng trả lời', knowledge_type: 'test_case', keywords: 'test case', answer: 'Không được khớp ở public chat.', priority: 999, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
   { id: 'kb-off', topic: 'Câu tắt', keywords: 'khuyến mãi', answer: 'Câu này đang tắt, không được khớp.', priority: 99, is_active: false, created_at: '2026-01-01', updated_at: '2026-01-01' },
@@ -237,9 +237,17 @@ describe('phân cấp đào tạo AI', () => {
     expect(turn.handoffRequired).toBe(true);
   });
 
-  it('test_case không được dùng làm nguồn trả lời public', () => {
-    const hit = matchKnowledge('test case', kbEntries);
-    expect(hit?.id).not.toBe('kb-test');
+  it('rule và test_case không được dùng làm nguồn trả lời public', () => {
+    expect(matchKnowledge('test case', kbEntries)?.id).not.toBe('kb-test');
+    expect(matchKnowledge('quy hoạch tăng bao nhiêu', kbEntries)?.id).not.toBe('kb-rule');
+  });
+
+  it('must_not_answer ép trả lời thiếu dữ liệu thay vì answer trực tiếp', () => {
+    const turn = buildAdvisorTurn('sổ hồng này an toàn chắc chắn không', taxonomy, { knowledge: kbEntries });
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toContain('chưa có dữ liệu xác thực');
+    expect(turn.reply).not.toContain('Anh/chị cần kiểm tra hồ sơ gốc');
+    expect(turn.handoffRequired).toBe(true);
   });
 
   it('mua nhà 2 tỷ có vay vẫn tìm tin và ghép handoff an toàn', () => {

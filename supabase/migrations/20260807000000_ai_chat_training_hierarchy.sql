@@ -20,7 +20,7 @@ WHERE knowledge_type IS NULL OR knowledge_type = '';
 DROP POLICY IF EXISTS "public_select_ai_chat_knowledge" ON ai_chat_knowledge;
 CREATE POLICY "public_select_ai_chat_knowledge" ON ai_chat_knowledge
   FOR SELECT TO anon, authenticated
-  USING (is_active = true AND knowledge_type IN ('priority_qa', 'background', 'rule'));
+  USING (is_active = true AND knowledge_type IN ('priority_qa', 'background'));
 
 INSERT INTO ai_chat_knowledge (
   topic, knowledge_type, keywords, question_examples, typo_variants, answer, priority,
@@ -33,7 +33,7 @@ SELECT * FROM (VALUES
     'không bịa, số liệu, lãi suất, quy hoạch, lợi nhuận',
     'Giá khu này tăng bao nhiêu phần trăm?\nLãi suất vay hiện tại bao nhiêu?\nCăn này có dính quy hoạch không?',
     'khong bia, lai suat, quy hoach, loi nhuan',
-    'Nếu hệ thống hoặc admin chưa cung cấp dữ liệu xác thực, Trợ lý phải nói rõ chưa đủ dữ liệu và mời tư vấn viên kiểm tra; không tự tạo phần trăm, lãi suất, quy hoạch hay cam kết lợi nhuận.',
+    'Quy tắc nội bộ: khi thiếu dữ liệu xác thực, dùng câu trả lời thiếu dữ liệu và mời tư vấn viên kiểm tra; không tự tạo phần trăm, lãi suất, quy hoạch hay cam kết lợi nhuận.',
     100,
     true,
     'Không tự bịa số liệu, tên dự án, quy hoạch, lãi suất, tỷ lệ tăng giá hoặc cam kết lợi nhuận.',
