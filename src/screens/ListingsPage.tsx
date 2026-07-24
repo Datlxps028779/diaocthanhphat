@@ -27,6 +27,7 @@ import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
 import { buildPropertyImageAlt } from '../lib/propertyImages';
+import { BlurFillImage } from '../components/BlurFillImage';
 interface ListingsPageProps {
   initialFilters?: Partial<{
     listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
@@ -809,11 +810,12 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <div className="relative aspect-[4/3] bg-gray-100">
-          <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-            alt={buildPropertyImageAlt(p)} fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500" />
-        </div>
+        <BlurFillImage
+          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
+          alt={buildPropertyImageAlt(p)}
+          sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          wrapperClassName="aspect-[4/3]"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
         {p.badge ? (
           <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
@@ -870,7 +872,12 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
       <div className="relative w-48 flex-shrink-0 overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="192px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        <BlurFillImage
+          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
+          alt={buildPropertyImageAlt(p)}
+          sizes="192px"
+          wrapperClassName="h-full"
+        />
         {p.listing_type === 'cho_thue' && (
           <span className="absolute top-2 left-2 z-[2] bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}

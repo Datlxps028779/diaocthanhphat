@@ -40,7 +40,7 @@ function locationLabel(p: PropertyFaqInput): string {
 // không bịa. Trả [] khi không đủ dữ liệu để có FAQ thật.
 export function buildPropertyFaq(p: PropertyFaqInput): FaqItem[] {
   const items: FaqItem[] = [];
-  const name = str(p.title) || 'Bất động sản này';
+  const name = 'Bất động sản này';
   const listingVerb = p.listing_type === 'cho_thue' ? 'cho thuê' : 'bán';
 
   const price = priceAnswer(p);

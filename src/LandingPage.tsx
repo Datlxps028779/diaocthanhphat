@@ -28,6 +28,7 @@ import { ContactModal } from './components/ContactModal';
 import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
+import { BlurFillImage } from './components/BlurFillImage';
 import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -360,9 +361,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
                   className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
                   {a.image_url && (
-                    <div className="relative overflow-hidden h-44 bg-gray-100">
-                      <Image src={a.image_url} alt={buildNewsImageAlt(a)} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain group-hover:scale-105 transition-transform duration-500" />
-                    </div>
+                    <BlurFillImage src={a.image_url} alt={buildNewsImageAlt(a)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
                   )}
                   <div className="p-4">
                     <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">{a.category}</span>
@@ -619,15 +618,12 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <div className="relative aspect-[4/3] bg-gray-100">
-          <Image
-            src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-            alt={buildPropertyImageAlt(p)}
-            fill
-            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        </div>
+        <BlurFillImage
+          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
+          alt={buildPropertyImageAlt(p)}
+          sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          wrapperClassName="aspect-[4/3]"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
         {p.badge ? (
           <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>

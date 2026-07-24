@@ -13,6 +13,7 @@ import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickRelated } from '../lib/relatedNews';
 import { buildNewsImageAlt } from '../lib/propertyImages';
+import { BlurFillImage } from '../components/BlurFillImage';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -75,9 +76,12 @@ function ArticleCard({
   if (large) {
     return (
       <Link href={href} className="block bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow md:flex group">
-        <div className="md:w-1/2 h-56 md:h-auto overflow-hidden flex-shrink-0 bg-gray-100">
-          <img src={imgUrl} alt={buildNewsImageAlt(article)} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
-        </div>
+        <BlurFillImage
+          src={imgUrl}
+          alt={buildNewsImageAlt(article)}
+          sizes="(max-width: 768px) 100vw, 50vw"
+          wrapperClassName="md:w-1/2 h-56 md:h-auto flex-shrink-0"
+        />
         <div className="p-6 flex flex-col justify-between md:w-1/2">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -109,9 +113,8 @@ function ArticleCard({
 
   return (
     <Link href={href} className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col group">
-      <div className="h-44 overflow-hidden bg-gray-100">
-        <img src={imgUrl} alt={buildNewsImageAlt(article)} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
-      </div>
+      <BlurFillImage src={imgUrl} alt={buildNewsImageAlt(article)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
+
       <div className="p-4 flex flex-col flex-1">
         {cat && (
           <span className={`self-start px-2 py-0.5 rounded-full text-xs font-semibold mb-2 ${categoryBadge(cat)}`}>
@@ -195,7 +198,9 @@ function ArticleDetail({
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-64 md:h-96 flex items-end overflow-hidden bg-gray-900">
-        <img src={imgUrl} alt={buildNewsImageAlt(article)} className="absolute inset-0 w-full h-full object-cover object-center" />
+        <div className="absolute inset-0">
+          <BlurFillImage src={imgUrl} alt={buildNewsImageAlt(article)} sizes="100vw" hover={false} priority wrapperClassName="w-full h-full bg-gray-900" />
+        </div>
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/40 to-transparent" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 w-full pb-8">
           <button
