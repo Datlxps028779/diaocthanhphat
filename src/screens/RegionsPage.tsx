@@ -2,14 +2,13 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, TrendingUp, Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
+import { TrendingUp, Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
 import { type Area } from '../lib/supabase';
-import { getAllPropertiesForMap, getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { useAreas } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
-import { PropertyMap } from '../components/PropertyMap';
 import { ForYou } from '../components/ForYou';
 import { AREA_DETAILS } from '../lib/areaSeo';
 
@@ -119,11 +118,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   const { data: areas = [], isLoading: areasLoading } = useAreas();
-  const { data: allMapProps = [], isLoading: mapLoading } = useQuery({
-    queryKey: qk.propertiesMap(),
-    queryFn: () => getAllPropertiesForMap(),
-  });
-  const loading = areasLoading || mapLoading;
+  const loading = areasLoading;
 
   const { data: areaProperties = [] } = useQuery({
     queryKey: qk.areaProperties(selectedArea?.id),
@@ -149,10 +144,6 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
     const current = window.location.pathname + window.location.search;
     if (current !== next) window.history.replaceState(null, '', next);
   }, [selectedArea]);
-
-  const mapProps = selectedArea
-    ? allMapProps.filter(p => p.area_id === selectedArea.id)
-    : allMapProps;
 
   const detail = selectedArea ? AREA_DETAILS[selectedArea.slug] ?? AREA_DETAILS['binh-duong'] : null;
 
@@ -194,26 +185,8 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
           </div>
         )}
 
-        {/* MAP — always visible, zooms to selected area */}
-        <div id="area-detail" className="mt-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-red-500" />
-              {selectedArea ? `Bản đồ BĐS tại ${selectedArea.name}` : 'Bản đồ BĐS toàn khu vực'}
-            </h2>
-            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              {mapProps.filter(p => p.latitude && p.longitude).length} tin có tọa độ
-            </span>
-          </div>
-          <PropertyMap
-            properties={mapProps}
-            onNavigate={onNavigate}
-            height="460px"
-            centerLat={detail?.centerLat ?? 11.0}
-            centerLng={detail?.centerLng ?? 106.7}
-            zoom={detail?.zoom ?? 9}
-          />
-        </div>
+        {/* Anchor cuộn tới khi chọn khu vực (bản đồ đã gỡ theo yêu cầu) */}
+        <div id="area-detail" />
 
         {/* Detail panel */}
         {selectedArea && detail && (

@@ -43,6 +43,10 @@ function articleHref(article: Pick<NewsArticle, 'id' | 'slug'>) {
   return pageToHref({ name: 'news', slug: article.slug || article.id });
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value.filter(Boolean) as T[] : [];
+}
+
 /* ────────────────── Skeletons ────────────────── */
 function SkeletonCard() {
   return (
@@ -187,7 +191,9 @@ function ArticleDetail({
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
-  const tags: string[] = (article as any).tags ?? [];
+  const tags = asArray<string>((article as any).tags);
+  const faqItems = asArray<{ question: string; answer: string }>(article.faq);
+  const citations = asArray<{ title?: string; url: string }>(article.citations);
   const cat = (article as any).category ?? '';
   const geoArea = article.geo_area?.trim();
   const geoEntity = article.geo_entity?.trim();
@@ -272,11 +278,11 @@ function ArticleDetail({
           )}
 
           {/* FAQ — admin nhập tay, khớp 1:1 với FAQPage JSON-LD ở page.tsx */}
-          {article.faq && article.faq.length > 0 && (
+          {faqItems.length > 0 && (
             <div className="mt-10 pt-6 border-t border-gray-200">
               <h2 className="font-bold text-gray-900 text-lg mb-4">Câu hỏi thường gặp</h2>
               <div className="divide-y divide-gray-100">
-                {article.faq.map((item, i) => (
+                {faqItems.map((item, i) => (
                   <details key={i} className="group py-3 first:pt-0">
                     <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-sm font-semibold text-gray-900">
                       {item.question}
@@ -290,11 +296,11 @@ function ArticleDetail({
           )}
 
           {/* Nguồn tham khảo — khớp 1:1 với schema citation ở page.tsx (tránh cloaking) */}
-          {article.citations && article.citations.length > 0 && (
+          {citations.length > 0 && (
             <div className="mt-10 pt-6 border-t border-gray-200">
               <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
               <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
-                {article.citations.map((c, i) => (
+                {citations.map((c, i) => (
                   <li key={i} className="text-sm text-gray-700 break-words">
                     {c.title || c.url}
                   </li>
@@ -383,7 +389,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   });
 
   // Bài liên quan chọn tay (có thể khác category) — resolve theo id để đưa vào pool.
-  const manualRelatedIds = activeArticle?.related_ids ?? [];
+  const manualRelatedIds = asArray<string>(activeArticle?.related_ids);
   const { data: manualRelated = [] } = useQuery({
     queryKey: ['news-related', activeArticle?.id, manualRelatedIds.join(',')],
     queryFn: () => getNewsByIds(manualRelatedIds),

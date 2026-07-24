@@ -71,11 +71,16 @@
    Preflight của Tailwind reset hết margin/bullet của h*, p, ul, ol, blockquote nên phải khai báo lại
    để bài viết có phân cấp, giãn dòng và dễ đọc. Chỉ áp trong .prose để không rò ra phần còn lại. */
 .prose {
-  font-size: 1.0625rem;   /* 17px — dễ đọc dài */
-  line-height: 1.8;
-  color: #374151;         /* gray-700 */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1.075rem;    /* ~17px — dễ đọc dài */
+  line-height: 1.75;
+  letter-spacing: 0.005em;
+  color: #1f2937;         /* gray-800 — tương phản tốt hơn, đỡ mờ */
   overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+.prose p { color: #374151; }  /* gray-700 cho đoạn văn, dịu mắt khi đọc dài */
 .prose > :first-child { margin-top: 0; }
 .prose > :last-child  { margin-bottom: 0; }
 
