@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyAdmin } from "../_shared/cors.ts";
+import { callClaude } from "../_shared/anthropic.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req);
@@ -56,20 +57,12 @@ Trả về đúng JSON format sau (không có markdown):
     };
 
     if (Deno.env.get("ANTHROPIC_API_KEY")) {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-haiku-20241022",
-          max_tokens: 400,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      const text = await callClaude({
+        model: Deno.env.get("AI_AUTOTAG_MODEL") || "claude-haiku-4-5",
+        maxTokens: 400,
+        prompt,
       });
-      if (resp.ok) { const d = await resp.json(); tryParse(d.content?.[0]?.text ?? ""); }
+      if (text) tryParse(text);
     } else if (Deno.env.get("OPENAI_API_KEY")) {
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",

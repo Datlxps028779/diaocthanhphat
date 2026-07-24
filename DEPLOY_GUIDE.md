@@ -48,10 +48,9 @@ supabase functions deploy ai-analytics --project-ref tcmpswlabzeqtuwdjjfe
 supabase functions deploy ai-autotag --project-ref tcmpswlabzeqtuwdjjfe
 supabase functions deploy sitemap --project-ref tcmpswlabzeqtuwdjjfe
 supabase functions deploy crm-webhook --project-ref tcmpswlabzeqtuwdjjfe
-
-# Set secrets (nếu dùng AI)
-supabase secrets set ANTHROPIC_API_KEY=your_key --project-ref tcmpswlabzeqtuwdjjfe
 ```
+
+Chi tiết cấu hình key AI ở **mục Cấu hình AI** bên dưới.
 
 ---
 
@@ -168,6 +167,63 @@ Nếu trả về JSON (không lỗi) → PostgREST đã nhận biết cột mớ
 
 ### Lỗi: Admin không lưu được BĐS
 → Kiểm tra user đã được set `role = 'admin'` trong Supabase
+
+---
+
+## Cấu hình AI (Claude API qua bên thứ 3)
+
+Toàn bộ tính năng AI đọc **cùng 2 biến môi trường**. Sau này đổi nhà cung cấp/khóa
+chỉ cần thay `ANTHROPIC_API_KEY` (và `ANTHROPIC_BASE_URL` nếu đổi cổng), không cần sửa code.
+
+| Biến | Bắt buộc | Ý nghĩa |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Có | Khóa API (Anthropic thật hoặc gateway bên thứ 3) |
+| `ANTHROPIC_BASE_URL` | Nếu dùng bên thứ 3 | URL gateway, vd `https://api.leeh.dev`. **Không đặt** = gọi thẳng `api.anthropic.com` |
+
+> Code gửi khóa qua **cả** `x-api-key` lẫn `Authorization: Bearer` nên hợp cả Anthropic
+> chính chủ lẫn gateway bên thứ 3 (thường đọc Bearer). Không cần chỉnh gì thêm.
+
+Khóa đặt ở **2 nơi** vì AI chạy trên 2 môi trường khác nhau:
+
+### A) Edge Functions (Supabase secrets) — AI Phân tích, AI mô tả, AI tự gắn tag
+```bash
+supabase secrets set ANTHROPIC_API_KEY=YOUR_KEY --project-ref tcmpswlabzeqtuwdjjfe
+supabase secrets set ANTHROPIC_BASE_URL=https://api.leeh.dev --project-ref tcmpswlabzeqtuwdjjfe
+
+# Sau khi set secret PHẢI deploy lại các function AI để nhận biến mới:
+supabase functions deploy ai-analytics --project-ref tcmpswlabzeqtuwdjjfe
+supabase functions deploy ai-description --project-ref tcmpswlabzeqtuwdjjfe
+supabase functions deploy ai-autotag --project-ref tcmpswlabzeqtuwdjjfe
+```
+
+### B) Next.js server (Vercel env) — AI viết bài tin tức
+Vào **Vercel → Project → Settings → Environment Variables**, thêm cho môi trường
+**Production** (và Preview nếu cần), rồi **redeploy**:
+```
+ANTHROPIC_API_KEY   = YOUR_KEY
+ANTHROPIC_BASE_URL  = https://api.leeh.dev
+```
+(Local dev: 2 biến này nằm trong file `.env` — không commit lên git.)
+
+### Model mặc định (tùy chọn override)
+Mỗi tính năng có model mặc định riêng, đổi qua env nếu muốn:
+
+| Biến (nơi đặt) | Mặc định | Dùng cho |
+| --- | --- | --- |
+| `ARTICLE_GEN_MODEL` (Vercel) | `claude-sonnet-5` | AI viết bài |
+| `AI_ANALYTICS_MODEL` (Supabase) | `claude-haiku-4-5` | AI phân tích dashboard |
+| `AI_DESCRIPTION_MODEL` (Supabase) | `claude-haiku-4-5` | AI viết mô tả tin đăng |
+| `AI_AUTOTAG_MODEL` (Supabase) | `claude-haiku-4-5` | AI gắn tag + meta SEO |
+
+> Lưu ý: Model phải là model mà **gateway bên thứ 3 của bạn hỗ trợ**. Nếu gateway chỉ có
+> một số model, đặt các biến trên cho khớp — nếu không API trả lỗi và tính năng rơi
+> về bản rule-based (không phải AI thật).
+
+### Kiểm tra nhanh
+- **AI Phân tích** (admin → "AI Phân tích"): bấm chạy, nếu ra phân tích chi tiết theo số
+  liệu thật là OK; nếu ra văn bản chung chung → key/model chưa đúng (đang chạy rule-based).
+- **AI viết bài** (admin → Tin tức → nút AI): tạo bài từ 1 từ khóa; lỗi 503 "Chưa cấu hình
+  ANTHROPIC_API_KEY" = chưa set biến trên Vercel.
 
 ---
 

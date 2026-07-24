@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, verifyAdmin } from "../_shared/cors.ts";
+import { callClaude } from "../_shared/anthropic.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req);
@@ -98,30 +99,16 @@ Hãy viết một báo cáo phân tích ngắn gọn (4-6 đoạn) bằng tiến
 
 Dùng bullet points, kết thúc bằng điểm mấu chốt cần hành động ngay. Nếu thiếu dữ liệu cho mục nào, ghi rõ "Chưa đủ dữ liệu".`;
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
-
     let analysis = "";
 
     if (Deno.env.get("ANTHROPIC_API_KEY")) {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5",
-          max_tokens: 1200,
-          temperature: 0.2,
-          system: systemPrompt,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      analysis = await callClaude({
+        model: Deno.env.get("AI_ANALYTICS_MODEL") || "claude-haiku-4-5",
+        maxTokens: 1200,
+        temperature: 0.2,
+        system: systemPrompt,
+        prompt,
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        analysis = data.content?.[0]?.text ?? "";
-      }
     } else if (Deno.env.get("OPENAI_API_KEY")) {
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",

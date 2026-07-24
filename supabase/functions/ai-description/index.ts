@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
+import { callClaude } from "../_shared/anthropic.ts";
 
 // Form đăng tin công khai gọi → siết CORS allowlist + rate-limit theo IP để chống
 // spam / đốt ngân sách LLM (không thể bắt đăng nhập vì form mở cho khách).
@@ -41,23 +42,11 @@ Deno.serve(async (req: Request) => {
     let description = "";
 
     if (Deno.env.get("ANTHROPIC_API_KEY")) {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-haiku-20241022",
-          max_tokens: 300,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      description = await callClaude({
+        model: Deno.env.get("AI_DESCRIPTION_MODEL") || "claude-haiku-4-5",
+        maxTokens: 300,
+        prompt,
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        description = data.content?.[0]?.text ?? "";
-      }
     } else if (Deno.env.get("OPENAI_API_KEY")) {
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
