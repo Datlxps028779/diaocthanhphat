@@ -17,6 +17,8 @@ const nextConfig = {
       // Ảnh minh hoạ/nguồn ngoài thường dùng
       { protocol: 'https', hostname: 'images.pexels.com' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'chonhaviet.com' },
+      { protocol: 'https', hostname: 'www.chonhaviet.com' },
       { protocol: 'https', hostname: '**.supabase.co' },
     ],
   },
