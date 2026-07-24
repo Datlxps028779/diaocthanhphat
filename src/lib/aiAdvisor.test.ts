@@ -5,11 +5,13 @@ import {
   buildAdvisorLeadPayload,
   formatAdvisorBudget,
   isSensitiveAdviceRequest,
+  matchKnowledge,
   safeAdviceResponse,
   summarizeAdvisorNeed,
   summarizePropertyForAdvisor,
   validateAdvisorLeadContact,
 } from './aiAdvisor';
+import type { AiChatKnowledge } from './supabase';
 
 const areas: Area[] = [{ id: 'area-bd', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '2026-01-01' }];
 const districts: District[] = [
@@ -125,5 +127,77 @@ describe('advisor helpers', () => {
     const payload = buildAdvisorLeadPayload({ full_name: 'Anh Minh', phone: '0901234567' }, turn);
     expect(payload.area_interest).toBe('Tôi cần tư vấn pháp lý');
     expect(payload.message).toContain('Tôi cần tư vấn pháp lý');
+  });
+});
+
+const kbEntries: AiChatKnowledge[] = [
+  { id: 'kb-loan', topic: 'Vay ngân hàng', keywords: 'vay, vay ngân hàng, trả góp', answer: 'Bên em hỗ trợ vay tới 70% qua ngân hàng liên kết.', priority: 10, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-fee', topic: 'Phí môi giới', keywords: 'phí, phí môi giới, hoa hồng', answer: 'Người mua xem tin và liên hệ tư vấn viên hoàn toàn miễn phí.', priority: 5, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-off', topic: 'Câu tắt', keywords: 'khuyến mãi', answer: 'Câu này đang tắt, không được khớp.', priority: 99, is_active: false, created_at: '2026-01-01', updated_at: '2026-01-01' },
+];
+
+describe('buildAdvisorTurn — fix bug ưu tiên câu nhạy cảm', () => {
+  it('"mua nhà 2 tỷ có vay ngân hàng" vẫn tìm tin ≤2 tỷ + ghép lưu ý vay', () => {
+    const turn = buildAdvisorTurn('mua nhà 2 tỷ có vay ngân hàng', taxonomy);
+    expect(turn.stage).toBe('showing_matches');
+    expect(turn.filters.listingType).toBe('mua_ban');
+    expect(turn.filters.maxPrice).toBe(2);
+    expect(turn.safetyNote).toBeDefined();
+    expect(turn.reply).toContain('ngân hàng');
+  });
+
+  it('câu hỏi tư vấn thuần "sổ chung có nên mua không" vẫn đi nhánh nhạy cảm', () => {
+    const turn = buildAdvisorTurn('sổ chung có nên mua không', taxonomy);
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toContain('hồ sơ gốc');
+  });
+
+  it('không truyền opts → hành vi cũ giữ nguyên (câu nhạy cảm thuần)', () => {
+    const turn = buildAdvisorTurn('vay ngân hàng lãi suất bao nhiêu', taxonomy);
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).not.toMatch(/\d+%/);
+  });
+});
+
+describe('matchKnowledge', () => {
+  it('khớp theo keyword, ưu tiên priority cao trước', () => {
+    const hit = matchKnowledge('cho hỏi phí môi giới thế nào', kbEntries);
+    expect(hit?.id).toBe('kb-fee');
+  });
+
+  it('không phân biệt hoa/dấu', () => {
+    const hit = matchKnowledge('VAY NGÂN HÀNG được không', kbEntries);
+    expect(hit?.id).toBe('kb-loan');
+  });
+
+  it('bỏ qua entry inactive dù priority cao', () => {
+    const hit = matchKnowledge('có khuyến mãi gì không', kbEntries);
+    expect(hit).toBeNull();
+  });
+
+  it('không có entries → null', () => {
+    expect(matchKnowledge('vay ngân hàng', [])).toBeNull();
+    expect(matchKnowledge('vay ngân hàng', undefined)).toBeNull();
+  });
+});
+
+describe('KB + lời mặc định override', () => {
+  it('KB khớp ở câu tư vấn thuần → trả answer admin soạn', () => {
+    const turn = buildAdvisorTurn('cho hỏi phí môi giới', taxonomy, { knowledge: kbEntries });
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toContain('miễn phí');
+  });
+
+  it('lời mặc định admin override câu nhạy cảm mặc định', () => {
+    const turn = buildAdvisorTurn('vay ngân hàng lãi suất bao nhiêu', taxonomy, {
+      messages: { loan: 'Câu vay do admin soạn riêng.' },
+    });
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toBe('Câu vay do admin soạn riêng.');
+  });
+
+  it('safeAdviceResponse nhận override', () => {
+    expect(safeAdviceResponse('loan', 'Nội dung admin')).toBe('Nội dung admin');
+    expect(safeAdviceResponse('loan', '  ')).toContain('ngân hàng');
   });
 });

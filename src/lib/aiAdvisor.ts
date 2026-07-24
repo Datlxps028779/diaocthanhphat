@@ -1,4 +1,4 @@
-import type { Property } from './supabase';
+import type { Property, AiChatKnowledge } from './supabase';
 import { buildPropertyPath, type PropertyFilters } from './api/properties';
 import { parseSearchIntent, normalizeVietnamese, type AiSearchMatch, type SearchTaxonomy } from './aiSearch';
 import type { submitLead } from './api/leads';
@@ -39,7 +39,13 @@ export function isSensitiveAdviceRequest(text: string): SensitiveKind | null {
   return null;
 }
 
-export function safeAdviceResponse(kind: SensitiveKind): string {
+// Lời mặc định admin có thể chỉnh (site_settings group 'ai_chat'). Truyền qua opts;
+// không truyền thì trả chuỗi cứng như cũ để test/hành vi cũ không đổi.
+export interface AdvisorMessages { loan?: string; legal?: string; investment?: string }
+export interface AdvisorOpts { knowledge?: AiChatKnowledge[]; messages?: AdvisorMessages }
+
+export function safeAdviceResponse(kind: SensitiveKind, override?: string): string {
+  if (override && override.trim()) return override.trim();
   if (kind === 'legal') {
     return 'Thông tin pháp lý chỉ nên xem như tham khảo. Anh/chị cần kiểm tra hồ sơ gốc, tình trạng quy hoạch và công chứng trước khi đặt cọc. Em có thể gửi nhu cầu cho tư vấn viên để kiểm tra kỹ từng tin.';
   }
@@ -47,6 +53,26 @@ export function safeAdviceResponse(kind: SensitiveKind): string {
     return 'Lãi suất và hạn mức vay phụ thuộc ngân hàng, hồ sơ thu nhập và tài sản đảm bảo. Em không tự bịa con số lãi suất; em có thể chuyển thông tin cho tư vấn viên để đối chiếu phương án vay phù hợp.';
   }
   return 'Đầu tư BĐS cần xem vị trí, pháp lý, thanh khoản, dòng tiền và thời gian nắm giữ. Không có cam kết lợi nhuận cố định; em có thể gợi ý tin phù hợp và chuyển tư vấn viên phân tích sâu hơn.';
+}
+
+// Khớp kho tri thức admin soạn: chuẩn hóa text + từng cụm keyword (tách bởi , hoặc
+// xuống dòng); nếu 1 cụm là substring của text đã chuẩn hóa → khớp. Entries đã
+// order theo priority giảm dần (getAiChatKnowledge), nên trả entry khớp đầu tiên.
+export function matchKnowledge(text: string, entries?: AiChatKnowledge[]): AiChatKnowledge | null {
+  if (!entries || entries.length === 0) return null;
+  const q = normalizeVietnamese(text);
+  const sorted = [...entries].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  for (const e of sorted) {
+    if (e.is_active === false) continue;
+    const phrases = e.keywords.split(/[,\n]/).map(s => normalizeVietnamese(s)).filter(Boolean);
+    if (phrases.some(p => q.includes(p))) return e;
+  }
+  return null;
+}
+
+function sensitiveMessage(kind: SensitiveKind, messages?: AdvisorMessages): string {
+  const override = kind === 'loan' ? messages?.loan : kind === 'legal' ? messages?.legal : messages?.investment;
+  return safeAdviceResponse(kind, override);
 }
 
 export function formatAdvisorBudget(filters: Partial<PropertyFilters>): string {
@@ -77,29 +103,51 @@ export function summarizeAdvisorNeed(turn: Pick<AdvisorTurnResult, 'filters' | '
   return turn.residualKeyword?.trim() || 'nhu cầu BĐS của anh/chị';
 }
 
-export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy): AdvisorTurnResult {
-  const sensitive = isSensitiveAdviceRequest(input);
-  if (sensitive) {
-    return { reply: safeAdviceResponse(sensitive), filters: {}, residualKeyword: input.trim(), matched: [], stage: 'collecting_contact', safetyNote: 'Thông tin chỉ mang tính tham khảo; cần tư vấn viên kiểm tra hồ sơ thực tế.' };
-  }
+export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?: AdvisorOpts): AdvisorTurnResult {
+  // Parse intent TRƯỚC để không bỏ nhu cầu tìm tin khi câu vừa hỏi vay/pháp lý
+  // vừa mô tả BĐS (vd "mua nhà 2 tỷ có vay ngân hàng"). Sau đó mới ghép lưu ý.
   const intent = parseSearchIntent(input, taxonomy);
-  if (intent.confidence === 'low') {
+  const sensitive = isSensitiveAdviceRequest(input);
+  const kb = matchKnowledge(input, opts?.knowledge);
+
+  // "Đủ mạnh để tìm tin" = confidence không thấp VÀ có filter cụ thể (giá/khu vực/
+  // loại/diện tích), không chỉ mỗi ý mua/thuê. Nhờ vậy câu hỏi tư vấn thuần (vd
+  // "sổ chung có nên mua không") vẫn đi nhánh nhạy cảm, còn "mua nhà 2 tỷ có vay
+  // ngân hàng" thì vừa tìm tin ≤2 tỷ vừa ghép lưu ý vay.
+  const f = intent.filters;
+  const hasConcreteFilter = f.minPrice != null || f.maxPrice != null || !!f.district
+    || !!f.ward || !!f.areaId || !!f.typeId || f.minArea != null || f.maxArea != null;
+
+  // Intent đủ mạnh để tìm tin → showing_matches BÌNH THƯỜNG, nhưng nếu câu chạm
+  // chủ đề nhạy cảm / khớp KB thì PREPEND câu lưu ý + set safetyNote (không bỏ tìm tin).
+  if (intent.confidence !== 'low' && hasConcreteFilter) {
+    const need = summarizeAdvisorNeed({ filters: intent.filters, matched: intent.matched });
+    const base = `Em đã hiểu ${need}. Em sẽ gợi ý vài tin phù hợp nhất trước, anh/chị có thể lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ sâu hơn.`;
+    const note = kb ? kb.answer : sensitive ? sensitiveMessage(sensitive, opts?.messages) : '';
     return {
-      reply: 'Em cần thêm một chút thông tin để lọc đúng: anh/chị muốn mua hay thuê, khu vực nào, tầm giá bao nhiêu và loại BĐS mong muốn là gì?',
-      filters: {},
-      residualKeyword: input.trim(),
-      matched: [],
-      stage: 'collecting_need',
+      reply: note ? `${note}\n\n${base}` : base,
+      filters: intent.filters,
+      residualKeyword: intent.residualKeyword,
+      matched: intent.matched,
+      stage: 'showing_matches',
+      ...(note ? { safetyNote: 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.' } : {}),
     };
   }
-  const result: AdvisorTurnResult = {
-    reply: `Em đã hiểu ${summarizeAdvisorNeed({ filters: intent.filters, matched: intent.matched })}. Em sẽ gợi ý vài tin phù hợp nhất trước, anh/chị có thể lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ sâu hơn.`,
-    filters: intent.filters,
-    residualKeyword: intent.residualKeyword,
-    matched: intent.matched,
-    stage: 'showing_matches',
+
+  // Intent yếu: ưu tiên KB admin soạn → rồi tới câu nhạy cảm mặc định.
+  if (kb) {
+    return { reply: kb.answer, filters: {}, residualKeyword: input.trim(), matched: [], stage: 'collecting_contact', safetyNote: 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.' };
+  }
+  if (sensitive) {
+    return { reply: sensitiveMessage(sensitive, opts?.messages), filters: {}, residualKeyword: input.trim(), matched: [], stage: 'collecting_contact', safetyNote: 'Thông tin chỉ mang tính tham khảo; cần tư vấn viên kiểm tra hồ sơ thực tế.' };
+  }
+  return {
+    reply: 'Em cần thêm một chút thông tin để lọc đúng: anh/chị muốn mua hay thuê, khu vực nào, tầm giá bao nhiêu và loại BĐS mong muốn là gì?',
+    filters: {},
+    residualKeyword: input.trim(),
+    matched: [],
+    stage: 'collecting_need',
   };
-  return result;
 }
 
 export function summarizePropertyForAdvisor(p: Property): AdvisorPropertySummary {

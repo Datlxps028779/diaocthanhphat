@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -31,6 +31,7 @@ const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
+const AiChatTab = lazy(() => import('./admin/tabs/AiChatTab').then(m => ({ default: m.AiChatTab })));
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
@@ -107,6 +108,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
     { id: 'backup', label: 'Sao lưu dữ liệu', icon: <Database className="w-4 h-4" /> },
     { id: 'ai-analytics', label: 'AI Phân tích', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'ai-chat', label: 'Đào tạo AI', icon: <Bot className="w-4 h-4" /> },
   ];
 
   return (
@@ -200,6 +202,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'settings' && <SiteSettingsTab />}
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
+          {tab === 'ai-chat' && <AiChatTab />}
           {tab === 'nurture' && <NurtureTab />}
           {tab === 'seo-geo' && <SeoGeoTab onEditEntity={editEntity} />}
           </Suspense>

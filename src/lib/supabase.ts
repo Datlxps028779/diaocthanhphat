@@ -205,6 +205,10 @@ export type SiteContent = {
   label: string; type: string; order_index: number;
   created_at: string; updated_at: string;
 };
+export type AiChatKnowledge = {
+  id: string; topic: string; keywords: string; answer: string;
+  priority: number; is_active: boolean; created_at: string; updated_at: string;
+};
 export type Banner = {
   id: string; title: string; subtitle: string | null; cta_text: string | null;
   cta_link: string | null; image_url: string | null; bg_color: string;

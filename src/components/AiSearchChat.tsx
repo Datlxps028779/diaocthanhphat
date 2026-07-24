@@ -1,26 +1,28 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
 import { getAllProperties } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
+import { getAiChatKnowledge } from '../lib/api/aiChatKnowledge';
+import { getSiteSettings } from '../lib/api/siteSettings';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 
-const EXAMPLES = [
+// Lời mặc định = fallback khi admin chưa cấu hình / mạng lỗi (site_settings group 'ai_chat').
+const DEFAULT_EXAMPLES = [
   'Nhà Dĩ An dưới 3 tỷ sổ hồng',
   'Cho thuê căn hộ Thủ Dầu Một 5-10 triệu',
   'Đất nền Bến Cát trên 100m2 gần VSIP',
   'Tôi cần tư vấn pháp lý',
 ];
 
-const GREETING: AdvisorMessage = {
-  role: 'assistant',
-  text: 'Em là Trợ lý BĐS. Anh/chị mô tả nhu cầu mua/thuê, em sẽ lọc tin phù hợp và có thể gửi thông tin cho tư vấn viên.',
-};
+const DEFAULT_GREETING = 'Em là Trợ lý BĐS. Anh/chị mô tả nhu cầu mua/thuê, em sẽ lọc tin phù hợp và có thể gửi thông tin cho tư vấn viên.';
+const GREETING: AdvisorMessage = { role: 'assistant', text: DEFAULT_GREETING };
 
 // Mascot AI kiểu "Tako" của TikTok: thân bóng ma bo tròn, tua sóng lượn ở đáy,
 // mắt to thân thiện. Vẽ theo currentColor để kế thừa màu chữ của nút.
@@ -65,6 +67,34 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const { data: wards = [], isLoading: loadingWards } = useWards();
   const taxonomyReady = !loadingAreas && !loadingTypes && !loadingDistricts && !loadingWards;
   const taxonomy = useMemo(() => ({ areas, districts, wards, propertyTypes }), [areas, districts, wards, propertyTypes]);
+
+  // Kho tri thức + lời mặc định do admin soạn (tab "Đào tạo AI"). Lỗi/rỗng thì
+  // dùng hằng số fallback nên chat vẫn chạy. staleTime dài vì nội dung ít đổi.
+  const { data: knowledge = [] } = useQuery({
+    queryKey: ['ai-chat-knowledge'],
+    queryFn: getAiChatKnowledge,
+    staleTime: 5 * 60_000,
+  });
+  const { data: chatSettings } = useQuery({
+    queryKey: ['ai-chat-settings'],
+    queryFn: getSiteSettings,
+    staleTime: 5 * 60_000,
+  });
+  const greetingText = chatSettings?.ai_greeting?.trim() || DEFAULT_GREETING;
+  const examples = useMemo(() => {
+    const raw = chatSettings?.ai_examples?.trim();
+    if (!raw) return DEFAULT_EXAMPLES;
+    const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    return lines.length ? lines : DEFAULT_EXAMPLES;
+  }, [chatSettings?.ai_examples]);
+  const advisorOpts = useMemo(() => ({
+    knowledge,
+    messages: {
+      loan: chatSettings?.ai_answer_loan,
+      legal: chatSettings?.ai_answer_legal,
+      investment: chatSettings?.ai_answer_investment,
+    },
+  }), [knowledge, chatSettings?.ai_answer_loan, chatSettings?.ai_answer_legal, chatSettings?.ai_answer_investment]);
   const hasUserMessage = messages.some(m => m.role === 'user');
   const showExamples = !hasUserMessage && !loading;
   const showMatchActions = !loading && lastTurn?.stage === 'showing_matches';
@@ -74,6 +104,15 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     if (!open) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [open, messages.length, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
+
+  // Đồng bộ lời chào động (admin cấu hình) vào bubble đầu khi hội thoại còn nguyên
+  // (chưa có tin người dùng). Không đụng khi khách đã bắt đầu chat để tránh ghi đè.
+  useEffect(() => {
+    if (hasUserMessage) return;
+    setMessages(prev => (prev.length === 1 && prev[0].role === 'assistant' && prev[0].text !== greetingText
+      ? [{ role: 'assistant', text: greetingText }]
+      : prev));
+  }, [greetingText, hasUserMessage]);
 
   useEffect(() => {
     if (!open || !chatHandle) return;
@@ -181,7 +220,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     // Chat tham khảo: KHÔNG tạo phiên. Chỉ ghi tiếp nếu khách đã mở tư vấn trước đó.
     await persistOngoingMessage('visitor', text);
 
-    const turn = buildAdvisorTurn(text, taxonomy);
+    const turn = buildAdvisorTurn(text, taxonomy, advisorOpts);
     setLastTurn(turn);
     setResults([]);
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
@@ -437,7 +476,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
             {!taxonomyReady && <p className="text-xs text-gray-400">Đang nạp dữ liệu khu vực/loại BĐS…</p>}
             {showExamples && (
               <div className="flex flex-wrap gap-1.5">
-                {EXAMPLES.map(example => (
+                {examples.map(example => (
                   <button key={example} disabled={!taxonomyReady} onClick={() => send(example)} className="text-[11px] text-gray-600 hover:text-red-600 bg-gray-50 hover:bg-red-50 disabled:opacity-50 rounded-full px-2.5 py-1.5 transition-colors">{example}</button>
                 ))}
               </div>
