@@ -12,6 +12,7 @@ import { useSetting } from '../lib/cms';
 import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickRelated } from '../lib/relatedNews';
+import { buildNewsImageAlt } from '../lib/propertyImages';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -75,7 +76,7 @@ function ArticleCard({
     return (
       <Link href={href} className="block bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow md:flex group">
         <div className="md:w-1/2 h-56 md:h-auto overflow-hidden flex-shrink-0 bg-gray-100">
-          <img src={imgUrl} alt={article.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+          <img src={imgUrl} alt={buildNewsImageAlt(article)} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
         </div>
         <div className="p-6 flex flex-col justify-between md:w-1/2">
           <div>
@@ -109,7 +110,7 @@ function ArticleCard({
   return (
     <Link href={href} className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col group">
       <div className="h-44 overflow-hidden bg-gray-100">
-        <img src={imgUrl} alt={article.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+        <img src={imgUrl} alt={buildNewsImageAlt(article)} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="p-4 flex flex-col flex-1">
         {cat && (
@@ -145,7 +146,7 @@ function HorizontalCard({ article }: { article: NewsArticle }) {
   return (
     <Link href={href} className="flex gap-3 h-full bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow p-2.5 group">
       <div className="w-24 min-h-[5rem] rounded-lg overflow-hidden shrink-0">
-        <img src={imgUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <img src={imgUrl} alt={buildNewsImageAlt(article)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="min-w-0 flex flex-col justify-center">
         {cat && (
@@ -194,7 +195,7 @@ function ArticleDetail({
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-64 md:h-96 flex items-end overflow-hidden bg-gray-900">
-        <img src={imgUrl} alt={article.title} className="absolute inset-0 w-full h-full object-cover object-center" />
+        <img src={imgUrl} alt={buildNewsImageAlt(article)} className="absolute inset-0 w-full h-full object-cover object-center" />
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/40 to-transparent" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 w-full pb-8">
           <button
@@ -323,7 +324,7 @@ function ArticleDetail({
                     href={relatedHref(r)}
                     className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
                   >
-                    <img src={rImg} alt={r.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                    <img src={rImg} alt={buildNewsImageAlt(r)} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                     <div>
                       <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">{r.title}</p>
                       <p className="text-xs text-gray-400 mt-1">
@@ -600,7 +601,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                     className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
                   >
                     <span className="text-lg font-black text-gray-200 leading-none w-5 shrink-0 text-center pt-0.5">{i + 1}</span>
-                    <img src={img} alt={a.title} className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                    <img src={img} alt={buildNewsImageAlt(a)} className="w-14 h-14 rounded-lg object-cover shrink-0" />
                     <div className="min-w-0">
                       <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">
                         {a.title}

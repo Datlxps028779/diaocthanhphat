@@ -53,12 +53,12 @@ describe('buildTrustSignals', () => {
   });
 
   it('nhiều hình khi gallery >= 3 ảnh thật', () => {
-    const s = buildTrustSignals(property({ image_url: 'a', images: ['b', 'c'] }));
+    const s = buildTrustSignals(property({ image_url: '/a.jpg', images: ['/b.jpg', '/c.jpg'] }));
     expect(s.map(x => x.key)).toContain('photos');
   });
 
   it('không tính photos khi ít ảnh', () => {
-    const s = buildTrustSignals(property({ image_url: 'a', images: ['a'] }));
+    const s = buildTrustSignals(property({ image_url: '/a.jpg', images: ['/a.jpg'] }));
     expect(s.map(x => x.key)).not.toContain('photos');
   });
 

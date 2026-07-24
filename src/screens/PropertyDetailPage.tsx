@@ -29,7 +29,7 @@ import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
-import { buildPropertyGallery } from '../lib/propertyImages';
+import { buildPropertyGallery, buildPropertyImageAlt } from '../lib/propertyImages';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 
@@ -286,7 +286,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     <button key={i} type="button" onClick={() => setLightboxOpen(true)}
                       className="relative flex-shrink-0 w-full h-full cursor-zoom-in"
                       aria-label="Phóng to ảnh">
-                      <Image src={img} alt={`${property.title} - ảnh ${i + 1}`} fill
+                      <Image src={img} alt={buildPropertyImageAlt(property, i)} fill
                         priority={i === 0}
                         sizes="(max-width: 768px) 100vw, 66vw" className="object-contain" />
                     </button>
@@ -683,7 +683,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                       <button key={r.id} onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}
                         className="flex gap-3 w-full text-left hover:bg-gray-50 rounded-lg p-1.5 transition-colors group">
                         <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                          <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={r.title} fill sizes="64px" className="object-cover" />
+                          <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(r)} fill sizes="64px" className="object-cover" />
                         </span>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
@@ -722,7 +722,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 <div key={r.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 cursor-pointer group transition-all"
                   onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}>
                   <div className="relative aspect-[4/3] bg-gray-100">
-                    <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={r.title} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(r)} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3">
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
@@ -805,7 +805,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/80 text-sm font-medium">
             {activeImg + 1} / {allImages.length}
           </div>
-          <img src={allImages[activeImg]} alt={`${property.title} - ảnh ${activeImg + 1}`}
+          <img src={allImages[activeImg]} alt={buildPropertyImageAlt(property, activeImg)}
             onClick={e => e.stopPropagation()}
             className="max-w-[92vw] max-h-[85vh] object-contain select-none" />
           {allImages.length > 1 && (

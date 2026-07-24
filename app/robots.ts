@@ -20,6 +20,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/quantrihethong', '/tai-khoan', '/tin-cua-toi', '/dat-lai-mat-khau', '/xac-nhan-email'],
       },
     ],
-    sitemap: `${SITE_URL}/sitemap.xml`,
+    sitemap: [`${SITE_URL}/sitemap.xml`, `${SITE_URL}/sitemap-images.xml`],
   };
 }

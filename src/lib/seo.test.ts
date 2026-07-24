@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildLocalBusinessJsonLd, staticPageMetadata, buildBreadcrumbJsonLd, buildPropertyJsonLd } from './seo';
-import type { Property } from './supabase';
+import { buildLocalBusinessJsonLd, staticPageMetadata, buildBreadcrumbJsonLd, buildPropertyJsonLd, buildPropertyMetadata, buildNewsJsonLd, buildNewsMetadata } from './seo';
+import type { NewsArticle, Property } from './supabase';
 
 const SITE_URL = 'https://chonhaviet.com';
 
@@ -18,6 +18,17 @@ function property(overrides: Partial<Property> = {}): Property {
     vr_tour_url: null, video_url: null, contact_zalo: null, tags: null,
     meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null, faq: null,
     slug: 'nha-pho-dep', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function news(overrides: Partial<NewsArticle> = {}): NewsArticle {
+  return {
+    id: 'n1', title: 'Tin thị trường', slug: 'tin-thi-truong', excerpt: 'Tóm tắt tin.', content: 'Nội dung tin.',
+    image_url: null, category: 'Thị trường', author: 'Admin', is_published: true, views: 0,
+    meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null, related_ids: null,
+    geo_area: null, geo_entity: null, geo_notes: null, faq: null, citations: null,
+    created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -173,5 +184,30 @@ describe('buildPropertyJsonLd', () => {
     const ld = buildPropertyJsonLd(property({ is_verified: true }));
     expect(ld).not.toHaveProperty('verified');
     expect(ld).not.toHaveProperty('isVerified');
+  });
+
+  it('metadata dùng ảnh đầu tiên trong gallery khi image_url thiếu', () => {
+    const metadata = buildPropertyMetadata(property({ image_url: null, images: ['https://x/gallery.jpg'] }));
+    expect(metadata.openGraph?.images).toEqual([{ url: 'https://x/gallery.jpg', width: 1200, height: 630 }]);
+  });
+
+  it('image JSON-LD đổi URL Supabase sang domain chính', () => {
+    const ld = buildPropertyJsonLd(property({ image_url: 'https://itgxladqskdcbwsbmuyi.supabase.co/storage/v1/object/public/admin-uploads/properties/nha.jpg' }));
+    expect(ld.image).toEqual(['https://chonhaviet.com/hinh-anh/admin-uploads/properties/nha.jpg']);
+  });
+});
+
+describe('buildNewsJsonLd/buildNewsMetadata', () => {
+  it('news JSON-LD dùng ảnh thật absolute branded, không set image khi thiếu ảnh', () => {
+    const withImage = buildNewsJsonLd(news({ image_url: 'https://itgxladqskdcbwsbmuyi.supabase.co/storage/v1/object/public/admin-uploads/news/tin.jpg' }));
+    expect(withImage.image).toBe('https://chonhaviet.com/hinh-anh/admin-uploads/news/tin.jpg');
+
+    const noImage = buildNewsJsonLd(news({ image_url: null }));
+    expect(noImage).not.toHaveProperty('image');
+  });
+
+  it('news metadata vẫn có fallback OG khi thiếu ảnh cover', () => {
+    const metadata = buildNewsMetadata(news({ image_url: null }));
+    expect(metadata.openGraph?.images).toEqual([{ url: 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg', width: 1200, height: 630 }]);
   });
 });

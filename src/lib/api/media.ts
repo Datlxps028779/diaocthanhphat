@@ -1,5 +1,6 @@
 import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia } from '../supabase';
 import { buildSlug } from '../slug';
+import { publicImageUrlToStoragePath, storageUrlToPublicImageUrl } from '../siteUrl';
 
 // Tên file chuẩn SEO: {folder}/{slug mô tả}-{hậu tố ngắn}.{ext} thay vì rác ngẫu nhiên.
 // Ưu tiên caption (vd tiêu đề tin), else tên file gốc, else folder. Google đánh giá
@@ -58,7 +59,7 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
   if (error) throw error;
 
   const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
-  const publicUrl = data.publicUrl;
+  const publicUrl = storageUrlToPublicImageUrl(data.publicUrl);
 
   // Ghi metadata vào user_media để hỗ trợ thư viện ảnh
   try {
@@ -99,7 +100,7 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
     const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
     if (error) throw error;
     const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
-    const publicUrl = data.publicUrl;
+    const publicUrl = storageUrlToPublicImageUrl(data.publicUrl);
     urls.push(publicUrl);
 
     // Ghi metadata vào user_media
@@ -214,6 +215,10 @@ export async function getUserMedia(folder?: string): Promise<UserMedia[]> {
   return (data ?? []) as UserMedia[];
 }
 
+// Danh mục ảnh chuẩn của hệ thống — luôn hiển thị trong thư viện dù chưa có ảnh nào.
+// Khớp với các folder cố định truyền vào ImageUpload/ImageLibraryModal khắp app.
+export const KNOWN_MEDIA_FOLDERS = ['properties', 'news', 'user-listings'];
+
 // Liệt kê các thư mục ảnh (giá trị folder phân biệt). Admin thấy mọi thư mục, user
 // thường chỉ thấy của mình. Thư mục là nhãn chuỗi trên user_media — "tạo thư mục" chỉ
 // là chọn nhãn mới để upload vào, thư mục hiện diện khi có ảnh đầu tiên.
@@ -225,7 +230,8 @@ export async function listMediaFolders(): Promise<string[]> {
   let q = supabase.from('user_media').select('folder');
   if (!isAdmin) q = q.eq('user_id', user.id);
   const { data } = await q;
-  const set = new Set<string>();
+  // Luôn kèm danh mục chuẩn (dù chưa có ảnh) + gộp thư mục tự tạo có ảnh.
+  const set = new Set<string>(KNOWN_MEDIA_FOLDERS);
   for (const row of (data ?? []) as { folder: string | null }[]) {
     if (row.folder?.trim()) set.add(row.folder.trim());
   }
@@ -241,17 +247,9 @@ export async function deleteUserMedia(id: string): Promise<void> {
     .single();
   if (fetchErr || !media) throw new Error('Media not found');
 
-  // Xóa file trong storage — thử cả 2 bucket (admin-uploads, user-uploads)
-  for (const bucketName of ['user-uploads', 'admin-uploads']) {
-    const urlParts = (media as { url: string }).url.split('/');
-    const idx = urlParts.indexOf(bucketName);
-    if (idx !== -1) {
-      const storagePath = urlParts.slice(idx + 1).join('/');
-      if (storagePath) {
-        try { await supabase.storage.from(bucketName).remove([storagePath]); } catch { /* silent */ }
-      }
-      break;
-    }
+  const storage = publicImageUrlToStoragePath((media as { url: string }).url);
+  if (storage) {
+    try { await supabase.storage.from(storage.bucket).remove([storage.path]); } catch { /* silent */ }
   }
 
   // Xóa record trong database

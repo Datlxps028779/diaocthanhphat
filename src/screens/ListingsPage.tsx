@@ -26,7 +26,7 @@ import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } fro
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
-
+import { buildPropertyImageAlt } from '../lib/propertyImages';
 interface ListingsPageProps {
   initialFilters?: Partial<{
     listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
@@ -639,7 +639,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                             onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                             className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                             <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                              <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={p.title} fill sizes="64px" className="object-cover" />
+                              <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                             </span>
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
@@ -670,7 +670,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                           onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                           className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                           <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                            <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={p.title} fill sizes="64px" className="object-cover" />
+                            <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
@@ -811,7 +811,7 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <div className="relative aspect-[4/3] bg-gray-100">
           <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-            alt={p.title} fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            alt={buildPropertyImageAlt(p)} fill sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-500" />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
@@ -870,7 +870,7 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
       <div className="relative w-48 flex-shrink-0 overflow-hidden">
         <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={p.title} fill sizes="192px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="192px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
         {p.listing_type === 'cho_thue' && (
           <span className="absolute top-2 left-2 z-[2] bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}

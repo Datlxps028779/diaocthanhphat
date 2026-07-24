@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
-import { buildPropertyGallery, FALLBACK_PROPERTY_IMAGE } from './propertyImages';
-import { absoluteUrl, getSiteUrl } from './siteUrl';
+import { buildSeoImageGallery, FALLBACK_PROPERTY_IMAGE, normalizeSeoImageUrl } from './propertyImages';
+import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { stripHtml, isHtmlContent } from './markdown';
 
@@ -132,7 +132,8 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const path = `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
   // OG image: luôn có ảnh (fallback khi tin thiếu ảnh) + ép URL tuyệt đối. Zalo/FB
   // bỏ qua ảnh nếu không phải absolute URL rõ ràng → share ra không hiện thumbnail.
-  const ogImage = absoluteUrl(p.image_url?.trim() || FALLBACK_PROPERTY_IMAGE);
+  const realGallery = buildSeoImageGallery(p.image_url, p.images, { max: 1 });
+  const ogImage = realGallery[0] || FALLBACK_PROPERTY_IMAGE;
 
   return {
     title,
@@ -156,7 +157,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
 // có thì tự dựng. Render trong page.tsx qua <script type="application/ld+json">.
 export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   const url = absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`);
-  const gallery = buildPropertyGallery(p.image_url, p.images).filter(u => u !== FALLBACK_PROPERTY_IMAGE);
+  const gallery = buildSeoImageGallery(p.image_url, p.images);
   const video = buildPropertyVideoObject(p);
   // GEO/local: dựng tên địa danh từ dữ liệu thật (phường → quận → thành phố). Chỉ
   // thêm contentLocation/spatialCoverage/about/areaServed khi có dữ liệu, không bịa.
@@ -233,7 +234,8 @@ function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
       embedUrl: `https://www.youtube.com/embed/${yt}`,
     };
   }
-  const thumb = p.image_url?.trim();
+  const gallery = buildSeoImageGallery(p.image_url, p.images, { max: 1 });
+  const thumb = gallery[0];
   if (!thumb) return null;
   return { ...base, thumbnailUrl: thumb, contentUrl: src };
 }
@@ -261,7 +263,7 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
   // OG image: luôn có ảnh (fallback khi bài thiếu ảnh) + ép URL tuyệt đối cho Zalo/FB.
-  const ogImage = absoluteUrl(a.image_url?.trim() || FALLBACK_PROPERTY_IMAGE);
+  const ogImage = normalizePublicImageUrl(a.image_url) || FALLBACK_PROPERTY_IMAGE;
   return {
     title,
     description,
@@ -293,13 +295,14 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
   const citations = (a.citations ?? [])
     .filter(c => c && c.url && /^https?:\/\//i.test(c.url))
     .map(c => ({ '@type': 'CreativeWork', name: c.title || c.url, url: c.url }));
+  const image = normalizeSeoImageUrl(a.image_url);
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
     '@id': `${url}#article`,
     headline: a.title,
     description: a.excerpt ?? a.meta_description ?? undefined,
-    image: a.image_url ?? undefined,
+    ...(image ? { image } : {}),
     datePublished: a.created_at,
     dateModified: a.updated_at,
     author: { '@type': 'Organization', name: a.author || SITE_NAME },

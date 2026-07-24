@@ -28,8 +28,8 @@ import { ContactModal } from './components/ContactModal';
 import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
+import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
     <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-4 flex-wrap">
@@ -361,7 +361,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
                   {a.image_url && (
                     <div className="relative overflow-hidden h-44 bg-gray-100">
-                      <Image src={a.image_url} alt={a.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain group-hover:scale-105 transition-transform duration-500" />
+                      <Image src={a.image_url} alt={buildNewsImageAlt(a)} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain group-hover:scale-105 transition-transform duration-500" />
                     </div>
                   )}
                   <div className="p-4">
@@ -622,7 +622,7 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
         <div className="relative aspect-[4/3] bg-gray-100">
           <Image
             src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-            alt={p.title}
+            alt={buildPropertyImageAlt(p)}
             fill
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-500"
