@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.ai-description]
 verify_jwt = false
+
+[functions.ai-analytics]
+verify_jwt = false
+
+[functions.ai-autotag]
+verify_jwt = false

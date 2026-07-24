@@ -25,10 +25,13 @@ export interface AdvisorTurnResult {
   matched: AiSearchMatch[];
   stage: AdvisorStage;
   safetyNote?: string;
+  knowledgeSource?: AiChatKnowledge['knowledge_type'];
+  handoffRequired?: boolean;
 }
 
 type LeadPayload = Parameters<typeof submitLead>[0];
 type SensitiveKind = 'legal' | 'loan' | 'investment';
+type KnowledgeMatch = { entry: AiChatKnowledge; score: number };
 
 export function isSensitiveAdviceRequest(text: string): SensitiveKind | null {
   const q = normalizeVietnamese(text);
@@ -41,7 +44,7 @@ export function isSensitiveAdviceRequest(text: string): SensitiveKind | null {
 
 // Lời mặc định admin có thể chỉnh (site_settings group 'ai_chat'). Truyền qua opts;
 // không truyền thì trả chuỗi cứng như cũ để test/hành vi cũ không đổi.
-export interface AdvisorMessages { loan?: string; legal?: string; investment?: string }
+export interface AdvisorMessages { loan?: string; legal?: string; investment?: string; unknown?: string; handoff?: string }
 export interface AdvisorOpts { knowledge?: AiChatKnowledge[]; messages?: AdvisorMessages }
 
 export function safeAdviceResponse(kind: SensitiveKind, override?: string): string {
@@ -55,24 +58,98 @@ export function safeAdviceResponse(kind: SensitiveKind, override?: string): stri
   return 'Đầu tư BĐS cần xem vị trí, pháp lý, thanh khoản, dòng tiền và thời gian nắm giữ. Không có cam kết lợi nhuận cố định; em có thể gợi ý tin phù hợp và chuyển tư vấn viên phân tích sâu hơn.';
 }
 
-// Khớp kho tri thức admin soạn: chuẩn hóa text + từng cụm keyword (tách bởi , hoặc
-// xuống dòng); nếu 1 cụm là substring của text đã chuẩn hóa → khớp. Entries đã
-// order theo priority giảm dần (getAiChatKnowledge), nên trả entry khớp đầu tiên.
-export function matchKnowledge(text: string, entries?: AiChatKnowledge[]): AiChatKnowledge | null {
-  if (!entries || entries.length === 0) return null;
-  const q = normalizeVietnamese(text);
-  const sorted = [...entries].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-  for (const e of sorted) {
-    if (e.is_active === false) continue;
-    const phrases = e.keywords.split(/[,\n]/).map(s => normalizeVietnamese(s)).filter(Boolean);
-    if (phrases.some(p => q.includes(p))) return e;
+const TYPO_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\bso\s+h(o+|og|ongg|ong)\b/g, 'so hong'],
+  [/\bso\s+h[oa]\w*\b/g, 'so hong'],
+  [/\bs[oa]\s+chung\b/g, 'so chung'],
+  [/\bfap\s+l[yi]\b/g, 'phap ly'],
+  [/\bphap\s+li\b/g, 'phap ly'],
+  [/\bvay\s+ngan\s+hangg\b/g, 'vay ngan hang'],
+  [/\bvay\s+nh\b/g, 'vay ngan hang'],
+  [/\bvay\s+nhang\b/g, 'vay ngan hang'],
+  [/\blai\s+xuat\b/g, 'lai suat'],
+  [/\bdi\s*an\b/g, 'di an'],
+  [/\bdian\b/g, 'di an'],
+  [/\bnha\s+fo\b/g, 'nha pho'],
+  [/\bko\b/g, 'khong'],
+  [/\bk\b/g, 'khong'],
+];
+
+export function normalizeAdvisorQuery(text: string): string {
+  let q = normalizeVietnamese(text);
+  TYPO_REPLACEMENTS.forEach(([re, to]) => { q = q.replace(re, to); });
+  return q.replace(/\s+/g, ' ').trim();
+}
+
+function knowledgeTypeRank(e: AiChatKnowledge): number {
+  const type = e.knowledge_type ?? 'priority_qa';
+  if (type === 'priority_qa') return 400;
+  if (type === 'background') return 250;
+  if (type === 'rule') return 150;
+  return 0;
+}
+
+function splitKnowledgeTerms(entry: AiChatKnowledge): string[] {
+  return [entry.keywords, entry.question_examples, entry.typo_variants]
+    .filter((v): v is string => Boolean(v?.trim()))
+    .flatMap(v => v.split(/[,\n]/))
+    .map(normalizeAdvisorQuery)
+    .filter(Boolean);
+}
+
+function scoreKnowledge(text: string, entry: AiChatKnowledge): KnowledgeMatch | null {
+  if (entry.is_active === false || entry.knowledge_type === 'test_case') return null;
+  const q = normalizeAdvisorQuery(text);
+  const terms = splitKnowledgeTerms(entry);
+  if (!terms.length) return null;
+  let best = 0;
+  for (const term of terms) {
+    if (!term) continue;
+    if (q === term) best = Math.max(best, 120);
+    else if (new RegExp(`(^| )${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($| )`).test(q)) best = Math.max(best, 90 + Math.min(term.length, 40));
+    else if (q.includes(term)) best = Math.max(best, 60 + Math.min(term.length, 30));
+    else {
+      const words = term.split(' ').filter(w => w.length >= 3);
+      const hits = words.filter(w => new RegExp(`(^| )${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($| )`).test(q)).length;
+      if (words.length >= 2 && hits >= Math.ceil(words.length * 0.7)) best = Math.max(best, 35 + hits * 6);
+    }
   }
-  return null;
+  if (best < 35) return null;
+  return { entry, score: best + knowledgeTypeRank(entry) + (entry.priority ?? 0) };
+}
+
+export function findKnowledgeMatch(text: string, entries?: AiChatKnowledge[]): KnowledgeMatch | null {
+  const matches = (entries ?? [])
+    .map(e => scoreKnowledge(text, e))
+    .filter((m): m is KnowledgeMatch => Boolean(m))
+    .sort((a, b) => b.score - a.score || (b.entry.priority ?? 0) - (a.entry.priority ?? 0));
+  return matches[0] ?? null;
+}
+
+export function matchKnowledge(text: string, entries?: AiChatKnowledge[]): AiChatKnowledge | null {
+  return findKnowledgeMatch(text, entries)?.entry ?? null;
 }
 
 function sensitiveMessage(kind: SensitiveKind, messages?: AdvisorMessages): string {
   const override = kind === 'loan' ? messages?.loan : kind === 'legal' ? messages?.legal : messages?.investment;
   return safeAdviceResponse(kind, override);
+}
+
+function unknownMessage(messages?: AdvisorMessages): string {
+  return messages?.unknown?.trim() || 'Em chưa có dữ liệu xác thực để kết luận phần này. Anh/chị có thể để lại thông tin để tư vấn viên kiểm tra trên dữ liệu và hồ sơ thực tế.';
+}
+
+function handoffMessage(messages?: AdvisorMessages): string {
+  return messages?.handoff?.trim() || 'Em sẽ chuyển nội dung này cho tư vấn viên để kiểm tra kỹ hơn trước khi tư vấn chi tiết.';
+}
+
+function asksForUnsupportedFact(text: string): boolean {
+  const q = normalizeAdvisorQuery(text);
+  return /\b(tang bao nhieu|bao nhieu phan tram|%|quy hoach|loi chac|chac loi|cam ket loi|lai suat bao nhieu|gia thi truong hien tai)\b/.test(q);
+}
+
+function safetyNoteFor(entry?: AiChatKnowledge | null): string {
+  return entry?.guardrail?.trim() || 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.';
 }
 
 export function formatAdvisorBudget(filters: Partial<PropertyFilters>): string {
@@ -104,42 +181,69 @@ export function summarizeAdvisorNeed(turn: Pick<AdvisorTurnResult, 'filters' | '
 }
 
 export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?: AdvisorOpts): AdvisorTurnResult {
-  // Parse intent TRƯỚC để không bỏ nhu cầu tìm tin khi câu vừa hỏi vay/pháp lý
-  // vừa mô tả BĐS (vd "mua nhà 2 tỷ có vay ngân hàng"). Sau đó mới ghép lưu ý.
-  const intent = parseSearchIntent(input, taxonomy);
-  const sensitive = isSensitiveAdviceRequest(input);
-  const kb = matchKnowledge(input, opts?.knowledge);
+  const normalizedInput = normalizeAdvisorQuery(input);
+  const intent = parseSearchIntent(normalizedInput, taxonomy);
+  const sensitive = isSensitiveAdviceRequest(normalizedInput);
+  const knowledgeMatch = findKnowledgeMatch(input, opts?.knowledge);
+  const kb = knowledgeMatch?.entry ?? null;
 
-  // "Đủ mạnh để tìm tin" = confidence không thấp VÀ có filter cụ thể (giá/khu vực/
-  // loại/diện tích), không chỉ mỗi ý mua/thuê. Nhờ vậy câu hỏi tư vấn thuần (vd
-  // "sổ chung có nên mua không") vẫn đi nhánh nhạy cảm, còn "mua nhà 2 tỷ có vay
-  // ngân hàng" thì vừa tìm tin ≤2 tỷ vừa ghép lưu ý vay.
   const f = intent.filters;
   const hasConcreteFilter = f.minPrice != null || f.maxPrice != null || !!f.district
     || !!f.ward || !!f.areaId || !!f.typeId || f.minArea != null || f.maxArea != null;
+  const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input);
 
-  // Intent đủ mạnh để tìm tin → showing_matches BÌNH THƯỜNG, nhưng nếu câu chạm
-  // chủ đề nhạy cảm / khớp KB thì PREPEND câu lưu ý + set safetyNote (không bỏ tìm tin).
+  if (asksForUnsupportedFact(input) && !kb && !sensitive) {
+    return {
+      reply: `${unknownMessage(opts?.messages)}\n\n${handoffMessage(opts?.messages)}`,
+      filters: {},
+      residualKeyword: input.trim(),
+      matched: [],
+      stage: 'collecting_contact',
+      safetyNote: 'Không có dữ liệu xác thực thì không tự bịa câu trả lời.',
+      handoffRequired: true,
+    };
+  }
+
   if (intent.confidence !== 'low' && hasConcreteFilter) {
     const need = summarizeAdvisorNeed({ filters: intent.filters, matched: intent.matched });
     const base = `Em đã hiểu ${need}. Em sẽ gợi ý vài tin phù hợp nhất trước, anh/chị có thể lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ sâu hơn.`;
     const note = kb ? kb.answer : sensitive ? sensitiveMessage(sensitive, opts?.messages) : '';
+    const handoff = handoffRequired && note ? `\n\n${handoffMessage(opts?.messages)}` : '';
     return {
-      reply: note ? `${note}\n\n${base}` : base,
+      reply: note ? `${note}${handoff}\n\n${base}` : base,
       filters: intent.filters,
       residualKeyword: intent.residualKeyword,
       matched: intent.matched,
       stage: 'showing_matches',
-      ...(note ? { safetyNote: 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.' } : {}),
+      ...(note ? { safetyNote: safetyNoteFor(kb) } : {}),
+      ...(kb ? { knowledgeSource: kb.knowledge_type ?? 'priority_qa' } : {}),
+      ...(handoffRequired ? { handoffRequired: true } : {}),
     };
   }
 
-  // Intent yếu: ưu tiên KB admin soạn → rồi tới câu nhạy cảm mặc định.
   if (kb) {
-    return { reply: kb.answer, filters: {}, residualKeyword: input.trim(), matched: [], stage: 'collecting_contact', safetyNote: 'Thông tin chỉ mang tính tham khảo; tư vấn viên sẽ kiểm tra hồ sơ thực tế.' };
+    const extra = (kb.handoff_required || handoffRequired) ? `\n\n${handoffMessage(opts?.messages)}` : '';
+    return {
+      reply: `${kb.answer}${extra}`,
+      filters: {},
+      residualKeyword: input.trim(),
+      matched: [],
+      stage: 'collecting_contact',
+      safetyNote: safetyNoteFor(kb),
+      knowledgeSource: kb.knowledge_type ?? 'priority_qa',
+      ...(kb.handoff_required || handoffRequired ? { handoffRequired: true } : {}),
+    };
   }
   if (sensitive) {
-    return { reply: sensitiveMessage(sensitive, opts?.messages), filters: {}, residualKeyword: input.trim(), matched: [], stage: 'collecting_contact', safetyNote: 'Thông tin chỉ mang tính tham khảo; cần tư vấn viên kiểm tra hồ sơ thực tế.' };
+    return {
+      reply: `${sensitiveMessage(sensitive, opts?.messages)}\n\n${handoffMessage(opts?.messages)}`,
+      filters: {},
+      residualKeyword: input.trim(),
+      matched: [],
+      stage: 'collecting_contact',
+      safetyNote: 'Thông tin chỉ mang tính tham khảo; cần tư vấn viên kiểm tra hồ sơ thực tế.',
+      handoffRequired: true,
+    };
   }
   return {
     reply: 'Em cần thêm một chút thông tin để lọc đúng: anh/chị muốn mua hay thuê, khu vực nào, tầm giá bao nhiêu và loại BĐS mong muốn là gì?',

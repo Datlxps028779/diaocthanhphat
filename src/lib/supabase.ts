@@ -205,9 +205,17 @@ export type SiteContent = {
   label: string; type: string; order_index: number;
   created_at: string; updated_at: string;
 };
+export type AiChatKnowledgeType = 'priority_qa' | 'background' | 'rule' | 'test_case';
 export type AiChatKnowledge = {
   id: string; topic: string; keywords: string; answer: string;
   priority: number; is_active: boolean; created_at: string; updated_at: string;
+  knowledge_type?: AiChatKnowledgeType | null;
+  question_examples?: string | null;
+  handoff_required?: boolean | null;
+  guardrail?: string | null;
+  expected_behavior?: string | null;
+  must_not_answer?: string | null;
+  typo_variants?: string | null;
 };
 export type Banner = {
   id: string; title: string; subtitle: string | null; cta_text: string | null;

@@ -3,9 +3,11 @@ import type { Area, District, Property, PropertyType, Ward } from './supabase';
 import {
   buildAdvisorTurn,
   buildAdvisorLeadPayload,
+  findKnowledgeMatch,
   formatAdvisorBudget,
   isSensitiveAdviceRequest,
   matchKnowledge,
+  normalizeAdvisorQuery,
   safeAdviceResponse,
   summarizeAdvisorNeed,
   summarizePropertyForAdvisor,
@@ -131,8 +133,11 @@ describe('advisor helpers', () => {
 });
 
 const kbEntries: AiChatKnowledge[] = [
-  { id: 'kb-loan', topic: 'Vay ngân hàng', keywords: 'vay, vay ngân hàng, trả góp', answer: 'Bên em hỗ trợ vay tới 70% qua ngân hàng liên kết.', priority: 10, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
-  { id: 'kb-fee', topic: 'Phí môi giới', keywords: 'phí, phí môi giới, hoa hồng', answer: 'Người mua xem tin và liên hệ tư vấn viên hoàn toàn miễn phí.', priority: 5, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-loan', topic: 'Vay ngân hàng', knowledge_type: 'background', keywords: 'vay, vay ngân hàng, trả góp', typo_variants: 'vay ngan hangg, vay nh, lai xuat', answer: 'Bên em hỗ trợ vay qua ngân hàng liên kết nhưng không tự bịa lãi suất.', priority: 10, handoff_required: true, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-fee', topic: 'Phí môi giới', knowledge_type: 'priority_qa', keywords: 'phí, phí môi giới, hoa hồng', answer: 'Người mua xem tin và liên hệ tư vấn viên hoàn toàn miễn phí.', priority: 5, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-legal', topic: 'Pháp lý sổ hồng', knowledge_type: 'background', keywords: 'sổ hồng, pháp lý, công chứng', typo_variants: 'sỗ hòng, so hongg, fap ly', answer: 'Anh/chị cần kiểm tra hồ sơ gốc, quy hoạch và điều kiện công chứng trước khi đặt cọc.', priority: 20, handoff_required: true, guardrail: 'Không khẳng định pháp lý nếu chưa xem hồ sơ.', is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-rule', topic: 'Không bịa số liệu', knowledge_type: 'rule', keywords: 'quy hoạch, tăng bao nhiêu phần trăm, lãi suất bao nhiêu', answer: 'Chưa có dữ liệu xác thực thì phải nói chưa đủ dữ liệu và chuyển tư vấn viên.', priority: 100, handoff_required: true, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
+  { id: 'kb-test', topic: 'Test không dùng trả lời', knowledge_type: 'test_case', keywords: 'test case', answer: 'Không được khớp ở public chat.', priority: 999, is_active: true, created_at: '2026-01-01', updated_at: '2026-01-01' },
   { id: 'kb-off', topic: 'Câu tắt', keywords: 'khuyến mãi', answer: 'Câu này đang tắt, không được khớp.', priority: 99, is_active: false, created_at: '2026-01-01', updated_at: '2026-01-01' },
 ];
 
@@ -193,11 +198,55 @@ describe('KB + lời mặc định override', () => {
       messages: { loan: 'Câu vay do admin soạn riêng.' },
     });
     expect(turn.stage).toBe('collecting_contact');
-    expect(turn.reply).toBe('Câu vay do admin soạn riêng.');
+    expect(turn.reply).toContain('Câu vay do admin soạn riêng.');
+    expect(turn.handoffRequired).toBe(true);
   });
 
   it('safeAdviceResponse nhận override', () => {
     expect(safeAdviceResponse('loan', 'Nội dung admin')).toBe('Nội dung admin');
     expect(safeAdviceResponse('loan', '  ')).toContain('ngân hàng');
+  });
+});
+
+describe('phân cấp đào tạo AI', () => {
+  it('normalizeAdvisorQuery sửa một số lỗi chính tả phổ biến', () => {
+    expect(normalizeAdvisorQuery('sỗ hòng có an toàn ko')).toContain('so hong');
+    expect(normalizeAdvisorQuery('vay nh lãi xuất')).toContain('vay ngan hang');
+    expect(normalizeAdvisorQuery('mua nha dian 2 ty')).toContain('di an');
+  });
+
+  it('Q&A ưu tiên thắng tri thức nền khi cùng khớp', () => {
+    const hit = findKnowledgeMatch('cho hỏi phí môi giới có mất phí không', kbEntries);
+    expect(hit?.entry.id).toBe('kb-fee');
+    expect(hit?.entry.knowledge_type).toBe('priority_qa');
+  });
+
+  it('khớp sai chính tả sổ hồng và bắt buộc chuyển tư vấn viên', () => {
+    const turn = buildAdvisorTurn('sỗ hòng có an toàn ko', taxonomy, { knowledge: kbEntries });
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toContain('hồ sơ gốc');
+    expect(turn.handoffRequired).toBe(true);
+    expect(turn.safetyNote).toContain('Không khẳng định');
+  });
+
+  it('câu hỏi thiếu dữ liệu không tự bịa phần trăm', () => {
+    const turn = buildAdvisorTurn('giá khu này tăng bao nhiêu phần trăm', taxonomy, { knowledge: [] });
+    expect(turn.stage).toBe('collecting_contact');
+    expect(turn.reply).toContain('chưa có dữ liệu xác thực');
+    expect(turn.reply).not.toMatch(/\d+%/);
+    expect(turn.handoffRequired).toBe(true);
+  });
+
+  it('test_case không được dùng làm nguồn trả lời public', () => {
+    const hit = matchKnowledge('test case', kbEntries);
+    expect(hit?.id).not.toBe('kb-test');
+  });
+
+  it('mua nhà 2 tỷ có vay vẫn tìm tin và ghép handoff an toàn', () => {
+    const turn = buildAdvisorTurn('mua nhà 2 tỷ có vay nh', taxonomy, { knowledge: kbEntries });
+    expect(turn.stage).toBe('showing_matches');
+    expect(turn.filters.maxPrice).toBe(2);
+    expect(turn.reply).toContain('không tự bịa lãi suất');
+    expect(turn.handoffRequired).toBe(true);
   });
 });

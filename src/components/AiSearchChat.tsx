@@ -93,8 +93,10 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       loan: chatSettings?.ai_answer_loan,
       legal: chatSettings?.ai_answer_legal,
       investment: chatSettings?.ai_answer_investment,
+      unknown: chatSettings?.ai_answer_unknown,
+      handoff: chatSettings?.ai_handoff_message,
     },
-  }), [knowledge, chatSettings?.ai_answer_loan, chatSettings?.ai_answer_legal, chatSettings?.ai_answer_investment]);
+  }), [knowledge, chatSettings?.ai_answer_loan, chatSettings?.ai_answer_legal, chatSettings?.ai_answer_investment, chatSettings?.ai_answer_unknown, chatSettings?.ai_handoff_message]);
   const hasUserMessage = messages.some(m => m.role === 'user');
   const showExamples = !hasUserMessage && !loading;
   const showMatchActions = !loading && lastTurn?.stage === 'showing_matches';
@@ -225,7 +227,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setResults([]);
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
     await persistOngoingMessage('assistant', turn.reply);
-    if (turn.stage === 'collecting_contact') setShowGeneralLeadForm(true);
+    if (turn.stage === 'collecting_contact' || turn.handoffRequired) setShowGeneralLeadForm(true);
 
     if (turn.stage !== 'showing_matches') return;
 

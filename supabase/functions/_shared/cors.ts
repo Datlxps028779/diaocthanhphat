@@ -28,9 +28,11 @@ export async function verifyAdmin(req: Request, createClient: (u: string, k: str
   if (!token) return null;
   const url = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const sb = createClient(url, anon);
-  const { data: { user } } = await sb.auth.getUser(token);
-  if (!user) return null;
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const authClient = createClient(url, anon);
+  const { data: { user } } = await authClient.auth.getUser(token);
+  if (!user || !serviceKey) return null;
+  const admin = createClient(url, serviceKey);
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
   return profile?.role === "admin" ? user.id : null;
 }
