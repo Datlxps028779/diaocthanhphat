@@ -20,6 +20,7 @@ const TYPE_FROM_LABEL = Object.fromEntries(
 ) as Record<string, AiChatKnowledgeType>;
 
 const DEFAULT_MESSAGE_FIELDS: { key: string; label: string; hint?: string; rows?: number }[] = [
+  { key: 'ai_system_prompt', label: 'System Prompt / bộ não Trợ lý AI', hint: 'Quy định vai trò, giọng điệu và flow trả lời. Luật chống bịa số liệu/pháp lý/lãi suất vẫn được khóa cứng trong hệ thống.', rows: 9 },
   { key: 'ai_greeting', label: 'Lời chào mở đầu', rows: 3 },
   { key: 'ai_examples', label: 'Câu hỏi gợi ý mẫu', hint: 'Mỗi dòng là 1 gợi ý hiển thị dưới ô chat.', rows: 4 },
   { key: 'ai_answer_loan', label: 'Câu trả lời an toàn: vay/lãi suất', rows: 3 },
@@ -213,7 +214,7 @@ export function AiChatTab() {
       )}
 
       <section className="space-y-3">
-        <h2 className="font-bold text-gray-900 text-base flex items-center gap-2"><Bot className="w-4 h-4 text-red-600" />Persona & lời mặc định ở giao diện chat</h2>
+        <h2 className="font-bold text-gray-900 text-base flex items-center gap-2"><Bot className="w-4 h-4 text-red-600" />System Prompt, persona & lời mặc định ở giao diện chat</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4 max-w-3xl">
           {DEFAULT_MESSAGE_FIELDS.map(f => (
             <div key={f.key}>

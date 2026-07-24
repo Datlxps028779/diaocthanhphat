@@ -16,6 +16,7 @@ export interface AdvisorPropertySummary {
   legal: string | null;
   area: string | null;
   path: string;
+  matchScore?: number;
 }
 export interface AdvisorLeadDraft { full_name: string; phone: string; message?: string }
 export interface AdvisorTurnResult {
@@ -189,6 +190,12 @@ export function summarizeAdvisorNeed(turn: Pick<AdvisorTurnResult, 'filters' | '
   return turn.residualKeyword?.trim() || 'nhu cầu BĐS của anh/chị';
 }
 
+export function detectHandoffTriggers(text: string): boolean {
+  const q = normalizeAdvisorQuery(text);
+  return isValidVnPhone(text)
+    || /\b(quy hoach|dau tu|loi nhuan|cam ket|dat coc|di xem|xem nha|xem dat|goi lai|lien he|tu van vien|gap sale|gap moi gioi|phap ly chuyen sau|kiem tra ho so)\b/.test(q);
+}
+
 export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?: AdvisorOpts): AdvisorTurnResult {
   const normalizedInput = normalizeAdvisorQuery(input);
   const intent = parseSearchIntent(normalizedInput, taxonomy);
@@ -200,7 +207,7 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
   const hasConcreteFilter = f.minPrice != null || f.maxPrice != null || !!f.district
     || !!f.ward || !!f.areaId || !!f.typeId || f.minArea != null || f.maxArea != null;
   const mustNotAnswer = mustNotAnswerHit(input, kb);
-  const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input) || mustNotAnswer;
+  const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input) || mustNotAnswer || detectHandoffTriggers(input);
 
   if (mustNotAnswer) {
     return {
@@ -277,7 +284,7 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
   };
 }
 
-export function summarizePropertyForAdvisor(p: Property): AdvisorPropertySummary {
+export function summarizePropertyForAdvisor(p: Property & { matchScore?: number }): AdvisorPropertySummary {
   return {
     id: p.id,
     slug: p.slug,
@@ -288,6 +295,7 @@ export function summarizePropertyForAdvisor(p: Property): AdvisorPropertySummary
     legal: p.legal_status,
     area: p.area_sqm ? `${p.area_sqm} m²` : null,
     path: buildPropertyPath(p),
+    ...(p.matchScore != null ? { matchScore: p.matchScore } : {}),
   };
 }
 

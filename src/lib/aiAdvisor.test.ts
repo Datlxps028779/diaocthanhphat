@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { parseSearchIntent } from './aiSearch';
 import type { Area, District, Property, PropertyType, Ward } from './supabase';
 import {
   buildAdvisorTurn,
   buildAdvisorLeadPayload,
+  detectHandoffTriggers,
   findKnowledgeMatch,
   formatAdvisorBudget,
   isSensitiveAdviceRequest,
@@ -89,11 +91,24 @@ describe('advisor helpers', () => {
     expect(summarizeAdvisorNeed(turn)).toContain('5–10 triệu/tháng');
   });
 
-  it('summarizePropertyForAdvisor convert property sang card summary', () => {
-    const summary = summarizePropertyForAdvisor(property());
-    expect(summary.title).toBe('Nhà phố Dĩ An');
-    expect(summary.priceText).toBe('2.8 tỷ');
-    expect(summary.location).toContain('Dĩ An');
+  it('parseSearchIntent nhận diện nhu cầu hỗ trợ vay', () => {
+    const intent = parseSearchIntent('mua nhà Dĩ An 2 tỷ có vay ngân hàng', taxonomy);
+    expect(intent.filters.loan).toBe(true);
+    expect(intent.matched.some(m => m.kind === 'loan')).toBe(true);
+  });
+
+  it('detectHandoffTriggers bắt các tình huống cần chuyển Sale', () => {
+    expect(detectHandoffTriggers('Tôi muốn đi xem nhà chiều nay')).toBe(true);
+    expect(detectHandoffTriggers('Căn này đặt cọc được chưa?')).toBe(true);
+    expect(detectHandoffTriggers('Gọi lại cho tôi 0901234567')).toBe(true);
+    expect(detectHandoffTriggers('Nhà Dĩ An dưới 3 tỷ')).toBe(false);
+  });
+
+  it('summarizePropertyForAdvisor giữ lại điểm khớp từ SQL', () => {
+    const summary = summarizePropertyForAdvisor(property({}) as Property & { matchScore: number });
+    const scored = summarizePropertyForAdvisor({ ...property(), matchScore: 70 });
+    expect(summary.matchScore).toBeUndefined();
+    expect(scored.matchScore).toBe(70);
   });
 
   it('detect sensitive requests + safe responses', () => {

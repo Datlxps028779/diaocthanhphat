@@ -2,7 +2,7 @@ import type { Area, District, PropertyType, Ward } from './supabase';
 import type { PropertyFilters } from './api/properties';
 import { LEGAL_OPTIONS } from './legalOptions';
 
-export type AiSearchMatchKind = 'listingType' | 'area' | 'district' | 'ward' | 'type' | 'price' | 'areaSize' | 'bedrooms' | 'legal' | 'direction';
+export type AiSearchMatchKind = 'listingType' | 'area' | 'district' | 'ward' | 'type' | 'price' | 'areaSize' | 'bedrooms' | 'legal' | 'direction' | 'loan';
 export interface AiSearchMatch { kind: AiSearchMatchKind; label: string }
 export interface SearchTaxonomy {
   areas: Area[];
@@ -234,6 +234,12 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
   if (direction && mergeFilter(filters, explicitFilters, 'direction', direction)) {
     matched.push({ kind: 'direction', label: `Hướng ${direction}` });
     removeSpan(remove, rawPhraseForNorm(query, `huong ${normalizeVietnamese(direction)}`));
+  }
+
+  if (/\b(vay|ngan hang|tra gop|ho tro vay)\b/.test(q) && mergeFilter(filters, explicitFilters, 'loan', true)) {
+    matched.push({ kind: 'loan', label: 'Hỗ trợ vay' });
+    const phrase = /ho tro vay/.test(q) ? 'ho tro vay' : /ngan hang/.test(q) ? 'ngan hang' : /tra gop/.test(q) ? 'tra gop' : 'vay';
+    removeSpan(remove, rawPhraseForNorm(query, phrase));
   }
 
   return {

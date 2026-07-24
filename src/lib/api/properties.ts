@@ -6,7 +6,7 @@ export interface PropertyFilters {
   listingType?: string; areaId?: string; typeId?: string; city?: string; keyword?: string;
   district?: string; ward?: string;
   minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
-  bedrooms?: string; direction?: string; legal?: string;
+  bedrooms?: string; direction?: string; legal?: string; loan?: boolean;
   isFeatured?: boolean; isHot?: boolean;
   sort?: PropertySort;
   page?: number; limit?: number;
@@ -99,6 +99,45 @@ async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ dat
   if (detailError) return null;
   const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
   return { data: ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p)), total: rows[0]?.total_count ?? rows.length };
+}
+
+interface AdvisorMatch { id: string; score: number; total_count: number }
+export type AdvisorMatchedProperty = Property & { matchScore: number };
+
+export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ data: AdvisorMatchedProperty[]; total: number }> {
+  const targetArea = filters.maxArea ?? filters.minArea ?? null;
+  const { data: matches, error } = await supabase.rpc('match_properties_for_advisor', {
+    f_listing_type: filters.listingType && filters.listingType !== 'all' ? filters.listingType : null,
+    f_area_id: filters.areaId ?? null,
+    f_type_id: filters.typeId ?? null,
+    f_district: filters.district ?? null,
+    f_ward: filters.ward ?? null,
+    f_target_price: filters.maxPrice ?? filters.minPrice ?? null,
+    f_target_area: targetArea,
+    f_want_loan: filters.loan ?? null,
+    f_legal: filters.legal ?? null,
+    kw: filters.keyword ?? null,
+    f_limit: filters.limit ?? 5,
+  });
+  if (error) throw error;
+  const rows = (matches ?? []) as AdvisorMatch[];
+  if (rows.length === 0) return { data: [], total: 0 };
+  const ids = rows.map(r => r.id);
+  const scores = new Map(rows.map(r => [r.id, r.score]));
+  const { data, error: detailError } = await supabase
+    .from('properties')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .eq('is_active', true)
+    .in('id', ids);
+  if (detailError) throw detailError;
+  const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
+  return {
+    data: ids
+      .map(id => byId.get(id))
+      .filter((p): p is Property => Boolean(p))
+      .map(p => ({ ...p, matchScore: scores.get(p.id) ?? 0 })),
+    total: rows[0]?.total_count ?? rows.length,
+  };
 }
 
 export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId?: string }): Promise<Property[]> {

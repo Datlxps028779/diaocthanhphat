@@ -4,10 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
-import { buildAdvisorLeadPayload, buildAdvisorTurn, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
-import { getAllProperties } from '../lib/api/properties';
+import { buildAdvisorLeadPayload, buildAdvisorTurn, detectHandoffTriggers, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
+import { getAdvisorMatches, getAllProperties } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
 import { getAiChatKnowledge } from '../lib/api/aiChatKnowledge';
+import { askAiChat } from '../lib/api/aiChat';
+import { parseSearchIntent } from '../lib/aiSearch';
 import { getSiteSettings } from '../lib/api/siteSettings';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
@@ -222,7 +224,61 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     // Chat tham khảo: KHÔNG tạo phiên. Chỉ ghi tiếp nếu khách đã mở tư vấn trước đó.
     await persistOngoingMessage('visitor', text);
 
+    const ai = await askAiChat(text, messages).catch(() => null);
+    const userTurns = messages.filter(m => m.role === 'user').length + 1;
+    const shouldAskContactByTurns = userTurns >= 3;
+
+    if (ai) {
+      const understood = ai.understood_query || text;
+      const intent = parseSearchIntent(understood, taxonomy);
+      const hasConcreteFilter = intent.filters.minPrice != null || intent.filters.maxPrice != null || !!intent.filters.district
+        || !!intent.filters.ward || !!intent.filters.areaId || !!intent.filters.typeId || intent.filters.minArea != null || intent.filters.maxArea != null;
+      const stage = intent.confidence !== 'low' && hasConcreteFilter ? 'showing_matches' : 'collecting_need';
+      const handoffRequired = ai.handoff || detectHandoffTriggers(text) || shouldAskContactByTurns;
+      const turn: AdvisorTurnResult = {
+        reply: ai.reply,
+        filters: intent.filters,
+        residualKeyword: intent.residualKeyword,
+        matched: intent.matched,
+        stage: handoffRequired && stage !== 'showing_matches' ? 'collecting_contact' : stage,
+        ...(ai.safety_note ? { safetyNote: ai.safety_note } : {}),
+        ...(handoffRequired ? { handoffRequired: true } : {}),
+      };
+      setLastTurn(turn);
+      setResults([]);
+      setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
+      await persistOngoingMessage('assistant', turn.reply);
+      if (turn.stage === 'collecting_contact' || turn.handoffRequired) setShowGeneralLeadForm(true);
+
+      if (turn.stage !== 'showing_matches') return;
+
+      setLoading(true);
+      try {
+        const res = await getAdvisorMatches({ ...turn.filters, keyword: turn.residualKeyword || undefined, page: 1, limit: 5 });
+        if (seq !== requestSeq.current) return;
+        const cards = res.data.map(summarizePropertyForAdvisor);
+        setResults(cards);
+        setShowGeneralLeadForm(true);
+        track(EVENTS.AI_ADVISOR_SUGGEST, { count: cards.length });
+        const resultReply = cards.length
+          ? `Em tìm được ${cards.length} tin phù hợp nhất, đã xếp theo điểm khớp nhu cầu. Anh/chị có thể xem chi tiết hoặc để lại thông tin để tư vấn viên hỗ trợ.`
+          : 'Hiện chưa có tin thật sự khớp theo điểm nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.';
+        setMessages(prev => [...prev, { role: 'assistant', text: resultReply }]);
+        await persistOngoingMessage('assistant', resultReply);
+      } catch {
+        if (seq !== requestSeq.current) return;
+        setShowGeneralLeadForm(true);
+        const errorReply = 'Em chưa tải được danh sách gợi ý lúc này. Anh/chị có thể để lại số điện thoại để tư vấn viên hỗ trợ.';
+        setMessages(prev => [...prev, { role: 'assistant', text: errorReply }]);
+        await persistOngoingMessage('assistant', errorReply);
+      } finally {
+        if (seq === requestSeq.current) setLoading(false);
+      }
+      return;
+    }
+
     const turn = buildAdvisorTurn(text, taxonomy, advisorOpts);
+    if (shouldAskContactByTurns && turn.stage !== 'showing_matches') turn.handoffRequired = true;
     setLastTurn(turn);
     setResults([]);
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
@@ -424,6 +480,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                         <p className="text-red-600 font-black text-sm mt-0.5">{p.priceText}</p>
                         <p className="text-[11px] text-gray-500 truncate">{p.location}</p>
                         <div className="flex gap-1 mt-1 text-[10px] text-gray-500 flex-wrap">
+                          {p.matchScore != null && <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">Điểm khớp {p.matchScore}</span>}
                           {p.area && <span className="bg-gray-50 px-1.5 py-0.5 rounded">{p.area}</span>}
                           {p.legal && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">{p.legal}</span>}
                         </div>
