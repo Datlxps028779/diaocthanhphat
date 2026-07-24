@@ -33,3 +33,5 @@ scripts/deploy-ftp.sh
 
 # Artifact di trú 1 lần (data export)
 supabase/_restore_once/
+.vercel
+.env*

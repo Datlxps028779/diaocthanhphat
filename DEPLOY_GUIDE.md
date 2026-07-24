@@ -5,15 +5,15 @@
 ```
 ┌─────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
 │  Frontend (Hosting) │────▶│  Supabase Backend (Cloud) │◀────│  Admin Panel        │
-│  chonhaviet.com │     │  tcmpswlabzeqtuwdjjfe     │     │  /quantrihethong    │
+│  chonhaviet.com │     │  itgxladqskdcbwsbmuyi     │     │  /quantrihethong    │
 │  HTML/CSS/JS tĩnh   │     │  Database + Auth + API    │     │  (trong Frontend)   │
 └─────────────────────┘     └──────────────────────────┘     └─────────────────────┘
 ```
 
 ## Bước 1: Cấu hình Backend (Supabase) — ĐÃ XONG
 
-Supabase project của bạn: `tcmpswlabzeqtuwdjjfe`
-URL: `https://tcmpswlabzeqtuwdjjfe.supabase.co`
+Supabase project của bạn: `itgxladqskdcbwsbmuyi`
+URL: `https://itgxladqskdcbwsbmuyi.supabase.co`
 
 ### 1.1. Chạy SQL fix lỗi PGRST204
 1. Vào **Supabase Dashboard** → **SQL Editor**
@@ -43,11 +43,11 @@ Nếu chưa có, tạo mới:
 # https://supabase.com/docs/guides/cli
 
 # Deploy functions
-supabase functions deploy ai-description --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy ai-analytics --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy ai-autotag --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy sitemap --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy crm-webhook --project-ref tcmpswlabzeqtuwdjjfe
+supabase functions deploy ai-description --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy ai-analytics --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy ai-autotag --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy sitemap --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy crm-webhook --project-ref itgxladqskdcbwsbmuyi
 ```
 
 Chi tiết cấu hình key AI ở **mục Cấu hình AI** bên dưới.
@@ -109,7 +109,7 @@ https://chonhaviet.com/quantrihethong
 ### 3.3. Kiểm tra API
 ```bash
 # Test API trực tiếp
-curl "https://tcmpswlabzeqtuwdjjfe.supabase.co/rest/v1/properties?select=id,focus_keywords&limit=1" \
+curl "https://itgxladqskdcbwsbmuyi.supabase.co/rest/v1/properties?select=id,focus_keywords&limit=1" \
   -H "apikey: YOUR_ANON_KEY"
 ```
 Nếu trả về JSON (không lỗi) → PostgREST đã nhận biết cột mới
@@ -140,7 +140,7 @@ Nếu trả về JSON (không lỗi) → PostgREST đã nhận biết cột mớ
 
 | Thành phần | Giá trị | Trạng thái |
 |-----------|---------|-----------|
-| Supabase URL | `https://tcmpswlabzeqtuwdjjfe.supabase.co` | ✅ |
+| Supabase URL | `https://itgxladqskdcbwsbmuyi.supabase.co` | ✅ |
 | Supabase Anon Key | (embedded trong build) | ✅ |
 | Database | Cột `focus_keywords` đã thêm | ✅ |
 | PostgREST | Cần reload schema cache | ⚠️ |
@@ -187,13 +187,13 @@ Khóa đặt ở **2 nơi** vì AI chạy trên 2 môi trường khác nhau:
 
 ### A) Edge Functions (Supabase secrets) — AI Phân tích, AI mô tả, AI tự gắn tag
 ```bash
-supabase secrets set ANTHROPIC_API_KEY=YOUR_KEY --project-ref tcmpswlabzeqtuwdjjfe
-supabase secrets set ANTHROPIC_BASE_URL=https://api.leeh.dev --project-ref tcmpswlabzeqtuwdjjfe
+supabase secrets set ANTHROPIC_API_KEY=YOUR_KEY --project-ref itgxladqskdcbwsbmuyi
+supabase secrets set ANTHROPIC_BASE_URL=https://api.leeh.dev --project-ref itgxladqskdcbwsbmuyi
 
 # Sau khi set secret PHẢI deploy lại các function AI để nhận biến mới:
-supabase functions deploy ai-analytics --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy ai-description --project-ref tcmpswlabzeqtuwdjjfe
-supabase functions deploy ai-autotag --project-ref tcmpswlabzeqtuwdjjfe
+supabase functions deploy ai-analytics --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy ai-description --project-ref itgxladqskdcbwsbmuyi
+supabase functions deploy ai-autotag --project-ref itgxladqskdcbwsbmuyi
 ```
 
 ### B) Next.js server (Vercel env) — AI viết bài tin tức

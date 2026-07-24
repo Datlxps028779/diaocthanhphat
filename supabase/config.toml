@@ -5,3 +5,6 @@ project_id = "itgxladqskdcbwsbmuyi"
 # của Supabase — nếu bật, mọi lần quét sẽ bị chặn 401 trước khi chạm code.
 [functions.nurture-drip]
 verify_jwt = false
+
+[functions.ai-description]
+verify_jwt = false
