@@ -54,6 +54,8 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const closeMenus = () => { setMobileOpen(false); setUserMenuOpen(false); setDesktopMenuOpen(null); };
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const hrefFor = (item: NavigationItem) => item.href ?? (item.page ? pageToHref(item.page) : '#');
+  // Menu item bật "mở tab mới" (admin cấu hình) → target=_blank + chống tabnabbing.
+  const newTabProps = (item: NavigationItem) => item.openNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
   return (
     <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
@@ -103,14 +105,14 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                       <div key={child.key} className="py-1">
                         <p className="px-4 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
                         {child.children.map(grand => (
-                          <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus}
+                          <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
                             className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                             {grand.label}
                           </Link>
                         ))}
                       </div>
                     ) : (
-                      <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
+                      <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
                         className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                         {child.label}
                       </Link>
@@ -120,7 +122,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               )}
             </div>
           ) : (
-            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
+            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
               className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
               {item.label}
             </Link>
@@ -196,14 +198,14 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                     <div key={child.key}>
                       <p className="px-3 pt-1.5 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
                       {child.children.map(grand => (
-                        <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus}
+                        <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
                           className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
                           {grand.label}
                         </Link>
                       ))}
                     </div>
                   ) : (
-                    <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
+                    <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
                       className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
                       {child.label}
                     </Link>
@@ -212,7 +214,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               )}
             </div>
           ) : (
-            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus}
+            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
               className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
               {item.label}
             </Link>

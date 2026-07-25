@@ -1,9 +1,13 @@
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtml from 'sanitize-html';
 
-const TEXT_ALIGN_STYLE = /^\s*text-align:\s*(left|right|center|justify);?\s*$/i;
+// Dùng sanitize-html (pure JS, htmlparser2) thay isomorphic-dompurify (kéo jsdom →
+// html-encoding-sniffer → @exodus/bytes ESM → crash ERR_REQUIRE_ESM trên server
+// component/Vercel lambda). Hàm chạy được cả server lẫn client.
+
 const ALLOWED_TAGS = ['p', 'h2', 'h3', 'h4', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre'];
 const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'target', 'rel', 'style', 'colspan', 'rowspan'];
 
+// Giữ export cũ để không phá caller/test đang import.
 export const ARTICLE_SANITIZE = {
   ALLOWED_TAGS,
   ALLOWED_ATTR,
@@ -11,23 +15,23 @@ export const ARTICLE_SANITIZE = {
   ALLOWED_URI_REGEXP: /^(?:https?:|\/)/i,
 };
 
-// Hook DOMPurify là toàn cục nên chỉ đăng ký 1 lần: (1) chỉ giữ style text-align,
-// (2) ép rel=noopener noreferrer cho link mở tab mới (chống tabnabbing).
-let hooksRegistered = false;
-function registerHooks() {
-  if (hooksRegistered) return;
-  hooksRegistered = true;
-  DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
-    if (data.attrName === 'style' && !TEXT_ALIGN_STYLE.test(data.attrValue)) {
-      data.keepAttr = false;
-    }
-  });
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
-      node.setAttribute('rel', 'noopener noreferrer');
-    }
-  });
-}
+// Chỉ cho phép style text-align (chống style injection). data-* cho phép mọi thẻ.
+const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: ALLOWED_TAGS,
+  allowedAttributes: { '*': [...ALLOWED_ATTR, 'data-*'] },
+  allowedStyles: { '*': { 'text-align': [/^(left|right|center|justify)$/] } },
+  // http/https + relative (khớp ALLOWED_URI_REGEXP cũ) — chặn javascript:, data:.
+  allowedSchemes: ['http', 'https'],
+  allowedSchemesByTag: {},
+  allowProtocolRelative: false,
+  transformTags: {
+    // target=_blank → ép rel=noopener noreferrer (chống tabnabbing).
+    a: (tagName, attribs) => {
+      if (attribs.target === '_blank') attribs.rel = 'noopener noreferrer';
+      return { tagName, attribs };
+    },
+  },
+};
 
 // Bỏ heading/đoạn rỗng (h2 rỗng đầu bài AI, đoạn chỉ có &nbsp;/<br>).
 function stripEmptyBlocks(html: string): string {
@@ -35,7 +39,6 @@ function stripEmptyBlocks(html: string): string {
 }
 
 export function sanitizeArticleHtml(raw: string): string {
-  registerHooks();
-  const clean = DOMPurify.sanitize(raw, ARTICLE_SANITIZE) as string;
+  const clean = sanitizeHtml(raw, SANITIZE_OPTIONS);
   return stripEmptyBlocks(clean);
 }

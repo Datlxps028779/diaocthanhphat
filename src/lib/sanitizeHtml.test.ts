@@ -27,4 +27,21 @@ describe('sanitizeArticleHtml', () => {
   it('loại bỏ <script>', () => {
     expect(sanitizeArticleHtml('<p>ok</p><script>alert(1)</script>')).toBe('<p>ok</p>');
   });
+
+  it('giữ style text-align hợp lệ, bỏ style khác', () => {
+    const out = sanitizeArticleHtml('<p style="text-align:center;color:red">x</p>');
+    expect(out).toContain('text-align:center');
+    expect(out).not.toContain('color');
+  });
+
+  it('ép rel=noopener noreferrer khi target=_blank', () => {
+    const out = sanitizeArticleHtml('<a href="https://x.com" target="_blank">link</a>');
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+  });
+
+  it('chặn URI javascript: trên link', () => {
+    const out = sanitizeArticleHtml('<a href="javascript:alert(1)">x</a>');
+    expect(out).not.toContain('javascript:');
+  });
 });

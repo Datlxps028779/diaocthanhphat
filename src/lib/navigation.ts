@@ -9,6 +9,7 @@ export type NavigationItem = {
   page?: Page;
   href?: string;
   activePage?: Page['name'];
+  openNewTab?: boolean;
   children?: NavigationItem[];
 };
 
@@ -77,6 +78,7 @@ export function buildMenuTree(items: MenuItem[], areas: Area[] = []): Navigation
       if (row.item_type === 'dynamic_areas') children.push(...areaNodes());
       const node: NavigationItem = { key: row.id, label: row.label };
       if (row.url) node.href = row.url;
+      if (row.open_new_tab) node.openNewTab = true;
       if (children.length > 0) node.children = children;
       return node;
     });
