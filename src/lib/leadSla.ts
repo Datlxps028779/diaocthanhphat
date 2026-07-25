@@ -21,37 +21,40 @@ function sameLocalDay(a: Date, b: Date): boolean {
     && a.getDate() === b.getDate();
 }
 
+// Parse mốc thời gian an toàn: chuỗi rác/sai định dạng → null (không phải Invalid Date).
+// Tránh new Date(rác) ra NaN khiến mọi so sánh .getTime() im lặng false → lead quá
+// hạn bị chấm nhầm 'ok'. Ngày không đọc được coi như "không biết" và bỏ qua nhánh đó.
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function leadSlaState(lead: SlaLead, now: Date): SlaState {
   // Lead đã chốt/mất (terminal) → không còn nhắc SLA.
   if (isTerminal(lead.status)) return 'none';
 
   const nowMs = now.getTime();
+  const followUp = parseDate(lead.follow_up_at);
 
   // Hẹn gọi lại đã tới/quá giờ → quá hạn (bất kể trạng thái).
-  if (lead.follow_up_at) {
-    const fu = new Date(lead.follow_up_at);
-    if (fu.getTime() <= nowMs) return 'overdue';
-  }
+  if (followUp && followUp.getTime() <= nowMs) return 'overdue';
 
-  // Lead mới để quá lâu chưa liên hệ → quá hạn.
+  // Lead mới để quá lâu chưa liên hệ → quá hạn. created_at rác → coi như quá hạn để
+  // không bỏ sót (an toàn hơn im lặng chấm 'ok'), vì lead 'new' phải được liên hệ sớm.
   if (lead.status === 'new') {
-    const created = new Date(lead.created_at).getTime();
-    if (created + SLA_NEW_HOURS * 3600_000 <= nowMs) return 'overdue';
+    const created = parseDate(lead.created_at);
+    if (!created || created.getTime() + SLA_NEW_HOURS * 3600_000 <= nowMs) return 'overdue';
   }
 
   // Hẹn gọi trong hôm nay (chưa tới giờ) → cần gọi hôm nay.
-  if (lead.follow_up_at) {
-    const fu = new Date(lead.follow_up_at);
-    if (sameLocalDay(fu, now)) return 'due_soon';
-  }
+  if (followUp && sameLocalDay(followUp, now)) return 'due_soon';
 
   // Lead mở đã lâu không có hoạt động (quá staleDays của giai đoạn) → nguội, cần chăm.
-  // Chỉ áp khi biết last_activity_at (nếu không truyền → bỏ qua để giữ tương thích cũ).
+  // Chỉ áp khi biết last_activity_at (nếu không truyền/rác → bỏ qua để giữ tương thích cũ).
   const staleDays = stageMeta(lead.status).staleDays;
-  if (staleDays && lead.last_activity_at) {
-    const last = new Date(lead.last_activity_at).getTime();
-    if (last + staleDays * 86_400_000 <= nowMs) return 'due_soon';
-  }
+  const lastActivity = parseDate(lead.last_activity_at);
+  if (staleDays && lastActivity && lastActivity.getTime() + staleDays * 86_400_000 <= nowMs) return 'due_soon';
 
   return 'ok';
 }

@@ -123,8 +123,11 @@ export function buildPropertyMetadata(p: Property): Metadata {
     p.legal_status?.trim() ? `Pháp lý ${p.legal_status.trim()}.` : '',
     'Liên hệ xem nhà và tư vấn miễn phí.',
   ].filter(Boolean).join(' ');
+  const plainDesc = p.description?.trim()
+    ? (isHtmlContent(p.description) ? stripHtml(p.description) : p.description).trim()
+    : '';
   const description = p.meta_description?.trim()
-    || (p.description?.trim() ? clampText(p.description, 120, 160) : clampText(descParts, 120, 160));
+    || (plainDesc ? clampText(plainDesc, 120, 160) : clampText(descParts, 120, 160));
 
   const keywords = p.focus_keywords?.trim()
     || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
@@ -169,7 +172,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     '@type': 'RealEstateListing',
     '@id': `${url}#realestatelisting`,
     name: p.title,
-    description: p.description ?? undefined,
+    description: p.description ? (isHtmlContent(p.description) ? stripHtml(p.description) : p.description) : undefined,
     url,
     mainEntityOfPage: url,
     datePosted: p.created_at,
@@ -220,10 +223,13 @@ function youtubeId(u: string): string | null {
 function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
   const src = p.video_url?.trim();
   if (!src) return null;
+  const plainDesc = p.description
+    ? (isHtmlContent(p.description) ? stripHtml(p.description) : p.description).trim()
+    : '';
   const base = {
     '@type': 'VideoObject',
     name: `Video: ${p.title}`,
-    description: p.description ?? p.title,
+    description: plainDesc || p.title,
     uploadDate: p.created_at,
   };
   const yt = youtubeId(src);

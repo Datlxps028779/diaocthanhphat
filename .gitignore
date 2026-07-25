@@ -35,3 +35,5 @@ scripts/deploy-ftp.sh
 supabase/_restore_once/
 .vercel
 .env*
+
+testsprite_tests/tmp/config.json

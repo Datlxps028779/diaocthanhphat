@@ -108,4 +108,20 @@ describe('parseSearchIntent', () => {
     expect(r.filters.district).toBe('Dĩ An');
     expect(r.filters.ward).toBeUndefined();
   });
+
+  // Câu lẫn số phòng ngủ + ngân sách: mỗi số được bắt đúng vai trò. "3 phòng ngủ"
+  // vào bedrooms (pattern \d+ pn/phong ngu), "2 tỷ" vào maxPrice (đơn vị tỷ/triệu chỉ
+  // gắn với giá; diện tích luôn đi với m2 nên không nuốt nhầm). Đây là hành vi ĐÚNG.
+  it('câu lẫn số phòng ngủ + ngân sách: "3 phòng ngủ 2 tỷ" → bedrooms=3 + maxPrice=2', () => {
+    const r = parseSearchIntent('nhà Dĩ An 3 phòng ngủ 2 tỷ', taxonomy);
+    expect(r.filters.bedrooms).toBe('3');
+    expect(r.filters.maxPrice).toBe(2);
+  });
+
+  // Diện tích không bị hiểu nhầm thành giá: "100 m2" đi với đơn vị m2 nên fallback
+  // giá (chỉ bắt tỷ/triệu) không nuốt → maxPrice không bị set nhầm.
+  it('diện tích "100 m2" không bị nuốt thành giá trần', () => {
+    const r = parseSearchIntent('đất Dĩ An 100 m2', taxonomy);
+    expect(r.filters.maxPrice).toBeUndefined();
+  });
 });

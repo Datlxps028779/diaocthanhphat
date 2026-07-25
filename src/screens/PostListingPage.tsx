@@ -21,6 +21,7 @@ import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
+import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
 
 interface PostListingPageProps {
@@ -659,12 +660,10 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
               </FormField>
 
               <FormField label="Mô tả chi tiết">
-                <textarea value={form.description} onChange={e => set('description', e.target.value)}
+                <RichTextEditor value={form.description} onChange={html => set('description', html)} enableImage={false}
                   placeholder={isRental(form.listing_type)
-                    ? 'Mô tả vị trí, nội thất, tiện ích xung quanh, yêu cầu thuê...'
-                    : 'Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán...'}
-                  rows={12}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-y min-h-[10rem]" />
+                    ? 'Mô tả vị trí, nội thất, tiện ích xung quanh, yêu cầu thuê. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'
+                    : 'Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'} />
               </FormField>
 
               {/* FAQ nhập tay — hiển thị cuối trang chi tiết + sinh schema FAQPage */}

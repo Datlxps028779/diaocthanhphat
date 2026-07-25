@@ -14,6 +14,8 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
+import { RichTextEditor } from '../shared/RichTextEditor';
+import { stripHtml, isHtmlContent } from '../../../lib/markdown';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -274,7 +276,8 @@ function calcSeoScore(title: string, description: string, imageUrl: string, area
   const titleLen = title.trim().length;
   if (titleLen >= 30 && titleLen <= 65) score += 30;
   else if (titleLen >= 15) score += 15;
-  const descLen = (description ?? '').trim().length;
+  const descPlain = isHtmlContent(description ?? '') ? stripHtml(description ?? '') : (description ?? '');
+  const descLen = descPlain.trim().length;
   if (descLen >= 120) score += 30;
   else if (descLen >= 60) score += 15;
   if (imageUrl) score += 15;
@@ -374,6 +377,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const visibleSpecFields = getCompatibleSpecFields(selectedPropertyType, 'admin_property');
   const showSpec = (field: SpecFieldKey) => visibleSpecFields.includes(field);
   const seoScore = calcSeoScore(form.title, form.description, form.image_url, form.area_sqm, form.price);
+  // Đếm độ dài mô tả trên text đã strip HTML (mô tả nay là rich HTML có thể chứa bảng/thẻ).
+  const descLen = (isHtmlContent(form.description) ? stripHtml(form.description) : form.description).trim().length;
 
   // ─── SEO Autofill ───────────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -782,12 +787,12 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               Mô tả chi tiết
-              <span className={`ml-2 text-[10px] font-normal ${form.description.length >= 120 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {form.description.length} ký tự (tối thiểu 120)
+              <span className={`ml-2 text-[10px] font-normal ${descLen >= 120 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {descLen} ký tự (tối thiểu 120)
               </span>
             </label>
-            <textarea value={form.description} onChange={e => setField('description', e.target.value)} rows={12}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-y min-h-[10rem]" />
+            <RichTextEditor value={form.description} onChange={html => setField('description', html)}
+              placeholder="Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng..." />
           </div>
 
           {/* FAQ nhập tay — ưu tiên hơn FAQ tự-sinh khi render public */}
@@ -932,7 +937,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Checklist SEO</p>
             {[
               { label: 'Tiêu đề 30–65 ký tự', ok: form.title.length >= 30 && form.title.length <= 65 },
-              { label: 'Mô tả ≥ 120 ký tự', ok: form.description.length >= 120 },
+              { label: 'Mô tả ≥ 120 ký tự', ok: descLen >= 120 },
               { label: 'Ảnh đại diện', ok: !!form.image_url },
               { label: 'Diện tích', ok: !!form.area_sqm },
               { label: 'Giá bán', ok: Number(form.price) > 0 },
@@ -952,7 +957,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-2.5">
             <p className="text-[10px] font-bold text-blue-800 mb-1">Mẹo tăng điểm</p>
             {form.title.length < 30 && <p className="text-[10px] text-blue-700 mb-0.5">• Tiêu đề quá ngắn — thêm khu vực & diện tích</p>}
-            {form.description.length < 120 && <p className="text-[10px] text-blue-700 mb-0.5">• Mô tả thêm tiện ích, vị trí, ưu điểm</p>}
+            {descLen < 120 && <p className="text-[10px] text-blue-700 mb-0.5">• Mô tả thêm tiện ích, vị trí, ưu điểm</p>}
             {!form.latitude && <p className="text-[10px] text-blue-700 mb-0.5">• Click bản đồ để lấy tọa độ</p>}
             {!form.image_url && <p className="text-[10px] text-blue-700">• Thêm ảnh đại diện</p>}
           </div>

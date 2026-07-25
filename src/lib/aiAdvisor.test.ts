@@ -273,3 +273,25 @@ describe('phân cấp đào tạo AI', () => {
     expect(turn.handoffRequired).toBe(true);
   });
 });
+
+// ─── ĐÃ SỬA — giá null không còn lộ chuỗi "null tỷ" ───
+describe('summarizePropertyForAdvisor — giá thiếu', () => {
+  it('price null + không có price_label → "Giá thỏa thuận" (không lộ "null tỷ")', () => {
+    const summary = summarizePropertyForAdvisor(
+      property({ price: null as unknown as number, price_unit: 'tỷ', price_label: null }),
+    );
+    expect(summary.priceText).toBe('Giá thỏa thuận');
+  });
+
+  it('có price_label thì ưu tiên', () => {
+    const summary = summarizePropertyForAdvisor(
+      property({ price: null as unknown as number, price_label: 'Giá liên hệ' }),
+    );
+    expect(summary.priceText).toBe('Giá liên hệ');
+  });
+
+  it('có giá thật thì hiển thị bình thường', () => {
+    const summary = summarizePropertyForAdvisor(property({ price: 2.8, price_unit: 'tỷ', price_label: null }));
+    expect(summary.priceText).toBe('2.8 tỷ');
+  });
+});

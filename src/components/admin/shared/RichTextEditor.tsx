@@ -6,9 +6,14 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 import {
   Bold, Italic, Heading2, Heading3, List, Quote, Link as LinkIcon, Unlink,
   Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Search, X,
+  Table as TableIcon, Rows3, Columns3, Trash2,
 } from 'lucide-react';
 import { safeUrl } from '../../../lib/markdown';
 import { ImageLibraryModal } from '../../ImageLibraryModal';
@@ -23,6 +28,7 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   internalLinks?: InternalLinkTarget[];
+  enableImage?: boolean;
 }
 
 const AlignableImage = Image.extend({
@@ -64,10 +70,12 @@ function Toolbar({
   editor,
   onImageClick,
   internalLinks,
+  enableImage,
 }: {
   editor: Editor;
   onImageClick: () => void;
   internalLinks: InternalLinkTarget[];
+  enableImage: boolean;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkText, setLinkText] = useState('');
@@ -163,7 +171,23 @@ function Toolbar({
       )}
 
       <span className="mx-1 w-px self-stretch bg-gray-200" aria-hidden />
-      <ToolButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={onImageClick} />
+      <ToolButton label="Bảng" icon={<TableIcon className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
+      {editor.isActive('table') && (
+        <>
+          <ToolButton label="+ Hàng" icon={<Rows3 className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().addRowAfter().run()} />
+          <ToolButton label="− Hàng" icon={<Rows3 className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().deleteRow().run()} />
+          <ToolButton label="+ Cột" icon={<Columns3 className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().addColumnAfter().run()} />
+          <ToolButton label="− Cột" icon={<Columns3 className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().deleteColumn().run()} />
+          <ToolButton label="Xóa bảng" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => editor.chain().focus().deleteTable().run()} />
+        </>
+      )}
+
+      {enableImage && (
+        <>
+          <span className="mx-1 w-px self-stretch bg-gray-200" aria-hidden />
+          <ToolButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={onImageClick} />
+        </>
+      )}
     </div>
 
     {linkOpen && (
@@ -242,7 +266,7 @@ function Toolbar({
   );
 }
 
-export function RichTextEditor({ value, onChange, placeholder = 'Viết nội dung bài viết...', internalLinks = [] }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder = 'Viết nội dung bài viết...', internalLinks = [], enableImage = true }: RichTextEditorProps) {
   const [libOpen, setLibOpen] = useState(false);
   const [pendingSrc, setPendingSrc] = useState<string | null>(null);
   const [altText, setAltText] = useState('');
@@ -255,6 +279,10 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
       Link.configure({ openOnClick: false, autolink: false, HTMLAttributes: { rel: 'nofollow noopener', target: '_blank' } }),
       Placeholder.configure({ placeholder }),
       TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right', 'justify'] }),
+      Table.configure({ resizable: true, HTMLAttributes: { class: 'rich-table' } }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: value,
     editorProps: {
@@ -285,18 +313,20 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 focus-within:ring-2 focus-within:ring-red-400">
-      <Toolbar editor={editor} internalLinks={internalLinks} onImageClick={() => setLibOpen(true)} />
+      <Toolbar editor={editor} internalLinks={internalLinks} onImageClick={() => setLibOpen(true)} enableImage={enableImage} />
       <div className="max-h-[65vh] overflow-y-auto">
         <EditorContent editor={editor} />
       </div>
 
-      <ImageLibraryModal
-        open={libOpen}
-        onClose={() => setLibOpen(false)}
-        onSelect={url => { setLibOpen(false); setPendingSrc(url); setAltText(''); }}
-        folder="news"
-        isAdmin
-      />
+      {enableImage && (
+        <ImageLibraryModal
+          open={libOpen}
+          onClose={() => setLibOpen(false)}
+          onSelect={url => { setLibOpen(false); setPendingSrc(url); setAltText(''); }}
+          folder="news"
+          isAdmin
+        />
+      )}
 
       {pendingSrc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

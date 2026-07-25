@@ -31,6 +31,8 @@ import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt } from '../lib/propertyImages';
 import { buildPropertyFaq } from '../lib/propertyFaq';
+import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
+import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 
 interface PropertyDetailPageProps {
@@ -445,7 +447,12 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {property.description && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Mô tả chi tiết</h2>
-                <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{property.description}</p>
+                {isHtmlContent(property.description) ? (
+                  <div className="prose prose-gray max-w-none text-sm text-gray-600 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(property.description) }} />
+                ) : (
+                  <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{property.description}</p>
+                )}
               </div>
             )}
 

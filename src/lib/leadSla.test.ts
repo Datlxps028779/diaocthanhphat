@@ -127,4 +127,21 @@ describe('leadSla — trạng thái SLA + sắp xếp + chia đều lead', () =>
       expect(countSlaStates([], NOW)).toEqual({ overdue: 0, dueSoon: 0, total: 0 });
     });
   });
+
+  // ─── Ngày sai định dạng → parse an toàn (đã sửa) ───
+  // created_at/follow_up_at rác trước đây ra Invalid Date → .getTime() NaN (luôn false)
+  // → lead new quá hạn bị chấm nhầm 'ok'. Nay parseDate() trả null khi không đọc được:
+  // lead 'new' không rõ ngày tạo → coi như overdue (an toàn, không bỏ sót); các mốc
+  // khác (follow_up/last_activity) rác → bỏ qua nhánh đó thay vì so sánh NaN.
+  describe('ngày sai định dạng → parse an toàn', () => {
+    it("created_at rác → lead new coi như 'overdue' (không bỏ sót)", () => {
+      const bad = mk({ status: 'new', created_at: 'không-phải-ngày' });
+      expect(leadSlaState(bad, NOW)).toBe('overdue');
+    });
+
+    it('follow_up_at rác → bỏ qua nhánh hẹn gọi, không văng NaN', () => {
+      const bad = mk({ status: 'contacted', created_at: iso(at(2026, 7, 14, 11, 0)), follow_up_at: 'xyz' });
+      expect(leadSlaState(bad, NOW)).toBe('ok');
+    });
+  });
 });

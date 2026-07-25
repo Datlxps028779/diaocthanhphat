@@ -166,6 +166,22 @@
 .prose th { font-weight: 600; color: #111827; }
 .prose tbody tr:nth-child(even) { background: #f9fafb; }
 
+/* Bảng TipTap khi soạn (resizable) — wrapper cuộn ngang trên mobile, ô đang chọn,
+   tay kéo cột. Dùng chung .prose nên áp cả editor lẫn trang public. */
+.prose .tableWrapper { overflow-x: auto; margin: 1.6em 0; }
+.prose .tableWrapper > table { margin: 0; }
+.prose table { table-layout: fixed; }
+.prose .selectedCell::after {
+  content: ''; position: absolute; inset: 0; z-index: 2;
+  background: rgba(220, 38, 38, 0.12); pointer-events: none;
+}
+.prose th, .prose td { position: relative; }
+.prose .column-resize-handle {
+  position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px;
+  background: #dc2626; cursor: col-resize; z-index: 3;
+}
+.prose .resize-cursor { cursor: col-resize; }
+
 .prose code {
   background: #f3f4f6;
   color: #b91c1c;

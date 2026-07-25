@@ -290,7 +290,7 @@ export function summarizePropertyForAdvisor(p: Property & { matchScore?: number 
     slug: p.slug,
     title: p.title,
     image_url: p.image_url,
-    priceText: p.price_label ?? `${p.price} ${p.price_unit}`,
+    priceText: p.price_label ?? (p.price != null ? `${p.price} ${p.price_unit}` : 'Giá thỏa thuận'),
     location: [p.district, p.city].filter(Boolean).join(', '),
     legal: p.legal_status,
     area: p.area_sqm ? `${p.area_sqm} m²` : null,
