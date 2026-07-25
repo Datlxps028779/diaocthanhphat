@@ -18,8 +18,9 @@ function seoFilename(file: File, folder: string, caption?: string): string {
 // stored XSS khi mở trực tiếp URL public. Kiểm cả MIME lẫn đuôi file.
 const ALLOWED_IMAGE_MIME = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+  'image/x-icon', 'image/vnd.microsoft.icon',
 ]);
-const ALLOWED_IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']);
+const ALLOWED_IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'ico']);
 
 function assertSafeImage(file: File) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();

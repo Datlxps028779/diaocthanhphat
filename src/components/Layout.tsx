@@ -29,6 +29,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const nav = useContent('navbar');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
+  const logoUrl = useSetting('site_logo_url', '');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -67,9 +68,13 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
         <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
-            <Home className="w-5 h-5 text-white" />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt={siteName} className="w-9 h-9 rounded-lg object-contain" />
+          ) : (
+            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
+              <Home className="w-5 h-5 text-white" />
+            </div>
+          )}
           <div className="hidden sm:block leading-tight">
             <div className="text-red-600 font-black text-sm tracking-tight">{siteName}</div>
             <div className="text-gray-400 text-[9px] tracking-wider uppercase">{siteSub}</div>
@@ -214,6 +219,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const footer = useContent('footer');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
+  const logoUrl = useSetting('site_logo_url', '');
   const phone = useSetting('phone_main', '0901 234 567');
   const email = useSetting('email', 'info@bdsbinhduong.vn');
   const address = useSetting('address', 'Thủ Dầu Một, Bình Dương');
@@ -254,9 +260,13 @@ export function Footer({ areas, onNavigate }: FooterProps) {
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
-              <Home className="w-5 h-5 text-white" />
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt={siteName} className="w-9 h-9 rounded-lg object-contain bg-white/10" />
+            ) : (
+              <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
+                <Home className="w-5 h-5 text-white" />
+              </div>
+            )}
             <div>
               <div className="text-red-400 font-black text-sm">{siteName}</div>
               <div className="text-gray-500 text-[10px]">{useSetting('site_logo_sub', 'Kênh BĐS uy tín')}</div>

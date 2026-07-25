@@ -43,7 +43,7 @@ export function SiteSettingsTab() {
   const isImageSetting = (setting: SiteSetting) => {
     const key = setting.key.toLowerCase();
     const label = setting.label.toLowerCase();
-    return setting.type === 'image' || key.includes('image') || key.includes('logo') || key.includes('avatar') || key.includes('banner') || key.includes('og_') || label.includes('ảnh') || label.includes('logo');
+    return setting.type === 'image' || key.includes('image') || key.includes('logo') || key.includes('avatar') || key.includes('banner') || key.includes('og_') || key.includes('favicon') || key.includes('icon') || label.includes('ảnh') || label.includes('logo') || label.includes('favicon');
   };
 
   if (loading) return <div className="text-center py-12"><div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
@@ -79,6 +79,8 @@ export function SiteSettingsTab() {
                       value={editVals[setting.key] ?? ''}
                       onChange={url => setEditVals(v => ({ ...v, [setting.key]: url }))}
                       placeholder="Tải ảnh lên hoặc chọn từ thư viện"
+                      folder="branding"
+                      isAdmin
                     />
                   ) : setting.type === 'textarea' ? (
                     <textarea
