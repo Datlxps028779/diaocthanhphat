@@ -4,11 +4,12 @@ import type { ManagedPage, PageBlock } from '../../../lib/supabase';
 import { adminGetAllManagedPages, adminCreateManagedPage, adminUpdateManagedPage, adminDeleteManagedPage, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
+import { ImageUrlInput } from '../../ImageUpload';
 
 // ─── Pages Tab ────────────────────────────────────────────────────────────────
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
-  text: 'Văn bản ngắn', textarea: 'Đoạn văn', html: 'Nội dung định dạng (có bảng)', image: 'URL ảnh',
+  text: 'Văn bản ngắn', textarea: 'Đoạn văn', html: 'Nội dung định dạng (có bảng)', image: 'Ảnh (tải lên / thư viện)',
   number: 'Số', color: 'Màu', list: 'Danh sách (mỗi dòng 1 mục)',
 };
 
@@ -76,11 +77,7 @@ function PageBlockEditor({ block, onSave, onDelete }: {
         <textarea value={val} onChange={e => setVal(e.target.value)} rows={block.type === 'list' ? 5 : 3}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none font-mono text-xs" />
       ) : block.type === 'image' ? (
-        <div className="space-y-2">
-          <input type="text" value={val} onChange={e => setVal(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" placeholder="https://..." />
-          {val && <img src={val} alt="" className="h-20 rounded-lg object-cover" onError={e => (e.currentTarget.style.display = 'none')} />}
-        </div>
+        <ImageUrlInput value={val} onChange={setVal} placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="pages" isAdmin />
       ) : block.type === 'color' ? (
         <div className="flex items-center gap-2">
           <input type="color" value={val || '#000000'} onChange={e => setVal(e.target.value)} className="w-10 h-10 rounded cursor-pointer border border-gray-200" />

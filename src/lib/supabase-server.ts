@@ -225,6 +225,44 @@ export async function serverGetPriceStats(scope: PriceStatScope, scopeKey: strin
   }
 }
 
+// Giá theo từng phường/xã của 1 khu vực (Tỉnh). Chuỗi: districts(area_id) →
+// wards(district_id) → price_stats(scope='ward', scope_key=ward.slug). Chỉ trả về
+// phường có ít nhất 1 nhóm giá đủ mẫu (RPC đã gate >=3). Sắp theo tên phường.
+export type WardPriceStats = { name: string; slug: string; stats: PriceStat[] };
+export async function serverGetAreaWardPriceStats(areaId: string): Promise<WardPriceStats[]> {
+  try {
+    const sb = serverClient();
+    const { data: districts } = await sb.from('districts').select('id').eq('area_id', areaId);
+    const districtIds = (districts ?? []).map(d => (d as { id: string }).id);
+    if (districtIds.length === 0) return [];
+
+    const { data: wards } = await sb.from('wards').select('name, slug').in('district_id', districtIds).order('order_index');
+    const wardRows = (wards ?? []) as Array<{ name: string; slug: string }>;
+    if (wardRows.length === 0) return [];
+
+    const { data: stats } = await sb
+      .from('price_stats')
+      .select('*')
+      .eq('scope', 'ward')
+      .in('scope_key', wardRows.map(w => w.slug));
+    const priceRows = (stats ?? []) as PriceStat[];
+    if (priceRows.length === 0) return [];
+
+    const byWard = new Map<string, PriceStat[]>();
+    for (const s of priceRows) {
+      const arr = byWard.get(s.scope_key) ?? [];
+      arr.push(s);
+      byWard.set(s.scope_key, arr);
+    }
+    return wardRows
+      .filter(w => byWard.has(w.slug))
+      .map(w => ({ name: w.name, slug: w.slug, stats: byWard.get(w.slug)! }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  } catch {
+    return [];
+  }
+}
+
 // Toàn bộ dữ liệu giá đã tổng hợp — cho hub /du-lieu-gia. Caller tự nhóm theo scope/scope_key.
 export async function serverGetAllPriceStats(): Promise<PriceStat[]> {
   try {

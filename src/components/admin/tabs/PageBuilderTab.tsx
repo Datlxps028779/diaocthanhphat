@@ -4,6 +4,7 @@ import type { PageSection, PropertyType, District, Ward } from '../../../lib/sup
 import { getPageLayout, adminSavePageLayout, getPropertyTypes, getDistricts, getWards } from '../../../lib/api';
 import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { CATEGORY_ICON_NAMES } from '../../../lib/categoryIcons';
+import { ImageUrlInput } from '../../ImageUpload';
 
 // ─── Page Builder Tab ─────────────────────────────────────────────────────────
 const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
@@ -47,6 +48,16 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
     </div>
   );
 
+  // Ảnh: tải lên / chọn từ thư viện (nhất quán với NewsTab/Banners/Properties)
+  // thay vì bắt dán URL thủ công.
+  const ImageField = ({ label, k, def = '' }: { label: string; k: string; def?: string }) => (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <ImageUrlInput value={get(k, def)} onChange={url => set(k, url)}
+        placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="pages" isAdmin />
+    </div>
+  );
+
   // Dropdown chọn 1 giá trị từ danh sách (value có thể khác nhãn hiển thị). Mục
   // rỗng = "không lọc theo chiều này".
   const Select = ({ label, k, options, emptyLabel = '— Không lọc —' }: {
@@ -76,7 +87,7 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
           <Field label="Tab 'Cho thuê'" k="tab_rent" def="Cho thuê" />
           <Field label="Nút Tìm kiếm" k="btn_search" def="Tìm kiếm" />
         </div>
-        <Field label="URL ảnh nền hero (để trống = dùng banner mặc định)" k="bg_image" def="" placeholder="https://..." />
+        <ImageField label="Ảnh nền hero (để trống = dùng banner mặc định)" k="bg_image" />
       </div>
     );
     case 'stats': return (
@@ -149,7 +160,7 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
             </div>
             <Field label="Mô tả ngắn" k={`region${r.n}_subtitle`} def={r.ds} />
             <Field label="Mô tả chi tiết" k={`region${r.n}_desc`} def={r.dd} />
-            <Field label="URL ảnh" k={`region${r.n}_image`} def={r.di} placeholder="https://..." />
+            <ImageField label="Ảnh khu vực" k={`region${r.n}_image`} def={r.di} />
             <Field label="Area slug (khớp với DB)" k={`region${r.n}_slug`} def={r.dslug} />
           </div>
         ))}

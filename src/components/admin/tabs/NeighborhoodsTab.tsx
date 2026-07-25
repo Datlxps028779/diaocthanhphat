@@ -8,6 +8,7 @@ import {
 } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
+import { ImageUrlInput } from '../../ImageUpload';
 
 // page_blocks namespace cho khu dân cư — khớp app/khu-dan-cu/[slug]/page.tsx.
 function blockSlug(slug: string): string { return `khu-dan-cu:${slug}`; }
@@ -215,9 +216,9 @@ export function NeighborhoodsTab() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">URL ảnh</label>
-              <input value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} placeholder="https://..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Ảnh đại diện</label>
+              <ImageUrlInput value={form.image_url} onChange={url => setForm(f => ({ ...f, image_url: url }))}
+                placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="neighborhoods" isAdmin />
             </div>
           </div>
           <div>
