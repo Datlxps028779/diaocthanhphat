@@ -4,6 +4,7 @@ import type { Neighborhood, Ward, PageBlock } from '../../../lib/supabase';
 import {
   getNeighborhoods, adminCreateNeighborhood, adminUpdateNeighborhood, adminDeleteNeighborhood,
   getWards, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock, adminRefreshPriceStats,
+  adminEnsureManagedPage,
 } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
@@ -34,8 +35,12 @@ function NeighborhoodContentEditor({ n, onBack }: { n: Neighborhood; onBack: () 
 
   const saveBody = async () => {
     setSavingBody(true);
-    await adminSavePageBlock({ page_slug: slug, section: 'body', key: 'content', label: 'Nội dung khu dân cư', type: 'html', value: body, order_index: 0 });
-    setSavedBody(true); setTimeout(() => setSavedBody(false), 2000);
+    try {
+      // page_blocks.page_slug có FK tới managed_pages(slug) — tạo trang chứa ẩn trước.
+      await adminEnsureManagedPage(slug, `Khu dân cư ${n.name}`);
+      await adminSavePageBlock({ page_slug: slug, section: 'body', key: 'content', label: 'Nội dung khu dân cư', type: 'html', value: body, order_index: 0 });
+      setSavedBody(true); setTimeout(() => setSavedBody(false), 2000);
+    } catch (e) { alert((e as Error).message); }
     setSavingBody(false);
     load();
   };
@@ -65,12 +70,12 @@ function NeighborhoodContentEditor({ n, onBack }: { n: Neighborhood; onBack: () 
         <RichTextEditor value={body} onChange={setBody} placeholder="Dùng H2 cho từng mục: Vị trí, Tiện ích, Hạ tầng, Pháp lý, Tiềm năng…" />
       </div>
 
-      <FaqEditor pageSlug={slug} faqBlocks={faqBlocks} onChanged={load} />
+      <FaqEditor pageSlug={slug} pageTitle={`Khu dân cư ${n.name}`} faqBlocks={faqBlocks} onChanged={load} />
     </div>
   );
 }
 
-function FaqEditor({ pageSlug, faqBlocks, onChanged }: { pageSlug: string; faqBlocks: PageBlock[]; onChanged: () => void }) {
+function FaqEditor({ pageSlug, pageTitle, faqBlocks, onChanged }: { pageSlug: string; pageTitle: string; faqBlocks: PageBlock[]; onChanged: () => void }) {
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,6 +84,8 @@ function FaqEditor({ pageSlug, faqBlocks, onChanged }: { pageSlug: string; faqBl
     if (!q.trim() || !a.trim()) return;
     setSaving(true);
     try {
+      // page_blocks.page_slug có FK tới managed_pages(slug) — tạo trang chứa ẩn trước.
+      await adminEnsureManagedPage(pageSlug, pageTitle);
       await adminSavePageBlock({ page_slug: pageSlug, section: 'faq', key: `q${Date.now()}`, label: q.trim(), type: 'textarea', value: a.trim(), order_index: faqBlocks.length });
       setQ(''); setA(''); onChanged();
     } catch (e) { alert((e as Error).message); }

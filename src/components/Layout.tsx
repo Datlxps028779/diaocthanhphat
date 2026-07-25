@@ -242,7 +242,9 @@ export function Footer({ areas, onNavigate }: FooterProps) {
     { label: 'Dự án', href: pageToHref({ name: 'projects' }) },
     { label: 'Đầu tư', href: pageToHref({ name: 'invest' }) },
     { label: 'Khu vực', href: pageToHref({ name: 'regions' }) },
+    { label: 'Khu dân cư', href: '/khu-dan-cu' },
     { label: 'Tin tức', href: pageToHref({ name: 'news' }) },
+    { label: 'Kiến thức', href: '/kien-thuc' },
     { label: 'Về chúng tôi', href: pageToHref({ name: 'about' }) },
   ];
 

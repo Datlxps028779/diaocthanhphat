@@ -28,6 +28,7 @@ export function buildNavigationItems(content: NavContent, areas: Area[] = []): N
       activePage: 'regions',
       children: [
         { key: 'regions-all', label: label(content, 'menu_regions_all', 'Tất cả khu vực'), href: '/khu-vuc', activePage: 'regions' },
+        { key: 'neighborhoods', label: label(content, 'menu_neighborhoods', 'Khu dân cư'), href: '/khu-dan-cu', activePage: 'regions' },
         ...areas.map(area => ({
           key: `region-${area.slug}`,
           label: label(content, `menu_region_${area.slug}`, area.name),
@@ -39,7 +40,16 @@ export function buildNavigationItems(content: NavContent, areas: Area[] = []): N
     { key: 'projects', label: label(content, 'menu_projects', 'Dự án'), page: { name: 'projects' } },
     { key: 'invest', label: label(content, 'menu_invest', 'Đầu tư'), page: { name: 'invest' } },
     { key: 'valuation', label: label(content, 'menu_valuation', 'Định giá'), page: { name: 'valuation' } },
-    { key: 'news', label: label(content, 'menu_news', 'Tin tức'), page: { name: 'news' } },
+    {
+      key: 'news',
+      label: label(content, 'menu_news', 'Tin tức'),
+      page: { name: 'news' },
+      activePage: 'news',
+      children: [
+        { key: 'news-all', label: label(content, 'menu_news_all', 'Tất cả tin tức'), href: '/tin-tuc', activePage: 'news' },
+        { key: 'knowledge', label: label(content, 'menu_knowledge', 'Kiến thức'), href: '/kien-thuc', activePage: 'news' },
+      ],
+    },
     { key: 'about', label: label(content, 'menu_about', 'Về chúng tôi'), page: { name: 'about' } },
   ];
 }

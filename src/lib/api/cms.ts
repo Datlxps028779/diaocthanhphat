@@ -121,6 +121,17 @@ export async function adminCreateManagedPage(page: Omit<ManagedPage, 'id' | 'cre
   return data as ManagedPage;
 }
 
+// Đảm bảo tồn tại 1 trang "chứa" (managed_pages) cho các namespace page_blocks không
+// phải trang công khai — vd nội dung khu dân cư dùng slug "khu-dan-cu:<slug>".
+// page_blocks.page_slug có FK tới managed_pages(slug); thiếu parent → insert block fail.
+// Trang ẩn: is_active=false (route /trang/ tự notFound) + is_system=true (vắng sitemap
+// + không hiện ở danh sách trang tùy biến). Idempotent: onConflict slug bỏ qua.
+export async function adminEnsureManagedPage(slug: string, title: string): Promise<void> {
+  const { error } = await supabase.from('managed_pages')
+    .upsert({ slug, title, is_active: false, is_system: true }, { onConflict: 'slug', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
 export async function adminUpdateManagedPage(id: string, updates: Partial<ManagedPage>): Promise<void> {
   const { error } = await supabase.from('managed_pages').update(updates).eq('id', id);
   if (error) throw error;

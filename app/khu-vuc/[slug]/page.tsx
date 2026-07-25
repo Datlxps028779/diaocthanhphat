@@ -4,7 +4,9 @@ import { notFound } from 'next/navigation';
 import { SiteChrome } from '@/components/SiteChrome';
 import { buildBreadcrumbJsonLd } from '@/lib/seo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
-import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats } from '@/lib/supabase-server';
+import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats, serverGetPriceStats } from '@/lib/supabase-server';
+import { PriceStatsBlock } from '@/components/PriceStatsBlock';
+import { buildPriceAnswer } from '@/lib/priceStatsFormat';
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
@@ -24,9 +26,10 @@ const DEFAULT_AREA_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo
 async function loadArea(slug: string) {
   const area = await serverGetAreaBySlug(slug);
   if (!area) return null;
-  const [listings, stats] = await Promise.all([
+  const [listings, stats, priceStats] = await Promise.all([
     serverGetAreaListings(area.id, 12),
     serverGetAreaStats(area.id),
+    serverGetPriceStats('area', area.slug),
   ]);
   const detail = getAreaDetails(area.slug);
   const summary = areaSummaryFromData(area, detail);
@@ -37,7 +40,7 @@ async function loadArea(slug: string) {
     propertyTypes: stats.propertyTypes,
     hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
   });
-  return { area, listings, stats, detail, summary, evaluation };
+  return { area, listings, stats, detail, summary, evaluation, priceStats };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -94,7 +97,8 @@ function PropertyAreaCard({ property }: { property: Property }) {
 export default async function AreaPage({ params }: Props) {
   const data = await loadArea(params.slug);
   if (!data) notFound();
-  const { area, listings, stats, detail, summary, evaluation } = data;
+  const { area, listings, stats, detail, summary, evaluation, priceStats } = data;
+  const priceAnswer = buildPriceAnswer(area.name, priceStats, 'mua_ban') ?? buildPriceAnswer(area.name, priceStats, 'cho_thue');
   const breadcrumb = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: 'Khu vực', path: '/khu-vuc' },
@@ -136,6 +140,8 @@ export default async function AreaPage({ params }: Props) {
                     Khu vực bất động sản
                   </p>
                   <h1 className="text-3xl font-black leading-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)] md:text-5xl">Bất động sản tại {area.name}</h1>
+                  {/* Answer Block giá — câu trả lời trực tiếp cho AIO/AEO, chỉ khi đủ mẫu. */}
+                  {priceAnswer && <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm font-semibold leading-7 text-white ring-1 ring-white/20">{priceAnswer}</p>}
                   <p className="mt-4 text-sm font-medium leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] md:text-base">{summary}</p>
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link href={`/mua-ban?area=${area.id}`} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-950/30 hover:bg-red-700">Xem tin mua bán</Link>
@@ -175,6 +181,9 @@ export default async function AreaPage({ params }: Props) {
                   </div>
                 ) : null}
               </div>
+
+              {/* Dữ liệu giá tổng hợp — tự ẩn khi khu vực chưa đủ mẫu (không bịa). */}
+              <PriceStatsBlock entityName={area.name} priceStats={priceStats} showAnswer={false} />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">

@@ -15,8 +15,18 @@ describe('buildNavigationItems', () => {
     expect(regions?.label).toBe('Tìm theo khu vực');
     expect(regions?.page).toEqual({ name: 'regions' });
     expect(regions?.children?.[0]).toMatchObject({ label: 'Tất cả khu vực', href: '/khu-vuc' });
-    expect(regions?.children?.[1]).toMatchObject({ label: 'Bình Dương', href: '/khu-vuc/binh-duong' });
-    expect(regions?.children?.[2]).toMatchObject({ label: 'Đồng Nai', href: '/khu-vuc/dong-nai' });
+    expect(regions?.children?.[1]).toMatchObject({ label: 'Khu dân cư', href: '/khu-dan-cu' });
+    expect(regions?.children?.[2]).toMatchObject({ label: 'Bình Dương', href: '/khu-vuc/binh-duong' });
+    expect(regions?.children?.[3]).toMatchObject({ label: 'Đồng Nai', href: '/khu-vuc/dong-nai' });
+  });
+
+  it('adds a news dropdown with knowledge hub', () => {
+    const nav = buildNavigationItems({}, []);
+    const news = nav.find(item => item.key === 'news');
+
+    expect(news?.label).toBe('Tin tức');
+    expect(news?.children?.[0]).toMatchObject({ label: 'Tất cả tin tức', href: '/tin-tuc' });
+    expect(news?.children?.[1]).toMatchObject({ label: 'Kiến thức', href: '/kien-thuc' });
   });
 
   it('allows CMS labels for region menu and area children', () => {
@@ -29,8 +39,8 @@ describe('buildNavigationItems', () => {
 
     expect(regions?.label).toBe('Khu vực');
     expect(regions?.children?.[0].label).toBe('Toàn bộ khu vực');
-    expect(regions?.children?.[1].label).toBe('BĐS Bình Dương');
-    expect(regions?.children?.[2].label).toBe('Đồng Nai');
+    expect(regions?.children?.[2].label).toBe('BĐS Bình Dương');
+    expect(regions?.children?.[3].label).toBe('Đồng Nai');
   });
 
   it('keeps existing menu routes and customizable valuation label', () => {
