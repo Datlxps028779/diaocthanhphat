@@ -26,6 +26,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
   const nav = useContent('navbar');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
@@ -68,8 +69,13 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
         <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
-          {logoUrl ? (
-            <img src={logoUrl} alt={siteName} className="w-9 h-9 rounded-lg object-contain" />
+          {logoUrl && !logoError ? (
+            <img
+              src={logoUrl}
+              alt={siteName}
+              onError={() => setLogoError(true)}
+              className="h-9 w-auto max-w-[160px] rounded-lg object-contain"
+            />
           ) : (
             <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
               <Home className="w-5 h-5 text-white" />
@@ -220,6 +226,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   const footer = useContent('footer');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const logoUrl = useSetting('site_logo_url', '');
+  const [logoError, setLogoError] = useState(false);
   const phone = useSetting('phone_main', '0901 234 567');
   const email = useSetting('email', 'info@bdsbinhduong.vn');
   const address = useSetting('address', 'Thủ Dầu Một, Bình Dương');
@@ -260,8 +267,13 @@ export function Footer({ areas, onNavigate }: FooterProps) {
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2.5 mb-3">
-            {logoUrl ? (
-              <img src={logoUrl} alt={siteName} className="w-9 h-9 rounded-lg object-contain bg-white/10" />
+            {logoUrl && !logoError ? (
+              <img
+                src={logoUrl}
+                alt={siteName}
+                onError={() => setLogoError(true)}
+                className="h-9 w-auto max-w-[160px] rounded-lg object-contain bg-white/10"
+              />
             ) : (
               <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
                 <Home className="w-5 h-5 text-white" />
