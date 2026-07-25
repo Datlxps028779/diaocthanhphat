@@ -21,3 +21,4 @@ export * from './api/savedSearches';
 export * from './api/schemaPro';
 export * from './api/aiChatKnowledge';
 export * from './api/priceStats';
+export * from './api/menu';

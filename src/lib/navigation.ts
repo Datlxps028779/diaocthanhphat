@@ -1,4 +1,4 @@
-import type { Area } from './supabase';
+import type { Area, MenuItem } from './supabase';
 import type { Page } from './router';
 
 export type NavContent = Record<string, string | null | undefined>;
@@ -53,4 +53,34 @@ export function buildNavigationItems(content: NavContent, areas: Area[] = []): N
     },
     { key: 'about', label: label(content, 'menu_about', 'Về chúng tôi'), page: { name: 'about' } },
   ];
+}
+
+// Dựng cây menu đệ quy từ bảng menu_items (phẳng, parent_id tự tham chiếu). Node
+// item_type='dynamic_areas' được bung thành danh sách khu vực thật (thêm area mới
+// → menu tự cập nhật). Chỉ lấy item is_active. Sort theo order_index từng cấp.
+export function buildMenuTree(items: MenuItem[], areas: Area[] = []): NavigationItem[] {
+  const active = items.filter(i => i.is_active);
+  const byParent = new Map<string | null, MenuItem[]>();
+  for (const it of active) {
+    const arr = byParent.get(it.parent_id) ?? [];
+    arr.push(it);
+    byParent.set(it.parent_id, arr);
+  }
+
+  const areaNodes = (): NavigationItem[] =>
+    areas.map(a => ({ key: `region-${a.slug}`, label: a.name, href: `/khu-vuc/${a.slug}`, activePage: 'regions' as const }));
+
+  const build = (parentId: string | null): NavigationItem[] => {
+    const rows = (byParent.get(parentId) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
+    return rows.map(row => {
+      const children = build(row.id);
+      if (row.item_type === 'dynamic_areas') children.push(...areaNodes());
+      const node: NavigationItem = { key: row.id, label: row.label };
+      if (row.url) node.href = row.url;
+      if (children.length > 0) node.children = children;
+      return node;
+    });
+  };
+
+  return build(null);
 }

@@ -29,6 +29,7 @@ const FeaturedSectionsTab = lazy(() => import('./admin/tabs/FeaturedSectionsTab'
 const PageBuilderTab = lazy(() => import('./admin/tabs/PageBuilderTab').then(m => ({ default: m.PageBuilderTab })));
 const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default: m.PagesTab })));
 const NeighborhoodsTab = lazy(() => import('./admin/tabs/NeighborhoodsTab').then(m => ({ default: m.NeighborhoodsTab })));
+const MenuTab = lazy(() => import('./admin/tabs/MenuTab').then(m => ({ default: m.MenuTab })));
 const FooterTab = lazy(() => import('./admin/tabs/FooterTab').then(m => ({ default: m.FooterTab })));
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
@@ -107,6 +108,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'page-builder', label: 'Bố cục trang', icon: <PanelLeft className="w-4 h-4" /> },
     { id: 'pages', label: 'Quản lý trang', icon: <FileText className="w-4 h-4" /> },
     { id: 'neighborhoods', label: 'Khu dân cư', icon: <MapPin className="w-4 h-4" /> },
+    { id: 'menu', label: 'Menu điều hướng', icon: <LinkIcon className="w-4 h-4" /> },
     { id: 'seo-geo', label: 'SEO / GEO', icon: <SearchCode className="w-4 h-4" /> },
     { id: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
     { id: 'footer', label: 'Footer', icon: <LinkIcon className="w-4 h-4" /> },
@@ -204,6 +206,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'page-builder' && <PageBuilderTab />}
           {tab === 'pages' && <PagesTab />}
           {tab === 'neighborhoods' && <NeighborhoodsTab />}
+          {tab === 'menu' && <MenuTab />}
           {tab === 'settings' && <SiteSettingsTab />}
           {tab === 'footer' && <FooterTab />}
           {tab === 'backup' && <BackupTab />}

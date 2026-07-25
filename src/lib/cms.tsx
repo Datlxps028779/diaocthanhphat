@@ -1,32 +1,39 @@
 'use client';
 import { useState, useEffect, createContext, useContext } from 'react';
-import { getAllSiteContent, getSiteSettings } from './api';
+import { getAllSiteContent, getSiteSettings, getMenuItems } from './api';
+import type { MenuItem } from './supabase';
 
 type CmsData = {
   content: Record<string, Record<string, string>>;
   settings: Record<string, string>;
+  menu: MenuItem[];
   loading: boolean;
 };
 
-const CmsContext = createContext<CmsData>({ content: {}, settings: {}, loading: true });
+const CmsContext = createContext<CmsData>({ content: {}, settings: {}, menu: [], loading: true });
 
 export function CmsProvider({ children }: { children: React.ReactNode }) {
   const [content, setContent] = useState<Record<string, Record<string, string>>>({});
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getAllSiteContent(), getSiteSettings()])
-      .then(([c, s]) => { setContent(c); setSettings(s); })
+    Promise.all([getAllSiteContent(), getSiteSettings(), getMenuItems().catch(() => [])])
+      .then(([c, s, m]) => { setContent(c); setSettings(s); setMenu(m); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  return <CmsContext.Provider value={{ content, settings, loading }}>{children}</CmsContext.Provider>;
+  return <CmsContext.Provider value={{ content, settings, menu, loading }}>{children}</CmsContext.Provider>;
 }
 
 export function useCms() {
   return useContext(CmsContext);
+}
+
+export function useMenu(): MenuItem[] {
+  return useContext(CmsContext).menu;
 }
 
 export function useContent(section: string): Record<string, string> {

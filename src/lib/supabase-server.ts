@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, Area, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock } from './supabase';
+import type { Property, NewsArticle, Area, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -231,6 +231,17 @@ export async function serverGetAllPriceStats(): Promise<PriceStat[]> {
     const sb = serverClient();
     const { data } = await sb.from('price_stats').select('*').order('sample_count', { ascending: false }).limit(2000);
     return (data ?? []) as PriceStat[];
+  } catch {
+    return [];
+  }
+}
+
+// Menu điều hướng động — cho SSR Header. Rỗng → FE fallback về menu hardcode.
+export async function serverGetMenuItems(): Promise<MenuItem[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('menu_items').select('*').order('order_index');
+    return (data ?? []) as MenuItem[];
   } catch {
     return [];
   }

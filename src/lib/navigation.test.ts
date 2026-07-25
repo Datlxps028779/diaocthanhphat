@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildNavigationItems } from './navigation';
-import type { Area } from './supabase';
+import { buildNavigationItems, buildMenuTree } from './navigation';
+import type { Area, MenuItem } from './supabase';
 
 const areas = [
   { id: 'a1', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '' },
@@ -52,5 +52,53 @@ describe('buildNavigationItems', () => {
     expect(nav.find(item => item.key === 'rent')?.page).toEqual({ name: 'listings', listingType: 'cho_thue' });
     expect(nav.find(item => item.key === 'valuation')?.label).toBe('Định giá nhà đất');
     expect(nav.find(item => item.key === 'valuation')?.page).toEqual({ name: 'valuation' });
+  });
+});
+
+function mkMenuItem(over: Partial<MenuItem> & { id: string }): MenuItem {
+  return {
+    id: over.id, parent_id: over.parent_id ?? null, label: over.label ?? over.id,
+    url: over.url ?? null, item_type: over.item_type ?? 'link',
+    open_new_tab: over.open_new_tab ?? false, order_index: over.order_index ?? 0,
+    is_active: over.is_active ?? true, created_at: '', updated_at: '',
+  };
+}
+
+describe('buildMenuTree', () => {
+  it('dựng cây theo parent_id + sort order_index', () => {
+    const items: MenuItem[] = [
+      mkMenuItem({ id: 'rent', label: 'Cho thuê', url: '/cho-thue', order_index: 1 }),
+      mkMenuItem({ id: 'buy', label: 'Mua bán', url: '/mua-ban', order_index: 0 }),
+      mkMenuItem({ id: 'news', label: 'Tin tức', url: '/tin-tuc', order_index: 2 }),
+      mkMenuItem({ id: 'kt', parent_id: 'news', label: 'Kiến thức', url: '/kien-thuc', order_index: 0 }),
+    ];
+    const tree = buildMenuTree(items, []);
+    expect(tree.map(t => t.label)).toEqual(['Mua bán', 'Cho thuê', 'Tin tức']);
+    const news = tree.find(t => t.key === 'news');
+    expect(news?.children?.[0]).toMatchObject({ label: 'Kiến thức', href: '/kien-thuc' });
+  });
+
+  it('bung mục dynamic_areas thành danh sách khu vực', () => {
+    const areas = [
+      { id: 'a1', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '' },
+    ] satisfies Area[];
+    const items: MenuItem[] = [
+      mkMenuItem({ id: 'regions', label: 'Khu vực', url: '/khu-vuc', order_index: 0 }),
+      mkMenuItem({ id: 'dyn', parent_id: 'regions', label: 'DS khu vực', item_type: 'dynamic_areas', order_index: 0 }),
+    ];
+    const tree = buildMenuTree(items, areas);
+    const regions = tree.find(t => t.key === 'regions');
+    // node động không có href; children của nó gồm cây con động (khu vực thật)
+    const dyn = regions?.children?.find(c => c.key === 'dyn');
+    expect(dyn?.children?.[0]).toMatchObject({ label: 'Bình Dương', href: '/khu-vuc/binh-duong' });
+  });
+
+  it('bỏ mục is_active=false', () => {
+    const items: MenuItem[] = [
+      mkMenuItem({ id: 'buy', label: 'Mua bán', url: '/mua-ban', order_index: 0 }),
+      mkMenuItem({ id: 'hidden', label: 'Ẩn', url: '/x', order_index: 1, is_active: false }),
+    ];
+    const tree = buildMenuTree(items, []);
+    expect(tree.map(t => t.key)).toEqual(['buy']);
   });
 });

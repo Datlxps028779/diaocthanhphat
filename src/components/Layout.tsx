@@ -4,9 +4,9 @@ import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
-import { buildNavigationItems, type NavigationItem } from '../lib/navigation';
+import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area } from '../lib/supabase';
-import { useContent, useSetting } from '../lib/cms';
+import { useContent, useSetting, useMenu } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const AiSearchChat = dynamic(() => import('./AiSearchChat').then(m => m.AiSearchChat), { ssr: false });
@@ -28,6 +28,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const nav = useContent('navbar');
+  const menu = useMenu();
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
   const logoUrl = useSetting('site_logo_url', '');
@@ -38,7 +39,8 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
-  const navItems = buildNavigationItems(nav, areas);
+  // Menu từ DB (admin quản lý); rỗng → fallback menu hardcode để không vỡ.
+  const navItems = menu.length > 0 ? buildMenuTree(menu, areas) : buildNavigationItems(nav, areas);
 
   const isActive = (item: NavigationItem) => {
     const pageName = item.page?.name ?? item.activePage;
@@ -97,7 +99,17 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               {desktopMenuOpen === item.key && (
                 <div className="absolute left-0 top-full pt-2 z-50">
                   <div className="w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
-                    {item.children.map(child => (
+                    {item.children.map(child => child.children ? (
+                      <div key={child.key} className="py-1">
+                        <p className="px-4 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
+                        {child.children.map(grand => (
+                          <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus}
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            {grand.label}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
                       <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
                         className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                         {child.label}
@@ -180,7 +192,17 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               </button>
               {mobileSubmenuOpen === item.key && (
                 <div className="ml-3 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
-                  {item.children.map(child => (
+                  {item.children.map(child => child.children ? (
+                    <div key={child.key}>
+                      <p className="px-3 pt-1.5 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
+                      {child.children.map(grand => (
+                        <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus}
+                          className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          {grand.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
                     <Link key={child.key} href={hrefFor(child)} onClick={closeMenus}
                       className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
                       {child.label}

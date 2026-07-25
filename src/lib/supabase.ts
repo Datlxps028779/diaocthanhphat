@@ -68,6 +68,19 @@ export type PriceStat = {
   min_price_per_sqm: number | null; max_price_per_sqm: number | null;
   avg_area_sqm: number | null; computed_at: string;
 };
+export type MenuItemType = 'link' | 'dynamic_areas';
+export type MenuItem = {
+  id: string;
+  parent_id: string | null;
+  label: string;
+  url: string | null;
+  item_type: MenuItemType;
+  open_new_tab: boolean;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
 export type Testimonial = {
   id: string; name: string; location: string | null; content: string;
   rating: number; avatar_url: string | null; is_active: boolean; created_at: string;
