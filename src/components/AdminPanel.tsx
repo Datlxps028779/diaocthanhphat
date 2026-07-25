@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -28,6 +28,7 @@ const BannersTab = lazy(() => import('./admin/tabs/BannersTab').then(m => ({ def
 const FeaturedSectionsTab = lazy(() => import('./admin/tabs/FeaturedSectionsTab').then(m => ({ default: m.FeaturedSectionsTab })));
 const PageBuilderTab = lazy(() => import('./admin/tabs/PageBuilderTab').then(m => ({ default: m.PageBuilderTab })));
 const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default: m.PagesTab })));
+const NeighborhoodsTab = lazy(() => import('./admin/tabs/NeighborhoodsTab').then(m => ({ default: m.NeighborhoodsTab })));
 const FooterTab = lazy(() => import('./admin/tabs/FooterTab').then(m => ({ default: m.FooterTab })));
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
@@ -105,6 +106,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'featured-sections', label: 'Tin nổi bật', icon: <Layers className="w-4 h-4" /> },
     { id: 'page-builder', label: 'Bố cục trang', icon: <PanelLeft className="w-4 h-4" /> },
     { id: 'pages', label: 'Quản lý trang', icon: <FileText className="w-4 h-4" /> },
+    { id: 'neighborhoods', label: 'Khu dân cư', icon: <MapPin className="w-4 h-4" /> },
     { id: 'seo-geo', label: 'SEO / GEO', icon: <SearchCode className="w-4 h-4" /> },
     { id: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
     { id: 'footer', label: 'Footer', icon: <LinkIcon className="w-4 h-4" /> },
@@ -201,6 +203,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'featured-sections' && <FeaturedSectionsTab />}
           {tab === 'page-builder' && <PageBuilderTab />}
           {tab === 'pages' && <PagesTab />}
+          {tab === 'neighborhoods' && <NeighborhoodsTab />}
           {tab === 'settings' && <SiteSettingsTab />}
           {tab === 'footer' && <FooterTab />}
           {tab === 'backup' && <BackupTab />}

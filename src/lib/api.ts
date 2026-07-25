@@ -20,3 +20,4 @@ export * from './api/nurture';
 export * from './api/savedSearches';
 export * from './api/schemaPro';
 export * from './api/aiChatKnowledge';
+export * from './api/priceStats';

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { NewsListClient } from '../../../_clients/pageClients';
 import { serverGetNews } from '@/lib/supabase-server';
 import { slugToCategory, NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
-import { buildBreadcrumbJsonLd } from '@/lib/seo';
+import { loadRouteSeo, type RouteFallback } from '@/lib/routeSeo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 
 export const revalidate = 1800;
@@ -15,34 +15,42 @@ export function generateStaticParams() {
 
 type Params = { params: { slug: string } };
 
+function categoryFallback(slug: string, category: string): RouteFallback {
+  const path = `/tin-tuc/danh-muc/${slug}`;
+  return {
+    title: `Tin ${category} bất động sản`,
+    description: `Tin tức, phân tích ${category.toLowerCase()} bất động sản tại Bình Dương và khu vực lân cận.`,
+    path,
+    routeType: 'CollectionPage',
+    breadcrumb: [
+      { name: 'Trang chủ', path: '/' },
+      { name: 'Tin tức', path: '/tin-tuc' },
+      { name: category, path },
+    ],
+  };
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const category = slugToCategory(params.slug);
   if (!category) return { title: 'Không tìm thấy danh mục' };
-  const title = `Tin ${category} bất động sản`;
-  const description = `Tin tức, phân tích ${category.toLowerCase()} bất động sản tại Bình Dương và khu vực lân cận.`;
   const path = `/tin-tuc/danh-muc/${params.slug}`;
-  return {
-    title,
-    description,
-    alternates: { canonical: path },
-    openGraph: { title, description, url: path, type: 'website' },
-  };
+  const { metadata } = await loadRouteSeo(path, categoryFallback(params.slug, category));
+  return metadata;
 }
 
 export default async function NewsCategoryPage({ params }: Params) {
   const category = slugToCategory(params.slug);
   if (!category) notFound();
 
-  const articles = await serverGetNews(20, category);
-  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
-    { name: 'Trang chủ', path: '/' },
-    { name: 'Tin tức', path: '/tin-tuc' },
-    { name: category, path: `/tin-tuc/danh-muc/${params.slug}` },
+  const path = `/tin-tuc/danh-muc/${params.slug}`;
+  const [articles, { jsonLd }] = await Promise.all([
+    serverGetNews(20, category),
+    loadRouteSeo(path, categoryFallback(params.slug, category)),
   ]);
 
   return (
     <>
-      <JsonLdScripts schemas={[breadcrumbJsonLd]} />
+      <JsonLdScripts schemas={jsonLd} />
       <NewsListClient initialArticles={articles} initialCategory={category} />
     </>
   );

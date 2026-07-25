@@ -7,7 +7,7 @@ function property(overrides: Partial<Property> = {}): Property {
     id: 'p1', title: 'Nhà đẹp', description: null,
     price: 3, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
     listing_type: 'mua_ban', area_sqm: 80, address: null, city: 'Bình Dương',
-    district: null, ward: null, area_id: null, district_id: null, property_type_id: null,
+    district: null, ward: null, neighborhood_slug: null, area_id: null, district_id: null, property_type_id: null,
     image_url: null, images: null, badge: null, badge_color: null, legal_status: null,
     is_featured: false, is_hot: false, is_active: true, is_verified: false, views: 0,
     contact_name: null, contact_phone: null, bedrooms: null, bathrooms: null,

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { MapPin, Sparkles } from 'lucide-react';
 import { getAllProperties } from '../lib/api';
 import { buildPropertyPath } from '../lib/api/properties';
+import { SafeImage } from './SafeImage';
+import { FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { useTasteProfile } from '../lib/hooks/useTasteProfile';
 import { rankRecommendations, hasEnoughSignal, topKey } from '../lib/taste';
@@ -57,8 +59,9 @@ export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excl
           <Link key={p.id} href={buildPropertyPath(p)}
             className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
             <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-              <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-                alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE}
+                alt={p.title} fill sizes="(max-width: 768px) 50vw, 25vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-500" />
               {p.listing_type === 'cho_thue' && (
                 <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
               )}

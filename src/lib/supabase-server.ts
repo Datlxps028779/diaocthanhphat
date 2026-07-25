@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, Area, SeoRouteOverride, ManagedPage, PageBlock } from './supabase';
+import type { Property, NewsArticle, Area, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -154,6 +154,77 @@ export async function serverGetAreaStats(areaId: string): Promise<{ districts: s
   }
 }
 
+// Khu dân cư (Entity Page /khu-dan-cu/{slug}). Bám khuôn area helpers ở trên.
+export async function serverGetNeighborhoods(): Promise<Neighborhood[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('neighborhoods').select('*').order('order_index', { ascending: true });
+    return (data ?? []) as Neighborhood[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetNeighborhoodBySlug(slug: string): Promise<Neighborhood | null> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('neighborhoods').select('*').eq('slug', slug).maybeSingle();
+    return (data as Neighborhood | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function serverGetNeighborhoodListings(slug: string, limit = 12): Promise<Property[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('properties')
+      .select(PROPERTY_SELECT)
+      .eq('is_active', true)
+      .eq('neighborhood_slug', slug)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return (data ?? []) as Property[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetNeighborhoodStats(slug: string): Promise<{ propertyTypes: string[]; activeCount: number }> {
+  try {
+    const sb = serverClient();
+    const { data, count } = await sb
+      .from('properties')
+      .select('property_type_id', { count: 'exact' })
+      .eq('is_active', true)
+      .eq('neighborhood_slug', slug)
+      .limit(500);
+    const rows = (data ?? []) as Array<{ property_type_id: string | null }>;
+    return {
+      propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
+      activeCount: count ?? rows.length,
+    };
+  } catch {
+    return { propertyTypes: [], activeCount: 0 };
+  }
+}
+
+// Dữ liệu giá đã tổng hợp (price_stats) cho 1 scope_key — dùng render Answer Block giá.
+export async function serverGetPriceStats(scope: PriceStatScope, scopeKey: string): Promise<PriceStat[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('price_stats')
+      .select('*')
+      .eq('scope', scope)
+      .eq('scope_key', scopeKey);
+    return (data ?? []) as PriceStat[];
+  } catch {
+    return [];
+  }
+}
+
 // News: URL /tin-tuc/{slug} tra theo slug; fallback id nếu là UUID.
 export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArticle | null> {
   try {
@@ -163,6 +234,22 @@ export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArt
     return data as NewsArticle | null;
   } catch {
     return null;
+  }
+}
+
+// Bài viết gắn với 1 entity (khu dân cư/khu vực) qua cột geo_entity — dùng cho
+// topic cluster: entity page liệt kê bài vệ tinh trỏ về nó.
+export async function serverGetNewsByGeoEntity(entity: string, limit = 6): Promise<NewsArticle[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('news').select('*')
+      .eq('is_published', true)
+      .eq('geo_entity', entity)
+      .order('created_at', { ascending: false }).limit(limit);
+    return (data ?? []) as NewsArticle[];
+  } catch {
+    return [];
   }
 }
 

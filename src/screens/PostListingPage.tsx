@@ -12,12 +12,13 @@ import { LocationPicker, type GeocodeTarget } from '../components/LocationPicker
 import { PropertyDetailPage } from './PropertyDetailPage';
 import { buildPropertyFaq, type FaqItem } from '../lib/propertyFaq';
 import { extractErrorMessage } from '../lib/errorMessage';
-import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
+import { useAreas, usePropertyTypes, useDistricts, useWards, useNeighborhoods } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { useAuth } from '../lib/auth';
 import { requestAuth } from '../lib/authModal';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
+import { isValidVnPhone } from '../lib/phone';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
@@ -83,7 +84,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     price: '', price_unit: 'tỷ', price_label: '',
     price_per_month: '',
     loan_support: '',
-    area_sqm: '', address: '', city: '', district: '', ward: '',
+    area_sqm: '', address: '', city: '', district: '', ward: '', neighborhood_slug: '',
     area_id: '', property_type_id: '',
     image_url: '', images: [] as string[],
     video_url: '',
@@ -109,6 +110,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   // Phường/xã theo quận/huyện đã chọn. form.district lưu dạng TÊN nên phải map ra id.
   const selectedDistrictId = districts.find(d => d.name === form.district)?.id;
   const { data: wards = [] } = useWards(selectedDistrictId || undefined);
+  // Khu dân cư theo phường/xã đã chọn. form.ward lưu TÊN nên map ra id.
+  const selectedWardId = wards.find(w => w.name === form.ward)?.id;
+  const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -172,11 +176,11 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     });
   }, [flyTo]);
 
-  // Chọn xã → zoom sát tới cấp phường/xã (trước đây bản đồ đứng yên).
+  // Chọn xã → zoom sát tới cấp phường/xã (trước đây bản đồ đứng yên). Reset khu dân cư.
   const setWard = useCallback((ward: string) => {
     setForm(f => {
       flyTo([ward, f.district, f.city].filter(Boolean).join(', '), 15);
-      return { ...f, ward };
+      return { ...f, ward, neighborhood_slug: '' };
     });
   }, [flyTo]);
 
@@ -209,24 +213,32 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     return { ...f, faq: [...f.faq, ...generated.filter(g => !existing.has(g.question.trim()))] };
   });
 
+  // parseFloat('abc') → NaN, và NaN <= 0 là false nên số rác từng lọt qua validate.
+  // Guard: chỉ hợp lệ khi là số hữu hạn và > 0.
+  const isPositiveNumber = (raw: string) => {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0;
+  };
+
   const validateStep = () => {
     const errs: Record<string, string> = {};
     if (step === 0) {
       if (!form.title.trim()) errs.title = 'Vui lòng nhập tiêu đề';
       if (!form.property_type_id) errs.property_type_id = 'Vui lòng chọn loại BĐS';
       if (isRental(form.listing_type)) {
-        if (!form.price_per_month || parseFloat(form.price_per_month) <= 0)
-          errs.price_per_month = 'Vui lòng nhập giá thuê';
+        if (!isPositiveNumber(form.price_per_month)) errs.price_per_month = 'Vui lòng nhập giá thuê hợp lệ (số lớn hơn 0)';
       } else {
-        if (!form.price || parseFloat(form.price) <= 0) errs.price = 'Vui lòng nhập giá';
+        if (!isPositiveNumber(form.price)) errs.price = 'Vui lòng nhập giá hợp lệ (số lớn hơn 0)';
       }
     }
     if (step === 1) {
       if (!form.city.trim()) errs.city = 'Vui lòng nhập tỉnh/thành phố';
+      if (form.area_sqm.trim() && !isPositiveNumber(form.area_sqm)) errs.area_sqm = 'Diện tích phải là số lớn hơn 0';
     }
     if (step === 3) {
       if (!form.contact_name.trim()) errs.contact_name = 'Vui lòng nhập họ tên';
       if (!form.contact_phone.trim()) errs.contact_phone = 'Vui lòng nhập số điện thoại';
+      else if (!isValidVnPhone(form.contact_phone)) errs.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -255,6 +267,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         city: specForm.city,
         district: specForm.district || null,
         ward: specForm.ward || null,
+        neighborhood_slug: specForm.neighborhood_slug || null,
         area_id: specForm.area_id || null,
         property_type_id: specForm.property_type_id || null,
         image_url: coverId,
@@ -544,6 +557,14 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                       placeholder="VD: Bình Chuẩn, An Phú..." className={inputCls()} />
                   )}
                 </FormField>
+                {neighborhoods.length > 0 && (
+                  <FormField label="Khu dân cư (tùy chọn)">
+                    <select value={form.neighborhood_slug} onChange={e => set('neighborhood_slug', e.target.value)} className={selectCls()}>
+                      <option value="">-- Chọn khu dân cư --</option>
+                      {neighborhoods.map(n => <option key={n.id} value={n.slug}>{n.name}</option>)}
+                    </select>
+                  </FormField>
+                )}
               </div>
               <FormField label="Địa chỉ chi tiết">
                 <div className="flex gap-2">

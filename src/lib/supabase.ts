@@ -23,6 +23,12 @@ export type District = {
 export type Ward = {
   id: string; district_id: string; name: string; slug: string; order_index: number; created_at: string;
 };
+export type Neighborhood = {
+  id: string; ward_id: string | null; name: string; slug: string;
+  description: string | null; image_url: string | null; order_index: number; created_at: string;
+  meta_title?: string | null; meta_description?: string | null;
+  focus_keywords?: string | null; schema_markup?: Record<string, unknown> | null;
+};
 export type PropertyType = {
   id: string; name: string; slug: string; icon: string | null; created_at: string;
 };
@@ -35,6 +41,7 @@ export type Property = {
   listing_type: ListingType;
   area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
   area_id: string | null; district_id: string | null; property_type_id: string | null;
+  neighborhood_slug: string | null;
   image_url: string | null; images: string[] | null;
   badge: string | null; badge_color: string | null; legal_status: string | null;
   is_featured: boolean; is_hot: boolean; is_active: boolean; is_verified: boolean; views: number;
@@ -50,6 +57,16 @@ export type Property = {
   faq: { question: string; answer: string }[] | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;
+};
+export type PriceStatScope = 'area' | 'ward' | 'neighborhood';
+export type PriceStat = {
+  id: string;
+  scope: PriceStatScope; scope_key: string;
+  listing_type: ListingType; property_type_id: string | null;
+  sample_count: number;
+  avg_price_per_sqm: number | null; median_price_per_sqm: number | null;
+  min_price_per_sqm: number | null; max_price_per_sqm: number | null;
+  avg_area_sqm: number | null; computed_at: string;
 };
 export type Testimonial = {
   id: string; name: string; location: string | null; content: string;
@@ -181,6 +198,7 @@ export type UserListing = {
   price_per_month: number | null;
   loan_support: number | null;
   area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
+  neighborhood_slug: string | null;
   area_id: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null; legal_status: string | null;
   bedrooms: number | null; bathrooms: number | null; direction: string | null;

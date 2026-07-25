@@ -34,6 +34,7 @@ function property(overrides: Partial<Property> = {}): Property {
     id: 'p1', title: 'Nhà phố Dĩ An', description: null,
     price: 2.8, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
     listing_type: 'mua_ban', area_sqm: 80, address: null, city: 'Bình Dương', district: 'Dĩ An', ward: null,
+    neighborhood_slug: null,
     area_id: 'area-bd', district_id: null, property_type_id: 'type-nha-pho',
     image_url: 'https://x/a.jpg', images: null, badge: null, badge_color: null, legal_status: 'Sổ hồng',
     is_featured: false, is_hot: false, is_active: true, is_verified: false, views: 0,

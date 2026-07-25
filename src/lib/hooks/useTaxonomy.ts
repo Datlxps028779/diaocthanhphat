@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAreas, getPropertyTypes, getDistricts, getWards } from '../api';
+import { getAreas, getPropertyTypes, getDistricts, getWards, getNeighborhoods } from '../api';
 
 // Taxonomy (khu vực, loại BĐS, quận/huyện) gần như không đổi và được gọi ở hầu hết
 // mọi trang. Cache dài + dedup qua React Query để tránh fetch lặp lại nhiều lần.
@@ -34,6 +34,14 @@ export function useWards(districtId?: string) {
   return useQuery({
     queryKey: ['wards', districtId ?? 'all'],
     queryFn: () => getWards(districtId),
+    staleTime: TAXONOMY_STALE,
+  });
+}
+
+export function useNeighborhoods(wardId?: string) {
+  return useQuery({
+    queryKey: ['neighborhoods', wardId ?? 'all'],
+    queryFn: () => getNeighborhoods(wardId),
     staleTime: TAXONOMY_STALE,
   });
 }

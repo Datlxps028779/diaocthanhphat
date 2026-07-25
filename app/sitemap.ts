@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
+import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { getSiteUrl } from '@/lib/siteUrl';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 
@@ -18,9 +19,11 @@ const STATIC: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/du-an`, changeFrequency: 'weekly', priority: 0.7 },
   { url: `${SITE_URL}/dau-tu`, changeFrequency: 'weekly', priority: 0.7 },
   { url: `${SITE_URL}/khu-vuc`, changeFrequency: 'weekly', priority: 0.6 },
+  { url: `${SITE_URL}/khu-dan-cu`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/dinh-gia`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/so-sanh`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/tin-tuc`, changeFrequency: 'daily', priority: 0.7 },
+  { url: `${SITE_URL}/kien-thuc`, changeFrequency: 'weekly', priority: 0.6 },
   ...NEWS_CATEGORY_SLUGS.map((slug) => ({
     url: `${SITE_URL}/tin-tuc/danh-muc/${slug}`,
     changeFrequency: 'weekly' as const,
@@ -78,6 +81,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           lastModified: area.created_at ? new Date(area.created_at) : undefined,
           changeFrequency: 'weekly',
           priority: 0.65,
+        });
+      }
+    }
+
+    const [nbRes, nbPropsRes] = await Promise.all([
+      sb.from('neighborhoods').select('name,slug,description,created_at').limit(5000),
+      sb.from('properties').select('id,neighborhood_slug,property_type_id').eq('is_active', true).not('neighborhood_slug', 'is', null).limit(5000),
+    ]);
+    const nbProps = (nbPropsRes.data ?? []) as Array<{ id: string; neighborhood_slug: string | null; property_type_id: string | null }>;
+    for (const nb of (nbRes.data ?? []) as Array<{ name: string; slug: string; description: string | null; created_at?: string | null }>) {
+      const rows = nbProps.filter(p => p.neighborhood_slug === nb.slug);
+      const evaluation = evaluateNeighborhoodSeo({
+        neighborhood: nb,
+        activeListings: rows,
+        propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
+        hasDescription: Boolean(nb.description?.trim()),
+      });
+      if (evaluation.indexable) {
+        entries.push({
+          url: `${SITE_URL}/khu-dan-cu/${nb.slug}`,
+          lastModified: nb.created_at ? new Date(nb.created_at) : undefined,
+          changeFrequency: 'weekly',
+          priority: 0.6,
         });
       }
     }

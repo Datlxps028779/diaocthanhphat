@@ -34,6 +34,7 @@ function property(id: string, typeId = 'type-a', district = 'Thủ Dầu Một')
     city: 'Bình Dương',
     district,
     ward: null,
+    neighborhood_slug: null,
     area_id: area.id,
     district_id: null,
     property_type_id: typeId,

@@ -17,6 +17,7 @@ import type { Property } from '../lib/supabase';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { useNeighborhoods } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { VerifiedBadge } from '../components/VerifiedBadge';
@@ -71,6 +72,12 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   // xem trước luôn phản ánh đúng form hiện tại); không loading.
   const property = preview ? (initialData ?? null) : queryProperty;
   const loading = preview ? false : loadingQuery;
+
+  // Khu dân cư của tin (nếu có) → link tới Entity Page (internal link mục 8 doc).
+  const { data: allNeighborhoods = [] } = useNeighborhoods();
+  const neighborhood = property?.neighborhood_slug
+    ? allNeighborhoods.find(n => n.slug === property.neighborhood_slug) ?? null
+    : null;
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
   // để giữ đúng thứ tự hooks.
@@ -494,6 +501,13 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               <h2 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-red-500" />Vị trí & Bản đồ
               </h2>
+              {neighborhood && (
+                <Link href={`/khu-dan-cu/${neighborhood.slug}`}
+                  className="mb-3 flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100">
+                  <MapPin className="w-4 h-4 flex-shrink-0" />
+                  <span>Xem tổng quan & giá nhà đất khu dân cư {neighborhood.name}</span>
+                </Link>
+              )}
               {hasCoords ? (
                 <div className="rounded-xl overflow-hidden mb-3 border border-gray-100">
                   <PropertyLocationMap lat={property.latitude!} lng={property.longitude!} title={property.title} />

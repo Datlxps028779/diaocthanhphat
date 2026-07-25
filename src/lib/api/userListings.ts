@@ -76,7 +76,18 @@ export async function approveUserListing(id: string): Promise<void> {
   }).select('id').single();
   if (propErr) throw propErr;
   const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());
-  await supabase.from('user_listings').update({ status: 'approved', property_id: inserted?.id ?? null, expires_at: expiresAt }).eq('id', id);
+  // Nếu cập nhật trạng thái tin thất bại (RLS/lỗi mạng) mà không rollback, property vừa
+  // insert sẽ thành tin công khai mồ côi trong khi user_listings vẫn 'pending' → duyệt
+  // lại tạo bản trùng. Xoá property vừa tạo rồi throw để giữ dữ liệu nhất quán.
+  const { data: updated, error: updateErr } = await supabase
+    .from('user_listings')
+    .update({ status: 'approved', property_id: inserted?.id ?? null, expires_at: expiresAt })
+    .eq('id', id)
+    .select('id');
+  if (updateErr || !updated || updated.length === 0) {
+    if (inserted?.id) await supabase.from('properties').delete().eq('id', inserted.id);
+    throw updateErr ?? new Error('Không cập nhật được trạng thái tin sau khi duyệt — đã hoàn tác.');
+  }
 
   // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
   // Edge Function ai-autotag xác thực admin — anon key sẽ bị từ chối 401.

@@ -10,7 +10,7 @@ export interface ListingFormState {
   price: string; price_unit: string; price_label: string;
   price_per_month: string;
   loan_support: string;
-  area_sqm: string; address: string; city: string; district: string; ward: string;
+  area_sqm: string; address: string; city: string; district: string; ward: string; neighborhood_slug: string;
   area_id: string; property_type_id: string;
   image_url: string; images: string[];
   video_url: string;
@@ -35,7 +35,7 @@ export function listingToFormState(l: UserListing): ListingFormState {
     price_per_month: n(l.price_per_month),
     loan_support: n(l.loan_support),
     area_sqm: n(l.area_sqm), address: s(l.address), city: s(l.city),
-    district: s(l.district), ward: s(l.ward),
+    district: s(l.district), ward: s(l.ward), neighborhood_slug: s(l.neighborhood_slug),
     area_id: s(l.area_id), property_type_id: s(l.property_type_id),
     image_url: s(l.image_url), images: l.images ?? [],
     video_url: s(l.video_url),
@@ -87,6 +87,7 @@ export function formToProperty(
     city: String(form.city ?? ''),
     district: str(form.district),
     ward: str(form.ward),
+    neighborhood_slug: str(form.neighborhood_slug),
     area_id: str(form.area_id),
     district_id: property?.district_id ?? null,
     property_type_id: typeId,

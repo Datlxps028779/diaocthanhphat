@@ -14,6 +14,8 @@ import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickRelated } from '../lib/relatedNews';
 import { buildNewsImageAlt } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
+import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
+import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -180,9 +182,17 @@ function ArticleDetail({
 }) {
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
   const contentIsHtml = isHtmlContent(rawContent);
+  // Nguồn target cho auto internal-link: khu dân cư + khu vực (mục 8 doc).
+  const { data: neighborhoods = [] } = useNeighborhoods();
+  const { data: areas = [] } = useAreas();
+  const linkTargets = useMemo<LinkTarget[]>(() => [
+    ...neighborhoods.map(n => ({ name: n.name, href: `/khu-dan-cu/${n.slug}` })),
+    ...areas.map(a => ({ name: a.name, href: `/khu-vuc/${a.slug}` })),
+  ], [neighborhoods, areas]);
+  // Sanitize TRƯỚC rồi mới auto-link: link chèn vào HTML đã sạch, anchor không bị strip.
   const safeHtml = useMemo(
-    () => (contentIsHtml ? sanitizeArticleHtml(rawContent) : ''),
-    [rawContent, contentIsHtml],
+    () => (contentIsHtml ? autoLinkContent(sanitizeArticleHtml(rawContent), linkTargets) : ''),
+    [rawContent, contentIsHtml, linkTargets],
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);

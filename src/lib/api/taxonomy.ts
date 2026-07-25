@@ -1,4 +1,4 @@
-import { supabase, type Area, type District, type Ward, type PropertyType } from '../supabase';
+import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType } from '../supabase';
 
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
@@ -36,6 +36,26 @@ export async function getWards(districtId?: string): Promise<Ward[]> {
   if (districtId) q = q.eq('district_id', districtId);
   const { data } = await q;
   return (data ?? []) as Ward[];
+}
+
+// ─── Neighborhoods (Khu dân cư) ─────────────────────────────────────────────────
+export async function getNeighborhoods(wardId?: string): Promise<Neighborhood[]> {
+  let q = supabase.from('neighborhoods').select('*').order('order_index');
+  if (wardId) q = q.eq('ward_id', wardId);
+  const { data } = await q;
+  return (data ?? []) as Neighborhood[];
+}
+export async function adminCreateNeighborhood(n: Omit<Neighborhood, 'id' | 'created_at'>): Promise<void> {
+  const { error } = await supabase.from('neighborhoods').insert(n);
+  if (error) throw error;
+}
+export async function adminUpdateNeighborhood(id: string, n: Partial<Neighborhood>): Promise<void> {
+  const { error } = await supabase.from('neighborhoods').update(n).eq('id', id);
+  if (error) throw error;
+}
+export async function adminDeleteNeighborhood(id: string): Promise<void> {
+  const { error } = await supabase.from('neighborhoods').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ─── Property Types ───────────────────────────────────────────────────────────
