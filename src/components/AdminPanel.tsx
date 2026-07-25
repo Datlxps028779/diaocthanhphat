@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -28,6 +28,7 @@ const BannersTab = lazy(() => import('./admin/tabs/BannersTab').then(m => ({ def
 const FeaturedSectionsTab = lazy(() => import('./admin/tabs/FeaturedSectionsTab').then(m => ({ default: m.FeaturedSectionsTab })));
 const PageBuilderTab = lazy(() => import('./admin/tabs/PageBuilderTab').then(m => ({ default: m.PageBuilderTab })));
 const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default: m.PagesTab })));
+const FooterTab = lazy(() => import('./admin/tabs/FooterTab').then(m => ({ default: m.FooterTab })));
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
@@ -106,6 +107,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'pages', label: 'Quản lý trang', icon: <FileText className="w-4 h-4" /> },
     { id: 'seo-geo', label: 'SEO / GEO', icon: <SearchCode className="w-4 h-4" /> },
     { id: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
+    { id: 'footer', label: 'Footer', icon: <LinkIcon className="w-4 h-4" /> },
     { id: 'backup', label: 'Sao lưu dữ liệu', icon: <Database className="w-4 h-4" /> },
     { id: 'ai-analytics', label: 'AI Phân tích', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'ai-chat', label: 'Đào tạo AI', icon: <Bot className="w-4 h-4" /> },
@@ -200,6 +202,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'page-builder' && <PageBuilderTab />}
           {tab === 'pages' && <PagesTab />}
           {tab === 'settings' && <SiteSettingsTab />}
+          {tab === 'footer' && <FooterTab />}
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
           {tab === 'ai-chat' && <AiChatTab />}

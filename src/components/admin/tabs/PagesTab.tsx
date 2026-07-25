@@ -3,11 +3,12 @@ import { Plus, Edit2, Trash2, CheckCircle, Save, ArrowDown, FileText } from 'luc
 import type { ManagedPage, PageBlock } from '../../../lib/supabase';
 import { adminGetAllManagedPages, adminCreateManagedPage, adminUpdateManagedPage, adminDeleteManagedPage, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
+import { RichTextEditor } from '../shared/RichTextEditor';
 
 // ─── Pages Tab ────────────────────────────────────────────────────────────────
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
-  text: 'Văn bản ngắn', textarea: 'Đoạn văn', image: 'URL ảnh',
+  text: 'Văn bản ngắn', textarea: 'Đoạn văn', html: 'Nội dung định dạng (có bảng)', image: 'URL ảnh',
   number: 'Số', color: 'Màu', list: 'Danh sách (mỗi dòng 1 mục)',
 };
 
@@ -25,6 +26,10 @@ const SECTION_LABELS: Record<string, Record<string, string>> = {
   regions: { hero: 'Hero', main: 'Nội dung chính', cta: 'CTA cuối trang' },
   news: { hero: 'Hero', newsletter: 'Đăng ký nhận tin' },
 };
+
+function publicPathForPage(slug: string): string {
+  return PAGE_PUBLIC_PATH[slug] ?? `/trang/${slug}`;
+}
 
 function PageBlockEditor({ block, onSave, onDelete }: {
   block: PageBlock;
@@ -65,7 +70,9 @@ function PageBlockEditor({ block, onSave, onDelete }: {
           </button>
         </div>
       </div>
-      {block.type === 'textarea' || block.type === 'list' ? (
+      {block.type === 'html' ? (
+        <RichTextEditor value={val} onChange={setVal} placeholder="Soạn nội dung trang..." />
+      ) : block.type === 'textarea' || block.type === 'list' ? (
         <textarea value={val} onChange={e => setVal(e.target.value)} rows={block.type === 'list' ? 5 : 3}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none font-mono text-xs" />
       ) : block.type === 'image' ? (
@@ -146,7 +153,9 @@ function AddBlockForm({ pageSlug, onAdded }: { pageSlug: string; onAdded: () => 
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1">Giá trị mặc định</label>
-        {type === 'textarea' || type === 'list'
+        {type === 'html' ? (
+          <RichTextEditor value={value} onChange={setValue} placeholder="Soạn nội dung mặc định..." />
+        ) : type === 'textarea' || type === 'list'
           ? <textarea value={value} onChange={e => setValue(e.target.value)} rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
           : <input type="text" value={value} onChange={e => setValue(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
         }
@@ -188,7 +197,7 @@ function PageContentEditor({ page, onBack }: { page: ManagedPage; onBack: () => 
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-black text-gray-900">{page.title}</h2>
           <p className="text-gray-500 text-xs">Chỉnh sửa toàn bộ nội dung trang — thay đổi được lưu ngay lập tức</p>
-          {PAGE_PUBLIC_PATH[page.slug] && <PublicUrlPreview path={PAGE_PUBLIC_PATH[page.slug]} />}
+          <PublicUrlPreview path={publicPathForPage(page.slug)} />
         </div>
         <div className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${page.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
           {page.is_active ? 'Đang hiển thị' : 'Ẩn'}
@@ -328,7 +337,7 @@ export function PagesTab() {
                   </span>
                 </div>
                 {page.description && <p className="text-gray-400 text-xs mt-0.5 truncate">{page.description}</p>}
-                <p className="text-gray-400 text-[10px] mt-0.5">/{page.slug}</p>
+                <p className="text-gray-400 text-[10px] mt-0.5">{publicPathForPage(page.slug)}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button onClick={() => toggleActive(page)} title={page.is_active ? 'Ẩn trang' : 'Hiện trang'}
@@ -367,7 +376,7 @@ export function PagesTab() {
                     </span>
                   </div>
                   {page.description && <p className="text-gray-400 text-xs mt-0.5 truncate">{page.description}</p>}
-                  <p className="text-gray-400 text-[10px] mt-0.5">/{page.slug}</p>
+                  <p className="text-gray-400 text-[10px] mt-0.5">{publicPathForPage(page.slug)}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button onClick={() => toggleActive(page)}

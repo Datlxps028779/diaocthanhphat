@@ -11,7 +11,8 @@ import { ValuationPage } from '@/screens/ValuationPage';
 import { ComparePage } from '@/screens/ComparePage';
 import { PostListingPage } from '@/screens/PostListingPage';
 import { AccountHubPage } from '@/screens/AccountHubPage';
-import type { Property, NewsArticle } from '@/lib/supabase';
+import { StaticPageScreen } from '@/screens/StaticPageScreen';
+import type { Property, NewsArticle, ManagedPage, PageBlock } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
@@ -67,6 +68,14 @@ export function AboutClient() {
   return (
     <SiteChrome currentPage={{ name: 'about' }}>
       <AboutPage onNavigate={navigate} />
+    </SiteChrome>
+  );
+}
+
+export function StaticPageClient({ page, blocks }: { page: ManagedPage; blocks: PageBlock[] }) {
+  return (
+    <SiteChrome currentPage={{ name: 'home' }}>
+      <StaticPageScreen page={page} blocks={blocks} />
     </SiteChrome>
   );
 }

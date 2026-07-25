@@ -92,6 +92,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.6,
       });
     }
+
+    const pages = await sb.from('managed_pages').select('slug,updated_at').eq('is_active', true).eq('is_system', false).limit(5000);
+    for (const page of (pages.data ?? []) as Array<{ slug: string; updated_at?: string | null }>) {
+      entries.push({
+        url: `${SITE_URL}/trang/${page.slug}`,
+        lastModified: page.updated_at ? new Date(page.updated_at) : undefined,
+        changeFrequency: 'monthly',
+        priority: 0.45,
+      });
+    }
   } catch {
     return STATIC;
   }

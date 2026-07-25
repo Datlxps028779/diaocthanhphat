@@ -222,16 +222,32 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   const col3sub2 = useSetting('footer_col3_sub2', 'Mở rộng: Bình Phước, Đồng Nai');
   const license = useSetting('footer_license', 'Giấy phép ĐKKD: 0000000000 | Bình Dương');
 
-  const links: { label: string; page: Page }[] = [
-    { label: 'Trang chủ', page: { name: 'home' } },
-    { label: 'Mua bán BĐS', page: { name: 'listings', listingType: 'mua_ban' } },
-    { label: 'BĐS Cho thuê', page: { name: 'listings', listingType: 'cho_thue' } },
-    { label: 'Dự án', page: { name: 'projects' } },
-    { label: 'Đầu tư', page: { name: 'invest' } },
-    { label: 'Khu vực', page: { name: 'regions' } },
-    { label: 'Tin tức', page: { name: 'news' } },
-    { label: 'Về chúng tôi', page: { name: 'about' } },
+  const fallbackLinks: { label: string; href: string }[] = [
+    { label: 'Trang chủ', href: pageToHref({ name: 'home' }) },
+    { label: 'Mua bán BĐS', href: pageToHref({ name: 'listings', listingType: 'mua_ban' }) },
+    { label: 'BĐS Cho thuê', href: pageToHref({ name: 'listings', listingType: 'cho_thue' }) },
+    { label: 'Dự án', href: pageToHref({ name: 'projects' }) },
+    { label: 'Đầu tư', href: pageToHref({ name: 'invest' }) },
+    { label: 'Khu vực', href: pageToHref({ name: 'regions' }) },
+    { label: 'Tin tức', href: pageToHref({ name: 'news' }) },
+    { label: 'Về chúng tôi', href: pageToHref({ name: 'about' }) },
   ];
+
+  const quickLinksRaw = useSetting('footer_quick_links', '');
+  const links: { label: string; href: string }[] = (() => {
+    if (!quickLinksRaw.trim()) return fallbackLinks;
+    try {
+      const parsed = JSON.parse(quickLinksRaw);
+      if (!Array.isArray(parsed)) return fallbackLinks;
+      const cleaned = parsed
+        .filter((x): x is { label: string; href: string } =>
+          x && typeof x.label === 'string' && typeof x.href === 'string' && x.label.trim() !== '' && x.href.trim() !== '')
+        .map(x => ({ label: x.label.trim(), href: x.href.trim() }));
+      return cleaned.length > 0 ? cleaned : fallbackLinks;
+    } catch {
+      return fallbackLinks;
+    }
+  })();
 
   return (
     <footer className="bg-gray-900 text-white">
@@ -252,9 +268,9 @@ export function Footer({ areas, onNavigate }: FooterProps) {
         <div>
           <h4 className="font-bold text-sm mb-3 text-white">{footer.col2_title || 'LIÊN KẾT NHANH'}</h4>
           <ul className="grid grid-cols-1 gap-1.5">
-            {links.map(({ label, page }) => (
-              <li key={label}>
-                <Link href={pageToHref(page)} onClick={() => scrollTop()} className="text-gray-400 hover:text-red-400 text-xs transition-colors">{label}</Link>
+            {links.map(({ label, href }) => (
+              <li key={`${label}-${href}`}>
+                <Link href={href} onClick={() => scrollTop()} className="text-gray-400 hover:text-red-400 text-xs transition-colors">{label}</Link>
               </li>
             ))}
           </ul>

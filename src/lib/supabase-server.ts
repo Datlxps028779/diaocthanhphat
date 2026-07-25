@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, Area, SeoRouteOverride } from './supabase';
+import type { Property, NewsArticle, Area, SeoRouteOverride, ManagedPage, PageBlock } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -194,6 +194,36 @@ export async function serverGetSiteSettings(): Promise<Record<string, string>> {
     return map;
   } catch {
     return {};
+  }
+}
+
+export async function serverGetManagedPage(slug: string): Promise<ManagedPage | null> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('managed_pages')
+      .select('*')
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .maybeSingle();
+    return (data as ManagedPage | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function serverGetPageBlocks(slug: string): Promise<PageBlock[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('page_blocks')
+      .select('*')
+      .eq('page_slug', slug)
+      .order('section')
+      .order('order_index');
+    return (data ?? []) as PageBlock[];
+  } catch {
+    return [];
   }
 }
 
