@@ -20,6 +20,7 @@ const STATIC: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/dau-tu`, changeFrequency: 'weekly', priority: 0.7 },
   { url: `${SITE_URL}/khu-vuc`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/khu-dan-cu`, changeFrequency: 'weekly', priority: 0.6 },
+  { url: `${SITE_URL}/du-lieu-gia`, changeFrequency: 'daily', priority: 0.7 },
   { url: `${SITE_URL}/dinh-gia`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/so-sanh`, changeFrequency: 'weekly', priority: 0.6 },
   { url: `${SITE_URL}/tin-tuc`, changeFrequency: 'daily', priority: 0.7 },

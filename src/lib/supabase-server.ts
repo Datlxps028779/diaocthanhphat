@@ -225,6 +225,17 @@ export async function serverGetPriceStats(scope: PriceStatScope, scopeKey: strin
   }
 }
 
+// Toàn bộ dữ liệu giá đã tổng hợp — cho hub /du-lieu-gia. Caller tự nhóm theo scope/scope_key.
+export async function serverGetAllPriceStats(): Promise<PriceStat[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('price_stats').select('*').order('sample_count', { ascending: false }).limit(2000);
+    return (data ?? []) as PriceStat[];
+  } catch {
+    return [];
+  }
+}
+
 // News: URL /tin-tuc/{slug} tra theo slug; fallback id nếu là UUID.
 export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArticle | null> {
   try {

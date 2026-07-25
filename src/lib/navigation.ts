@@ -29,6 +29,7 @@ export function buildNavigationItems(content: NavContent, areas: Area[] = []): N
       children: [
         { key: 'regions-all', label: label(content, 'menu_regions_all', 'Tất cả khu vực'), href: '/khu-vuc', activePage: 'regions' },
         { key: 'neighborhoods', label: label(content, 'menu_neighborhoods', 'Khu dân cư'), href: '/khu-dan-cu', activePage: 'regions' },
+        { key: 'price-data', label: label(content, 'menu_price_data', 'Dữ liệu giá'), href: '/du-lieu-gia', activePage: 'regions' },
         ...areas.map(area => ({
           key: `region-${area.slug}`,
           label: label(content, `menu_region_${area.slug}`, area.name),

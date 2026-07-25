@@ -16,8 +16,9 @@ describe('buildNavigationItems', () => {
     expect(regions?.page).toEqual({ name: 'regions' });
     expect(regions?.children?.[0]).toMatchObject({ label: 'Tất cả khu vực', href: '/khu-vuc' });
     expect(regions?.children?.[1]).toMatchObject({ label: 'Khu dân cư', href: '/khu-dan-cu' });
-    expect(regions?.children?.[2]).toMatchObject({ label: 'Bình Dương', href: '/khu-vuc/binh-duong' });
-    expect(regions?.children?.[3]).toMatchObject({ label: 'Đồng Nai', href: '/khu-vuc/dong-nai' });
+    expect(regions?.children?.[2]).toMatchObject({ label: 'Dữ liệu giá', href: '/du-lieu-gia' });
+    expect(regions?.children?.[3]).toMatchObject({ label: 'Bình Dương', href: '/khu-vuc/binh-duong' });
+    expect(regions?.children?.[4]).toMatchObject({ label: 'Đồng Nai', href: '/khu-vuc/dong-nai' });
   });
 
   it('adds a news dropdown with knowledge hub', () => {
@@ -39,8 +40,8 @@ describe('buildNavigationItems', () => {
 
     expect(regions?.label).toBe('Khu vực');
     expect(regions?.children?.[0].label).toBe('Toàn bộ khu vực');
-    expect(regions?.children?.[2].label).toBe('BĐS Bình Dương');
-    expect(regions?.children?.[3].label).toBe('Đồng Nai');
+    expect(regions?.children?.[3].label).toBe('BĐS Bình Dương');
+    expect(regions?.children?.[4].label).toBe('Đồng Nai');
   });
 
   it('keeps existing menu routes and customizable valuation label', () => {
