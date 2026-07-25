@@ -21,15 +21,22 @@ export default async function NewsArticlePage({ params }: Params) {
   if (!article) notFound();
 
   const settings = await serverGetSiteSettings();
-  const jsonLd = buildArticleJsonLd(article, settings);
-  const breadcrumbJsonLd = buildBreadcrumbJsonLd([
-    { name: 'Trang chủ', path: '/' },
-    { name: 'Tin tức', path: '/tin-tuc' },
-    { name: article.title, path: `/tin-tuc/${article.slug || article.id}` },
-  ]);
-  // FAQPage chỉ emit khi bài có FAQ nhập tay (khớp khối FAQ visible trong ArticleDetail).
-  const faqJsonLd = buildFaqJsonLd(article.faq ?? []);
-  const schemas = [jsonLd, breadcrumbJsonLd, ...(faqJsonLd ? [faqJsonLd] : [])];
+  // JSON-LD chỉ để SEO — dữ liệu jsonb (faq/citations) lỡ sai kiểu KHÔNG được làm sập
+  // trang bài viết. Bọc try/catch: hỏng schema thì bỏ qua, trang vẫn render.
+  let schemas: Record<string, unknown>[] = [];
+  try {
+    const jsonLd = buildArticleJsonLd(article, settings);
+    const breadcrumbJsonLd = buildBreadcrumbJsonLd([
+      { name: 'Trang chủ', path: '/' },
+      { name: 'Tin tức', path: '/tin-tuc' },
+      { name: article.title, path: `/tin-tuc/${article.slug || article.id}` },
+    ]);
+    // FAQPage chỉ emit khi bài có FAQ nhập tay (khớp khối FAQ visible trong ArticleDetail).
+    const faqJsonLd = buildFaqJsonLd(Array.isArray(article.faq) ? article.faq : []);
+    schemas = [jsonLd, breadcrumbJsonLd, ...(faqJsonLd ? [faqJsonLd] : [])];
+  } catch {
+    schemas = [];
+  }
 
   return (
     <>

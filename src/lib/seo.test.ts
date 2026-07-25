@@ -210,4 +210,12 @@ describe('buildNewsJsonLd/buildNewsMetadata', () => {
     const metadata = buildNewsMetadata(news({ image_url: null }));
     expect(metadata.openGraph?.images).toEqual([{ url: 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg', width: 1200, height: 630 }]);
   });
+
+  it('citations sai kiểu (object/string/null) không làm throw', () => {
+    expect(() => buildNewsJsonLd(news({ citations: {} as never }))).not.toThrow();
+    expect(() => buildNewsJsonLd(news({ citations: 'x' as never }))).not.toThrow();
+    expect(() => buildNewsJsonLd(news({ citations: null as never }))).not.toThrow();
+    const ld = buildNewsJsonLd(news({ citations: {} as never }));
+    expect(ld).not.toHaveProperty('citation');
+  });
 });

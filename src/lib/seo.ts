@@ -292,7 +292,7 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
   const geoName = (a.geo_area?.trim() || settings?.geo_area_served || '').trim() || 'Bình Dương, Việt Nam';
   const geoEntity = a.geo_entity?.trim() || undefined;
   const geoNotes = a.geo_notes?.trim() || undefined;
-  const citations = (a.citations ?? [])
+  const citations = (Array.isArray(a.citations) ? a.citations : [])
     .filter(c => c && c.url && /^https?:\/\//i.test(c.url))
     .map(c => ({ '@type': 'CreativeWork', name: c.title || c.url, url: c.url }));
   const image = normalizeSeoImageUrl(a.image_url);

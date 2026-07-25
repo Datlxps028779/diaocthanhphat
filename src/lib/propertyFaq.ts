@@ -104,7 +104,7 @@ export function suggestNewsFaq(input: { title?: string; category?: string; geoAr
 // FAQPage JSON-LD từ danh sách FAQ. Trả null khi rỗng để caller KHÔNG emit schema
 // khi không có FAQ visible (chuẩn Google/AEO: schema phải khớp nội dung hiển thị).
 export function buildFaqJsonLd(items: FaqItem[]): Record<string, unknown> | null {
-  if (!items || items.length === 0) return null;
+  if (!Array.isArray(items) || items.length === 0) return null;
   return {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',

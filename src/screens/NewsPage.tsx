@@ -424,21 +424,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     onNavigate({ name: 'news' }); // điều hướng thật → URL về /tin-tuc, không kẹt ở /tin-tuc/{slug}
   };
 
-  // Detail view
-  if (activeArticle) {
-    // Pool = tin đã tải + bài liên quan chọn tay (dedup), rồi xếp: tay trước, tự bù sau.
-    const poolMap = new Map<string, NewsArticle>();
-    for (const a of [...articles, ...manualRelated]) poolMap.set(a.id, a);
-    const related = pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
-    return (
-      <ArticleDetail
-        article={activeArticle}
-        related={related}
-        onBack={handleBack}
-      />
-    );
-  }
-
   // Layout tạp chí: 1 bài nổi bật lớn + 3 bài phụ cạnh bên, phần còn lại xuống lưới.
   const featured = articles[0];
   const heroSide = articles.slice(1, 4);
@@ -471,6 +456,23 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     return [...ordered, ...extras].map(c => ({ category: c, items: byCat.get(c)! }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gridArticles, showGroups]);
+
+  // Detail view. LƯU Ý: đặt SAU mọi hook (useMemo ở trên) để không vi phạm
+  // Rules-of-Hooks — nếu return sớm trước useMemo, render lúc activeArticle=null và
+  // lúc có bài sẽ gọi số hook khác nhau → React throw "Rendered fewer hooks".
+  if (activeArticle) {
+    // Pool = tin đã tải + bài liên quan chọn tay (dedup), rồi xếp: tay trước, tự bù sau.
+    const poolMap = new Map<string, NewsArticle>();
+    for (const a of [...articles, ...manualRelated]) poolMap.set(a.id, a);
+    const related = pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
+    return (
+      <ArticleDetail
+        article={activeArticle}
+        related={related}
+        onBack={handleBack}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

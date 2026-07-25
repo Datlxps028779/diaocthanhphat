@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
 import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
@@ -50,9 +50,8 @@ function newsSlug(title: string): string {
 // Dựng NewsArticle tạm từ form state để tái dùng builder public (buildNewsMetadata +
 // buildNewsJsonLd) — đảm bảo SEO/GEO form fill khớp 1:1 JSON-LD public /tin-tuc/[slug].
 // Các field không có trong form (id, views, related_ids...) → giá trị tạm an toàn.
-function formToNewsArticle(form: NewsFormState, article: NewsArticle | null): NewsArticle {
+function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now: string): NewsArticle {
   const slug = form.slug.trim() || newsSlug(form.title) || 'slug';
-  const now = new Date().toISOString();
   return {
     id: article?.id ?? 'draft',
     title: form.title.trim(),
@@ -125,6 +124,17 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const generatedSchemaRef = useRef(form.schema_markup);
   const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
+  // Timestamp ổn định theo vòng đời form. Nếu dùng new Date() mỗi lần dựng schema thì
+  // chuỗi JSON-LD đổi liên tục → effect auto-schema bắn onChange vô hạn (Maximum update
+  // depth) làm hỏng cả subtree editor khi tạo bài mới.
+  const nowRef = useRef(new Date().toISOString());
+  const autoSchema = useMemo(
+    () => buildNewsJsonLd(formToNewsArticle(form, article, nowRef.current)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [form.title, form.slug, form.excerpt, form.content, form.image_url, form.author, form.category,
+     form.geo_area, form.geo_entity, form.geo_notes, form.faq, form.citations, form.focus_keywords,
+     form.meta_title, form.meta_description, article],
+  );
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
 
   const candidatePool = allArticles.filter(a => a.id !== article?.id);
@@ -220,7 +230,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   const readinessDisplay = [...readiness.errors, ...readiness.warnings, ...readiness.passes].slice(0, 10);
 
   useEffect(() => {
-    const temp = formToNewsArticle(form, article);
+    const temp = formToNewsArticle(form, article, nowRef.current);
     const schema = JSON.stringify(buildNewsJsonLd(temp), null, 2);
     generatedSchemaRef.current = schema;
     const meta = buildNewsMetadata(temp);
@@ -234,7 +244,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
   }, [form.title, form.slug, form.category, form.author, form.image_url, form.excerpt, form.content, form.geo_area, form.geo_entity, form.geo_notes, article]);
 
   const autoGenerateSeo = () => {
-    const temp = formToNewsArticle(form, article);
+    const temp = formToNewsArticle(form, article, nowRef.current);
     const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
@@ -600,7 +610,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             onChange={setSeo}
             target="news"
             basePath={`/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`}
-            autoSchema={buildNewsJsonLd(formToNewsArticle(form, article))}
+            autoSchema={autoSchema}
           />
         </aside>
       </div>
