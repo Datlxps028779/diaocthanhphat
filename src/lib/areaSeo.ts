@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
-import type { Area, Property } from './supabase';
+import type { Area, Property, PriceStat } from './supabase';
 import { absoluteUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
+import type { FaqItem } from './propertyFaq';
+import { buildPriceAnswer } from './priceStatsFormat';
 const SITE_NAME = 'BĐS Bình Dương';
 
 export const MIN_AREA_LISTINGS_FOR_INDEX = 5;
@@ -146,4 +148,42 @@ export function buildAreaCollectionJsonLd(area: Area, listings: Pick<Property, '
     },
   };
   return mergeSchema(base, area.schema_markup, 'area', ['@context', '@type', '@id', 'name', 'url', 'mainEntity']).schema;
+}
+
+// FAQ tự-sinh cho trang khu vực — CHỈ từ dữ liệu thật (giá tổng hợp, số tin, hạ tầng
+// từ AreaDetail). Câu nào thiếu dữ liệu thì bỏ, không bịa. Trả [] khi không đủ.
+export function buildAreaFaq(
+  area: Pick<Area, 'name'>,
+  opts: { activeCount: number; priceStats: PriceStat[]; detail: AreaDetail | null; summary: string },
+): FaqItem[] {
+  const items: FaqItem[] = [];
+  const { activeCount, priceStats, detail, summary } = opts;
+
+  const priceAnswer = buildPriceAnswer(area.name, priceStats, 'mua_ban') ?? buildPriceAnswer(area.name, priceStats, 'cho_thue');
+  if (priceAnswer) {
+    items.push({ question: `Giá nhà đất ${area.name} hiện bao nhiêu?`, answer: priceAnswer });
+  }
+
+  if (activeCount > 0) {
+    items.push({
+      question: `${area.name} hiện có bao nhiêu tin bất động sản đang bán?`,
+      answer: `Hiện có ${activeCount} tin bất động sản đang hoạt động tại ${area.name}, được cập nhật liên tục từ tin đăng thực tế.`,
+    });
+  }
+
+  if (detail?.infrastructure?.length) {
+    items.push({
+      question: `Hạ tầng nổi bật tại ${area.name} gồm những gì?`,
+      answer: `Các dự án hạ tầng nổi bật: ${detail.infrastructure.slice(0, 5).join(', ')}.`,
+    });
+  }
+
+  if (detail?.investmentTypes?.length) {
+    items.push({
+      question: `Nên đầu tư loại hình bất động sản nào tại ${area.name}?`,
+      answer: `Các loại hình phù hợp: ${detail.investmentTypes.slice(0, 5).join(', ')}. ${summary}`.trim(),
+    });
+  }
+
+  return items;
 }

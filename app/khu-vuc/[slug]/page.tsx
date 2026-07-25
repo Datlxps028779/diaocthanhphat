@@ -10,11 +10,13 @@ import { buildPriceAnswer } from '@/lib/priceStatsFormat';
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
+  buildAreaFaq,
   buildAreaMetadata,
   evaluateAreaSeo,
   getAreaDetails,
   MIN_AREA_LISTINGS_FOR_INDEX,
 } from '@/lib/areaSeo';
+import { buildFaqJsonLd } from '@/lib/propertyFaq';
 import type { Property } from '@/lib/supabase';
 
 export const revalidate = 3600;
@@ -99,6 +101,8 @@ export default async function AreaPage({ params }: Props) {
   if (!data) notFound();
   const { area, listings, stats, detail, summary, evaluation, priceStats } = data;
   const priceAnswer = buildPriceAnswer(area.name, priceStats, 'mua_ban') ?? buildPriceAnswer(area.name, priceStats, 'cho_thue');
+  const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats, detail, summary });
+  const faqLd = buildFaqJsonLd(faq);
   const breadcrumb = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: 'Khu vực', path: '/khu-vuc' },
@@ -114,7 +118,7 @@ export default async function AreaPage({ params }: Props) {
 
   return (
     <>
-      <JsonLdScripts schemas={[breadcrumb, collection]} />
+      <JsonLdScripts schemas={[breadcrumb, collection, faqLd]} />
 
       <SiteChrome currentPage={{ name: 'regions' }}>
         <main className="bg-gray-50">
@@ -256,6 +260,24 @@ export default async function AreaPage({ params }: Props) {
               </div>
             )}
           </section>
+
+          {faq.length > 0 && (
+            <section className="mx-auto max-w-7xl px-4 pb-12">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-600">Câu hỏi thường gặp</p>
+              <h2 className="mt-1 mb-5 text-2xl font-black text-gray-900">FAQ về bất động sản {area.name}</h2>
+              <div className="space-y-3">
+                {faq.map((item, i) => (
+                  <details key={i} className="group rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                    <summary className="cursor-pointer list-none font-bold text-gray-900 text-sm flex items-center justify-between gap-2">
+                      {item.question}
+                      <span className="text-red-500 transition-transform group-open:rotate-45">+</span>
+                    </summary>
+                    <p className="mt-3 text-sm leading-7 text-gray-600">{item.answer}</p>
+                  </details>
+                ))}
+              </div>
+            </section>
+          )}
         </main>
       </SiteChrome>
     </>

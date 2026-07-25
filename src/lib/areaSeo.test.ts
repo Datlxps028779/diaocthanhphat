@@ -6,7 +6,9 @@ import {
   areaSummaryFromData,
   buildAreaMetadata,
   buildAreaCollectionJsonLd,
+  buildAreaFaq,
 } from './areaSeo';
+import type { PriceStat } from './supabase';
 
 const area: Area = {
   id: 'area-1',
@@ -131,5 +133,30 @@ describe('buildAreaCollectionJsonLd', () => {
     expect(items).toHaveLength(2);
     expect(items[0].position).toBe(1);
     expect(items[0].url).toBe('https://chonhaviet.com/bat-dong-san/nha-dat-1');
+  });
+});
+
+function priceStat(over: Partial<PriceStat> = {}): PriceStat {
+  return {
+    id: 'ps-1', scope: 'area', scope_key: 'binh-duong', listing_type: 'mua_ban',
+    property_type_id: null, sample_count: 8, avg_price_per_sqm: 30,
+    median_price_per_sqm: 28, min_price_per_sqm: 20, max_price_per_sqm: 40,
+    avg_area_sqm: 80, computed_at: '2026-07-01T00:00:00.000Z', ...over,
+  };
+}
+
+describe('buildAreaFaq', () => {
+  it('trả [] khi không có dữ liệu thật', () => {
+    const faq = buildAreaFaq({ name: 'Bình Dương' }, { activeCount: 0, priceStats: [], detail: null, summary: '' });
+    expect(faq).toEqual([]);
+  });
+
+  it('sinh câu hỏi giá + số tin từ dữ liệu thật', () => {
+    const faq = buildAreaFaq({ name: 'Bình Dương' }, {
+      activeCount: 12, priceStats: [priceStat()], detail: null, summary: '',
+    });
+    expect(faq.some(f => f.question.includes('Giá nhà đất Bình Dương'))).toBe(true);
+    expect(faq.some(f => f.question.includes('bao nhiêu tin'))).toBe(true);
+    expect(faq.every(f => f.answer.trim().length > 0)).toBe(true);
   });
 });

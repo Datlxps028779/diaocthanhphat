@@ -208,7 +208,12 @@ function ArticleDetail({
   const geoArea = article.geo_area?.trim();
   const geoEntity = article.geo_entity?.trim();
   const readMin = estimateReadTime(contentIsHtml ? stripHtml(rawContent) : rawContent);
-  const pubDate = formatDate((article as any).published_at ?? (article as any).created_at ?? new Date().toISOString());
+  const pubRaw = (article as any).published_at ?? (article as any).created_at ?? new Date().toISOString();
+  const pubDate = formatDate(pubRaw);
+  // "Cập nhật" chỉ hiện khi bài đã sửa sau đăng đáng kể (>1 ngày) — tránh nhiễu khi vừa tạo.
+  const updatedRaw = (article as any).updated_at;
+  const showUpdated = updatedRaw && new Date(updatedRaw).getTime() - new Date(pubRaw).getTime() > 86400000;
+  const updatedDate = showUpdated ? formatDate(updatedRaw) : '';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -242,6 +247,11 @@ function ArticleDetail({
             <span className="flex items-center gap-1">
               <Calendar className="w-4 h-4" /> {pubDate}
             </span>
+            {updatedDate && (
+              <span className="flex items-center gap-1 text-gray-400">
+                Cập nhật {updatedDate}
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <Clock className="w-4 h-4" /> {readMin} phút đọc
             </span>

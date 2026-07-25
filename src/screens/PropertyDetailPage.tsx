@@ -31,6 +31,7 @@ import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt } from '../lib/propertyImages';
+import { formatUpdateDate } from '../lib/priceStatsFormat';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
@@ -240,6 +241,27 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     ? ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0)
     : null;
 
+  // Answer Block (AIO): câu tóm tắt trực tiếp từ dữ liệu thật, chỉ ghép field có giá trị.
+  const answerText = (() => {
+    const typeLabel = property.property_types?.name?.trim() || 'Bất động sản';
+    const verb = property.listing_type === 'cho_thue' ? 'cho thuê' : 'bán';
+    const loc = [property.ward, property.district, property.city].map(s => s?.trim()).filter(Boolean).join(', ');
+    const priceStr = property.price_label?.trim()
+      || (property.listing_type === 'cho_thue' && property.price_per_month ? `${property.price_per_month} triệu/tháng`
+        : property.price ? `${property.price} ${property.price_unit ?? 'tỷ'}` : '');
+    const parts = [
+      `${typeLabel} đang ${verb}${loc ? ` tại ${loc}` : ''}`,
+      priceStr ? `giá ${priceStr}` : '',
+      property.area_sqm ? `diện tích ${property.area_sqm}m²` : '',
+      property.bedrooms ? `${property.bedrooms} phòng ngủ` : '',
+      property.legal_status?.trim() ? `pháp lý ${property.legal_status.trim()}` : '',
+    ].filter(Boolean);
+    return parts.length > 1 ? parts.join(', ') + '.' : '';
+  })();
+  const postedDate = formatUpdateDate(property.created_at);
+  const modifiedDate = formatUpdateDate(property.updated_at);
+  const showModified = modifiedDate && modifiedDate !== postedDate;
+
   const contactPhone = property.contact_phone ?? sitePhone;
   const hasCoords = property.latitude && property.longitude;
   const gmapsUrl = hasCoords
@@ -391,10 +413,21 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
               <h1 className="text-xl font-black text-gray-900 leading-tight mb-2">{property.title}</h1>
-              <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-4 flex-wrap">
+              <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span>{[property.address, property.district, property.city].filter(Boolean).join(', ')}</span>
               </div>
+              {(postedDate || showModified) && (
+                <p className="text-gray-400 text-xs mb-3">
+                  {postedDate && <>Đăng {postedDate}</>}
+                  {showModified && <> · Cập nhật {modifiedDate}</>}
+                </p>
+              )}
+              {answerText && (
+                <p className="property-answer text-sm leading-6 text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-3 mb-4">
+                  {answerText}
+                </p>
+              )}
               <div className="flex flex-wrap items-end justify-between gap-4 pt-4 border-t border-gray-100">
                 <div>
                   <p className="text-gray-500 text-xs mb-0.5">Mức giá</p>
