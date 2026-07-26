@@ -21,6 +21,7 @@ const TYPE_FROM_LABEL = Object.fromEntries(
 
 const DEFAULT_MESSAGE_FIELDS: { key: string; label: string; hint?: string; rows?: number }[] = [
   { key: 'ai_system_prompt', label: 'System Prompt / bộ não Trợ lý AI', hint: 'Quy định vai trò, giọng điệu và flow trả lời. Luật chống bịa số liệu/pháp lý/lãi suất vẫn được khóa cứng trong hệ thống.', rows: 9 },
+  { key: 'ai_tone_profile', label: 'Văn phong trợ lý', hint: 'Mô tả giọng văn admin muốn AI dùng (vd: thân thiện, ngắn gọn, xưng "em"; hoặc trang trọng, chuyên nghiệp). CHỈ ảnh hưởng cách diễn đạt — KHÔNG thay đổi dữ kiện, không cho phép bịa.', rows: 4 },
   { key: 'ai_greeting', label: 'Lời chào mở đầu', rows: 3 },
   { key: 'ai_examples', label: 'Câu hỏi gợi ý mẫu', hint: 'Mỗi dòng là 1 gợi ý hiển thị dưới ô chat.', rows: 4 },
   { key: 'ai_answer_loan', label: 'Câu trả lời an toàn: vay/lãi suất', rows: 3 },

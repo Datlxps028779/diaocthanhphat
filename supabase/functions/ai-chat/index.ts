@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
     const retrievalQuery = `${message} ${recentUserContext}`.trim().slice(0, 500);
 
     const [{ data: settingRows }, { data: kbRows }, { data: ragRows }] = await Promise.all([
-      db.from("site_settings").select("value").eq("key", "ai_system_prompt").maybeSingle(),
+      db.from("site_settings").select("key, value").in("key", ["ai_system_prompt", "ai_tone_profile"]),
       db.from("ai_chat_knowledge")
         .select("topic, answer, guardrail")
         .eq("is_active", true)
@@ -109,8 +109,15 @@ Deno.serve(async (req: Request) => {
         ).join("\n\n")
       : "\n\nDỮ LIỆU TRUY XUẤT: (trống — không tìm thấy dữ liệu nội bộ liên quan)";
 
-    const adminPrompt = (settingRows?.value as string | undefined)?.trim()
+    const settings = new Map((settingRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
+    const adminPrompt = (settings.get("ai_system_prompt") as string | undefined)?.trim()
       || "Bạn là Trợ lý BĐS của Chợ Nhà Tốt. Hiểu nhu cầu khách, gợi ý tin phù hợp, xin SĐT khi cần.";
+
+    // Văn phong: chỉ điều khiển giọng điệu/cách diễn đạt, KHÔNG phải nguồn dữ kiện.
+    const toneProfile = (settings.get("ai_tone_profile") as string | undefined)?.trim();
+    const toneBlock = toneProfile
+      ? `\n\nVĂN PHONG (chỉ áp dụng cho GIỌNG ĐIỆU/cách diễn đạt — TUYỆT ĐỐI không dùng để bịa hay thay đổi dữ kiện/số liệu/nguồn):\n${toneProfile}`
+      : "";
 
     const kb = (kbRows ?? []) as { topic: string; answer: string; guardrail: string | null }[];
     const kbBlock = kb.length
@@ -118,7 +125,7 @@ Deno.serve(async (req: Request) => {
         kb.map(k => `• ${k.topic}: ${k.answer}${k.guardrail ? ` [Lưu ý: ${k.guardrail}]` : ""}`).join("\n")
       : "";
 
-    const system = `${adminPrompt}${kbBlock}${ragBlock}\n${HARD_GUARDRAIL}`;
+    const system = `${adminPrompt}${toneBlock}${kbBlock}${ragBlock}\n${HARD_GUARDRAIL}`;
 
     const historyBlock = history.length
       ? "Lịch sử hội thoại gần đây:\n" +
