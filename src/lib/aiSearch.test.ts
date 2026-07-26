@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Area, District, PropertyType, Ward } from './supabase';
-import { normalizeVietnamese, parseSearchIntent } from './aiSearch';
+import { inheritFilters, normalizeVietnamese, parseSearchIntent } from './aiSearch';
 
 const areas: Area[] = [
   { id: 'area-bd', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '2026-01-01' },
@@ -123,5 +123,53 @@ describe('parseSearchIntent', () => {
   it('diện tích "100 m2" không bị nuốt thành giá trần', () => {
     const r = parseSearchIntent('đất Dĩ An 100 m2', taxonomy);
     expect(r.filters.maxPrice).toBeUndefined();
+  });
+
+  // Vốn tự có: "tôi có X tỷ" KÈM ý vay → X là vốn tự có, KHÔNG chặn maxPrice cứng.
+  it('"tôi có 3 tỷ muốn vay mua đất" → selfCapital, không set maxPrice', () => {
+    const r = parseSearchIntent('tôi có 3 tỷ muốn vay mua đất', taxonomy);
+    expect(r.selfCapital).toEqual({ amount: 3, unit: 'ty' });
+    expect(r.filters.maxPrice).toBeUndefined();
+  });
+
+  // Không có tín hiệu vay: "tôi có X" giữ nguyên hành vi cũ = giá trần (không regress).
+  it('"tôi có 3 tỷ mua nhà Dĩ An" (không vay) → maxPrice = 3, không selfCapital', () => {
+    const r = parseSearchIntent('tôi có 3 tỷ mua nhà Dĩ An', taxonomy);
+    expect(r.filters.maxPrice).toBe(3);
+    expect(r.selfCapital).toBeUndefined();
+  });
+
+  // "ngân sách X" luôn là giá trần dù câu có nhắc vay ở nơi khác.
+  it('"ngân sách 2 tỷ" → maxPrice = 2 (giá trần, không phải vốn tự có)', () => {
+    const r = parseSearchIntent('ngân sách 2 tỷ', taxonomy);
+    expect(r.filters.maxPrice).toBe(2);
+    expect(r.selfCapital).toBeUndefined();
+  });
+});
+
+describe('inheritFilters', () => {
+  it('kế thừa district lượt trước khi lượt mới không nêu địa điểm', () => {
+    const merged = inheritFilters({ district: 'Dĩ An', maxPrice: 3 }, { maxPrice: 2 });
+    expect(merged.district).toBe('Dĩ An');
+    expect(merged.maxPrice).toBe(2);
+  });
+
+  it('reset nhóm địa điểm khi khách đổi sang khu khác', () => {
+    const merged = inheritFilters({ district: 'Dĩ An', maxPrice: 3 }, { district: 'Thủ Dầu Một' });
+    expect(merged.district).toBe('Thủ Dầu Một');
+    expect(merged.maxPrice).toBe(3);
+  });
+
+  it('reset areaId/ward cũ khi lượt mới nêu district mới (không trộn địa điểm)', () => {
+    const merged = inheritFilters({ areaId: 'area-bd', ward: 'Phường Dĩ An' }, { district: 'Bến Cát' });
+    expect(merged.district).toBe('Bến Cát');
+    expect(merged.areaId).toBeUndefined();
+    expect(merged.ward).toBeUndefined();
+  });
+
+  it('reset typeId khi khách đổi loại BĐS', () => {
+    const merged = inheritFilters({ typeId: 'type-can-ho', district: 'Dĩ An' }, { typeId: 'type-dat' });
+    expect(merged.typeId).toBe('type-dat');
+    expect(merged.district).toBe('Dĩ An');
   });
 });

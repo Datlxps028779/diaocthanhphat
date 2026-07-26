@@ -15,6 +15,9 @@ export interface SearchIntent {
   residualKeyword: string;
   matched: AiSearchMatch[];
   confidence: 'high' | 'medium' | 'low';
+  // "Tôi có X tỷ" KÈM ý định vay → X là vốn tự có (không phải giá trần). Tầng trên
+  // dùng để gợi ý vay phần còn lại, không set maxPrice chặn tin giá cao hơn.
+  selfCapital?: { amount: number; unit: 'ty' | 'trieu' };
 }
 
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Bắc', 'Đông Nam', 'Tây Bắc', 'Tây Nam'];
@@ -69,13 +72,23 @@ function findType(queryNorm: string, types: PropertyType[]): PropertyType | null
   return types.find(t => matched.terms.some(term => normalizeVietnamese(t.name).includes(normalizeVietnamese(term)))) ?? null;
 }
 
-function extractPrice(queryNorm: string): { min?: number; max?: number; unit?: 'ty' | 'trieu'; phrase?: string } | null {
+// Tín hiệu khách định vay/trả góp (để phân biệt vốn tự có vs giá trần).
+const LOAN_SIGNAL = /\b(vay|ngan hang|tra gop|ho tro vay|tra truoc|von tu co|von)\b/;
+
+function extractPrice(queryNorm: string): { min?: number; max?: number; unit?: 'ty' | 'trieu'; phrase?: string; selfCapital?: number } | null {
   const range = queryNorm.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*(ty|trieu)/);
   if (range) return { min: Number(range[1]), max: Number(range[2]), unit: range[3] as 'ty' | 'trieu', phrase: range[0] };
   const under = queryNorm.match(/\b(duoi|nho hon|toi da)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
   if (under) return { max: Number(under[2]), unit: under[3] as 'ty' | 'trieu', phrase: under[0] };
   const above = queryNorm.match(/\b(tren|tu)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
   if (above) return { min: Number(above[2]), unit: above[3] as 'ty' | 'trieu', phrase: above[0] };
+  // "Tôi có X" KÈM ý định vay → X là VỐN TỰ CÓ, không phải giá trần: không set max
+  // (để không loại các BĐS giá cao hơn mà khách có thể vay thêm). Chỉ nhánh sở hữu
+  // ("(tôi/mình) có X") mới hiểu vốn tự có; "ngân sách/tầm/khoảng X" vẫn là trần.
+  const have = queryNorm.match(/\b(toi co|minh co|co)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
+  if (have && LOAN_SIGNAL.test(queryNorm)) {
+    return { unit: have[3] as 'ty' | 'trieu', phrase: have[0], selfCapital: Number(have[2]) };
+  }
   // Cụm chỉ NGÂN SÁCH ("tôi có 500 triệu", "ngân sách 2 tỷ", "tầm/khoảng/với X")
   // → hiểu là giá trần (max). Trước đây không bắt → không lọc giá → gợi cả BĐS vượt xa túi tiền.
   const budget = queryNorm.match(/\b(co|toi co|minh co|ngan sach|tam|khoang|voi|trong tam)\s+(\d+(?:\.\d+)?)\s*(ty|trieu)/);
@@ -189,22 +202,29 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
   }
 
   const price = extractPrice(q);
+  let selfCapital: SearchIntent['selfCapital'];
   if (price) {
     const listingType = filters.listingType ?? explicitFilters.listingType;
-    const min = price.min == null ? undefined : normalizePriceForListing(price.min, price.unit, listingType);
-    const max = price.max == null ? undefined : normalizePriceForListing(price.max, price.unit, listingType);
-    const wroteMin = min == null || mergeFilter(filters, explicitFilters, 'minPrice', min);
-    const wroteMax = max == null || mergeFilter(filters, explicitFilters, 'maxPrice', max);
-    if (wroteMin || wroteMax) {
-      const unitLabel = listingType === 'cho_thue' ? ' triệu' : price.unit === 'trieu' && listingType !== 'cho_thue' ? ' triệu' : '';
-      matched.push({
-        kind: 'price',
-        label: price.min != null && price.max != null
-          ? `${price.min}–${price.max}${unitLabel}`
-          : price.max != null
-            ? `Dưới ${price.max}${unitLabel}`
-            : `Trên ${price.min}${unitLabel}`,
-      });
+    if (price.selfCapital != null) {
+      // Vốn tự có: không set maxPrice (không chặn tin giá cao hơn khách có thể vay).
+      selfCapital = { amount: price.selfCapital, unit: price.unit ?? 'ty' };
+      matched.push({ kind: 'price', label: `Vốn tự có ${price.selfCapital}${price.unit === 'trieu' ? ' triệu' : ' tỷ'}` });
+    } else {
+      const min = price.min == null ? undefined : normalizePriceForListing(price.min, price.unit, listingType);
+      const max = price.max == null ? undefined : normalizePriceForListing(price.max, price.unit, listingType);
+      const wroteMin = min == null || mergeFilter(filters, explicitFilters, 'minPrice', min);
+      const wroteMax = max == null || mergeFilter(filters, explicitFilters, 'maxPrice', max);
+      if (wroteMin || wroteMax) {
+        const unitLabel = listingType === 'cho_thue' ? ' triệu' : price.unit === 'trieu' && listingType !== 'cho_thue' ? ' triệu' : '';
+        matched.push({
+          kind: 'price',
+          label: price.min != null && price.max != null
+            ? `${price.min}–${price.max}${unitLabel}`
+            : price.max != null
+              ? `Dưới ${price.max}${unitLabel}`
+              : `Trên ${price.min}${unitLabel}`,
+        });
+      }
     }
     if (price.phrase) removeSpan(remove, rawPhraseForNorm(query, price.phrase));
   }
@@ -247,5 +267,32 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
     residualKeyword: rawResidual(query, remove),
     matched,
     confidence: matched.length >= 2 ? 'high' : matched.length === 1 ? 'medium' : 'low',
+    ...(selfCapital ? { selfCapital } : {}),
   };
+}
+
+// Kế thừa bộ lọc qua các lượt trong 1 phiên chat, có reset theo nhóm khi khách đổi
+// chủ đề. `prev` = filter lượt trước, `current` = filter parse từ lượt mới.
+// Quy tắc: nếu lượt mới nêu địa điểm mới (areaId/district/ward) thì XÓA cả nhóm địa
+// điểm cũ rồi lấy theo lượt mới (tránh trộn Dĩ An + Thuận An); tương tự nhóm loại BĐS
+// (typeId). Các filter khác (giá, diện tích, PN, pháp lý, hướng, vay) lượt mới ưu tiên,
+// còn thiếu thì kế thừa lượt trước.
+export function inheritFilters(
+  prev: Partial<PropertyFilters>,
+  current: Partial<PropertyFilters>,
+): Partial<PropertyFilters> {
+  const hasNewLocation = current.areaId != null || current.district != null || current.ward != null;
+  const hasNewType = current.typeId != null;
+  const LOCATION_KEYS: (keyof PropertyFilters)[] = ['areaId', 'district', 'ward'];
+
+  const merged: Partial<PropertyFilters> = { ...prev };
+  // Đổi chủ đề địa điểm: bỏ nhóm địa điểm cũ trước khi nhận địa điểm mới.
+  if (hasNewLocation) for (const k of LOCATION_KEYS) delete merged[k];
+  if (hasNewType) delete merged.typeId;
+
+  // Lượt mới ưu tiên: chỉ ghi đè bằng giá trị thực sự có ở lượt mới.
+  for (const [k, v] of Object.entries(current) as [keyof PropertyFilters, unknown][]) {
+    if (v !== undefined && v !== '' && v !== 'all') (merged as Record<string, unknown>)[k] = v;
+  }
+  return merged;
 }

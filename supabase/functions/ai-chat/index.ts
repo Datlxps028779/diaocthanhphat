@@ -79,6 +79,16 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(url, serviceKey);
 
+    // RAG query CÓ NGỮ CẢNH: ghép tin nhắn mới + vài lượt khách gần nhất để câu hỏi
+    // nối mạch ("còn căn nào rẻ hơn?") vẫn kéo đúng chunk của khu/chủ đề đang nói.
+    // Cắt ≤500 ký tự để không làm loãng rank lexical.
+    const recentUserContext = history
+      .filter(t => t.role === "user")
+      .slice(-2)
+      .map(t => t.text)
+      .join(" ");
+    const retrievalQuery = `${message} ${recentUserContext}`.trim().slice(0, 500);
+
     const [{ data: settingRows }, { data: kbRows }, { data: ragRows }] = await Promise.all([
       db.from("site_settings").select("value").eq("key", "ai_system_prompt").maybeSingle(),
       db.from("ai_chat_knowledge")
@@ -88,7 +98,7 @@ Deno.serve(async (req: Request) => {
         .order("priority", { ascending: false })
         .limit(30),
       // RAG: kéo chunk liên quan TỪ DỮ LIỆU THẬT trước khi gọi Claude (retrieve-then-generate).
-      db.rpc("match_rag_chunks", { query: message, match_count: 8, filter_source_types: null, filter_visibility: "public" }),
+      db.rpc("match_rag_chunks", { query: retrievalQuery, match_count: 8, filter_source_types: null, filter_visibility: "public" }),
     ]);
 
     const rag = (ragRows ?? []) as RagMatch[];

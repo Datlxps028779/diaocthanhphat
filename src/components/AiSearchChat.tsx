@@ -5,11 +5,11 @@ import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react'
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, detectHandoffTriggers, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
-import { getAdvisorMatches, getAllProperties } from '../lib/api/properties';
+import { getAdvisorMatches, getAllProperties, type PropertyFilters } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
 import { getAiChatKnowledge } from '../lib/api/aiChatKnowledge';
 import { askAiChat } from '../lib/api/aiChat';
-import { parseSearchIntent } from '../lib/aiSearch';
+import { inheritFilters, parseSearchIntent } from '../lib/aiSearch';
 import { getSiteSettings } from '../lib/api/siteSettings';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
@@ -61,6 +61,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const chatHandleRef = useRef<PublicChatHandle | null>(null);
   const seenRemoteMessageIds = useRef<Set<string>>(new Set());
   const requestSeq = useRef(0);
+  // Bộ lọc tích luỹ trong phiên: hỏi tiếp ("còn căn nào rẻ hơn?") kế thừa khu vực/loại
+  // của lượt trước; đổi chủ đề (nêu khu vực/loại mới) thì reset nhóm tương ứng.
+  const sessionFiltersRef = useRef<Partial<PropertyFilters>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: areas = [], isLoading: loadingAreas } = useAreas();
@@ -160,6 +163,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setRequestingStaff(false);
     chatHandleRef.current = null;
     seenRemoteMessageIds.current = new Set();
+    sessionFiltersRef.current = {};
     setChatHandle(null);
   };
 
@@ -231,13 +235,17 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     if (ai) {
       const understood = ai.understood_query || text;
       const intent = parseSearchIntent(understood, taxonomy);
-      const hasConcreteFilter = intent.filters.minPrice != null || intent.filters.maxPrice != null || !!intent.filters.district
-        || !!intent.filters.ward || !!intent.filters.areaId || !!intent.filters.typeId || intent.filters.minArea != null || intent.filters.maxArea != null;
+      // Kế thừa bộ lọc phiên: lượt sau giữ khu vực/loại/giá lượt trước, reset theo
+      // nhóm khi khách đổi chủ đề (vd chuyển sang khu khác). Vốn tự có KHÔNG chặn trần.
+      const mergedFilters = inheritFilters(sessionFiltersRef.current, intent.filters);
+      sessionFiltersRef.current = mergedFilters;
+      const hasConcreteFilter = mergedFilters.minPrice != null || mergedFilters.maxPrice != null || !!mergedFilters.district
+        || !!mergedFilters.ward || !!mergedFilters.areaId || !!mergedFilters.typeId || mergedFilters.minArea != null || mergedFilters.maxArea != null;
       const stage = intent.confidence !== 'low' && hasConcreteFilter ? 'showing_matches' : 'collecting_need';
       const handoffRequired = ai.handoff || detectHandoffTriggers(text) || shouldAskContactByTurns;
       const turn: AdvisorTurnResult = {
         reply: ai.reply,
-        filters: intent.filters,
+        filters: mergedFilters,
         residualKeyword: intent.residualKeyword,
         matched: intent.matched,
         stage: handoffRequired && stage !== 'showing_matches' ? 'collecting_contact' : stage,
@@ -263,9 +271,13 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
         setResults(cards);
         setShowGeneralLeadForm(true);
         track(EVENTS.AI_ADVISOR_SUGGEST, { count: cards.length });
-        const resultReply = cards.length
+        // Vốn tự có: gợi ý vay phần còn lại (không bịa lãi suất/hạn mức), mời tư vấn viên.
+        const loanHint = intent.selfCapital
+          ? ` Với ${intent.selfCapital.amount}${intent.selfCapital.unit === 'trieu' ? ' triệu' : ' tỷ'} vốn tự có, anh/chị có thể tham khảo cả những căn giá cao hơn và vay phần còn lại — tư vấn viên sẽ giúp tính phương án vay phù hợp.`
+          : '';
+        const resultReply = (cards.length
           ? `Em tìm được ${cards.length} tin phù hợp nhất, đã xếp theo điểm khớp nhu cầu. Anh/chị có thể xem chi tiết hoặc để lại thông tin để tư vấn viên hỗ trợ.`
-          : 'Hiện chưa có tin thật sự khớp theo điểm nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.';
+          : 'Hiện chưa có tin thật sự khớp theo điểm nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.') + loanHint;
         setMessages(prev => [...prev, { role: 'assistant', text: resultReply }]);
         await persistOngoingMessage('assistant', resultReply);
       } catch {
