@@ -10,7 +10,7 @@ export type Role = 'user' | 'staff' | 'admin';
 export const ALL_TABS: AdminTab[] = [
   'dashboard', 'properties', 'leads', 'chat-sessions', 'nurture', 'user-listings', 'users', 'staff', 'projects',
   'news', 'testimonials', 'cms', 'settings', 'footer', 'banners', 'featured-sections',
-  'page-builder', 'pages', 'neighborhoods', 'menu', 'backup', 'ai-analytics', 'ai-chat', 'seo-geo',
+  'page-builder', 'pages', 'neighborhoods', 'menu', 'backup', 'ai-analytics', 'ai-chat', 'ai-rag', 'seo-geo',
 ];
 
 // Tab staff được thấy: chăm sóc khách + duyệt tin đăng.

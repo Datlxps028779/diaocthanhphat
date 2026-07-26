@@ -1,3 +1,3 @@
-export type AdminTab = 'dashboard' | 'properties' | 'leads' | 'chat-sessions' | 'nurture' | 'user-listings' | 'users' | 'staff' | 'projects' | 'news' | 'testimonials' | 'cms' | 'settings' | 'footer' | 'banners' | 'featured-sections' | 'page-builder' | 'pages' | 'neighborhoods' | 'menu' | 'backup' | 'ai-analytics' | 'ai-chat' | 'seo-geo';
+export type AdminTab = 'dashboard' | 'properties' | 'leads' | 'chat-sessions' | 'nurture' | 'user-listings' | 'users' | 'staff' | 'projects' | 'news' | 'testimonials' | 'cms' | 'settings' | 'footer' | 'banners' | 'featured-sections' | 'page-builder' | 'pages' | 'neighborhoods' | 'menu' | 'backup' | 'ai-analytics' | 'ai-chat' | 'ai-rag' | 'seo-geo';
 
 export interface AdminPanelProps { onLogout: () => void; initialTab?: string; role: 'user' | 'staff' | 'admin'; }

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -35,6 +35,7 @@ const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
 const AiAnalyticsTab = lazy(() => import('./admin/tabs/AiAnalyticsTab').then(m => ({ default: m.AiAnalyticsTab })));
 const AiChatTab = lazy(() => import('./admin/tabs/AiChatTab').then(m => ({ default: m.AiChatTab })));
+const AiRagTab = lazy(() => import('./admin/tabs/AiRagTab').then(m => ({ default: m.AiRagTab })));
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
@@ -115,6 +116,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
     { id: 'backup', label: 'Sao lưu dữ liệu', icon: <Database className="w-4 h-4" /> },
     { id: 'ai-analytics', label: 'AI Phân tích', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'ai-chat', label: 'Đào tạo AI', icon: <Bot className="w-4 h-4" /> },
+    { id: 'ai-rag', label: 'RAG / Tri thức AI', icon: <BrainCircuit className="w-4 h-4" /> },
   ];
 
   return (
@@ -212,6 +214,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
           {tab === 'backup' && <BackupTab />}
           {tab === 'ai-analytics' && <AiAnalyticsTab />}
           {tab === 'ai-chat' && <AiChatTab />}
+          {tab === 'ai-rag' && <AiRagTab />}
           {tab === 'nurture' && <NurtureTab />}
           {tab === 'seo-geo' && <SeoGeoTab onEditEntity={editEntity} />}
           </Suspense>
