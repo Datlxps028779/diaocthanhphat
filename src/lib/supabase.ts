@@ -81,7 +81,7 @@ export type MenuItem = {
   created_at: string;
   updated_at: string;
 };
-export type RagSourceTable = 'properties' | 'news' | 'neighborhoods' | 'areas' | 'price_stats' | 'ai_chat_knowledge';
+export type RagSourceTable = 'properties' | 'news' | 'neighborhoods' | 'areas' | 'price_stats' | 'ai_chat_knowledge' | 'admin_docs';
 export type RagVisibility = 'public' | 'internal';
 export type RagChunk = {
   id: string;
@@ -119,6 +119,21 @@ export type RagMatch = {
   content: string;
   metadata: Record<string, unknown>;
   score: number;
+};
+
+// Tài liệu admin upload để đào tạo AI (Word/Excel/PDF…). Text đã trích ở client lưu
+// vào extracted_text; refresh_rag_index đẩy thành chunk vào rag_chunks (nguồn admin_docs).
+export type AdminDocument = {
+  id: string;
+  title: string;
+  file_name: string | null;
+  file_url: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  extracted_text: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Testimonial = {

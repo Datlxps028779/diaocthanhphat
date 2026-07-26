@@ -17,8 +17,9 @@ const SOURCE_LABELS: Record<RagSourceTable, string> = {
   areas: 'Khu vực',
   price_stats: 'Dữ liệu giá',
   ai_chat_knowledge: 'Tri thức Q&A',
+  admin_docs: 'Tài liệu admin',
 };
-const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge'];
+const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge', 'admin_docs'];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';

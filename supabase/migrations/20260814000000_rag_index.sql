@@ -283,6 +283,20 @@ BEGIN
     END IF;
   END IF;
 
+  -- (7) ADMIN_DOCS — tài liệu admin upload (Word/Excel/PDF…), text đã trích sẵn ở
+  -- client lưu trong admin_documents.extracted_text. Chunk hoá ~2000 ký tự/chunk.
+  IF do_all OR target = 'admin_docs' THEN
+    INSERT INTO rag_chunks (source_table, source_id, source_slug, source_url, title, chunk_index, content, metadata, visibility, content_hash)
+    SELECT 'admin_docs', d.id, NULL, d.file_url, d.title, gs.idx,
+      substring(d.extracted_text FROM gs.idx * 2000 + 1 FOR 2000),
+      jsonb_strip_nulls(jsonb_build_object('file_name', d.file_name, 'mime_type', d.mime_type)),
+      'public',
+      md5(coalesce(d.extracted_text,'') || coalesce(d.updated_at::text,'') || gs.idx::text)
+    FROM admin_documents d
+    CROSS JOIN LATERAL generate_series(0, greatest(0, (length(d.extracted_text) - 1) / 2000)) AS gs(idx)
+    WHERE d.is_active = true AND length(trim(d.extracted_text)) > 0;
+  END IF;
+
   SELECT count(*)::int INTO n_upserted FROM rag_chunks WHERE do_all OR source_table = target;
 
   INSERT INTO rag_index_runs (source_table, chunks_upserted, chunks_deleted, status, finished_at)
