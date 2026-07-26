@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { BrainCircuit, RefreshCw, Search, ChevronRight, ExternalLink, AlertCircle, CheckCircle, Database } from 'lucide-react';
-import type { RagChunk, RagMatch, RagSourceTable } from '../../../lib/supabase';
+import { BrainCircuit, RefreshCw, Search, ChevronRight, ExternalLink, AlertCircle, CheckCircle, Database, FileText, Upload, Trash2 } from 'lucide-react';
+import type { RagChunk, RagMatch, RagSourceTable, AdminDocument } from '../../../lib/supabase';
 import {
   adminRefreshRagIndex, adminGetRagStats, adminGetRagRuns, adminGetRagChunks, testRagRetrieval,
+  adminListDocuments, adminCreateDocument, adminUpdateDocument, adminDeleteDocument, uploadDocument,
   type RagSourceStat,
 } from '../../../lib/api';
+import { parseDocument } from '../../../lib/documentParse';
 import type { RagIndexRun } from '../../../lib/supabase';
 
 // Console RAG / Tri thức AI: soi + đồng bộ kho chunk sinh TỪ DỮ LIỆU THẬT, và test
@@ -45,6 +47,65 @@ export function AiRagTab() {
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<RagMatch[] | null>(null);
   const [testing, setTesting] = useState(false);
+
+  // Tài liệu đào tạo AI (admin upload → trích text client → admin_documents)
+  const [docs, setDocs] = useState<AdminDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [docBusy, setDocBusy] = useState<string | null>(null); // id đang toggle/xóa
+
+  const loadDocs = () => {
+    setDocsLoading(true);
+    return adminListDocuments().then(d => { setDocs(d); setDocsLoading(false); }).catch(() => setDocsLoading(false));
+  };
+  useEffect(() => { loadDocs(); }, []);
+
+  const onUploadDoc = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setMsg(null);
+    try {
+      // Trích text ở client TRƯỚC (kiểm định dạng/nội dung), rồi mới upload file gốc.
+      const { text } = await parseDocument(file);
+      const meta = await uploadDocument(file).catch(() => null); // file gốc phụ, lỗi vẫn lưu text
+      await adminCreateDocument({
+        title: file.name.replace(/\.[^.]+$/, ''),
+        extracted_text: text,
+        file_url: meta?.url ?? null,
+        file_name: meta?.file_name ?? file.name,
+        mime_type: meta?.mime_type ?? file.type,
+        size_bytes: meta?.size_bytes ?? file.size,
+      });
+      setMsg({ kind: 'ok', text: `Đã thêm tài liệu "${file.name}". Bấm "Đồng bộ" nguồn Tài liệu admin để đưa vào kho AI.` });
+      await loadDocs();
+    } catch (e) {
+      setMsg({ kind: 'err', text: (e as Error).message });
+    }
+    setUploading(false);
+  };
+
+  const toggleDoc = async (doc: AdminDocument) => {
+    setDocBusy(doc.id);
+    try {
+      await adminUpdateDocument(doc.id, { is_active: !doc.is_active });
+      await loadDocs();
+    } catch (e) {
+      setMsg({ kind: 'err', text: (e as Error).message });
+    }
+    setDocBusy(null);
+  };
+
+  const removeDoc = async (doc: AdminDocument) => {
+    if (!confirm(`Xóa tài liệu "${doc.title}"? Chunk đã sinh sẽ mất ở lần đồng bộ kế tiếp.`)) return;
+    setDocBusy(doc.id);
+    try {
+      await adminDeleteDocument(doc);
+      await loadDocs();
+    } catch (e) {
+      setMsg({ kind: 'err', text: (e as Error).message });
+    }
+    setDocBusy(null);
+  };
 
   const load = () => Promise.all([adminGetRagStats(), adminGetRagRuns(8)])
     .then(([s, r]) => { setStats(s); setRuns(r); setLoading(false); });
@@ -134,6 +195,57 @@ export function AiRagTab() {
         </div>
         {runs.length > 0 && (
           <p className="text-[11px] text-gray-400 mt-3">Lần đồng bộ gần nhất: {fmtDate(runs[0].finished_at)} · {runs[0].status === 'ok' ? 'thành công' : 'lỗi'}</p>
+        )}
+      </div>
+
+      {/* Tài liệu đào tạo AI */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-gray-500" />
+            <h3 className="font-bold text-gray-800 text-sm">Tài liệu đào tạo AI</h3>
+          </div>
+          <label className={`flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${uploading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white'}`}>
+            {uploading ? <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {uploading ? 'Đang xử lý…' : 'Tải tài liệu'}
+            <input type="file" accept=".docx,.xlsx,.xls,.csv,.pdf,.txt,.md" disabled={uploading}
+              onChange={e => { onUploadDoc(e.target.files?.[0]); e.target.value = ''; }} className="hidden" />
+          </label>
+        </div>
+        <p className="text-gray-500 text-xs mb-3">Tải file Word (.docx), Excel (.xlsx/.csv), PDF hoặc text — AI đọc nội dung để trả lời (chỉ dùng nội dung thật, không bịa). Sau khi thêm/sửa, bấm "Đồng bộ" nguồn Tài liệu admin ở trên để đưa vào kho AI.</p>
+        {docsLoading ? (
+          <div className="py-8 text-center"><div className="inline-block w-6 h-6 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>
+        ) : docs.length === 0 ? (
+          <p className="text-sm text-gray-500 italic py-4 text-center">Chưa có tài liệu. Tải lên file đầu tiên để AI học nội dung nội bộ.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {docs.map(doc => (
+              <div key={doc.id} className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${doc.is_active ? 'border-gray-100' : 'border-gray-100 bg-gray-50/60'}`}>
+                <FileText className={`w-4 h-4 flex-shrink-0 ${doc.is_active ? 'text-red-500' : 'text-gray-300'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold text-sm truncate ${doc.is_active ? 'text-gray-900' : 'text-gray-400'}`}>{doc.title}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    {(doc.extracted_text?.length ?? 0).toLocaleString('vi-VN')} ký tự · {fmtDate(doc.created_at)}
+                    {doc.file_url && ' · có file gốc'}
+                  </p>
+                </div>
+                {doc.file_url && (
+                  <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0" title="Mở file gốc">
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                <button onClick={() => toggleDoc(doc)} disabled={docBusy === doc.id}
+                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0 disabled:opacity-40 ${doc.is_active ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                  title={doc.is_active ? 'Đang bật — bấm để tắt' : 'Đang tắt — bấm để bật'}>
+                  {doc.is_active ? 'Đang bật' : 'Đang tắt'}
+                </button>
+                <button onClick={() => removeDoc(doc)} disabled={docBusy === doc.id}
+                  className="text-gray-300 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-40" title="Xóa tài liệu">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

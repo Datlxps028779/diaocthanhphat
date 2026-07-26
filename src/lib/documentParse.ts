@@ -59,11 +59,12 @@ async function parseXlsx(buf: ArrayBuffer): Promise<string> {
 
 async function parsePdf(buf: ArrayBuffer): Promise<string> {
   const pdfjs = await import('pdfjs-dist');
-  // Worker: trỏ tới bản dựng kèm package (webpack 5 emit asset từ new URL) để không
-  // phụ thuộc CDN ngoài. Bọc try để không chặn nếu bundler không resolve được.
+  // Worker trỏ CDN theo đúng version pdfjs — cách chính thức, ổn định với mọi bundler
+  // (bundle worker qua new URL khiến Terser của Next vỡ khi minify lại file .mjs).
   try {
+    const v = (pdfjs as unknown as { version: string }).version;
     (pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-      new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${v}/pdf.worker.min.mjs`;
   } catch { /* dùng worker mặc định của pdfjs */ }
   const doc = await pdfjs.getDocument({ data: buf }).promise;
   const parts: string[] = [];
