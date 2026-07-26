@@ -197,7 +197,7 @@ BEGIN
       ),
       jsonb_strip_nulls(jsonb_build_object('neighborhood_slug', nh.slug, 'ward_id', nh.ward_id)),
       'public',
-      md5(coalesce(nh.name,'') || coalesce(nh.description,'') || coalesce(nh.updated_at::text, nh.created_at::text,''))
+      md5(coalesce(nh.name,'') || coalesce(nh.description,'') || coalesce(nh.created_at::text,''))
     FROM neighborhoods nh;
   END IF;
 
@@ -254,15 +254,33 @@ BEGIN
   END IF;
 
   -- (6) AI_CHAT_KNOWLEDGE — chỉ priority_qa/background active (KHÔNG rule/test_case).
+  -- Tự thích ứng: bảng gốc chưa có cột knowledge_type (migration hierarchy chưa chạy)
+  -- thì lấy toàn bộ câu đang bật; có cột thì lọc priority_qa/background.
   IF do_all OR target = 'ai_chat_knowledge' THEN
-    INSERT INTO rag_chunks (source_table, source_id, source_slug, source_url, title, chunk_index, content, metadata, visibility, content_hash)
-    SELECT 'ai_chat_knowledge', k.id, NULL, NULL, k.topic, 0,
-      concat_ws(E'\n', k.topic, k.answer),
-      jsonb_strip_nulls(jsonb_build_object('knowledge_type', k.knowledge_type)),
-      'public',
-      md5(coalesce(k.topic,'') || coalesce(k.answer,'') || coalesce(k.updated_at::text,''))
-    FROM ai_chat_knowledge k
-    WHERE k.is_active = true AND k.knowledge_type IN ('priority_qa', 'background');
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'ai_chat_knowledge' AND column_name = 'knowledge_type'
+    ) THEN
+      EXECUTE $q$
+        INSERT INTO rag_chunks (source_table, source_id, source_slug, source_url, title, chunk_index, content, metadata, visibility, content_hash)
+        SELECT 'ai_chat_knowledge', k.id, NULL, NULL, k.topic, 0,
+          concat_ws(E'\n', k.topic, k.answer),
+          jsonb_strip_nulls(jsonb_build_object('knowledge_type', k.knowledge_type)),
+          'public',
+          md5(coalesce(k.topic,'') || coalesce(k.answer,'') || coalesce(k.updated_at::text,''))
+        FROM ai_chat_knowledge k
+        WHERE k.is_active = true AND k.knowledge_type IN ('priority_qa', 'background')
+      $q$;
+    ELSE
+      INSERT INTO rag_chunks (source_table, source_id, source_slug, source_url, title, chunk_index, content, metadata, visibility, content_hash)
+      SELECT 'ai_chat_knowledge', k.id, NULL, NULL, k.topic, 0,
+        concat_ws(E'\n', k.topic, k.answer),
+        '{}'::jsonb,
+        'public',
+        md5(coalesce(k.topic,'') || coalesce(k.answer,'') || coalesce(k.updated_at::text,''))
+      FROM ai_chat_knowledge k
+      WHERE k.is_active = true;
+    END IF;
   END IF;
 
   SELECT count(*)::int INTO n_upserted FROM rag_chunks WHERE do_all OR source_table = target;
