@@ -5,7 +5,8 @@ import type { submitLead } from './api/leads';
 import { isValidVnPhone } from './phone';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
-export interface AdvisorMessage { role: 'user' | 'assistant' | 'staff' | 'system'; text: string; chips?: string[] }
+export interface AdvisorCitation { title: string; source_url: string | null }
+export interface AdvisorMessage { role: 'user' | 'assistant' | 'staff' | 'system'; text: string; chips?: string[]; citations?: AdvisorCitation[] }
 export interface AdvisorPropertySummary {
   id: string;
   slug: string | null;

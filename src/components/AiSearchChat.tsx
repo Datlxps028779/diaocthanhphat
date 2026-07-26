@@ -246,7 +246,10 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       };
       setLastTurn(turn);
       setResults([]);
-      setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
+      const citations = ai.citations
+        .filter(c => c.source_url)
+        .map(c => ({ title: c.title, source_url: c.source_url }));
+      setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label), ...(citations.length ? { citations } : {}) }]);
       await persistOngoingMessage('assistant', turn.reply);
       if (turn.stage === 'collecting_contact' || turn.handoffRequired) setShowGeneralLeadForm(true);
 
@@ -457,6 +460,16 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                     {m.role === 'staff' && <p className="text-[10px] font-black uppercase tracking-wide mb-1 text-emerald-700">Tư vấn viên</p>}
                     {m.role === 'system' && <p className="text-[10px] font-black uppercase tracking-wide mb-1 text-amber-700">Hệ thống</p>}
                     <p>{m.text}</p>
+                    {m.citations && m.citations.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-200/70 space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Nguồn</p>
+                        {m.citations.map((c, ci) => (
+                          <a key={ci} href={c.source_url ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-red-600 hover:underline">
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" /><span className="truncate">{c.title}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     {m.chips && m.chips.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {m.chips.map(c => <span key={c} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-1">{c}</span>)}
