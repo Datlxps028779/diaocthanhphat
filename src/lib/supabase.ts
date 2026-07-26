@@ -81,6 +81,46 @@ export type MenuItem = {
   created_at: string;
   updated_at: string;
 };
+export type RagSourceTable = 'properties' | 'news' | 'neighborhoods' | 'areas' | 'price_stats' | 'ai_chat_knowledge';
+export type RagVisibility = 'public' | 'internal';
+export type RagChunk = {
+  id: string;
+  source_table: RagSourceTable;
+  source_id: string;
+  source_slug: string | null;
+  source_url: string | null;
+  title: string;
+  chunk_index: number;
+  content: string;
+  metadata: Record<string, unknown>;
+  visibility: RagVisibility;
+  content_hash: string;
+  indexed_at: string | null;
+  created_at: string;
+};
+export type RagIndexRun = {
+  id: string;
+  source_table: RagSourceTable | null;
+  chunks_upserted: number;
+  chunks_deleted: number;
+  status: 'ok' | 'error';
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+};
+// Kết quả match_rag_chunks (retrieve) — không phải 1 dòng bảng đầy đủ.
+export type RagMatch = {
+  chunk_id: string;
+  source_table: RagSourceTable;
+  source_id: string;
+  source_slug: string | null;
+  source_url: string | null;
+  title: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  score: number;
+};
+
 export type Testimonial = {
   id: string; name: string; location: string | null; content: string;
   rating: number; avatar_url: string | null; is_active: boolean; created_at: string;
