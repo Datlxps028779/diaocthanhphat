@@ -122,6 +122,62 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   return urls;
 }
 
+// ─── Document Upload (tài liệu đào tạo AI, admin-only) ──────────────────────────
+// Tài liệu KHÔNG phải ảnh nên không dùng assertSafeImage. Whitelist riêng docx/xlsx/
+// pdf/text. File gốc chỉ lưu để admin tải lại/đối chiếu; nội dung dùng cho AI là
+// extracted_text (trích ở client, xem documentParse.ts) — file gốc không render public.
+const ALLOWED_DOC_MIME = new Set([
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword', // .doc (một số trình gửi MIME này)
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls / .csv đôi khi
+  'application/pdf',
+  'text/plain', 'text/markdown', 'text/csv',
+]);
+const ALLOWED_DOC_EXT = new Set(['docx', 'doc', 'xlsx', 'xls', 'pdf', 'txt', 'md', 'csv']);
+
+function assertSafeDocument(file: File) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  // MIME của file tài liệu hay bị trình duyệt để trống → chấp nhận nếu đuôi hợp lệ.
+  const extOk = ALLOWED_DOC_EXT.has(ext);
+  const mimeOk = file.type === '' || ALLOWED_DOC_MIME.has(file.type);
+  if (!extOk || !mimeOk) {
+    throw new Error(`Định dạng "${file.type || ext || 'không rõ'}" không được phép. ` +
+      `Chỉ chấp nhận Word (.docx), Excel (.xlsx), PDF, hoặc văn bản (.txt, .md, .csv).`);
+  }
+}
+
+export interface UploadedDocument {
+  url: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
+// Upload file tài liệu gốc vào bucket admin-uploads (RLS admin-only). Trả metadata
+// để lưu kèm vào admin_documents. KHÔNG ghi user_media (đó là thư viện ảnh).
+export async function uploadDocument(file: File, isAdmin = true): Promise<UploadedDocument> {
+  assertSafeDocument(file);
+  const maxSize = await getMaxFileSize();
+  const maxSizeBytes = maxSize * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    throw new Error(`File vượt quá dung lượng cho phép (${maxSize}MB). Vui lòng chọn file nhỏ hơn.`);
+  }
+
+  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
+  const filename = seoFilename(file, 'ai-docs');
+  const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
+  return {
+    url: storageUrlToPublicImageUrl(data.publicUrl),
+    file_name: file.name,
+    mime_type: file.type || '',
+    size_bytes: file.size,
+  };
+}
+
 // ─── User Favorites (cho người dùng đăng nhập) ──────────────────────────────────
 export async function getUserFavoriteIds(): Promise<string[]> {
   const { data: { user } } = await supabase.auth.getUser();
