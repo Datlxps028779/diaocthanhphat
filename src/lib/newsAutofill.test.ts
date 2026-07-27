@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autofillNewsFaq, autofillNewsGeo } from './newsAutofill';
+import { autofillNewsFaq, autofillNewsGeo, autofillNewsExcerpt } from './newsAutofill';
 
 const HTML = [
   '<p>Thị trường bất động sản Dĩ An, Bình Dương đang phục hồi nhờ hạ tầng. Nhu cầu ở thực tăng rõ.</p>',
@@ -39,5 +39,25 @@ describe('autofillNewsGeo', () => {
     const geo = autofillNewsGeo('<p>Một đoạn văn không có địa danh cụ thể.</p>', '');
     expect(geo.geoArea).toBe('');
     expect(geo.geoEntity).toBe('');
+  });
+});
+
+describe('autofillNewsExcerpt', () => {
+  it('lấy câu mở đầu bài làm tóm tắt', () => {
+    const excerpt = autofillNewsExcerpt(HTML);
+    expect(excerpt).toContain('Thị trường bất động sản Dĩ An');
+    expect(excerpt.length).toBeGreaterThanOrEqual(80);
+  });
+
+  it('nối đoạn kế khi đoạn đầu quá ngắn để đủ ngưỡng SERP', () => {
+    const short = '<p>Giá tăng.</p><p>Nhu cầu ở thực tại Dĩ An, Bình Dương phục hồi mạnh nhờ hạ tầng giao thông mới và dòng vốn đầu tư.</p>';
+    const excerpt = autofillNewsExcerpt(short);
+    expect(excerpt.length).toBeGreaterThanOrEqual(80);
+    expect(excerpt).toContain('Giá tăng');
+    expect(excerpt).toContain('Nhu cầu ở thực');
+  });
+
+  it('trả rỗng khi chưa có nội dung', () => {
+    expect(autofillNewsExcerpt('')).toBe('');
   });
 });

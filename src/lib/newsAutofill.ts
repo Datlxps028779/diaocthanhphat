@@ -22,6 +22,20 @@ function firstSentences(text: string, max = 2): string {
   return out.length > 320 ? `${out.slice(0, 317).trimEnd()}…` : out;
 }
 
+// Tóm tắt (excerpt) cho SERP/AEO — lấy câu mở đầu bài, gộp thêm câu kế nếu chưa đủ
+// ngưỡng "pass" (80 ký tự) của evaluateNewsReadiness. Deterministic, trích thẳng từ
+// bài nên không bịa nội dung. Trả '' khi bài chưa có đoạn văn.
+export function autofillNewsExcerpt(content: string): string {
+  const paras = paragraphs(content);
+  if (!paras.length) return '';
+  let out = firstSentences(paras[0], 2);
+  // Ngắn hơn ngưỡng SERP/AEO thì nối câu đầu đoạn kế cho đủ ngữ cảnh.
+  for (let i = 1; i < paras.length && out.length < 80; i++) {
+    out = `${out} ${firstSentences(paras[i], 1)}`.trim();
+  }
+  return out.length > 300 ? `${out.slice(0, 297).trimEnd()}…` : out;
+}
+
 export interface NewsFaqMeta {
   title?: string;
   category?: string;

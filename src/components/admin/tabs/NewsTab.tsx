@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
 import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
-import { autofillNewsFaq, autofillNewsGeo } from '../../../lib/newsAutofill';
+import { autofillNewsFaq, autofillNewsGeo, autofillNewsExcerpt } from '../../../lib/newsAutofill';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
@@ -155,6 +155,10 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
     const existing = new Set(f.faq.map(it => it.question.trim()));
     const merged = [...f.faq, ...suggestions.filter(s => !existing.has(s.question.trim()))];
     return { ...f, faq: merged };
+  });
+  const suggestExcerpt = () => setForm(f => {
+    const excerpt = autofillNewsExcerpt(f.content);
+    return excerpt ? { ...f, excerpt } : f;
   });
   const autofillGeo = () => setForm(f => {
     const geo = autofillNewsGeo(f.content, f.title);
@@ -344,7 +348,13 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-700">Tóm tắt</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className="block text-xs font-semibold text-gray-700">Tóm tắt</label>
+              <button type="button" onClick={suggestExcerpt}
+                className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100">
+                <Sparkles className="h-3.5 w-3.5" /> Tự sinh từ nội dung
+              </button>
+            </div>
             <textarea value={form.excerpt} onChange={e => set('excerpt', e.target.value)} rows={3}
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
