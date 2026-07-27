@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeFilters, filtersToPage, hasSavedSearchCriteria, buildSearchName, isAlertCadence, type SavedFilters,
+  normalizeFilters, filtersToPage, hasSavedSearchCriteria, buildSearchName, isAlertCadence,
+  savedSearchesToSignals, type SavedFilters,
 } from './savedSearch';
 
 describe('normalizeFilters', () => {
@@ -79,6 +80,36 @@ describe('buildSearchName', () => {
   it('tiền tố Thuê khi cho_thue có tiêu chí', () => {
     expect(buildSearchName({ listingType: 'cho_thue', keyword: 'phòng trọ' }))
       .toBe('Thuê: "phòng trọ"');
+  });
+});
+
+describe('savedSearchesToSignals', () => {
+  const NOW = new Date('2026-07-27T00:00:00Z').getTime();
+
+  it('mỗi saved search → 1 tín hiệu search mang area/type/listingType', () => {
+    const sigs = savedSearchesToSignals(
+      [{ filters: { areaId: 'a1', typeId: 't1', listingType: 'mua_ban' }, updated_at: '2026-07-20T00:00:00Z' }],
+      NOW,
+    );
+    expect(sigs).toHaveLength(1);
+    expect(sigs[0]).toMatchObject({ kind: 'search', areaId: 'a1', typeId: 't1', listingType: 'mua_ban' });
+    expect(sigs[0].ts).toBe(new Date('2026-07-20T00:00:00Z').getTime());
+  });
+
+  it('khoảng giá 2 phía → trung điểm làm price mềm', () => {
+    const [s] = savedSearchesToSignals([{ filters: { minPrice: 2, maxPrice: 4 } }], NOW);
+    expect(s.price).toBe(3);
+  });
+
+  it('giá một phía → lấy phía có', () => {
+    expect(savedSearchesToSignals([{ filters: { maxPrice: 5 } }], NOW)[0].price).toBe(5);
+    expect(savedSearchesToSignals([{ filters: { minPrice: 1 } }], NOW)[0].price).toBe(1);
+  });
+
+  it('không có giá → price null; thiếu updated_at → dùng now', () => {
+    const [s] = savedSearchesToSignals([{ filters: { areaId: 'a1' } }], NOW);
+    expect(s.price).toBeNull();
+    expect(s.ts).toBe(NOW);
   });
 });
 

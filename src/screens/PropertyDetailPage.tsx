@@ -10,10 +10,11 @@ import {
   Navigation, ExternalLink, Play, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, pushTasteSignal, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
+import { captureSignalFromProperty } from '../lib/captureSignal';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
@@ -27,7 +28,6 @@ import { LoanCalculator } from '../components/LoanCalculator';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { ForYou } from '../components/ForYou';
 import { recordRecentlyViewed } from '../lib/recentlyViewed';
-import { recordSignal } from '../lib/tasteStore';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt } from '../lib/propertyImages';
@@ -120,7 +120,11 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const liked = !!property && favIds.includes(property.id);
   const favMutation = useMutation({
     mutationFn: (id: string) => toggleFavorite(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+    onSuccess: (favorited) => {
+      queryClient.invalidateQueries({ queryKey: qk.favoriteIds() });
+      // Chỉ ghi tín hiệu khi vừa BẬT yêu thích (true) — bỏ tim không phải ý định.
+      if (favorited && property) captureSignalFromProperty('favorite', property);
+    },
   });
 
   // Tăng view tách khỏi fetcher: bắn đúng 1 lần mỗi lần mở trang, theo UUID thật
@@ -133,12 +137,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
       recordRecentlyViewed(property);
-      const tasteAttrs = {
-        areaId: property.area_id, typeId: property.property_type_id,
-        listingType: property.listing_type, price: property.price,
-      };
-      recordSignal('view', tasteAttrs);
-      pushTasteSignal('view', tasteAttrs).catch(() => {});
+      captureSignalFromProperty('view', property);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property?.id]);
@@ -155,6 +154,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     }),
     onSuccess: () => {
       track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_detail_form', hasBudget: !!form.budget });
+      if (property) captureSignalFromProperty('contact', property);
       setFormSent(true);
     },
   });
@@ -185,6 +185,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     },
     onSuccess: () => {
       track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_callback', hasMessage: !!callbackForm.note.trim(), callbackTime: callbackForm.timePreset });
+      if (property) captureSignalFromProperty('contact', property);
       setCallbackSent(true);
     },
   });

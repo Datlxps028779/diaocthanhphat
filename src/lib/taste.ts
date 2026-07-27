@@ -1,9 +1,9 @@
 // Engine "tự học" sở thích khách (thuần, test được) — KHÔNG đụng DB/localStorage/đồng hồ.
-// Ý tưởng: gom tín hiệu hành vi (tìm kiếm + xem BĐS) → suy hồ sơ sở thích (khu vực/loại/
-// khoảng giá hay gặp) → chấm điểm & xếp hạng BĐS ứng viên để tự gợi ý. Chạy client-side
-// nên hoạt động cả với khách chưa đăng nhập.
+// Ý tưởng: gom tín hiệu hành vi (tìm kiếm + xem + yêu thích + liên hệ) → suy hồ sơ sở thích
+// (khu vực/loại/khoảng giá hay gặp) → chấm điểm & xếp hạng BĐS ứng viên để tự gợi ý. Chạy
+// client-side nên hoạt động cả với khách chưa đăng nhập.
 
-export type SignalKind = 'search' | 'view';
+export type SignalKind = 'search' | 'view' | 'favorite' | 'contact';
 
 // 1 tín hiệu hành vi đã ghi. Chỉ giữ thuộc tính suy sở thích (không PII).
 export interface Signal {
@@ -11,7 +11,7 @@ export interface Signal {
   areaId?: string | null;
   typeId?: string | null;
   listingType?: string | null;
-  price?: number | null;      // giá BĐS đã xem (view) — bỏ qua với search
+  price?: number | null;      // giá BĐS gắn với tín hiệu (view/favorite/contact); search không có
   ts: number;                 // epoch ms, để tính trọng số theo độ mới
 }
 
@@ -25,8 +25,9 @@ export interface TasteProfile {
   sampleSize: number;         // số tín hiệu dùng để suy (0 = chưa đủ dữ liệu)
 }
 
-// View đáng tin hơn search (khách bỏ công xem chi tiết) → trọng số gốc cao hơn.
-const KIND_WEIGHT: Record<SignalKind, number> = { view: 2, search: 1 };
+// Ý định càng mạnh → trọng số càng cao. Liên hệ (để lại SĐT) = ý định mua rõ nhất,
+// yêu thích = giữ lại để ngắm, xem = bỏ công đọc chi tiết, tìm kiếm = duyệt lướt.
+const KIND_WEIGHT: Record<SignalKind, number> = { contact: 4, favorite: 3, view: 2, search: 1 };
 
 // Giảm trọng số theo độ cũ: nửa đời 14 ngày (tín hiệu 14 ngày trước còn ~1/2 sức nặng).
 const HALF_LIFE_MS = 14 * 86_400_000;
@@ -51,7 +52,9 @@ export function inferTaste(signals: Signal[], now: number): TasteProfile {
     bump(profile.areaWeights, s.areaId, w);
     bump(profile.typeWeights, s.typeId, w);
     bump(profile.listingTypeWeights, s.listingType, w);
-    if (s.kind === 'view' && typeof s.price === 'number' && s.price > 0) viewedPrices.push(s.price);
+    // Giá suy khoảng ưa thích: lấy từ mọi tín hiệu có giá thật (view/favorite/contact).
+    // Search không kèm giá BĐS cụ thể nên tự khắc bỏ qua.
+    if (typeof s.price === 'number' && s.price > 0) viewedPrices.push(s.price);
   }
   if (viewedPrices.length > 0) {
     const min = Math.min(...viewedPrices);

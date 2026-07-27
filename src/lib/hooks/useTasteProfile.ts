@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getRemoteTasteSignals } from '../api';
+import { getRemoteTasteSignals, listSavedSearches } from '../api';
 import { getSignals } from '../tasteStore';
+import { savedSearchesToSignals } from '../savedSearch';
 import { inferTaste, type Signal, type TasteProfile } from '../taste';
 import { useAuth } from '../auth';
 
@@ -24,6 +25,16 @@ export function useTasteProfile(): { profile: TasteProfile; ready: boolean } {
     staleTime: 5 * 60 * 1000,
   });
 
-  const profile = inferTaste([...local, ...remote], Date.now());
+  // Nhu cầu tường minh khách tự lưu (chỉ khi đăng nhập) → nạp làm tín hiệu 'search'.
+  const { data: saved = [] } = useQuery({
+    queryKey: ['savedSearchesForTaste', user?.id ?? null],
+    queryFn: listSavedSearches,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const now = Date.now();
+  const savedSignals = savedSearchesToSignals(saved, now);
+  const profile = inferTaste([...local, ...remote, ...savedSignals], now);
   return { profile, ready };
 }

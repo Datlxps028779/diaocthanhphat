@@ -1,4 +1,5 @@
 import type { Page } from './router';
+import type { Signal } from './taste';
 
 // Bộ lọc lưu kèm một saved search. Là tập con "có thể tuần tự hóa" của state
 // filter trong ListingsPage — chỉ giữ tiêu chí tìm, không giữ page/viewMode.
@@ -101,4 +102,30 @@ export function buildSearchName(f: SavedFilters, labels: SavedSearchLabels = {})
   }
   const prefix = n.listingType === 'cho_thue' ? 'Thuê: ' : '';
   return (prefix + parts.join(' · ')).slice(0, 120);
+}
+
+// Chuyển các tìm kiếm đã LƯU (nhu cầu tường minh) → tín hiệu 'search' để nạp vào engine
+// taste. Mỗi saved search là 1 ý định rõ ràng khách tự lưu; ts theo updated_at để tính
+// độ mới. Khoảng giá (min/max) → lấy trung điểm làm price mềm, góp vào khoảng giá ưa thích.
+export function savedSearchesToSignals(
+  searches: { filters: SavedFilters | Record<string, unknown>; updated_at?: string | null }[],
+  now: number,
+): Signal[] {
+  const out: Signal[] = [];
+  for (const s of searches) {
+    const f = normalizeFilters(s.filters as SavedFilters);
+    let price: number | null = null;
+    if (f.minPrice != null && f.maxPrice != null) price = (f.minPrice + f.maxPrice) / 2;
+    else if (f.maxPrice != null) price = f.maxPrice;
+    else if (f.minPrice != null) price = f.minPrice;
+    out.push({
+      kind: 'search',
+      areaId: f.areaId ?? null,
+      typeId: f.typeId ?? null,
+      listingType: f.listingType ?? null,
+      price,
+      ts: s.updated_at ? new Date(s.updated_at).getTime() : now,
+    });
+  }
+  return out;
 }

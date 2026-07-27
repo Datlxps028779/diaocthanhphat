@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { type Property } from '../lib/supabase';
+import { captureSignalFromProperty } from '../lib/captureSignal';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, autoSaveSearch } from '../lib/api';
 import { buildSearchName, hasSavedSearchCriteria, type SavedFilters } from '../lib/savedSearch';
 import { buildPropertyPath, type PropertySort } from '../lib/api/properties';
@@ -137,8 +138,11 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
   const favoriteIds = new Set(favIds);
   const favMutation = useMutation({
-    mutationFn: (propertyId: string) => toggleFavorite(propertyId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+    mutationFn: (p: Property) => toggleFavorite(p.id),
+    onSuccess: (favorited, p) => {
+      queryClient.invalidateQueries({ queryKey: qk.favoriteIds() });
+      if (favorited) captureSignalFromProperty('favorite', p);
+    },
   });
 
   const { mutate: autoSaveCurrentSearch } = useMutation({
@@ -715,7 +719,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   {properties.map(p => (
                     <GridCard key={p.id} property={p}
                       isFavorited={favoriteIds.has(p.id)}
-                      onToggleFavorite={() => favMutation.mutate(p.id)}
+                      onToggleFavorite={() => favMutation.mutate(p)}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -732,7 +736,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   {properties.map(p => (
                     <ListCard key={p.id} property={p}
                       isFavorited={favoriteIds.has(p.id)}
-                      onToggleFavorite={() => favMutation.mutate(p.id)}
+                      onToggleFavorite={() => favMutation.mutate(p)}
                       onContact={() => setContactProp(p)} />
                   ))}
                 </div>
@@ -788,7 +792,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
         </div>
       )}
 
-      <ContactModal property={contactProp} onClose={() => setContactProp(null)} />
+      <ContactModal property={contactProp} onClose={() => setContactProp(null)}
+        onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />
     </div>
   );
 }

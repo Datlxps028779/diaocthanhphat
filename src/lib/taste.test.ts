@@ -18,6 +18,22 @@ describe('inferTaste', () => {
     const p = inferTaste([sig({ kind: 'view', areaId: 'v' }), sig({ kind: 'search', areaId: 's' })], NOW);
     expect(p.areaWeights['v']).toBeGreaterThan(p.areaWeights['s']);
   });
+  it('ý định mạnh hơn nặng hơn: contact > favorite > view > search', () => {
+    const p = inferTaste([
+      sig({ kind: 'contact', areaId: 'c' }),
+      sig({ kind: 'favorite', areaId: 'f' }),
+      sig({ kind: 'view', areaId: 'v' }),
+      sig({ kind: 'search', areaId: 's' }),
+    ], NOW);
+    expect(p.areaWeights['c']).toBeGreaterThan(p.areaWeights['f']);
+    expect(p.areaWeights['f']).toBeGreaterThan(p.areaWeights['v']);
+    expect(p.areaWeights['v']).toBeGreaterThan(p.areaWeights['s']);
+  });
+  it('favorite/contact có giá cũng đóng góp khoảng giá', () => {
+    const p = inferTaste([sig({ kind: 'favorite', price: 2 }), sig({ kind: 'contact', price: 4 })], NOW);
+    expect(p.priceMin).toBeCloseTo(1.7, 5);   // 2 * 0.85
+    expect(p.priceMax).toBeCloseTo(4.6, 5);   // 4 * 1.15
+  });
   it('tín hiệu cũ nhẹ hơn tín hiệu mới', () => {
     const p = inferTaste([sig({ areaId: 'new', ts: NOW }), sig({ areaId: 'old', ts: NOW - 28 * DAY })], NOW);
     expect(p.areaWeights['new']).toBeGreaterThan(p.areaWeights['old']);

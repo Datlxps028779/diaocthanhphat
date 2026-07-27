@@ -14,6 +14,7 @@ import {
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
   getPageLayout, buildPropertyPath,
 } from './lib/api';
+import { captureSignalFromProperty } from './lib/captureSignal';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
 import { parseSearchIntent } from './lib/aiSearch';
@@ -116,13 +117,16 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   };
 
   const favoriteMutation = useMutation({
-    mutationFn: (propertyId: string) => toggleFavorite(propertyId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.favoriteIds() }),
+    mutationFn: (p: Property) => toggleFavorite(p.id),
+    onSuccess: (favorited, p) => {
+      queryClient.invalidateQueries({ queryKey: qk.favoriteIds() });
+      if (favorited) captureSignalFromProperty('favorite', p);
+    },
   });
 
-  const handleToggleFavorite = (propertyId: string) => {
+  const handleToggleFavorite = (p: Property) => {
     if (!user) { onShowAuth('login'); return; }
-    favoriteMutation.mutate(propertyId);
+    favoriteMutation.mutate(p);
   };
 
   const handleSearch = () => {
@@ -237,7 +241,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       <div key={p.id} className="flex-shrink-0 w-64 snap-start">
                         <PropertyCard property={p}
                           isFavorited={favoriteIds.has(p.id)}
-                          onToggleFavorite={() => handleToggleFavorite(p.id)}
+                          onToggleFavorite={() => handleToggleFavorite(p)}
                           onContact={() => setContactProp(p)} />
                       </div>
                     ))}
@@ -247,7 +251,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                     {properties.map(p => (
                       <PropertyCard key={p.id} property={p}
                         isFavorited={favoriteIds.has(p.id)}
-                        onToggleFavorite={() => handleToggleFavorite(p.id)}
+                        onToggleFavorite={() => handleToggleFavorite(p)}
                         onContact={() => setContactProp(p)} />
                     ))}
                   </div>
@@ -596,7 +600,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 
       <Footer areas={areas} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />
-      <ContactModal property={contactProp} onClose={() => setContactProp(null)} />
+      <ContactModal property={contactProp} onClose={() => setContactProp(null)}
+        onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />
     </div>
   );
 }

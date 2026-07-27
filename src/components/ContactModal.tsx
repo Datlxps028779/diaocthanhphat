@@ -15,9 +15,10 @@ interface ContactTarget {
 interface ContactModalProps {
   property: ContactTarget | null;
   onClose: () => void;
+  onSubmitted?: () => void;   // gửi lead thành công → trang cha ghi tín hiệu "contact"
 }
 
-export function ContactModal({ property, onClose }: ContactModalProps) {
+export function ContactModal({ property, onClose, onSubmitted }: ContactModalProps) {
   const [form, setForm] = useState({ full_name: '', phone: '', area_interest: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -57,6 +58,7 @@ export function ContactModal({ property, onClose }: ContactModalProps) {
         source: 'contact_modal',
       });
       track(EVENTS.LEAD_SUBMIT, { listingId: property.id, source: 'contact_modal', hasMessage: !!form.message.trim() });
+      onSubmitted?.();
       setSuccess(true);
     } catch {
       setError('Có lỗi xảy ra. Vui lòng thử lại.');
