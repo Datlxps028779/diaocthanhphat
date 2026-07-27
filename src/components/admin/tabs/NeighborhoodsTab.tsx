@@ -9,6 +9,7 @@ import {
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { ImageUrlInput } from '../../ImageUpload';
+import { buildSlug, buildUniqueSlug } from '../../../lib/slug';
 
 // page_blocks namespace cho khu dân cư — khớp app/khu-dan-cu/[slug]/page.tsx.
 function blockSlug(slug: string): string { return `khu-dan-cu:${slug}`; }
@@ -127,33 +128,41 @@ export function NeighborhoodsTab() {
   const [editing, setEditing] = useState<Neighborhood | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
+  const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = () => Promise.all([getNeighborhoods(), getWards()]).then(([n, w]) => { setItems(n); setWards(w); setLoading(false); });
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => { setForm({ ...EMPTY }); setEditing(null); setCreating(true); };
+  const openCreate = () => { setForm({ ...EMPTY }); setSlugTouched(false); setEditing(null); setCreating(true); };
   const openEdit = (n: Neighborhood) => {
     setForm({
       name: n.name, slug: n.slug, ward_id: n.ward_id ?? '', description: n.description ?? '',
       image_url: n.image_url ?? '', meta_title: n.meta_title ?? '', meta_description: n.meta_description ?? '', focus_keywords: n.focus_keywords ?? '',
     });
+    setSlugTouched(true); // đang sửa khu có sẵn → giữ slug, không auto-đè theo tên
     setEditing(n); setCreating(true);
   };
 
+  // Slug preview: khi tạo mới + chưa chạm ô slug → bám theo tên; else dùng slug đang gõ.
+  const previewSlug = form.slug.trim()
+    ? buildSlug(form.slug)
+    : (form.name.trim() ? buildSlug(form.name) : '');
+
   const save = async () => {
-    if (!form.name.trim() || !form.slug.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
     try {
+      const slug = form.slug.trim() ? buildSlug(form.slug) : buildUniqueSlug(form.name);
       const payload = {
-        name: form.name.trim(), slug: form.slug.trim().toLowerCase().replace(/\s+/g, '-'),
+        name: form.name.trim(), slug,
         ward_id: form.ward_id || null, description: form.description.trim() || null,
         image_url: form.image_url.trim() || null, order_index: editing?.order_index ?? items.length,
         meta_title: form.meta_title.trim() || null, meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null, schema_markup: null,
       };
-      if (editing) await adminUpdateNeighborhood(editing.id, payload);
+      if (editing) await adminUpdateNeighborhood(editing.id, payload, editing.slug);
       else await adminCreateNeighborhood(payload);
       await load();
       setCreating(false); setEditing(null);
@@ -197,15 +206,24 @@ export function NeighborhoodsTab() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Tên *</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Phú Hồng Thịnh 8"
+              <input value={form.name}
+                onChange={e => {
+                  const name = e.target.value;
+                  // Chưa chạm ô slug → URL tự bám theo tên (bỏ dấu). Chạm rồi → giữ nguyên.
+                  setForm(f => ({ ...f, name, slug: slugTouched ? f.slug : buildSlug(name) }));
+                }}
+                placeholder="Phú Hồng Thịnh 8"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Slug (URL) *</label>
-              <input value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }))} placeholder="phu-hong-thinh-8"
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Slug (URL)</label>
+              <input value={form.slug}
+                onChange={e => { setSlugTouched(true); setForm(f => ({ ...f, slug: buildSlug(e.target.value) })); }}
+                placeholder={form.name.trim() ? buildSlug(form.name) : 'phu-hong-thinh-8'}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
           </div>
+          {previewSlug && <PublicUrlPreview path={`/khu-dan-cu/${previewSlug}`} />}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Phường/Xã</label>
@@ -244,7 +262,7 @@ export function NeighborhoodsTab() {
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
           </div>
           <div className="flex gap-2">
-            <button onClick={save} disabled={saving || !form.name.trim() || !form.slug.trim()}
+            <button onClick={save} disabled={saving || !form.name.trim()}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-40">
               <Save className="w-3.5 h-3.5" />{saving ? 'Đang lưu...' : 'Lưu'}
             </button>

@@ -49,7 +49,20 @@ export async function adminCreateNeighborhood(n: Omit<Neighborhood, 'id' | 'crea
   const { error } = await supabase.from('neighborhoods').insert(n);
   if (error) throw error;
 }
-export async function adminUpdateNeighborhood(id: string, n: Partial<Neighborhood>): Promise<void> {
+// Cập nhật khu dân cư. Nếu admin đổi slug (n.slug khác oldSlug) → gọi RPC atomic
+// cascade đồng bộ slug sang properties/user_listings + khóa trang nội dung, rồi mới
+// update các trường còn lại. Không đổi slug → update thường như cũ.
+export async function adminUpdateNeighborhood(id: string, n: Partial<Neighborhood>, oldSlug?: string): Promise<void> {
+  if (oldSlug && n.slug && n.slug !== oldSlug) {
+    const { error: rpcError } = await supabase.rpc('rename_neighborhood_slug', { p_id: id, p_old: oldSlug, p_new: n.slug });
+    if (rpcError) throw rpcError;
+    const { slug: _slug, ...rest } = n;
+    if (Object.keys(rest).length) {
+      const { error } = await supabase.from('neighborhoods').update(rest).eq('id', id);
+      if (error) throw error;
+    }
+    return;
+  }
   const { error } = await supabase.from('neighborhoods').update(n).eq('id', id);
   if (error) throw error;
 }
