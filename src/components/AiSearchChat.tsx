@@ -48,6 +48,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AdvisorMessage[]>([GREETING]);
   const [loading, setLoading] = useState(false);
+  // Đang chờ AI phản hồi (gọi Edge ~7-8s). Tách khỏi `loading` (giai đoạn tìm tin
+  // SAU khi AI trả về) vì trước đây suốt lúc chờ AI màn hình trống → cảm giác đơ.
+  const [thinking, setThinking] = useState(false);
   const [results, setResults] = useState<AdvisorPropertySummary[]>([]);
   const [lastTurn, setLastTurn] = useState<AdvisorTurnResult | null>(null);
   const [leadFor, setLeadFor] = useState<AdvisorPropertySummary | null>(null);
@@ -110,7 +113,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   useEffect(() => {
     if (!open) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [open, messages.length, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
+  }, [open, messages.length, thinking, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
 
   // Đồng bộ lời chào động (admin cấu hình) vào bubble đầu khi hội thoại còn nguyên
   // (chưa có tin người dùng). Không đụng khi khách đã bắt đầu chat để tránh ghi đè.
@@ -149,6 +152,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     setQuery('');
     setMessages([GREETING]);
     setLoading(false);
+    setThinking(false);
     setResults([]);
     setLastTurn(null);
     setLeadFor(null);
@@ -228,7 +232,10 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
     // Chat tham khảo: KHÔNG tạo phiên. Chỉ ghi tiếp nếu khách đã mở tư vấn trước đó.
     await persistOngoingMessage('visitor', text);
 
+    // Hiện bong bóng "đang soạn" suốt lúc chờ Edge (~7-8s) để khách không thấy đơ.
+    setThinking(true);
     const ai = await askAiChat(text, messages).catch(() => null);
+    if (seq === requestSeq.current) setThinking(false);
     const userTurns = messages.filter(m => m.role === 'user').length + 1;
     const shouldAskContactByTurns = userTurns >= 3;
 
@@ -491,6 +498,21 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                 </div>
               );
             })}
+
+            {thinking && (
+              <div className="flex justify-start">
+                <div className="max-w-[88%] rounded-2xl px-3 py-2.5 bg-gray-50 text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-xs">Em đang đọc dữ liệu và soạn câu trả lời…</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {loading && <div className="text-xs text-gray-400">Đang tìm BĐS phù hợp…</div>}
 
