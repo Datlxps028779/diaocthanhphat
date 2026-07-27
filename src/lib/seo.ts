@@ -65,31 +65,55 @@ export function buildLocalBusinessJsonLd(settings: Record<string, string>): Reco
 // title/description/canonical → share ra FB/Zalo hiện thẻ generic của site).
 export function staticPageMetadata(opts: { title: string; description: string; path: string; ogImage?: string }): Metadata {
   const { title, description, path, ogImage } = opts;
-  const images = ogImage ? [{ url: ogImage, width: 1200, height: 630 }] : undefined;
+  const ogTtl = ogTitle(title);
+  const ogDesc = ogDescription(description);
+  const images = ogImage ? [{ url: ogImage, width: 1200, height: 630, alt: ogTtl }] : undefined;
   return {
     title,
     description,
     alternates: { canonical: path },
     openGraph: {
       type: 'website',
-      title,
-      description,
+      title: ogTtl,
+      description: ogDesc,
       url: path,
       siteName: SITE_NAME,
       locale: 'vi_VN',
       images,
     },
-    twitter: { card: 'summary_large_image', title, description, images: ogImage ? [ogImage] : undefined },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: ogImage ? [ogImage] : undefined },
   };
 }
 
 // Kẹp chuỗi về khoảng SEO mong muốn, cắt theo ranh giới từ + thêm "…" khi vượt max.
+// Chỉ dùng cho thẻ <title>/meta description (SEO cần đúng độ dài để tránh Google cắt).
 function clampText(text: string, min: number, max: number): string {
   const t = text.trim().replace(/\s+/g, ' ');
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const lastSpace = cut.lastIndexOf(' ');
   return (lastSpace > min ? cut.slice(0, lastSpace) : cut).trim() + '…';
+}
+
+// og:title — KHÔNG kẹp "…" như thẻ <title> SEO. FB/Zalo tự cắt khi hiển thị; ta chỉ
+// chặn trần rộng (110) cắt theo ranh giới từ, KHÔNG thêm "…" giữa chừng (trước đây
+// dùng chung title kẹp 65 nên share ra bị "sót chữ" trông phản cảm).
+export function ogTitle(text: string): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  if (t.length <= 110) return t;
+  const cut = t.slice(0, 110);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim();
+}
+
+// og:description — dài hơn meta description SEO (FB/Zalo hiển thị được ~200-300 ký
+// tự). Cắt theo ranh giới từ, chỉ thêm "…" khi thật sự bị cắt (nội dung còn tiếp).
+export function ogDescription(text: string): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  if (t.length <= 300) return t;
+  const cut = t.slice(0, 300);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 200 ? cut.slice(0, lastSpace) : cut).trim() + '…';
 }
 
 function formatPropertyPrice(p: Property): string {
@@ -108,12 +132,13 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const location = [p.district?.trim(), p.city?.trim() || 'Bình Dương'].filter(Boolean).join(', ');
   const listingVerb = p.listing_type === 'cho_thue' ? 'Cho thuê' : 'Bán';
 
-  const fallbackTitle = clampText(
-    [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), p.title, priceStr ? `giá ${priceStr}` : '']
-      .filter(Boolean).join(' - '),
-    45, 65,
-  );
+  const titleSource = [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), p.title, priceStr ? `giá ${priceStr}` : '']
+    .filter(Boolean).join(' - ');
+  const fallbackTitle = clampText(titleSource, 45, 65);
   const title = p.meta_title?.trim() || fallbackTitle;
+  // og:title dùng title đầy đủ (không kẹp "…" như thẻ <title> SEO) để share ra FB/Zalo
+  // không bị "sót chữ". Ưu tiên meta_title admin nhập, else nguồn title chưa kẹp.
+  const ogTtl = ogTitle(p.meta_title?.trim() || titleSource);
 
   const descParts = [
     `${typeLabel || 'Bất động sản'} ${p.title}${location ? ` tại ${location}` : ''}.`,
@@ -128,6 +153,8 @@ export function buildPropertyMetadata(p: Property): Metadata {
     : '';
   const description = p.meta_description?.trim()
     || (plainDesc ? clampText(plainDesc, 120, 160) : clampText(descParts, 120, 160));
+  // og:description nới dài hơn meta SEO (FB/Zalo hiển thị được nhiều chữ hơn).
+  const ogDesc = ogDescription(p.meta_description?.trim() || plainDesc || descParts);
 
   const keywords = p.focus_keywords?.trim()
     || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
@@ -145,14 +172,14 @@ export function buildPropertyMetadata(p: Property): Metadata {
     alternates: { canonical: path },
     openGraph: {
       type: 'article',
-      title,
-      description,
+      title: ogTtl,
+      description: ogDesc,
       url: absoluteUrl(path),
       siteName: SITE_NAME,
       locale: 'vi_VN',
-      images: [{ url: ogImage, width: 1200, height: 630 }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: ogTtl }],
     },
-    twitter: { card: 'summary_large_image', title, description, images: [ogImage] },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: [ogImage] },
   };
 }
 
@@ -268,6 +295,11 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
   const title = a.meta_title || a.title;
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
+  const ogTtl = ogTitle(title);
+  // og:description dùng nội dung dài hơn meta SEO: ưu tiên meta_description/excerpt admin
+  // nhập, else nới từ đoạn đầu thân bài (FB/Zalo hiển thị được nhiều chữ hơn).
+  const plainBody = (isHtmlContent(a.content ?? '') ? stripHtml(a.content ?? '') : (a.content ?? '')).replace(/\s+/g, ' ').trim();
+  const ogDesc = ogDescription(a.meta_description?.trim() || a.excerpt?.trim() || plainBody || a.title);
   // OG image: luôn có ảnh (fallback khi bài thiếu ảnh) + ép URL tuyệt đối cho Zalo/FB.
   const ogImage = normalizePublicImageUrl(a.image_url) || FALLBACK_PROPERTY_IMAGE;
   return {
@@ -277,15 +309,15 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
     alternates: { canonical: path },
     openGraph: {
       type: 'article',
-      title,
-      description,
+      title: ogTtl,
+      description: ogDesc,
       url: absoluteUrl(path),
       siteName: SITE_NAME,
       locale: 'vi_VN',
-      images: [{ url: ogImage, width: 1200, height: 630 }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: ogTtl }],
       publishedTime: a.created_at,
     },
-    twitter: { card: 'summary_large_image', title, description, images: [ogImage] },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: [ogImage] },
   };
 }
 

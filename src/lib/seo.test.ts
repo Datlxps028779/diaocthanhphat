@@ -188,7 +188,7 @@ describe('buildPropertyJsonLd', () => {
 
   it('metadata dùng ảnh đầu tiên trong gallery khi image_url thiếu', () => {
     const metadata = buildPropertyMetadata(property({ image_url: null, images: ['https://x/gallery.jpg'] }));
-    expect(metadata.openGraph?.images).toEqual([{ url: 'https://x/gallery.jpg', width: 1200, height: 630 }]);
+    expect(metadata.openGraph?.images).toEqual([{ url: 'https://x/gallery.jpg', width: 1200, height: 630, alt: expect.any(String) }]);
   });
 
   it('image JSON-LD đổi URL Supabase sang domain chính', () => {
@@ -208,7 +208,7 @@ describe('buildNewsJsonLd/buildNewsMetadata', () => {
 
   it('news metadata vẫn có fallback OG khi thiếu ảnh cover', () => {
     const metadata = buildNewsMetadata(news({ image_url: null }));
-    expect(metadata.openGraph?.images).toEqual([{ url: 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg', width: 1200, height: 630 }]);
+    expect(metadata.openGraph?.images).toEqual([{ url: 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg', width: 1200, height: 630, alt: expect.any(String) }]);
   });
 
   it('citations sai kiểu (object/string/null) không làm throw', () => {

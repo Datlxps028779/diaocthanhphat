@@ -4,6 +4,7 @@ import { absoluteUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import type { FaqItem } from './propertyFaq';
 import { buildPriceAnswer } from './priceStatsFormat';
+import { ogTitle, ogDescription } from './seo';
 const SITE_NAME = 'BĐS Bình Dương';
 
 export const MIN_AREA_LISTINGS_FOR_INDEX = 5;
@@ -109,7 +110,11 @@ export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaS
   const title = area.meta_title || `Bất động sản ${area.name}`;
   const description = area.meta_description || fallbackDescription;
   const path = `/khu-vuc/${area.slug}`;
-  const images = area.image_url ? [{ url: area.image_url, width: 1200, height: 630 }] : undefined;
+  // og:title/description tách khỏi thẻ SEO: dùng nguồn đầy đủ (summary chưa kẹp) để
+  // share ra FB/Zalo không "sót chữ". og:desc nới dài hơn meta SEO.
+  const ogTtl = ogTitle(title);
+  const ogDesc = ogDescription(area.meta_description?.trim() || summary);
+  const images = area.image_url ? [{ url: area.image_url, width: 1200, height: 630, alt: ogTtl }] : undefined;
   return {
     title,
     description,
@@ -118,14 +123,14 @@ export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaS
     robots: evaluation.robots,
     openGraph: {
       type: 'website',
-      title,
-      description,
+      title: ogTtl,
+      description: ogDesc,
       url: path,
       siteName: SITE_NAME,
       locale: 'vi_VN',
       images,
     },
-    twitter: { card: 'summary_large_image', title, description, images: area.image_url ? [area.image_url] : undefined },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: area.image_url ? [area.image_url] : undefined },
   };
 }
 

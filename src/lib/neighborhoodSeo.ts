@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { Neighborhood, Property } from './supabase';
 import { absoluteUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
+import { ogTitle, ogDescription } from './seo';
 
 const SITE_NAME = 'BĐS Bình Dương';
 
@@ -49,7 +50,11 @@ export function buildNeighborhoodMetadata(n: Neighborhood, summary: string, eval
   const title = n.meta_title || `Khu dân cư ${n.name} — giá nhà đất & tin đăng`;
   const description = n.meta_description || fallbackDescription;
   const path = `/khu-dan-cu/${n.slug}`;
-  const images = n.image_url ? [{ url: n.image_url, width: 1200, height: 630 }] : undefined;
+  // og:title/description tách khỏi thẻ SEO: dùng nguồn đầy đủ (summary chưa kẹp) để
+  // share ra FB/Zalo không "sót chữ". og:desc nới dài hơn meta SEO.
+  const ogTtl = ogTitle(title);
+  const ogDesc = ogDescription(n.meta_description?.trim() || summary);
+  const images = n.image_url ? [{ url: n.image_url, width: 1200, height: 630, alt: ogTtl }] : undefined;
   return {
     title,
     description,
@@ -58,14 +63,14 @@ export function buildNeighborhoodMetadata(n: Neighborhood, summary: string, eval
     robots: evaluation.robots,
     openGraph: {
       type: 'website',
-      title,
-      description,
+      title: ogTtl,
+      description: ogDesc,
       url: path,
       siteName: SITE_NAME,
       locale: 'vi_VN',
       images,
     },
-    twitter: { card: 'summary_large_image', title, description, images: n.image_url ? [n.image_url] : undefined },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: n.image_url ? [n.image_url] : undefined },
   };
 }
 
