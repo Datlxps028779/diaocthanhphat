@@ -10,6 +10,7 @@ import { buildSiteEntitySchema } from '../../../lib/api';
 import { areaSummaryFromData, buildAreaCollectionJsonLd, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
+import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
   if (!schemaType) return 'WebPage';
@@ -520,6 +521,8 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
           </div>
         </aside>
       </div>
+
+      <ImageOptimizerCard />
 
       {auditModal && audit && (
         <AuditModal

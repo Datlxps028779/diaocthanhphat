@@ -24,3 +24,4 @@ export * from './api/priceStats';
 export * from './api/menu';
 export * from './api/aiRag';
 export * from './api/adminDocs';
+export * from './api/imageMaintenance';

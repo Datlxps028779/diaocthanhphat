@@ -1,6 +1,7 @@
 import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia } from '../supabase';
 import { buildSlug } from '../slug';
 import { publicImageUrlToStoragePath, storageUrlToPublicImageUrl } from '../siteUrl';
+import { compressImage } from '../imageCompress';
 
 // Tên file chuẩn SEO: {folder}/{slug mô tả}-{hậu tố ngắn}.{ext} thay vì rác ngẫu nhiên.
 // Ưu tiên caption (vd tiêu đề tin), else tên file gốc, else folder. Google đánh giá
@@ -42,6 +43,9 @@ export async function getMaxFileSize(): Promise<number> {
 // Upload ảnh với bucket phân tách: admin-uploads hoặc user-uploads
 export async function uploadImage(file: File, folder = 'properties', isAdmin = false, caption?: string): Promise<string> {
   assertSafeImage(file);
+  // Nén ở client trước khi đo dung lượng: PNG/ảnh chụp nặng → JPEG ≤1600px cho nhẹ
+  // (ảnh OG share Zalo/FB không bị bỏ qua). PNG trong suốt giữ nguyên format.
+  file = await compressImage(file);
   // Kiểm tra dung lượng file
   const maxSize = await getMaxFileSize();
   const maxSizeBytes = maxSize * 1024 * 1024; // Chuyển MB sang bytes
@@ -85,8 +89,10 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   const maxSize = await getMaxFileSize();
   const maxSizeBytes = maxSize * 1024 * 1024;
 
+  // Nén trước khi validate size: ảnh nặng nén xong mới đo, không bị chặn oan.
+  for (const file of files) assertSafeImage(file);
+  files = await Promise.all(files.map(compressImage));
   for (const file of files) {
-    assertSafeImage(file);
     if (file.size > maxSizeBytes) {
       throw new Error(`File "${file.name}" vượt quá dung lượng cho phép (${maxSize}MB).`);
     }
