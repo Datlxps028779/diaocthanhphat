@@ -98,14 +98,14 @@ Deno.serve(async (req: Request) => {
         .order("priority", { ascending: false })
         .limit(30),
       // RAG: kéo chunk liên quan TỪ DỮ LIỆU THẬT trước khi gọi Claude (retrieve-then-generate).
-      db.rpc("match_rag_chunks", { query: retrievalQuery, match_count: 8, filter_source_types: null, filter_visibility: "public" }),
+      db.rpc("match_rag_chunks", { query: retrievalQuery, match_count: 5, filter_source_types: null, filter_visibility: "public" }),
     ]);
 
     const rag = (ragRows ?? []) as RagMatch[];
     const ragBlock = rag.length
       ? "\n\nDỮ LIỆU TRUY XUẤT (chỉ dùng nội dung dưới đây, kèm nguồn — cấm dùng kiến thức ngoài cho số liệu/vị trí/giá):\n" +
         rag.map((c, i) =>
-          `[${i + 1}] (source_table: ${c.source_table}, source_id: ${c.source_id}, title: ${c.title})\n${c.content}`
+          `[${i + 1}] (source_table: ${c.source_table}, source_id: ${c.source_id}, title: ${c.title})\n${c.content.slice(0, 1200)}`
         ).join("\n\n")
       : "\n\nDỮ LIỆU TRUY XUẤT: (trống — không tìm thấy dữ liệu nội bộ liên quan)";
 
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
 
     const raw = await callClaude({
       model: Deno.env.get("AI_CHAT_MODEL") || "claude-haiku-4-5",
-      maxTokens: 700,
+      maxTokens: 400,
       temperature: 0.2,
       system,
       prompt,
