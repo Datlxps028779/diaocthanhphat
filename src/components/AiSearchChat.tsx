@@ -636,7 +636,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       )}
       <button
         onClick={openPanel}
-        className="relative w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-orange-500 text-white shadow-lg hover:scale-110 transition-all flex items-center justify-center"
+        className={`relative w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-orange-500 text-white shadow-lg hover:scale-110 transition-all items-center justify-center ${open ? 'hidden sm:flex' : 'flex'}`}
         title="AI tìm BĐS cho bạn"
         aria-label="Mở trợ lý AI tìm BĐS"
       >
