@@ -211,6 +211,13 @@ describe('buildNewsJsonLd/buildNewsMetadata', () => {
     expect(metadata.openGraph?.images).toEqual([{ url: 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg', width: 1200, height: 630, alt: expect.any(String) }]);
   });
 
+  it('og:title dùng headline đầy đủ, không dùng meta_title đã cắt ngắn cho SEO', () => {
+    const full = 'Bất Động Sản Nửa Đầu Năm 2026: Chung Cư Tăng Giá, Đất Nền Chững Lại, Thị Trường Phân Hóa Mạnh';
+    const metadata = buildNewsMetadata(news({ title: full, meta_title: full.slice(0, 60) }));
+    expect(metadata.openGraph?.title).toBe(full);
+    expect(metadata.title).toBe(full.slice(0, 60));
+  });
+
   it('citations sai kiểu (object/string/null) không làm throw', () => {
     expect(() => buildNewsJsonLd(news({ citations: {} as never }))).not.toThrow();
     expect(() => buildNewsJsonLd(news({ citations: 'x' as never }))).not.toThrow();

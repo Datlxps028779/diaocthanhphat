@@ -295,7 +295,9 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
   const title = a.meta_title || a.title;
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
-  const ogTtl = ogTitle(title);
+  // og:title ưu tiên headline đầy đủ a.title (meta_title đã bị kẹp ~60 ký tự cho SEO
+  // nên share ra FB/Zalo bị cụt giữa chữ). <title> bên dưới vẫn dùng title=meta_title.
+  const ogTtl = ogTitle(a.title?.trim() || title);
   // og:description dùng nội dung dài hơn meta SEO: ưu tiên meta_description/excerpt admin
   // nhập, else nới từ đoạn đầu thân bài (FB/Zalo hiển thị được nhiều chữ hơn).
   const plainBody = (isHtmlContent(a.content ?? '') ? stripHtml(a.content ?? '') : (a.content ?? '')).replace(/\s+/g, ' ').trim();
