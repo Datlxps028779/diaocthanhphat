@@ -9,7 +9,7 @@ import { SafeImage } from './SafeImage';
 import { FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { useTasteProfile } from '../lib/hooks/useTasteProfile';
-import { rankRecommendations, hasEnoughSignal, topKey } from '../lib/taste';
+import { rankRecommendations, hasEnoughSignal, topKey, diversify } from '../lib/taste';
 import { getRecentlyViewed } from '../lib/recentlyViewed';
 import { buildProfileDigest } from '../lib/recoDigest';
 import { fetchAiRanking, type RecoCandidate } from '../lib/api/aiReco';
@@ -80,7 +80,10 @@ export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excl
   // Hợp nhất: nếu AI cho kết quả → sắp theo thứ tự AI (chỉ trong shortlist) + gắn lý do;
   // các tin AI không nhắc tới xếp sau (giữ thứ tự deterministic). Chưa có AI → giữ nguyên.
   const recs = useMemo(() => {
-    if (!aiRanked?.length) return shortlist.slice(0, 4).map(p => ({ p, aiReason: '' }));
+    // Đa dạng hóa top-4: không để 1 khu vực chiếm >2 chỗ (tránh 4 tin y hệt), vẫn đủ 4 tin.
+    const pick = (list: { p: (typeof shortlist)[number]; aiReason: string }[]) =>
+      diversify(list, x => x.p.area_id, { maxPerKey: 2, limit: 4 });
+    if (!aiRanked?.length) return pick(shortlist.map(p => ({ p, aiReason: '' })));
     const byId = new Map(shortlist.map(p => [p.id, p]));
     const reasonById = new Map(aiRanked.map(r => [r.id, r.reason]));
     const ordered: { p: (typeof shortlist)[number]; aiReason: string }[] = [];
@@ -92,7 +95,7 @@ export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excl
     for (const p of shortlist) {
       if (!used.has(p.id)) ordered.push({ p, aiReason: reasonById.get(p.id) ?? '' });
     }
-    return ordered.slice(0, 4);
+    return pick(ordered);
   }, [aiRanked, shortlist]);
 
   if (!enough || recs.length === 0) return null;

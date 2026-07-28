@@ -42,13 +42,23 @@ function bump(map: Record<string, number>, key: string | null | undefined, w: nu
   map[key] = (map[key] ?? 0) + w;
 }
 
+// Bù ý định trong phiên: tín hiệu trong cửa sổ gần (sessionWindowMs) được nhân thêm
+// sessionBoost để hành vi "ngay lúc này" nổi lên trên hồ sơ dài hạn (nửa-đời 14 ngày
+// quá chậm bắt kịp phiên). Mặc định tắt (opts undefined) → hành vi cũ giữ nguyên.
+export interface InferOpts {
+  sessionWindowMs?: number;
+  sessionBoost?: number;
+}
+
 // Suy hồ sơ sở thích từ danh sách tín hiệu. Khoảng giá = min/max của các BĐS đã xem
 // (nới ±15% để không quá hẹp). now truyền vào để test tất định.
-export function inferTaste(signals: Signal[], now: number): TasteProfile {
+export function inferTaste(signals: Signal[], now: number, opts?: InferOpts): TasteProfile {
   const profile: TasteProfile = { areaWeights: {}, typeWeights: {}, listingTypeWeights: {}, sampleSize: signals.length };
   const viewedPrices: number[] = [];
   for (const s of signals) {
-    const w = KIND_WEIGHT[s.kind] * recencyWeight(s.ts, now);
+    const inSession = opts?.sessionWindowMs !== undefined && now - s.ts <= opts.sessionWindowMs;
+    const boost = inSession ? (opts?.sessionBoost ?? 1) : 1;
+    const w = KIND_WEIGHT[s.kind] * recencyWeight(s.ts, now) * boost;
     bump(profile.areaWeights, s.areaId, w);
     bump(profile.typeWeights, s.typeId, w);
     bump(profile.listingTypeWeights, s.listingType, w);
@@ -114,4 +124,33 @@ export function rankRecommendations<T extends Candidate>(
     .sort((a, b) => (b.s - a.s) || (a.i - b.i))
     .slice(0, limit)
     .map(x => x.c);
+}
+
+// Đa dạng hóa danh sách đã xếp hạng: không để 1 nhóm (vd cùng khu vực) chiếm quá
+// maxPerKey chỗ trong top. Duyệt theo thứ tự vào (đã xếp điểm/AI), nhận item nếu key
+// chưa đầy; nếu chưa đủ `limit` thì backfill các item đã bỏ (giữ nguyên thứ tự) để
+// luôn đủ số lượng. key null (không phân loại được) không bị giới hạn.
+export function diversify<T>(
+  items: T[], keyFn: (x: T) => string | null, opts: { maxPerKey: number; limit: number }
+): T[] {
+  const counts = new Map<string, number>();
+  const picked: T[] = [];
+  const skipped: T[] = [];
+  for (const item of items) {
+    if (picked.length >= opts.limit) break;
+    const key = keyFn(item);
+    if (key === null) { picked.push(item); continue; }
+    const n = counts.get(key) ?? 0;
+    if (n < opts.maxPerKey) {
+      counts.set(key, n + 1);
+      picked.push(item);
+    } else {
+      skipped.push(item);
+    }
+  }
+  for (const item of skipped) {
+    if (picked.length >= opts.limit) break;
+    picked.push(item);
+  }
+  return picked;
 }

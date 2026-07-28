@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inferTaste, topKey, hasEnoughSignal, scoreCandidate, rankRecommendations, type Signal, type Candidate } from './taste';
+import { inferTaste, topKey, hasEnoughSignal, scoreCandidate, rankRecommendations, diversify, type Signal, type Candidate } from './taste';
 
 const NOW = new Date('2026-07-14T12:00:00Z').getTime();
 const DAY = 86_400_000;
@@ -46,6 +46,25 @@ describe('inferTaste', () => {
   it('search không đặt khoảng giá', () => {
     const p = inferTaste([sig({ kind: 'search', price: null }), sig({ kind: 'search', price: null })], NOW);
     expect(p.priceMin).toBeUndefined();
+  });
+  it('session boost: intent phiên vượt hồ sơ cũ mạnh hơn', () => {
+    // "old" tích luỹ 3 view cách đây 2 ngày; "now" chỉ 1 view vừa xong trong phiên.
+    const signals = [
+      sig({ areaId: 'old', ts: NOW - 2 * DAY }),
+      sig({ areaId: 'old', ts: NOW - 2 * DAY }),
+      sig({ areaId: 'old', ts: NOW - 2 * DAY }),
+      sig({ areaId: 'now', ts: NOW }),
+    ];
+    const off = inferTaste(signals, NOW);
+    expect(off.areaWeights['old']).toBeGreaterThan(off.areaWeights['now']);
+    const on = inferTaste(signals, NOW, { sessionWindowMs: 60 * 60 * 1000, sessionBoost: 5 });
+    expect(on.areaWeights['now']).toBeGreaterThan(on.areaWeights['old']);
+  });
+  it('sessionBoost = 1 giữ nguyên trọng số như khi opts tắt', () => {
+    const signals = [sig({ areaId: 'a1', ts: NOW }), sig({ areaId: 'a2', ts: NOW - 2 * DAY })];
+    const base = inferTaste(signals, NOW);
+    const noBoost = inferTaste(signals, NOW, { sessionWindowMs: 60 * 60 * 1000, sessionBoost: 1 });
+    expect(noBoost.areaWeights).toEqual(base.areaWeights);
   });
 });
 
@@ -97,5 +116,31 @@ describe('rankRecommendations', () => {
     const r = rankRecommendations(cands, profile, { limit: 1, excludeIds: ['a'] });
     expect(r).toHaveLength(1);
     expect(r[0].id).toBe('b');
+  });
+});
+
+describe('diversify', () => {
+  const item = (id: string, area: string | null) => ({ id, area });
+  it('chặn 1 nhóm chiếm quá maxPerKey nhưng vẫn đủ limit (backfill)', () => {
+    const items = [
+      item('a1', 'A'), item('a2', 'A'), item('a3', 'A'), item('a4', 'A'),
+      item('b1', 'B'), item('c1', 'C'),
+    ];
+    const r = diversify(items, x => x.area, { maxPerKey: 2, limit: 4 });
+    expect(r).toHaveLength(4);
+    // Tối đa 2 tin khu vực A trước khi nhận B/C.
+    expect(r.slice(0, 4).filter(x => x.area === 'A').length).toBeLessThanOrEqual(2);
+    expect(r.map(x => x.id)).toEqual(['a1', 'a2', 'b1', 'c1']);
+  });
+  it('backfill khi không đủ nhóm khác để đạt limit', () => {
+    const items = [item('a1', 'A'), item('a2', 'A'), item('a3', 'A'), item('a4', 'A')];
+    const r = diversify(items, x => x.area, { maxPerKey: 2, limit: 4 });
+    expect(r).toHaveLength(4);
+    expect(r.map(x => x.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
+  });
+  it('key null không bị giới hạn', () => {
+    const items = [item('n1', null), item('n2', null), item('n3', null)];
+    const r = diversify(items, x => x.area, { maxPerKey: 1, limit: 3 });
+    expect(r).toHaveLength(3);
   });
 });

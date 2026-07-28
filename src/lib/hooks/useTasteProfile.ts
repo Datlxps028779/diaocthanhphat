@@ -35,6 +35,11 @@ export function useTasteProfile(): { profile: TasteProfile; ready: boolean } {
 
   const now = Date.now();
   const savedSignals = savedSearchesToSignals(saved, now);
-  const profile = inferTaste([...local, ...remote, ...savedSignals], now);
+  // Ý định trong phiên: tín hiệu trong ~1 giờ qua nặng gấp 3 → hành vi "ngay lúc này"
+  // nổi lên trên hồ sơ dài hạn (nửa-đời 14 ngày bắt kịp phiên quá chậm).
+  const profile = inferTaste([...local, ...remote, ...savedSignals], now, {
+    sessionWindowMs: 60 * 60 * 1000,
+    sessionBoost: 3,
+  });
   return { profile, ready };
 }
