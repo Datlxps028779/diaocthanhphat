@@ -1,4 +1,12 @@
 import { categoryToSlug } from './newsCategories';
+import { buildAreaListingPath } from './areaPath';
+
+// Taxonomy tối thiểu để map areaId→slug (+ district tên→slug) khi sinh path SEO.
+// Truyền tùy chọn: có thì sinh path /cho-thue/binh-duong/di-an; không thì giữ query cũ.
+export interface HrefTaxonomy {
+  areas: { id: string; slug: string }[];
+  districts: { slug: string; name: string; area_id: string }[];
+}
 
 export type Page =
   | { name: 'home' }
@@ -87,7 +95,7 @@ export function parseProjectParams(sp: RawSearchParams): { area?: string; phase?
 
 // Ánh xạ một Page → URL path. Là nguồn chân lý duy nhất cho điều hướng trong Next
 // (thay window.history.pushState của SPA cũ). Dùng cho <Link> và router.push.
-export function pageToHref(page: Page): string {
+export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
   switch (page.name) {
     case 'home': return '/';
     case 'property': return `/bat-dong-san/${(page.slug && page.slug.trim()) || page.id}`;
@@ -101,13 +109,34 @@ export function pageToHref(page: Page): string {
       }
       return '/tin-tuc';
     case 'listings': {
-      const base = page.listingType === 'mua_ban' ? '/mua-ban'
+      // Sinh path SEO /{lt}/{areaSlug}/{districtSlug?} khi: có taxonomy + areaId map được
+      // sang slug + listingType ∈ {mua_ban, cho_thue}. Ngược lại giữ base query cũ
+      // (middleware lo 301). area/district đã lên path → không lặp lại ở query.
+      let base = page.listingType === 'mua_ban' ? '/mua-ban'
         : page.listingType === 'cho_thue' ? '/cho-thue'
         : '/danh-sach';
+      let areaOnPath = false;
+      let districtOnPath = false;
+      if (taxonomy && page.areaId && (page.listingType === 'mua_ban' || page.listingType === 'cho_thue')) {
+        const area = taxonomy.areas.find(a => a.id === page.areaId);
+        if (area) {
+          // district lưu theo TÊN trong Page → tra slug qua districts (lọc theo area).
+          const district = page.district
+            ? taxonomy.districts.find(d => d.area_id === page.areaId && d.name === page.district)
+            : undefined;
+          base = buildAreaListingPath({
+            listingType: page.listingType,
+            areaSlug: area.slug,
+            districtSlug: district?.slug,
+          });
+          areaOnPath = true;
+          districtOnPath = Boolean(district);
+        }
+      }
       const q = new URLSearchParams();
-      if (page.areaId) q.set('area', page.areaId);
+      if (page.areaId && !areaOnPath) q.set('area', page.areaId);
       if (page.typeId) q.set('type', page.typeId);
-      if (page.district) q.set('district', page.district);
+      if (page.district && !districtOnPath) q.set('district', page.district);
       if (page.ward) q.set('ward', page.ward);
       if (page.legal) q.set('legal', page.legal);
       if (page.keyword) q.set('q', page.keyword);

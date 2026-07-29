@@ -12,6 +12,7 @@ import { ComparePage } from '@/screens/ComparePage';
 import { PostListingPage } from '@/screens/PostListingPage';
 import { AccountHubPage } from '@/screens/AccountHubPage';
 import { StaticPageScreen } from '@/screens/StaticPageScreen';
+import type { ReactNode } from 'react';
 import type { Property, NewsArticle, ManagedPage, PageBlock } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
@@ -22,6 +23,24 @@ export function ListingsClient({ listingType, filters, initialData }: {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
+      <ListingsPage initialFilters={{ listingType, ...filters }} initialData={initialData} onNavigate={navigate} />
+    </SiteChrome>
+  );
+}
+
+// Trang khu vực theo listing-type (/cho-thue/binh-duong/di-an): khối nội dung tĩnh
+// (server-render, truyền qua children) hiển thị TRÊN danh sách tin. Một SiteChrome
+// duy nhất bọc cả hai — tránh lồng chrome khi tái dùng ListingsPage.
+export function AreaListingClient({ listingType, filters, initialData, header }: {
+  listingType: 'mua_ban' | 'cho_thue';
+  filters?: { typeId?: string; district?: string; areaId?: string };
+  initialData?: { data: Property[]; total: number };
+  header?: ReactNode;
+}) {
+  const navigate = useNavigate();
+  return (
+    <SiteChrome currentPage={{ name: 'listings', listingType }}>
+      {header}
       <ListingsPage initialFilters={{ listingType, ...filters }} initialData={initialData} onNavigate={navigate} />
     </SiteChrome>
   );

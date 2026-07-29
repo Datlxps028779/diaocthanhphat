@@ -70,12 +70,42 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('direction')).toBe('Đông Nam');
   });
 
-  it('minArea=0 được giữ (0 là falsy nhưng vẫn là giá trị hợp lệ)', () => {
-    const params = new URLSearchParams(pageToHref({ name: 'listings', minArea: 0, maxArea: 80 }).split('?')[1]);
-    expect(params.get('minArea')).toBe('0');
-    expect(params.get('maxArea')).toBe('80');
+  it('sinh path SEO từ areaId và map district name sang district slug', () => {
+    const href = pageToHref(
+      { name: 'listings', listingType: 'cho_thue', areaId: 'bd', district: 'Dĩ An', ward: 'Tân Đông Hiệp', minPrice: 3 },
+      {
+        areas: [{ id: 'bd', slug: 'binh-duong' }],
+        districts: [{ area_id: 'bd', name: 'Dĩ An', slug: 'di-an' }],
+      },
+    );
+    const [path, qs] = href.split('?');
+    expect(path).toBe('/cho-thue/binh-duong/di-an');
+    const params = new URLSearchParams(qs);
+    expect(params.get('area')).toBeNull();
+    expect(params.get('district')).toBeNull();
+    expect(params.get('ward')).toBe('Tân Đông Hiệp');
+    expect(params.get('minPrice')).toBe('3');
+  });
+
+  it('sinh path cấp area khi không có district hoặc district chưa map được', () => {
+    const href = pageToHref(
+      { name: 'listings', listingType: 'mua_ban', areaId: 'bd', district: 'Không tồn tại' },
+      { areas: [{ id: 'bd', slug: 'binh-duong' }], districts: [] },
+    );
+    const [path, qs] = href.split('?');
+    expect(path).toBe('/mua-ban/binh-duong');
+    expect(new URLSearchParams(qs).get('district')).toBe('Không tồn tại');
+  });
+
+  it('giữ URL query cũ khi thiếu taxonomy hoặc area không map được', () => {
+    expect(pageToHref({ name: 'listings', listingType: 'cho_thue', areaId: 'unknown' }, {
+      areas: [{ id: 'bd', slug: 'binh-duong' }],
+      districts: [],
+    })).toBe('/cho-thue?area=unknown');
+    expect(pageToHref({ name: 'listings', listingType: 'cho_thue', areaId: 'bd' })).toBe('/cho-thue?area=bd');
   });
 });
+
 
 describe('parseListingParams — đọc ngược query của Next searchParams', () => {
   it('bóc type/district/legal từ object searchParams', () => {

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, Area, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
+import type { Property, NewsArticle, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -151,6 +151,18 @@ export async function serverGetAreaStats(areaId: string): Promise<{ districts: s
     };
   } catch {
     return { districts: [], propertyTypes: [], activeCount: 0 };
+  }
+}
+
+// Districts (Quận/Huyện) của 1 area — resolve districtSlug trên URL path khu vực
+// (/cho-thue/binh-duong/di-an) về id + name thật. Bám khuôn area helpers ở trên.
+export async function serverGetDistrictsByArea(areaId: string): Promise<District[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb.from('districts').select('*').eq('area_id', areaId).order('order_index', { ascending: true });
+    return (data ?? []) as District[];
+  } catch {
+    return [];
   }
 }
 

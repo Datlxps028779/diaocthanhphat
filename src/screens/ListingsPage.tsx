@@ -257,11 +257,11 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       legal: legal || undefined,
       sort: sort !== 'newest' ? (sort as string) : undefined,
       page: page > 1 ? page : undefined,
-    });
+    }, { areas, districts });
     const current = window.location.pathname + window.location.search;
     if (current !== href) window.history.replaceState(null, '', href);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max]);
+  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts]);
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({
