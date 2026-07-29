@@ -33,7 +33,7 @@ export function ListingsClient({ listingType, filters, initialData }: {
 // duy nhất bọc cả hai — tránh lồng chrome khi tái dùng ListingsPage.
 export function AreaListingClient({ listingType, filters, initialData, header }: {
   listingType: 'mua_ban' | 'cho_thue';
-  filters?: { typeId?: string; district?: string; areaId?: string };
+  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number };
   initialData?: { data: Property[]; total: number };
   header?: ReactNode;
 }) {

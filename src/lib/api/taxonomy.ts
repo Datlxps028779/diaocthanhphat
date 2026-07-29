@@ -66,9 +66,15 @@ export async function adminUpdateNeighborhood(id: string, n: Partial<Neighborhoo
   const { error } = await supabase.from('neighborhoods').update(n).eq('id', id);
   if (error) throw error;
 }
-export async function adminDeleteNeighborhood(id: string): Promise<void> {
+// Xóa khu dân cư + trang container 'khu-dan-cu:<slug>' (page_blocks pillar/FAQ tự
+// cascade theo FK ON DELETE CASCADE). Truyền slug để dọn trang, tránh để trang mồ côi
+// như trước (adminDeleteNeighborhood cũ chỉ xóa dòng neighborhoods).
+export async function adminDeleteNeighborhood(id: string, slug?: string): Promise<void> {
   const { error } = await supabase.from('neighborhoods').delete().eq('id', id);
   if (error) throw error;
+  if (slug?.trim()) {
+    await supabase.from('managed_pages').delete().eq('slug', `khu-dan-cu:${slug}`);
+  }
 }
 
 // ─── Property Types ───────────────────────────────────────────────────────────

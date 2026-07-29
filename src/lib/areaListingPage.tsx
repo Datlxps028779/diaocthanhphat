@@ -25,6 +25,7 @@ import {
   getAreaDetails,
 } from '@/lib/areaSeo';
 import { parseAreaListingPath, resolveAreaPath, buildAreaListingPath, listingTypeToSlug, type ListingType } from '@/lib/areaPath';
+import { parseListingParams } from '@/lib/router';
 
 // Nhãn giao dịch hiển thị + trong tiêu đề SEO. Khác nhau theo path /mua-ban vs /cho-thue.
 const LISTING_LABEL: Record<ListingType, string> = { mua_ban: 'mua bán', cho_thue: 'cho thuê' };
@@ -166,12 +167,20 @@ function AreaStaticHeader({ data }: { data: AreaListingData }) {
 }
 
 // Renderer dùng chung cho 2 route /mua-ban và /cho-thue. Route page chỉ truyền listingType.
-export async function renderAreaListingPage(listingType: ListingType, params: { areaSlug: string; rest?: string[] }) {
+export async function renderAreaListingPage(
+  listingType: ListingType,
+  params: { areaSlug: string; rest?: string[] },
+  searchParams?: Record<string, string | string[] | undefined>,
+) {
   const listingSlug = listingTypeToSlug(listingType);
   const data = await loadAreaListing(listingSlug, [params.areaSlug, ...(params.rest ?? [])]);
   if (!data) notFound();
   const { area, district, listings, stats, detail, summary, priceStats, parts, path } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
+
+  // Filter phụ (giá/loại/phòng/hướng…) từ query → seed lại khi F5/share link. area &
+  // district lấy từ PATH nên loại khỏi query (path thắng), tránh ghi đè khu vực.
+  const { areaId: _qArea, district: _qDistrict, ...extraFilters } = parseListingParams(searchParams);
 
   const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats: district ? [] : priceStats, detail, summary });
   const breadcrumb = buildBreadcrumbJsonLd([
@@ -187,7 +196,7 @@ export async function renderAreaListingPage(listingType: ListingType, params: { 
       <JsonLdScripts schemas={[breadcrumb, collection, faqLd]} />
       <AreaListingClient
         listingType={parts.listingType}
-        filters={{ areaId: area.id, district: district?.name }}
+        filters={{ ...extraFilters, areaId: area.id, district: district?.name }}
         initialData={{ data: listings, total: listings.length }}
         header={<AreaStaticHeader data={data} />}
       />

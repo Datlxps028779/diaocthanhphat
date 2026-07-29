@@ -290,7 +290,7 @@ export function NeighborhoodsTab() {
                   <Edit2 className="w-3 h-3" />Soạn nội dung
                 </button>
                 <button onClick={() => openEdit(n)} className="text-xs font-semibold px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">Thông tin</button>
-                <button onClick={async () => { if (!confirm(`Xóa khu dân cư "${n.name}"?`)) return; await adminDeleteNeighborhood(n.id); setItems(prev => prev.filter(x => x.id !== n.id)); }}
+                <button onClick={async () => { if (!confirm(`Xóa khu dân cư "${n.name}"?`)) return; await adminDeleteNeighborhood(n.id, n.slug); setItems(prev => prev.filter(x => x.id !== n.id)); }}
                   className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>

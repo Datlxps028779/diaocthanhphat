@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
-import type { District, Ward, Property, Area, PropertyType } from '../../../lib/supabase';
-import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
+import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
+import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
@@ -330,6 +330,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     city: property?.city ?? '',
     district: property?.district ?? '',
     ward: property?.ward ?? '',
+    neighborhood_slug: property?.neighborhood_slug ?? '',
     area_id: property?.area_id ?? '',
     property_type_id: property?.property_type_id ?? '',
     image_url: property?.image_url ?? '',
@@ -364,6 +365,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
   const flyTo = useCallback((query: string, zoom: number) => {
@@ -443,7 +445,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     setField('city', area?.name ?? '');
     setField('district', '');
     setField('ward', '');
+    setField('neighborhood_slug', '');
     setWards([]);
+    setNeighborhoods([]);
     if (areaId) {
       getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
       if (area?.name) flyTo(area.name, 13);
@@ -455,17 +459,23 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const handleDistrictChange = useCallback((districtName: string) => {
     setField('district', districtName);
     setField('ward', '');
+    setField('neighborhood_slug', '');
+    setNeighborhoods([]);
     const d = districts.find(x => x.name === districtName);
     if (d) getWards(d.id).then(setWards).catch(() => setWards([]));
     else setWards([]);
     flyTo([districtName, form.city].filter(Boolean).join(', '), 14);
   }, [form.city, districts, flyTo]);
 
-  // Chọn xã → zoom sát tới cấp phường/xã.
+  // Chọn xã → zoom sát tới cấp phường/xã + nạp khu dân cư của xã đó.
   const handleWardChange = useCallback((wardName: string) => {
     setField('ward', wardName);
+    setField('neighborhood_slug', '');
+    const w = wards.find(x => x.name === wardName);
+    if (w) getNeighborhoods(w.id).then(setNeighborhoods).catch(() => setNeighborhoods([]));
+    else setNeighborhoods([]);
     flyTo([wardName, form.district, form.city].filter(Boolean).join(', '), 15);
-  }, [form.district, form.city, flyTo]);
+  }, [form.district, form.city, wards, flyTo]);
 
   useEffect(() => {
     if (property?.area_id) getDistricts(property.area_id).then(setDistricts).catch(() => {});
@@ -477,6 +487,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     const d = districts.find(x => x.name === property.district);
     if (d) getWards(d.id).then(setWards).catch(() => {});
   }, [districts, property?.district]);
+
+  // Nạp khu dân cư khi sửa BĐS có sẵn ward (wards vừa load xong → map tên ra id).
+  useEffect(() => {
+    if (!property?.ward || wards.length === 0) return;
+    const w = wards.find(x => x.name === property.ward);
+    if (w) getNeighborhoods(w.id).then(setNeighborhoods).catch(() => {});
+  }, [wards, property?.ward]);
 
   const seoColor = seoScore >= 70 ? 'text-emerald-600' : seoScore >= 40 ? 'text-amber-600' : 'text-red-600';
   const seoBarColor = seoScore >= 70 ? 'bg-emerald-500' : seoScore >= 40 ? 'bg-amber-500' : 'bg-red-500';
@@ -512,6 +529,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       city: specForm.city,
       district: cs(specForm.district),
       ward: cs(specForm.ward),
+      neighborhood_slug: cs(specForm.neighborhood_slug),
       area_id: cs(specForm.area_id),
       property_type_id: cs(specForm.property_type_id),
       image_url: cs(specForm.image_url),
@@ -694,6 +712,19 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               )}
             </div>
           </div>
+
+          {/* Gán tin vào khu dân cư (entity page) — cần ≥3 tin active để trang khu dân cư
+              được index. Chỉ hiện khi xã đã chọn có khu dân cư. */}
+          {neighborhoods.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Khu dân cư (tùy chọn)</label>
+              <select value={form.neighborhood_slug} onChange={e => setField('neighborhood_slug', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                <option value="">-- Chọn khu dân cư --</option>
+                {neighborhoods.map(n => <option key={n.id} value={n.slug}>{n.name}</option>)}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Địa chỉ chi tiết</label>

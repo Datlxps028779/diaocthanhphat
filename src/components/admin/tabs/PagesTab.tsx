@@ -238,7 +238,13 @@ export function PagesTab() {
   const [saving, setSaving] = useState(false);
   const [newForm, setNewForm] = useState({ slug: '', title: '', description: '', hero_image: '', is_active: true });
 
-  const load = () => adminGetAllManagedPages().then(p => { setPages(p); setLoading(false); });
+  // Trang container 'khu-dan-cu:<slug>' là trang nội bộ chứa page_blocks pillar/FAQ,
+  // quản lý qua tab Khu dân cư — ẩn khỏi danh sách trang thường để không lộn xộn
+  // và tránh xóa nhầm. Vòng đời do NeighborhoodsTab (tạo/xóa theo khu dân cư).
+  const load = () => adminGetAllManagedPages().then(p => {
+    setPages(p.filter(x => !x.slug.startsWith('khu-dan-cu:')));
+    setLoading(false);
+  });
   useEffect(() => { load(); }, []);
 
   const handleCreate = async () => {
