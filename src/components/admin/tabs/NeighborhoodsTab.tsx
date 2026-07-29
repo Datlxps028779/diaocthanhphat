@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, ArrowDown, MapPin, RefreshCw, CheckCircle } from 'lucide-react';
-import type { Neighborhood, Ward, PageBlock } from '../../../lib/supabase';
+import type { Neighborhood, Ward, District, PageBlock } from '../../../lib/supabase';
 import {
   getNeighborhoods, adminCreateNeighborhood, adminUpdateNeighborhood, adminDeleteNeighborhood,
-  getWards, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock, adminRefreshPriceStats,
+  getWards, getDistricts, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock, adminRefreshPriceStats,
   adminEnsureManagedPage,
 } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
@@ -123,25 +123,28 @@ const EMPTY = { name: '', slug: '', ward_id: '', description: '', image_url: '',
 export function NeighborhoodsTab() {
   const [items, setItems] = useState<Neighborhood[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Neighborhood | null>(null);
   const [editing, setEditing] = useState<Neighborhood | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
+  const [wardSearch, setWardSearch] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = () => Promise.all([getNeighborhoods(), getWards()]).then(([n, w]) => { setItems(n); setWards(w); setLoading(false); });
+  const load = () => Promise.all([getNeighborhoods(), getWards(), getDistricts()]).then(([n, w, d]) => { setItems(n); setWards(w); setDistricts(d); setLoading(false); });
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => { setForm({ ...EMPTY }); setSlugTouched(false); setEditing(null); setCreating(true); };
+  const openCreate = () => { setForm({ ...EMPTY }); setWardSearch(''); setSlugTouched(false); setEditing(null); setCreating(true); };
   const openEdit = (n: Neighborhood) => {
     setForm({
       name: n.name, slug: n.slug, ward_id: n.ward_id ?? '', description: n.description ?? '',
       image_url: n.image_url ?? '', meta_title: n.meta_title ?? '', meta_description: n.meta_description ?? '', focus_keywords: n.focus_keywords ?? '',
     });
     setSlugTouched(true); // đang sửa khu có sẵn → giữ slug, không auto-đè theo tên
+    setWardSearch(wards.find(w => w.id === n.ward_id)?.name ?? '');
     setEditing(n); setCreating(true);
   };
 
@@ -149,6 +152,18 @@ export function NeighborhoodsTab() {
   const previewSlug = form.slug.trim()
     ? buildSlug(form.slug)
     : (form.name.trim() ? buildSlug(form.name) : '');
+
+  const districtById = new Map(districts.map(d => [d.id, d]));
+  const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+  const wardNeedle = normalize(wardSearch.trim());
+  const wardOptions = wards
+    .map(w => ({ ward: w, district: districtById.get(w.district_id) }))
+    .filter(({ ward, district }) => !wardNeedle || normalize(`${ward.name} ${district?.name ?? ''}`).includes(wardNeedle))
+    .sort((a, b) => {
+      const da = a.district?.name ?? '';
+      const db = b.district?.name ?? '';
+      return da.localeCompare(db, 'vi') || a.ward.name.localeCompare(b.ward.name, 'vi');
+    });
 
   const save = async () => {
     if (!form.name.trim()) return;
@@ -227,11 +242,21 @@ export function NeighborhoodsTab() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Phường/Xã</label>
-              <select value={form.ward_id} onChange={e => setForm(f => ({ ...f, ward_id: e.target.value }))}
+              <input value={wardSearch} onChange={e => setWardSearch(e.target.value)}
+                placeholder="Gõ phường/xã hoặc quận/huyện để lọc..."
+                className="mb-2 w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              <select value={form.ward_id} onChange={e => {
+                const ward = wards.find(w => w.id === e.target.value);
+                setForm(f => ({ ...f, ward_id: e.target.value }));
+                if (ward) setWardSearch(ward.name);
+              }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
                 <option value="">— Chọn phường/xã —</option>
-                {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                {wardOptions.map(({ ward, district }) => (
+                  <option key={ward.id} value={ward.id}>{ward.name}{district ? ` — ${district.name}` : ''}</option>
+                ))}
               </select>
+              <p className="mt-1 text-[10px] text-gray-400">Đang hiển thị {wardOptions.length}/{wards.length} phường/xã, sắp xếp theo quận/huyện.</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Ảnh đại diện</label>
