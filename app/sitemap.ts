@@ -4,8 +4,10 @@ import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { getSiteUrl } from '@/lib/siteUrl';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
+import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
 
 const SITE_URL = getSiteUrl();
+const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
 // Revalidate mỗi giờ để tin mới xuất hiện mà không cần rebuild.
@@ -77,12 +79,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
       });
       if (evaluation.indexable) {
+        const lastModified = area.created_at ? new Date(area.created_at) : undefined;
         entries.push({
           url: `${SITE_URL}/khu-vuc/${area.slug}`,
-          lastModified: area.created_at ? new Date(area.created_at) : undefined,
+          lastModified,
           changeFrequency: 'weekly',
           priority: 0.65,
         });
+        // URL listing area-level mới: /mua-ban/{areaSlug}, /cho-thue/{areaSlug}.
+        // Chỉ đưa vào sitemap khi area đã qua quality-gate. District-level hiện noindex
+        // có chủ đích nên không đưa vào sitemap để tránh sitemap chứa URL noindex.
+        for (const listingType of AREA_LISTING_TYPES) {
+          entries.push({
+            url: `${SITE_URL}${buildAreaListingPath({ listingType, areaSlug: area.slug })}`,
+            lastModified,
+            changeFrequency: 'daily',
+            priority: 0.72,
+          });
+        }
       }
     }
 
