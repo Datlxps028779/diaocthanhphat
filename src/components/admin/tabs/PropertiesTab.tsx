@@ -16,6 +16,7 @@ import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { stripHtml, isHtmlContent } from '../../../lib/markdown';
+import { buildProductPath } from '../../../lib/productPath';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -498,6 +499,14 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const seoColor = seoScore >= 70 ? 'text-emerald-600' : seoScore >= 40 ? 'text-amber-600' : 'text-red-600';
   const seoBarColor = seoScore >= 70 ? 'bg-emerald-500' : seoScore >= 40 ? 'bg-amber-500' : 'bg-red-500';
   const seoLabel = seoScore >= 70 ? 'Tốt' : seoScore >= 40 ? 'Trung bình' : 'Cần cải thiện';
+  // Tin đã lưu có public_code → preview đúng URL canonical mới, kể cả khi admin đang
+  // sửa slug/khu vực. Tin mới chưa có code nên chỉ biết URL sau khi lưu lần đầu.
+  const publicUrlPreview = useMemo(() => {
+    if (!property?.public_code) return '';
+    const preview = formToProperty(form as Record<string, unknown>, property, types, faq);
+    const previewArea = areas.find(a => a.id === preview.area_id) ?? property.areas ?? null;
+    return buildProductPath({ ...preview, areas: previewArea });
+  }, [form, property, types, faq, areas]);
 
   // ─── Handle Save Click an toàn ──────────────────────────────────────────────
   const handleSaveClick = () => {
@@ -922,15 +931,19 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">URL thân thiện (Slug)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Slug mô tả URL</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 flex-shrink-0">/bat-dong-san/</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">…/</span>
                   <input value={form.slug} placeholder={generateSlug(form.title) || 'tu-dong-tao-tu-tieu-de'}
                     onChange={e => setField('slug', generateSlug(e.target.value))}
                     className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">Để trống sẽ tự tạo từ tiêu đề (kèm mã ngắn đảm bảo duy nhất). URL: /bat-dong-san/{form.slug || (generateSlug(form.title) ? generateSlug(form.title) + '-xxxx' : 'slug')}</p>
-                <PublicUrlPreview path={(form.slug || property?.slug || property?.id) ? `/bat-dong-san/${form.slug || property?.slug || property?.id}` : ''} />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  {property?.public_code
+                    ? 'URL chuẩn gồm giao dịch, khu vực, quận/huyện, slug và mã pr ổn định.'
+                    : 'URL chuẩn sẽ được tạo sau lần lưu đầu tiên, khi tin nhận mã pr ổn định.'}
+                </p>
+                <PublicUrlPreview path={publicUrlPreview} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>

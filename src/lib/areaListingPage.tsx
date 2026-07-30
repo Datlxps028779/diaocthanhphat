@@ -26,6 +26,7 @@ import {
 } from '@/lib/areaSeo';
 import { parseAreaListingPath, resolveAreaPath, buildAreaListingPath, listingTypeToSlug, type ListingType } from '@/lib/areaPath';
 import { parseListingParams } from '@/lib/router';
+import { detectProductCode, renderProductDetail, productMetadataFromRest } from '@/lib/productDetailPage';
 
 // Nhãn giao dịch hiển thị + trong tiêu đề SEO. Khác nhau theo path /mua-ban vs /cho-thue.
 const LISTING_LABEL: Record<ListingType, string> = { mua_ban: 'mua bán', cho_thue: 'cho thuê' };
@@ -96,8 +97,14 @@ async function metadataFromParams(listingSlug: string, rest: string[] | undefine
 
 export function areaListingMetadataFactory(listingType: ListingType) {
   const listingSlug = listingTypeToSlug(listingType);
-  return ({ params }: { params: { areaSlug: string; rest?: string[] } }) =>
-    metadataFromParams(listingSlug, [params.areaSlug, ...(params.rest ?? [])]);
+  return async ({ params }: { params: { areaSlug: string; rest?: string[] } }) => {
+    const rest = [params.areaSlug, ...(params.rest ?? [])];
+    // Segment cuối khớp -pr{số} → metadata chi tiết sản phẩm (redirect/notFound xử lý
+    // TẠI ĐÂY vì chạy trước khi stream shell — xem ghi chú productMetadataFromRest).
+    const productMeta = await productMetadataFromRest(listingType, rest);
+    if (productMeta) return productMeta;
+    return metadataFromParams(listingSlug, rest);
+  };
 }
 
 // Khối nội dung tĩnh riêng cho từng khu vực (chống thin/duplicate): tổng quan + hạ tầng +
@@ -173,7 +180,12 @@ export async function renderAreaListingPage(
   searchParams?: Record<string, string | string[] | undefined>,
 ) {
   const listingSlug = listingTypeToSlug(listingType);
-  const data = await loadAreaListing(listingSlug, [params.areaSlug, ...(params.rest ?? [])]);
+  const rest = [params.areaSlug, ...(params.rest ?? [])];
+  // Segment cuối khớp -pr{số} → nhánh chi tiết sản phẩm (cùng cây route khu vực).
+  if (detectProductCode(rest) != null) {
+    return renderProductDetail(listingType, rest);
+  }
+  const data = await loadAreaListing(listingSlug, rest);
   if (!data) notFound();
   const { area, district, listings, stats, detail, summary, priceStats, parts, path } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;

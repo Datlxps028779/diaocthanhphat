@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildSeoImageGallery } from '@/lib/propertyImages';
+import { buildProductPath } from '@/lib/productPath';
 import { getSiteUrl } from '@/lib/siteUrl';
 
 export const revalidate = 3600;
@@ -41,16 +42,15 @@ export async function GET() {
     try {
       const sb = createClient(url, key, { auth: { persistSession: false } });
       const [properties, news] = await Promise.all([
-        sb.from('properties').select('id,slug,title,image_url,images').eq('is_active', true).limit(5000),
+        sb.from('properties').select('id,slug,title,image_url,images,public_code,listing_type,district,areas(slug)').eq('is_active', true).limit(5000),
         sb.from('news').select('id,slug,title,image_url').eq('is_published', true).limit(5000),
       ]);
 
-      for (const p of (properties.data ?? []) as Array<{ id: string; slug?: string | null; title: string; image_url?: string | null; images?: string[] | null }>) {
+      for (const p of (properties.data ?? []) as unknown as Array<{ id: string; slug?: string | null; title: string; image_url?: string | null; images?: string[] | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | null }>) {
         const images = buildSeoImageGallery(p.image_url, p.images, { max: 10 });
         if (!images.length) continue;
-        const seg = p.slug?.trim() || p.id;
         entries.push({
-          loc: `${SITE_URL}/bat-dong-san/${seg}`,
+          loc: `${SITE_URL}${buildProductPath(p)}`,
           images: images.map((loc, index) => ({ loc, caption: `${p.title}${index ? ` - ảnh ${index + 1}` : ''}` })),
         });
       }

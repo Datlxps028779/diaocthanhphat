@@ -38,6 +38,23 @@ export async function serverGetPropertyByIdOrSlug(idOrSlug: string): Promise<Pro
   }
 }
 
+// Resolve theo public_code (đuôi pr{số} ổn định trên URL mới). Là "chìa khoá thật":
+// đổi tiêu đề/khu vực không đổi code → link không vỡ, route tự 301 về canonical mới.
+export async function serverGetPropertyByPublicCode(code: number): Promise<Property | null> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('properties')
+      .select(PROPERTY_SELECT)
+      .eq('public_code', code)
+      .eq('is_active', true)
+      .maybeSingle();
+    return data as Property | null;
+  } catch {
+    return null;
+  }
+}
+
 export async function serverGetFeaturedProperties(): Promise<Property[]> {
   try {
     const sb = serverClient();

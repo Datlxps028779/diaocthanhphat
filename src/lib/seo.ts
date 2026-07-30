@@ -4,6 +4,7 @@ import { buildSeoImageGallery, FALLBACK_PROPERTY_IMAGE, normalizeSeoImageUrl } f
 import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { stripHtml, isHtmlContent } from './markdown';
+import { buildProductPath } from './productPath';
 
 const SITE_URL = getSiteUrl();
 const SITE_NAME = 'BĐS Bình Dương';
@@ -159,7 +160,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const keywords = p.focus_keywords?.trim()
     || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
       .filter(Boolean).join(', ');
-  const path = `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
+  const path = buildProductPath(p);
   // OG image: luôn có ảnh (fallback khi tin thiếu ảnh) + ép URL tuyệt đối. Zalo/FB
   // bỏ qua ảnh nếu không phải absolute URL rõ ràng → share ra không hiện thumbnail.
   const realGallery = buildSeoImageGallery(p.image_url, p.images, { max: 1 });
@@ -186,7 +187,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
 // JSON-LD RealEstateListing. Ưu tiên schema_markup nhập tay trong admin; nếu không
 // có thì tự dựng. Render trong page.tsx qua <script type="application/ld+json">.
 export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
-  const url = absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`);
+  const url = absoluteUrl(buildProductPath(p));
   const gallery = buildSeoImageGallery(p.image_url, p.images);
   const video = buildPropertyVideoObject(p);
   // GEO/local: dựng tên địa danh từ dữ liệu thật (phường → quận → thành phố). Chỉ

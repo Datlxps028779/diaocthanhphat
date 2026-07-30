@@ -4,6 +4,7 @@ import { isHtmlContent } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickOverallStat, formatPricePerSqm, buildPriceAnswer } from '../lib/priceStatsFormat';
 import { PriceStatsBlock } from '../components/PriceStatsBlock';
+import { buildProductPath } from '../lib/productPath';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -29,8 +30,8 @@ const DEFAULT_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo-1642
 function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label'>): string {
   return p.price_label || `${p.price} ${p.price_unit}`;
 }
-function propertyHref(p: Pick<Property, 'id' | 'slug'>): string {
-  return `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
+function propertyHref(p: Property): string {
+  return buildProductPath(p);
 }
 
 function renderContentBlock(block: PageBlock) {

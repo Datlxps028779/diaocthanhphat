@@ -71,6 +71,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgJsonLd) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }} />
+        {/* Ahrefs Web Analytics */}
+        <script src="https://analytics.ahrefs.com/analytics.js" data-key="qx938+eyaGeeHH4c8CZ0HA" async />
       </head>
       <body>
         <Providers>{children}</Providers>

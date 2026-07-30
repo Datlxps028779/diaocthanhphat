@@ -8,6 +8,7 @@ import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats, serverG
 import { PriceStatsBlock } from '@/components/PriceStatsBlock';
 import { WardPriceBreakdown } from '@/components/WardPriceBreakdown';
 import { buildPriceAnswer } from '@/lib/priceStatsFormat';
+import { buildProductPath } from '@/lib/productPath';
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
@@ -53,8 +54,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return buildAreaMetadata(data.area, data.summary, data.evaluation);
 }
 
-function propertyHref(p: Pick<Property, 'id' | 'slug'>): string {
-  return `/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`;
+function propertyHref(p: Property): string {
+  return buildProductPath(p);
 }
 
 function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label'>): string {

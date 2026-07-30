@@ -54,6 +54,7 @@ export type Property = {
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
   slug: string | null;
+  public_code?: number | null;
   faq: { question: string; answer: string }[] | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;

@@ -1,5 +1,6 @@
 import { supabase, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
+import { buildProductPath } from '../productPath';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -284,11 +285,15 @@ export function buildUniquePropertySlug(title: string): string {
   return buildUniqueSlug(title);
 }
 
-// URL chuẩn SEO: /bat-dong-san/{slug}. Dùng slug lưu trong DB; fallback UUID chỉ
-// khi tin cũ chưa có slug (getPropertyByIdOrSlug resolve được cả hai).
-export function buildPropertyPath(p: { id: string; slug?: string | null }): string {
-  const slug = p.slug && p.slug.trim();
-  return `/bat-dong-san/${slug || p.id}`;
+// URL chuẩn SEO sản phẩm. Có public_code + areas.slug + listing_type hợp lệ → path mới
+// /{lt}/{areaSlug}/{districtSlug?}/{slug}-pr{code} (buildProductPath). Thiếu (tin cũ chưa
+// backfill) → fallback /bat-dong-san/{slug||id} — route cũ 301 lo phần còn lại.
+export function buildPropertyPath(p: {
+  id: string; slug?: string | null;
+  public_code?: number | null; listing_type?: string | null;
+  district?: string | null; areas?: { slug?: string | null } | null;
+}): string {
+  return buildProductPath(p);
 }
 
 export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {

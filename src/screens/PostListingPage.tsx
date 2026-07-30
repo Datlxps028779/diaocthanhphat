@@ -831,16 +831,16 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 />
               </FormField>
 
-              <FormField label="URL thân thiện (Slug)">
+              <FormField label="Slug mô tả URL">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 flex-shrink-0">/bat-dong-san/</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">…/</span>
                   <input
                     value={generateSlug(form.title)}
                     readOnly
                     className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-600"
                   />
                 </div>
-                <p className="text-gray-400 text-xs mt-1">Slug tự động tạo từ tiêu đề. Sẽ duy nhất khi đăng.</p>
+                <p className="text-gray-400 text-xs mt-1">URL chuẩn được tạo sau khi đăng: giao dịch/khu vực/quận-huyện/slug-pr{`{mã}`}.</p>
               </FormField>
 
               {/* Schema Markup (JSON-LD) vẫn được tạo tự động ngầm khi submit —

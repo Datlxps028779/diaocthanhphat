@@ -195,7 +195,7 @@ export function SEOPreview({ metaTitle, metaDescription, focusKeywords }: {
       {/* Google SERP Preview */}
       <div className="bg-white border border-gray-200 rounded-xl p-4">
         <p className="text-xs font-semibold text-gray-700 mb-2">Preview Google Search</p>
-        <div className="text-xs text-emerald-700 truncate">{typeof window !== 'undefined' ? window.location.origin : 'https://bdsbinhduong.vn'}/bat-dong-san/...</div>
+        <div className="text-xs text-emerald-700 truncate">{typeof window !== 'undefined' ? window.location.origin : 'https://chonhaviet.com'}/mua-ban/khu-vuc/slug-pr{`{mã}`}</div>
         <div className="text-base text-blue-700 font-medium leading-snug line-clamp-2 mt-0.5">{metaTitle || 'Tiêu đề SEO sẽ hiển thị ở đây'}</div>
         <div className="text-sm text-gray-600 line-clamp-2 mt-0.5">{metaDescription || 'Meta description sẽ hiển thị ở đây...'}</div>
       </div>

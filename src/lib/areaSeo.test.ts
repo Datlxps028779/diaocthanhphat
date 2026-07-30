@@ -134,6 +134,16 @@ describe('buildAreaCollectionJsonLd', () => {
     expect(items[0].position).toBe(1);
     expect(items[0].url).toBe('https://chonhaviet.com/bat-dong-san/nha-dat-1');
   });
+
+  it('ItemList dùng URL sản phẩm mới khi listing có public_code và area slug', () => {
+    const p = property('1');
+    p.public_code = 1001;
+    p.areas = area;
+    const ld = buildAreaCollectionJsonLd(area, [p]);
+    const main = ld.mainEntity as Record<string, unknown>;
+    const items = main.itemListElement as Array<Record<string, unknown>>;
+    expect(items[0].url).toBe('https://chonhaviet.com/mua-ban/binh-duong/thu-dau-mot/nha-dat-1-pr1001');
+  });
 });
 
 function priceStat(over: Partial<PriceStat> = {}): PriceStat {

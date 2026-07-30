@@ -123,6 +123,8 @@ export function formToProperty(
     focus_keywords: str(form.focus_keywords),
     schema_markup: null,
     slug,
+    public_code: property?.public_code ?? null,
+    areas: property?.areas ?? null,
     faq: (() => {
       const valid = faq
         .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))

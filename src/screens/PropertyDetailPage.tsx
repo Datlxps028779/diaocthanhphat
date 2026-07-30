@@ -197,8 +197,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     callbackMutation.mutate();
   };
 
-  // Link chia sẻ dạng /bat-dong-san/{slug} chuẩn SEO. Web Share API trên mobile,
-  // fallback copy clipboard trên desktop.
+  // Link chia sẻ theo URL canonical (path khu vực + slug-pr{code} khi đủ dữ liệu).
+  // Web Share API trên mobile, fallback copy clipboard trên desktop.
   const handleShare = async () => {
     if (!property) return;
     const shareUrl = `${window.location.origin}${buildPropertyPath(property)}`;

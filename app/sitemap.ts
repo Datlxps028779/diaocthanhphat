@@ -5,6 +5,7 @@ import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { getSiteUrl } from '@/lib/siteUrl';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
+import { buildProductPath } from '@/lib/productPath';
 
 const SITE_URL = getSiteUrl();
 const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
@@ -44,19 +45,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [...STATIC];
 
   try {
-    // Ưu tiên slug thật; nếu cột chưa tồn tại thì fallback select không slug → dùng id.
-    let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null }> = [];
-    const withSlug = await sb.from('properties').select('id,slug,updated_at').eq('is_active', true).limit(5000);
-    if (withSlug.error) {
+    // Lấy đủ field để buildProductPath dựng URL mới /{lt}/{areaSlug}/{districtSlug?}/
+    // {slug}-pr{code}. Tin thiếu public_code/areas.slug/listing_type → fallback URL cũ
+    // (buildProductPath tự xử lý). Fallback select gọn nếu cột mới chưa tồn tại.
+    let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | null }> = [];
+    const full = await sb.from('properties').select('id,slug,updated_at,public_code,listing_type,district,areas(slug)').eq('is_active', true).limit(5000);
+    if (full.error) {
       const noSlug = await sb.from('properties').select('id,updated_at').eq('is_active', true).limit(5000);
       propRows = (noSlug.data ?? []) as typeof propRows;
     } else {
-      propRows = (withSlug.data ?? []) as typeof propRows;
+      propRows = (full.data ?? []) as typeof propRows;
     }
     for (const p of propRows) {
-      const seg = (p.slug && String(p.slug).trim()) || p.id;
       entries.push({
-        url: `${SITE_URL}/bat-dong-san/${seg}`,
+        url: `${SITE_URL}${buildProductPath(p)}`,
         lastModified: p.updated_at ? new Date(p.updated_at) : undefined,
         changeFrequency: 'weekly',
         priority: 0.8,

@@ -125,6 +125,20 @@ describe('buildPropertyJsonLd', () => {
     expect(ld.additionalType).toBe('https://schema.org/House');
   });
 
+  it('dùng URL mới cho canonical + JSON-LD khi có public_code và area slug', () => {
+    const p = property({
+      public_code: 1001,
+      areas: { id: 'a1', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 0, created_at: '2026-01-01T00:00:00.000Z' },
+    });
+    const path = '/mua-ban/binh-duong/thu-dau-mot/nha-pho-dep-pr1001';
+    const metadata = buildPropertyMetadata(p);
+    const ld = buildPropertyJsonLd(p);
+    expect(metadata.alternates?.canonical).toBe(path);
+    expect(metadata.openGraph?.url).toBe(`${SITE_URL}${path}`);
+    expect(ld.url).toBe(`${SITE_URL}${path}`);
+    expect(ld['@id']).toBe(`${SITE_URL}${path}#realestatelisting`);
+  });
+
   it('RealEstateListing cơ bản: type/name/url/offers/floorSize/address', () => {
     const ld = buildPropertyJsonLd(property({ image_url: 'https://x/a.jpg' }));
     expect(ld['@type']).toBe('RealEstateListing');

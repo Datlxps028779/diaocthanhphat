@@ -3,6 +3,7 @@ import type { Neighborhood, Property } from './supabase';
 import { absoluteUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { ogTitle, ogDescription } from './seo';
+import { buildProductPath } from './productPath';
 
 const SITE_NAME = 'BĐS Bình Dương';
 
@@ -74,7 +75,7 @@ export function buildNeighborhoodMetadata(n: Neighborhood, summary: string, eval
   };
 }
 
-export function buildNeighborhoodCollectionJsonLd(n: Neighborhood, listings: Pick<Property, 'id' | 'title' | 'slug'>[]): Record<string, unknown> {
+export function buildNeighborhoodCollectionJsonLd(n: Neighborhood, listings: Array<Pick<Property, 'id' | 'title' | 'slug'> & Partial<Pick<Property, 'public_code' | 'listing_type' | 'district' | 'areas'>>>): Record<string, unknown> {
   const url = absoluteUrl(`/khu-dan-cu/${n.slug}`);
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
@@ -88,7 +89,7 @@ export function buildNeighborhoodCollectionJsonLd(n: Neighborhood, listings: Pic
         '@type': 'ListItem',
         position: i + 1,
         name: p.title,
-        url: absoluteUrl(`/bat-dong-san/${(p.slug && p.slug.trim()) || p.id}`),
+        url: absoluteUrl(buildProductPath(p)),
       })),
     },
   };
