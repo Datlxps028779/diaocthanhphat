@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-type Enrollment = { factorId: string; qrCode: string } | null;
+type Enrollment = { factorId: string; qrCode: string; secret: string | null } | null;
+
+function getQrImageSrc(qrCode: string): string {
+  return qrCode.startsWith('data:') ? qrCode : `data:image/svg+xml;utf8,${encodeURIComponent(qrCode)}`;
+}
 
 export function OwnerMfaClient() {
   const [loading, setLoading] = useState(true);
@@ -51,7 +55,11 @@ export function OwnerMfaClient() {
         return;
       }
       if (mounted) {
-        setEnrollment({ factorId: enrolled.id, qrCode: enrolled.totp.qr_code });
+        setEnrollment({
+          factorId: enrolled.id,
+          qrCode: enrolled.totp.qr_code,
+          secret: enrolled.totp.secret ?? null,
+        });
         setFactorId(enrolled.id);
       }
     };
@@ -107,10 +115,16 @@ export function OwnerMfaClient() {
                 <div className="space-y-3 text-center">
                   <p className="text-sm text-gray-200">Quét mã này bằng ứng dụng xác thực, rồi nhập mã 6 số.</p>
                   <img
-                    src={`data:image/svg+xml;utf8,${encodeURIComponent(enrollment.qrCode)}`}
+                    src={getQrImageSrc(enrollment.qrCode)}
                     alt="Mã QR thiết lập xác thực đa yếu tố"
                     className="w-48 h-48 bg-white rounded-xl p-2 mx-auto"
                   />
+                  {enrollment.secret && (
+                    <div className="text-xs text-gray-400 bg-gray-950/60 border border-gray-800 rounded-xl px-3 py-2 text-left">
+                      <span className="block mb-1">Nếu không quét được QR, nhập khóa thiết lập thủ công:</span>
+                      <code className="block text-gray-100 break-all font-mono tracking-wide">{enrollment.secret}</code>
+                    </div>
+                  )}
                 </div>
               )}
               <form onSubmit={verify} className="space-y-4">
