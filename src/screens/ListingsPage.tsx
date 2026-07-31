@@ -97,6 +97,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
+  const [selectedMapPropertyId, setSelectedMapPropertyId] = useState<string | null>(null);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -265,13 +266,16 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({
-    queryKey: qk.propertiesMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
-    queryFn: () => getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
+    queryKey: qk.propertiesMap(filters),
+    queryFn: () => getAllPropertiesForMap(filters),
     enabled: viewMode === 'map',
   });
   // Leaflet keeps the first handler, so keep data filtering outside its closure.
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     setMapBounds(bounds);
+  }, []);
+  const handleMapPropertySelect = useCallback((property: Property) => {
+    setSelectedMapPropertyId(property.id);
   }, []);
 
   // Thu hẹp marker theo quận/xã đã chọn (query map chỉ lọc được khu vực/loại). Càng
@@ -565,31 +569,35 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               </a>
             )}
             {/* Sort + view mode bar */}
-            <div className="flex items-center justify-between mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2.5">
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="w-4 h-4 text-gray-400" />
-                <select value={effectiveSort} onChange={e => setFilter(() => setSort(e.target.value as PropertySort))}
-                  className="border-0 text-sm text-gray-700 focus:outline-none bg-transparent font-medium">
-                  <option value="relevance">Liên quan nhất</option>
-                  <option value="newest">Mới nhất</option>
-                  <option value="price_asc">Giá thấp → cao</option>
-                  <option value="price_desc">Giá cao → thấp</option>
-                  <option value="views">Xem nhiều nhất</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  {[
-                    { mode: 'grid' as const, icon: <Grid3X3 className="w-4 h-4" />, label: 'Lưới' },
-                    { mode: 'list' as const, icon: <List className="w-4 h-4" />, label: 'Danh sách' },
-                    { mode: 'map' as const, icon: <MapIcon className="w-4 h-4" />, label: 'Bản đồ' },
-                  ].map(v => (
-                    <button key={v.mode} onClick={() => setViewMode(v.mode)} title={v.label}
-                      className={`p-1.5 rounded transition-colors ${viewMode === v.mode ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-gray-600'}`}>
-                      {v.icon}
-                    </button>
-                  ))}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white rounded-[var(--cnv-radius-xl)] border border-gray-100 shadow-sm px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                  {viewMode === 'map' ? `${mapProperties.length} tin có vị trí` : `${total.toLocaleString('vi-VN')} tin phù hợp`}
+                </span>
+                <span className="hidden sm:block w-px h-4 bg-gray-200" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <ArrowUpDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <select value={effectiveSort} onChange={e => setFilter(() => setSort(e.target.value as PropertySort))}
+                    className="border-0 text-sm text-gray-700 focus:outline-none bg-transparent font-medium min-w-0">
+                    <option value="relevance">Liên quan nhất</option>
+                    <option value="newest">Mới nhất</option>
+                    <option value="price_asc">Giá thấp → cao</option>
+                    <option value="price_desc">Giá cao → thấp</option>
+                    <option value="views">Xem nhiều nhất</option>
+                  </select>
                 </div>
+              </div>
+              <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1" aria-label="Chế độ hiển thị">
+                {[
+                  { mode: 'grid' as const, icon: <Grid3X3 className="w-4 h-4" />, label: 'Lưới' },
+                  { mode: 'list' as const, icon: <List className="w-4 h-4" />, label: 'Danh sách' },
+                  { mode: 'map' as const, icon: <MapIcon className="w-4 h-4" />, label: 'Bản đồ' },
+                ].map(v => (
+                  <button key={v.mode} onClick={() => setViewMode(v.mode)} title={v.label} aria-label={v.label}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${viewMode === v.mode ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
+                    {v.icon}<span className="hidden sm:inline">{v.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -640,6 +648,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                     onNavigate={onNavigate}
                     height="100%"
                     onBoundsChange={handleBoundsChange}
+                    onSelectProperty={handleMapPropertySelect}
                     showCountBadge={false}
                     fitToMarkers
                   />
@@ -655,7 +664,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                         {viewportProps.map(p => (
                           <button key={p.id}
                             onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                            className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
+                            className={`flex gap-2.5 w-full text-left bg-white border rounded-xl p-2.5 transition-all group ${selectedMapPropertyId === p.id ? 'border-red-400 ring-2 ring-red-100 shadow-sm' : 'border-gray-100 hover:border-red-300 hover:shadow-sm'}`}>
+
                             <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                               <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                             </span>
@@ -686,7 +696,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                       {viewportProps.map(p => (
                         <button key={p.id}
                           onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                          className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
+                          className={`flex gap-2.5 w-full text-left bg-white border rounded-xl p-2.5 transition-all group ${selectedMapPropertyId === p.id ? 'border-red-400 ring-2 ring-red-100 shadow-sm' : 'border-gray-100 hover:border-red-300 hover:shadow-sm'}`}>
                           <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                             <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                           </span>

@@ -8,6 +8,38 @@ export async function getNews(category?: string, limit = 20): Promise<NewsArticl
   const { data } = await q;
   return (data ?? []) as NewsArticle[];
 }
+
+export async function getNewsPage(filters: { category?: string; keyword?: string; page?: number; limit?: number } = {}): Promise<{ data: NewsArticle[]; total: number }> {
+  const limit = filters.limit ?? 12;
+  const page = Math.max(1, filters.page ?? 1);
+  let q = supabase
+    .from('news')
+    .select('*', { count: 'exact' })
+    .eq('is_published', true)
+    .order('created_at', { ascending: false });
+  if (filters.category && filters.category !== 'Tất cả') q = q.eq('category', filters.category);
+  if (filters.keyword?.trim()) {
+    const keyword = filters.keyword.replace(/[,()\%*]/g, ' ').trim();
+    if (keyword) q = q.or(`title.ilike.%${keyword}%,excerpt.ilike.%${keyword}%`);
+  }
+  const { data, error, count } = await q.range((page - 1) * limit, page * limit - 1);
+  if (error) {
+    // PostgREST trả 416 khi offset vượt quá số dòng (vd page=2 nhưng chỉ có <limit kết
+    // quả). Lấy lại tổng thật để UI tự lùi về trang hợp lệ thay vì vỡ.
+    let countQuery = supabase
+      .from('news')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_published', true);
+    if (filters.category && filters.category !== 'Tất cả') countQuery = countQuery.eq('category', filters.category);
+    if (filters.keyword?.trim()) {
+      const keyword = filters.keyword.replace(/[,()\%*]/g, ' ').trim();
+      if (keyword) countQuery = countQuery.or(`title.ilike.%${keyword}%,excerpt.ilike.%${keyword}%`);
+    }
+    const { count: safeCount } = await countQuery;
+    return { data: [], total: safeCount ?? 0 };
+  }
+  return { data: (data ?? []) as NewsArticle[], total: count ?? 0 };
+}
 export async function getNewsById(id: string): Promise<NewsArticle | null> {
   // Pure read — tăng view tách ra incrementNewsView, bắn 1 lần khi mount ở tầng UI.
   const { data } = await supabase.from('news').select('*').eq('id', id).maybeSingle();

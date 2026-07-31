@@ -142,15 +142,35 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
   };
 }
 
-export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId?: string }): Promise<Property[]> {
+export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise<Property[]> {
   let q = supabase
     .from('properties')
-    .select('id, title, price, price_label, price_unit, city, district, ward, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id')
+    .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, area_sqm, bedrooms, direction, legal_status, listing_type')
     .eq('is_active', true)
     .not('latitude', 'is', null);
+
+  if (filters?.listingType && filters.listingType !== 'all') q = q.eq('listing_type', filters.listingType);
   if (filters?.areaId) q = q.eq('area_id', filters.areaId);
   if (filters?.typeId) q = q.eq('property_type_id', filters.typeId);
-  const { data } = await q.limit(200);
+  if (filters?.district) q = q.eq('district', filters.district);
+  if (filters?.ward) q = q.eq('ward', filters.ward);
+  if (filters?.keyword) {
+    const kw = filters.keyword.replace(/[,()\%]/g, ' ').trim();
+    if (kw) q = q.or(`title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`);
+  }
+  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
+  if (filters?.minPrice !== undefined) q = q.gte(priceColumn, filters.minPrice);
+  if (filters?.maxPrice !== undefined) q = q.lte(priceColumn, filters.maxPrice);
+  if (filters?.minArea !== undefined) q = q.gte('area_sqm', filters.minArea);
+  if (filters?.maxArea !== undefined) q = q.lte('area_sqm', filters.maxArea);
+  if (filters?.bedrooms && filters.bedrooms !== 'all') q = q.gte('bedrooms', parseInt(filters.bedrooms));
+  if (filters?.direction) q = q.eq('direction', filters.direction);
+  if (filters?.legal) q = q.eq('legal_status', filters.legal);
+  if (filters?.isFeatured) q = q.eq('is_featured', true);
+  if (filters?.isHot) q = q.eq('is_hot', true);
+
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
+  if (error) throw error;
   return (data ?? []) as Property[];
 }
 

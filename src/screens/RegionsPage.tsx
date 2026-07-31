@@ -11,6 +11,7 @@ import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ForYou } from '../components/ForYou';
 import { AREA_DETAILS } from '../lib/areaSeo';
+import { useSetting } from '../lib/cms';
 
 function SkeletonCard() {
   return (
@@ -109,6 +110,7 @@ function ComparisonTable({ areas }: { areas: Area[] }) {
 
 export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: string; onNavigate: (p: Page) => void }) {
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
+  const phone = useSetting('phone_hotline', '0901 234 567');
 
   const { data: cms = {} } = useQuery({
     queryKey: qk.pageBlocks('regions'),
@@ -150,9 +152,9 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
-      <div className="relative h-56 md:h-72 flex items-center"
+      <div className="relative flex h-64 items-end md:h-80"
         style={{ backgroundImage: `url('${g('hero','image','https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?auto=compress&w=1200')}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-700/60" />
+        <div className="absolute inset-0 bg-slate-950/65" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 w-full">
           <Breadcrumb items={[
             { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
@@ -251,7 +253,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors">
                     <Building2 className="w-4 h-4" /> Xem BĐS khu vực này
                   </button>
-                  <a href="tel:0901234567"
+                  <a href={`tel:${phone.replace(/\s/g, '')}`}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-600 text-red-600 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors">
                     <Phone className="w-4 h-4" /> Gọi tư vấn
                   </a>
@@ -296,7 +298,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
         <h2 className="text-2xl md:text-3xl font-bold mb-3">{g('cta','title','Chưa biết nên đầu tư ở đâu?')}</h2>
         <p className="text-red-100 mb-6 max-w-xl mx-auto">{g('cta','subtitle','Chuyên gia của chúng tôi sẽ phân tích và đề xuất khu vực phù hợp nhất với ngân sách và mục tiêu của bạn.')}</p>
         <div className="flex flex-wrap gap-3 justify-center">
-          <a href="tel:0901234567"
+          <a href={`tel:${phone.replace(/\s/g, '')}`}
             className="inline-flex items-center gap-2 px-6 py-3 bg-white text-red-600 rounded-xl font-semibold hover:bg-red-50 transition-colors">
             <Phone className="w-4 h-4" /> {g('cta','btn_consult','Tư vấn miễn phí')}
           </a>

@@ -1,7 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, MapPin, Users, CheckCircle, Phone, ArrowRight } from 'lucide-react';
+import { Building2, MapPin, CheckCircle, Phone, ArrowRight, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { type Project } from '../lib/supabase';
 import { getProjects } from '../lib/api';
 import { useAreas } from '../lib/hooks/useTaxonomy';
@@ -13,6 +13,7 @@ import { ForYou } from '../components/ForYou';
 import { useSetting } from '../lib/cms';
 
 const PHASE_OPTIONS = ['Tất cả', 'Đang mở bán', 'Sắp ra mắt', 'Đã bàn giao'];
+const PROJECTS_PER_PAGE = 9;
 
 const phaseBadge = (phase: string) => {
   if (phase === 'Đang mở bán') return 'bg-green-100 text-green-700 border-green-200';
@@ -138,9 +139,14 @@ function ProjectCard({
   );
 }
 
-export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavigate: (p: Page) => void; initialPhase?: string; initialArea?: string }) {
+export function ProjectsPage({ onNavigate, initialPhase, initialArea, initialKeyword, initialSort, initialPage }: {
+  onNavigate: (p: Page) => void; initialPhase?: string; initialArea?: string; initialKeyword?: string; initialSort?: string; initialPage?: number;
+}) {
   const [selectedArea, setSelectedArea] = useState<string>(initialArea ?? 'all');
   const [selectedPhase, setSelectedPhase] = useState<string>(initialPhase ?? 'Tất cả');
+  const [keyword, setKeyword] = useState(initialKeyword ?? '');
+  const [sort, setSort] = useState(initialSort === 'price_asc' || initialSort === 'price_desc' ? initialSort : 'newest');
+  const [page, setPage] = useState(initialPage ?? 1);
   const [contactProject, setContactProject] = useState<Project | null>(null);
   const phone = useSetting('phone_hotline', '0901 234 567');
 
@@ -163,17 +169,36 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
       name: 'projects',
       areaId: selectedArea !== 'all' ? selectedArea : undefined,
       phase: selectedPhase !== 'Tất cả' ? selectedPhase : undefined,
+      keyword: keyword.trim() || undefined,
+      sort: sort !== 'newest' ? sort : undefined,
+      page: page > 1 ? page : undefined,
     });
     const current = window.location.pathname + window.location.search;
     if (current !== href) window.history.replaceState(null, '', href);
-  }, [selectedArea, selectedPhase]);
+  }, [selectedArea, selectedPhase, keyword, sort, page]);
 
-  const filtered = projects.filter((p) => {
-    const phase = p.phase ?? 'Đang mở bán';
-    const areaMatch = selectedArea === 'all' || p.area_id === selectedArea || p.areas?.slug === selectedArea;
-    const phaseMatch = selectedPhase === 'Tất cả' || phase === selectedPhase;
-    return areaMatch && phaseMatch;
-  });
+  const filtered = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLocaleLowerCase('vi-VN');
+    const result = projects.filter((p) => {
+      const phase = p.phase ?? 'Đang mở bán';
+      const areaMatch = selectedArea === 'all' || p.area_id === selectedArea || p.areas?.slug === selectedArea;
+      const phaseMatch = selectedPhase === 'Tất cả' || phase === selectedPhase;
+      const searchText = [p.name, p.location, p.city, p.developer].filter(Boolean).join(' ').toLocaleLowerCase('vi-VN');
+      return areaMatch && phaseMatch && (!normalizedKeyword || searchText.includes(normalizedKeyword));
+    });
+    return result.sort((a, b) => {
+      if (sort === 'price_asc') return (a.price_from ?? Number.MAX_SAFE_INTEGER) - (b.price_from ?? Number.MAX_SAFE_INTEGER);
+      if (sort === 'price_desc') return (b.price_from ?? -1) - (a.price_from ?? -1);
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [projects, selectedArea, selectedPhase, keyword, sort]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PROJECTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleProjects = filtered.slice((currentPage - 1) * PROJECTS_PER_PAGE, currentPage * PROJECTS_PER_PAGE);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const contactProperty = contactProject
     ? {
@@ -212,14 +237,12 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
         </div>
       </div>
 
-      {/* Stat bar */}
-      <div className="bg-red-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+      <div className="bg-gradient-to-r from-red-700 via-red-600 to-amber-500 text-white">
+        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
           {[
-            { icon: <Building2 className="w-5 h-5" />, val: `${projects.length || '50'}+`, label: 'Dự án' },
-            { icon: <MapPin className="w-5 h-5" />, val: `${areas.length || '4'}`, label: 'Tỉnh thành' },
-            { icon: <Users className="w-5 h-5" />, val: '1.200+', label: 'Khách hàng' },
-            { icon: <CheckCircle className="w-5 h-5" />, val: '98%', label: 'Bàn giao đúng hạn' },
+            { icon: <Building2 className="w-5 h-5" />, val: projects.length.toLocaleString('vi-VN'), label: 'Dự án đang hiển thị' },
+            { icon: <MapPin className="w-5 h-5" />, val: new Set(projects.map(p => p.area_id).filter(Boolean)).size.toLocaleString('vi-VN'), label: 'Khu vực có dự án' },
+            { icon: <CheckCircle className="w-5 h-5" />, val: projects.filter(p => p.phase === 'Đã bàn giao').length.toLocaleString('vi-VN'), label: 'Dự án đã bàn giao' },
           ].map((s) => (
             <div key={s.label} className="flex flex-col items-center gap-1">
               <div className="opacity-80">{s.icon}</div>
@@ -281,10 +304,24 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-10">
+        <div className="mb-6 flex flex-col gap-3 rounded-[var(--cnv-radius-xl)] border border-gray-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={keyword} onChange={event => { setKeyword(event.target.value); setPage(1); }} placeholder="Tìm theo tên dự án, chủ đầu tư, vị trí..." className="w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-red-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="h-4 w-4 text-gray-400" />
+            <select value={sort} onChange={event => { setSort(event.target.value); setPage(1); }} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-red-500">
+              <option value="newest">Mới cập nhật</option>
+              <option value="price_asc">Giá thấp → cao</option>
+              <option value="price_desc">Giá cao → thấp</option>
+            </select>
+          </div>
+        </div>
         <div className="flex items-center justify-between mb-6">
           <SectionTitle
             title="Danh Sách Dự Án"
-            subtitle={`Hiển thị ${filtered.length} dự án${selectedArea !== 'all' ? ' tại khu vực đã chọn' : ''}`}
+            subtitle={`Hiển thị ${filtered.length.toLocaleString('vi-VN')} dự án${selectedArea !== 'all' ? ' tại khu vực đã chọn' : ''}`}
           />
         </div>
 
@@ -309,7 +346,7 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((p) => (
+            {visibleProjects.map((p) => (
               <ProjectCard
                 key={p.id}
                 project={p}
@@ -318,6 +355,13 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
               />
             ))}
           </div>
+        )}
+        {filtered.length > PROJECTS_PER_PAGE && (
+          <nav className="mt-8 flex items-center justify-center gap-2" aria-label="Phân trang dự án">
+            <button onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="rounded-lg border border-gray-200 p-2 text-gray-600 disabled:opacity-40" aria-label="Trang trước"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="text-sm font-semibold text-gray-700">Trang {currentPage} / {totalPages}</span>
+            <button onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="rounded-lg border border-gray-200 p-2 text-gray-600 disabled:opacity-40" aria-label="Trang sau"><ChevronRight className="h-4 w-4" /></button>
+          </nav>
         )}
         <ForYou />
       </div>

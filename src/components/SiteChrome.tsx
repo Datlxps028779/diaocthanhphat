@@ -33,7 +33,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--cnv-surface-soft)]">
       <Header
         currentPage={currentPage}
         onNavigate={navigate}

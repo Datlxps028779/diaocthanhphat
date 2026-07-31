@@ -46,11 +46,13 @@ export function AreaListingClient({ listingType, filters, initialData, header }:
   );
 }
 
-export function ProjectsClient({ initialArea, initialPhase }: { initialArea?: string; initialPhase?: string } = {}) {
+export function ProjectsClient({ initialArea, initialPhase, initialKeyword, initialSort, initialPage }: {
+  initialArea?: string; initialPhase?: string; initialKeyword?: string; initialSort?: string; initialPage?: number;
+} = {}) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'projects' }}>
-      <ProjectsPage onNavigate={navigate} initialArea={initialArea} initialPhase={initialPhase} />
+      <ProjectsPage onNavigate={navigate} initialArea={initialArea} initialPhase={initialPhase} initialKeyword={initialKeyword} initialSort={initialSort} initialPage={initialPage} />
     </SiteChrome>
   );
 }
@@ -73,11 +75,13 @@ export function RegionsClient({ initialAreaId }: { initialAreaId?: string } = {}
   );
 }
 
-export function NewsListClient({ initialArticles, initialCategory }: { initialArticles?: NewsArticle[]; initialCategory?: string }) {
+export function NewsListClient({ initialArticles, initialCategory, initialKeyword, initialPage }: {
+  initialArticles?: NewsArticle[]; initialCategory?: string; initialKeyword?: string; initialPage?: number;
+}) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'news' }}>
-      <NewsPage onNavigate={navigate} initialArticles={initialArticles} initialCategory={initialCategory} />
+      <NewsPage onNavigate={navigate} initialArticles={initialArticles} initialCategory={initialCategory} initialKeyword={initialKeyword} initialPage={initialPage} />
     </SiteChrome>
   );
 }

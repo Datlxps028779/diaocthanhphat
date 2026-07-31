@@ -58,9 +58,9 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const newTabProps = (item: NavigationItem) => item.openNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
+    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white/95 shadow-[var(--cnv-shadow-soft)] backdrop-blur-xl' : 'bg-white/90 shadow-sm backdrop-blur-xl'}`}>
       {/* Top bar */}
-      <div className="bg-red-600 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
+      <div className="bg-gradient-to-r from-red-700 via-red-600 to-amber-500 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1"><Phone className="w-3 h-3" />Hotline: {useSetting('phone_hotline', '0901 234 567')}</span>
           <span className="opacity-60">|</span>
@@ -81,7 +81,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               className="h-9 w-auto max-w-[160px] rounded-lg object-contain"
             />
           ) : (
-            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
+            <div className="w-9 h-9 bg-gradient-to-br from-red-600 to-amber-500 rounded-xl flex items-center justify-center shadow-sm">
               <Home className="w-5 h-5 text-white" />
             </div>
           )}
@@ -95,7 +95,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           {navItems.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+                className={`px-3.5 py-2 text-[13px] font-medium rounded-full transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-700 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-700 hover:bg-red-50/70'}`}>
                 {item.label}<ChevronDown className="w-3 h-3" />
               </button>
               {desktopMenuOpen === item.key && (
@@ -123,7 +123,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+              className={`px-3.5 py-2 text-[13px] font-medium rounded-full transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-700 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-700 hover:bg-red-50/70'}`}>
               {item.label}
             </Link>
           ))}
@@ -162,18 +162,18 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           ) : (
             <>
               <button onClick={() => onShowAuth?.('login')}
-                className="border border-red-500 text-red-600 text-[13px] font-semibold px-4 py-1.5 rounded-md hover:bg-red-50 transition-colors">
+                className="border border-red-200 text-red-700 text-[13px] font-semibold px-4 py-2 rounded-full hover:bg-red-50 transition-colors">
                 {nav.btn_login || 'Đăng nhập'}
               </button>
               <button onClick={() => onShowAuth?.('register')}
-                className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors">
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[13px] font-semibold px-4 py-2 rounded-full transition-colors shadow-sm">
                 {nav.btn_post || 'Đăng tin'}
               </button>
             </>
           )}
           {user && (
             <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-              className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors flex items-center gap-1">
+              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[13px] font-semibold px-4 py-2 rounded-full transition-colors flex items-center gap-1 shadow-sm">
               <Plus className="w-3.5 h-3.5" />Đăng tin
             </Link>
           )}
@@ -185,7 +185,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       </div>
 
       {mobileOpen && (
-        <div className="xl:hidden bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
+        <div className="xl:hidden bg-white/95 backdrop-blur-xl border-t px-4 py-3 space-y-0.5 shadow-lg">
           {navItems.map(item => item.children ? (
             <div key={item.key}>
               <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
@@ -290,8 +290,8 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   })();
 
   return (
-    <footer className="bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+    <footer className="bg-slate-950 text-white border-t border-slate-900">
+      <div className="max-w-7xl mx-auto px-4 py-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2.5 mb-3">
             {logoUrl && !logoError ? (

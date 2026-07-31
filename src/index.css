@@ -3,9 +3,23 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --cnv-ink: #111827;
+    --cnv-muted: #6b7280;
+    --cnv-surface: #ffffff;
+    --cnv-surface-soft: #f8fafc;
+    --cnv-brand: #dc2626;
+    --cnv-brand-dark: #991b1b;
+    --cnv-gold: #f59e0b;
+    --cnv-border: #e5e7eb;
+    --cnv-radius-xl: 1.25rem;
+    --cnv-shadow-soft: 0 18px 60px rgba(15, 23, 42, 0.08);
+  }
   html { scroll-behavior: smooth; }
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--cnv-ink);
+    background: var(--cnv-surface-soft);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

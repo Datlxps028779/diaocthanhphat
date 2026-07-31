@@ -40,7 +40,7 @@ export async function getMaxFileSize(): Promise<number> {
   return maxSize;
 }
 
-// Upload ảnh với bucket phân tách: admin-uploads hoặc user-uploads
+// Ảnh hiển thị công khai của owner dùng public-media; admin-uploads chỉ giữ tài liệu nội bộ private.
 export async function uploadImage(file: File, folder = 'properties', isAdmin = false, caption?: string): Promise<string> {
   assertSafeImage(file);
   // Nén ở client trước khi đo dung lượng: PNG/ảnh chụp nặng → JPEG ≤1600px cho nhẹ
@@ -54,7 +54,7 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
   }
 
   // Chọn bucket phù hợp
-  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
+  const bucketName = isAdmin ? 'public-media' : 'user-uploads';
 
   // Tên file chuẩn SEO (slug mô tả + hậu tố chống trùng)
   const filename = seoFilename(file, folder, caption);
@@ -98,7 +98,7 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
     }
   }
 
-  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
+  const bucketName = isAdmin ? 'public-media' : 'user-uploads';
   const urls: string[] = [];
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -170,7 +170,7 @@ export async function uploadDocument(file: File, isAdmin = true): Promise<Upload
     throw new Error(`File vượt quá dung lượng cho phép (${maxSize}MB). Vui lòng chọn file nhỏ hơn.`);
   }
 
-  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
+  const bucketName = isAdmin ? 'public-media' : 'user-uploads';
   const filename = seoFilename(file, 'ai-docs');
   const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
   if (error) throw error;

@@ -37,6 +37,7 @@ import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 import { DetailShareButtons } from '../components/DetailShareButtons';
+import { CompareButton } from '../components/CompareButton';
 import { getProductSuggestions } from '../lib/productSuggestions';
 
 interface PropertyDetailPageProps {
@@ -268,7 +269,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   ].filter(Boolean) as { icon: React.ReactNode; label: string; value: string }[];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--cnv-surface-soft)] pb-20 lg:pb-0">
 
       {preview && (
         <div className="bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 text-center flex items-center justify-center gap-2">
@@ -387,10 +388,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             )}
 
             {/* Title & price */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
-              <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{property.title}</h1>
-              <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
+            <div className="bg-white rounded-[var(--cnv-radius-xl)] shadow-sm border border-gray-100 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
+                  <h1 className="text-xl font-black text-gray-900 leading-tight">{property.title}</h1>
+                </div>
+                <CompareButton property={property} variant="inline" className="flex-shrink-0" />
+              </div>
+              <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mt-3 mb-4" />
               <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span>{[property.address, property.district, property.city].filter(Boolean).join(', ')}</span>
@@ -424,7 +430,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={() => setShowContact(true)}
-                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
+                    className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm shadow-sm">
                     <Phone className="w-4 h-4" />Yêu cầu tư vấn
                   </button>
                   <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
@@ -639,14 +645,17 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
           <aside className="hidden lg:block w-80 flex-shrink-0">
             <div className="sticky top-16 space-y-4">
               {/* Price box */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <p className="text-xs text-gray-500 mb-1">Mức giá</p>
+              <div className="bg-white rounded-[var(--cnv-radius-xl)] shadow-[var(--cnv-shadow-soft)] border border-red-100 p-5">
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <p className="text-xs font-semibold text-gray-500">Mức giá</p>
+                  {property.is_verified && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">Tin đã xác minh</span>}
+                </div>
                 <p className="text-2xl font-black text-red-600 mb-1">
                   {property.price_label ?? `${property.price} ${property.price_unit}`}
                 </p>
                 {pricePerSqm && <p className="text-gray-400 text-xs mb-4">≈ {pricePerSqm} triệu/m²</p>}
                 <button onClick={() => setShowContact(true)}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2 shadow-sm">
                   Yêu cầu tư vấn ngay
                 </button>
                 <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
@@ -789,6 +798,23 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
         {!preview && <ForYou excludeId={property.id} />}
         {!preview && <RecentlyViewed excludeId={property.id} />}
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-lg gap-2">
+          {phoneRevealed ? (
+            <a href={`tel:${contactPhone.replace(/\s/g, '')}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-700">
+              <Phone className="w-4 h-4" />{contactPhone}
+            </a>
+          ) : (
+            <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property.id, source: 'property_detail_mobile' }); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-700">
+              <Phone className="w-4 h-4" />Hiện số điện thoại
+            </button>
+          )}
+          <button onClick={() => setShowContact(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-red-700 py-3 text-sm font-bold text-white shadow-sm">
+            <CalendarClock className="w-4 h-4" />Nhận tư vấn
+          </button>
+        </div>
       </div>
 
       <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />

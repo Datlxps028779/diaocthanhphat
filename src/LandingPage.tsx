@@ -168,7 +168,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     switch (id) {
       case 'hero': return null; // always rendered separately at the top
       case 'stats': return (
-        <section key="stats" className="bg-red-600 text-white py-4">
+        <section key="stats" className="bg-slate-950 text-white py-6">
           <div className="max-w-5xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             {[
               { num: sec('stats')('stat1_number', '5.000+'), label: sec('stats')('stat1_label', 'Tin đăng') },
@@ -177,16 +177,20 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               { num: sec('stats')('stat4_number', '3'), label: sec('stats')('stat4_label', 'Tỉnh phủ sóng') },
             ].map((s, i) => (
               <div key={i}>
-                <p className="text-2xl font-black">{s.num}</p>
-                <p className="text-red-100 text-xs">{s.label}</p>
+                <p className="text-2xl font-black text-amber-300 md:text-3xl">{s.num}</p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-white/70">{s.label}</p>
               </div>
             ))}
           </div>
         </section>
       );
       case 'categories': return (
-        <section key="categories" className="py-8 bg-white border-b border-gray-100">
+        <section key="categories" className="py-10 bg-white border-b border-gray-100">
           <div className="max-w-7xl mx-auto px-4">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="h-6 w-1 rounded-full bg-gradient-to-b from-red-600 to-amber-500" />
+              <h2 className="text-lg font-black text-slate-900 md:text-xl">Khám phá theo loại hình</h2>
+            </div>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               {[1, 2, 3, 4, 5, 6].map((i) => {
                 const g = sec('categories');
@@ -201,8 +205,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 };
                 return (
                   <Link key={i} href={pageToHref(quickCategoryToPage(cfg))}
-                    className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-red-400 hover:bg-red-50 transition-all group">
-                    <div className="w-10 h-10 bg-red-50 group-hover:bg-red-100 rounded-full flex items-center justify-center text-red-600 transition-colors">
+                    className="group flex flex-col items-center gap-2.5 rounded-2xl border border-slate-100 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[var(--cnv-shadow-soft)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-red-50 to-amber-50 text-red-600 transition-colors group-hover:from-red-100 group-hover:to-amber-100">
                       <CategoryIcon name={iconName} className="w-5 h-5" />
                     </div>
                     <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{label}</span>
@@ -226,9 +230,12 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             <section key={section.id} className="py-10 bg-gray-50">
               <div className="max-w-7xl mx-auto px-4">
                 <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="inline-block text-xl font-black text-gray-900">{section.title}</h2>
-                    {section.subtitle && <p className="text-gray-500 text-sm mt-1">{section.subtitle}</p>}
+                  <div className="flex items-center gap-3">
+                    <span className="h-6 w-1 rounded-full bg-gradient-to-b from-red-600 to-amber-500" />
+                    <div>
+                      <h2 className="inline-block text-xl font-black text-slate-900">{section.title}</h2>
+                      {section.subtitle && <p className="text-gray-500 text-sm mt-0.5">{section.subtitle}</p>}
+                    </div>
                   </div>
                   <Link href={pageToHref({ name: 'listings', ...(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {}) })}
                     className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
@@ -264,7 +271,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       case 'region_banners': return (
         <section key="region_banners" className="py-10 bg-white">
           <div className="max-w-7xl mx-auto px-4">
-            <h2 className="inline-block text-xl font-black text-gray-900 mb-6">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
+            <div className="mb-6 flex items-center gap-3">
+              <span className="h-6 w-1 rounded-full bg-gradient-to-b from-red-600 to-amber-500" />
+              <h2 className="inline-block text-xl font-black text-slate-900">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
+            </div>
             <div className="grid md:grid-cols-3 gap-4">
               {[
                 { n: 1, dt: 'Bình Dương', ds: 'Thị trường chính – sôi động nhất', dd: 'Thủ Dầu Một, Dĩ An, Thuận An, Bến Cát, Tân Uyên...', db: 'Trọng tâm', color: 'from-red-600 to-red-700', di: 'https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg', dslug: 'binh-duong' },
@@ -465,7 +475,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[var(--cnv-surface-soft)]">
       <Header
         currentPage={{ name: 'home' }}
         onNavigate={onNavigate}
@@ -476,32 +486,35 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       />
 
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
-      <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-14">
+      <section className="relative min-h-[620px] overflow-hidden bg-slate-950 pt-16 lg:min-h-[680px]">
         <div className="absolute inset-0">
-          <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/50 to-black/70" />
+          <Image src={heroBg} alt="Khu dân cư và bất động sản tại Bình Dương" fill priority sizes="100vw" className="object-cover object-center" />
+          <div className="absolute inset-0 bg-slate-950/65" />
+          <div className="absolute inset-x-0 bottom-0 h-40 bg-slate-950/70" />
         </div>
 
-        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-12 text-center">
-          <div className="inline-flex items-center gap-2 bg-red-600/80 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4">
-            <MapPin className="w-3 h-3" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
+        <div className="relative z-10 mx-auto flex min-h-[620px] w-full max-w-7xl flex-col justify-center px-4 py-16 lg:min-h-[680px] lg:py-20">
+          <div className="max-w-3xl">
+            <div className="mb-5 inline-flex items-center gap-2 border border-white/25 bg-slate-950/30 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
+              <MapPin className="h-3 w-3 text-amber-300" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
+            </div>
+            <h1 className="max-w-3xl text-4xl font-black leading-[1.08] text-white md:text-6xl">
+              {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-6 text-white/85 md:text-base md:leading-7">
+              {sec('hero')('subtitle', 'Khám phá tài sản theo vị trí, pháp lý và ngân sách phù hợp với nhu cầu thực.')}
+            </p>
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3">
-            {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
-          </h1>
-          <p className="text-white/80 text-sm md:text-base mb-8 max-w-2xl mx-auto">
-            {sec('hero')('subtitle', 'Hơn 5.000 tin đăng nhà đất, căn hộ, đất nền uy tín tại Bình Dương, Bình Phước, Đồng Nai')}
-          </p>
 
-          {/* Search box */}
-          <div className="bg-white rounded-2xl shadow-2xl p-3 max-w-3xl mx-auto">
+          {/* Search workspace */}
+          <div className="mt-9 max-w-5xl border border-white/25 bg-white/95 p-3 shadow-[var(--cnv-shadow-soft)] backdrop-blur-xl lg:mt-11">
             {/* Tabs */}
-            <div className="flex gap-1 mb-3 bg-gray-100 rounded-xl p-1">
+            <div className="mb-3 flex gap-1 border-b border-slate-200 pb-3">
               {LISTING_TYPE_TABS.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => { setActiveTab(tab.key); setSearchPriceIdx(0); }}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === tab.key ? 'bg-red-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  className={`flex-1 py-2.5 text-sm font-semibold transition-all ${activeTab === tab.key ? 'bg-red-700 text-white shadow-sm' : 'text-gray-600 hover:bg-slate-100 hover:text-gray-900'}`}
                 >
                   {tab.key === 'mua_ban' ? sec('hero')('tab_buy', tab.label) : sec('hero')('tab_rent', tab.label)}
                 </button>
@@ -517,13 +530,13 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   onChange={e => setSearchKeyword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                   placeholder={sec('hero')('search_placeholder', 'Tìm theo tên dự án, địa chỉ, khu vực...')}
-                  className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  className="w-full border border-slate-200 bg-white py-3 pl-9 pr-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-red-600"
                 />
               </div>
               <select
                 value={searchAreaId}
                 onChange={e => { setSearchAreaId(e.target.value); setSearchDistrict(''); setSearchWard(''); }}
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                className="border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-red-600 min-w-[130px]"
               >
                 <option value="">Tất cả khu vực</option>
                 {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -532,7 +545,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 <select
                   value={searchDistrict}
                   onChange={e => { setSearchDistrict(e.target.value); setSearchWard(''); }}
-                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                  className="border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-red-600 min-w-[130px]"
                 >
                   <option value="">Tất cả quận/huyện</option>
                   {searchDistricts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -542,7 +555,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 <select
                   value={searchWard}
                   onChange={e => setSearchWard(e.target.value)}
-                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                  className="border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-red-600 min-w-[130px]"
                 >
                   <option value="">Tất cả phường/xã</option>
                   {searchWards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
@@ -551,7 +564,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               <select
                 value={searchTypeId}
                 onChange={e => setSearchTypeId(e.target.value)}
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                className="border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-red-600 min-w-[130px]"
               >
                 <option value="">Loại BĐS</option>
                 {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -560,7 +573,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 value={searchPriceIdx}
                 onChange={e => setSearchPriceIdx(Number(e.target.value))}
                 aria-label="Khoảng giá"
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                className="border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-red-600 min-w-[130px]"
               >
                 {(activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE).map((r, i) => (
                   <option key={i} value={i}>{r.label}</option>
@@ -568,7 +581,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               </select>
               <button
                 onClick={handleSearch}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
+                className="bg-red-700 px-6 py-3 font-bold text-white transition-colors hover:bg-red-800 flex items-center gap-2 whitespace-nowrap"
               >
                 <Search className="w-4 h-4" />
                 {sec('hero')('btn_search', 'Tìm kiếm')}
@@ -576,21 +589,25 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             </div>
 
             {/* Quick search pills */}
-            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
               <span className="text-gray-400 text-xs">Tìm nhanh:</span>
               {areas.slice(0, 2).map(a => (
                 <button key={a.id} onClick={() => goListings({ listingType: 'mua_ban', areaId: a.id })}
-                  className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                  className="border border-red-100 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100">
                   {a.name}
                 </button>
               ))}
               {types.slice(0, 2).map(t => (
                 <button key={t.id} onClick={() => goListings({ typeId: t.id })}
-                  className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+                  className="border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100">
                   {t.name}
                 </button>
               ))}
             </div>
+          </div>
+          <div className="mt-9 flex items-center gap-3 text-xs font-semibold uppercase text-white/70">
+            <span className="h-px w-10 bg-amber-300" />
+            Khám phá tài sản đang được quan tâm
           </div>
         </div>
       </section>

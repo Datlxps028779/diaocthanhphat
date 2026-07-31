@@ -19,10 +19,10 @@ export type Page =
       isFeatured?: boolean; isHot?: boolean; sort?: string; page?: number;
     }
   | { name: 'property'; id: string; slug?: string }
-  | { name: 'projects'; areaId?: string; phase?: string }
+  | { name: 'projects'; areaId?: string; phase?: string; keyword?: string; sort?: string; page?: number }
   | { name: 'invest' }
   | { name: 'regions'; areaId?: string }
-  | { name: 'news'; articleId?: string; slug?: string; category?: string }
+  | { name: 'news'; articleId?: string; slug?: string; category?: string; keyword?: string; page?: number }
   | { name: 'about' }
   | { name: 'valuation' }
   | { name: 'compare' }
@@ -83,13 +83,19 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
 }
 
 // Chiều nghịch của phần 'projects' trong pageToHref: ?area=<slug>&phase=<label>.
-export function parseProjectParams(sp: RawSearchParams): { area?: string; phase?: string } {
+export function parseProjectParams(sp: RawSearchParams): { area?: string; phase?: string; keyword?: string; sort?: string; page?: number } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
-  const out: { area?: string; phase?: string } = {};
+  const page = Number(first(sp?.page));
+  const out: { area?: string; phase?: string; keyword?: string; sort?: string; page?: number } = {};
   const area = first(sp?.area);
   const phase = first(sp?.phase);
+  const keyword = first(sp?.q);
+  const sort = first(sp?.sort);
   if (area) out.area = area;
   if (phase) out.phase = phase;
+  if (keyword) out.keyword = keyword;
+  if (sort) out.sort = sort;
+  if (Number.isFinite(page) && page > 1) out.page = page;
   return out;
 }
 
@@ -102,12 +108,16 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
     case 'news':
       if (page.slug) return `/tin-tuc/${page.slug}`;
       if (page.articleId) return `/tin-tuc/${page.articleId}`;
+      const q = new URLSearchParams();
       if (page.category && page.category !== 'Tất cả') {
         const catSlug = categoryToSlug(page.category);
-        if (catSlug) return `/tin-tuc/danh-muc/${catSlug}`;
-        return `/tin-tuc?category=${encodeURIComponent(page.category)}`;
+        if (catSlug && !page.keyword && !page.page) return `/tin-tuc/danh-muc/${catSlug}`;
+        q.set('category', page.category);
       }
-      return '/tin-tuc';
+      if (page.keyword) q.set('q', page.keyword);
+      if (page.page && page.page > 1) q.set('page', String(page.page));
+      const qs = q.toString();
+      return qs ? `/tin-tuc?${qs}` : '/tin-tuc';
     case 'listings': {
       // Sinh path SEO /{lt}/{areaSlug}/{districtSlug?} khi: có taxonomy + areaId map được
       // sang slug + listingType ∈ {mua_ban, cho_thue}. Ngược lại giữ base query cũ
@@ -155,6 +165,9 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
       const q = new URLSearchParams();
       if (page.areaId) q.set('area', page.areaId);
       if (page.phase) q.set('phase', page.phase);
+      if (page.keyword) q.set('q', page.keyword);
+      if (page.sort) q.set('sort', page.sort);
+      if (page.page && page.page > 1) q.set('page', String(page.page));
       const qs = q.toString();
       return qs ? `/du-an?${qs}` : '/du-an';
     }

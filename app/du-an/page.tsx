@@ -23,11 +23,11 @@ export const revalidate = 1800;
 
 export default async function Page({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const { jsonLd } = await loadRouteSeo(PATH, fallback);
-  const { area, phase } = parseProjectParams(searchParams);
+  const { area, phase, keyword, sort, page } = parseProjectParams(searchParams);
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <ProjectsClient initialArea={area} initialPhase={phase} />
+      <ProjectsClient initialArea={area} initialPhase={phase} initialKeyword={keyword} initialSort={sort} initialPage={page} />
     </>
   );
 }

@@ -2,9 +2,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, Tag, ChevronRight, ChevronLeft, ArrowRight, Eye, Mail, CheckCircle, Search } from 'lucide-react';
 import { type NewsArticle } from '../lib/supabase';
-import { getNews, getNewsById, getNewsByIds, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { getNewsPage, getNewsById, getNewsByIds, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { type Page, pageToHref } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
@@ -380,8 +380,12 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles, initialCategory, initialKeyword, initialPage }: {
+  onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[]; initialCategory?: string; initialKeyword?: string; initialPage?: number;
+}) {
   const [category, setCategory] = useState(initialCategory && CATEGORIES.includes(initialCategory) ? initialCategory : 'Tất cả');
+  const [keyword, setKeyword] = useState(initialKeyword ?? '');
+  const [page, setPage] = useState(initialPage ?? 1);
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
@@ -394,15 +398,34 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   const newsCategory = category === 'Tất cả' ? undefined : category;
-  // Category mà server đã prefetch initialArticles (route /tin-tuc → 'Tất cả',
-  // route /tin-tuc/danh-muc/{slug} → nhãn danh mục). Seed SSR khi view khớp đúng
-  // cái server fetch để không nháy loading (kể cả trang danh mục).
+  const newsFilters = { category: newsCategory, keyword: keyword.trim() || undefined, page, limit: 12 };
   const seedCategory = initialCategory && CATEGORIES.includes(initialCategory) ? initialCategory : 'Tất cả';
-  const { data: articles = [], isLoading: loading } = useQuery({
-    queryKey: qk.news(newsCategory),
-    queryFn: () => getNews(newsCategory),
-    initialData: category === seedCategory && initialArticles ? initialArticles : undefined,
+  const canSeed = category === seedCategory && !keyword.trim() && page === 1 && Boolean(initialArticles);
+  const { data: newsResult, isLoading: loading } = useQuery({
+    queryKey: qk.newsPage(newsFilters),
+    queryFn: () => getNewsPage(newsFilters),
+    initialData: canSeed ? { data: (initialArticles ?? []).slice(0, newsFilters.limit), total: initialArticles?.length ?? 0 } : undefined,
+    initialDataUpdatedAt: canSeed ? 0 : undefined,
   });
+  const articles = newsResult?.data ?? [];
+  const totalArticles = newsResult?.total ?? initialArticles?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalArticles / newsFilters.limit));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const href = pageToHref({
+      name: 'news',
+      category: category !== 'Tất cả' ? category : undefined,
+      keyword: keyword.trim() || undefined,
+      page: page > 1 ? page : undefined,
+    });
+    const current = window.location.pathname + window.location.search;
+    if (current !== href) window.history.replaceState(null, '', href);
+  }, [category, keyword, page]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   // activeArticle derive từ detail query — set articleId để mở, undefined để đóng
   const { data: activeArticle = null } = useQuery({
@@ -465,7 +488,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
 
   // Khi xem "Tất cả": nhóm phần lưới theo danh mục (giữ thứ tự CATEGORIES, bỏ nhóm rỗng).
   // Khi xem 1 danh mục cụ thể: để nguyên 1 lưới phẳng.
-  const showGroups = category === 'Tất cả';
+  const showGroups = category === 'Tất cả' && !keyword.trim() && page === 1;
   const grouped = useMemo(() => {
     if (!showGroups) return [];
     const byCat = new Map<string, NewsArticle[]>();
@@ -531,7 +554,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
             <Link
               key={cat}
               href={pageToHref({ name: 'news', category: cat })}
-              onClick={() => setCategory(cat)}
+              onClick={() => { setCategory(cat); setKeyword(''); setPage(1); }}
               className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 category === cat
                   ? 'bg-red-600 text-white border-red-600'
@@ -542,8 +565,18 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
             </Link>
           ))}
           {!loading && articles.length > 0 && (
-            <span className="ml-auto text-xs text-gray-400">{articles.length} bài viết</span>
+            <span className="ml-auto text-xs text-gray-400">{totalArticles.toLocaleString('vi-VN')} bài viết</span>
           )}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 pt-6">
+        <div className="flex flex-col gap-3 rounded-[var(--cnv-radius-xl)] border border-gray-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={keyword} onChange={event => { setKeyword(event.target.value); setPage(1); }} placeholder="Tìm theo chủ đề, khu vực, hạ tầng..." className="w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-red-500" />
+          </div>
+          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{totalArticles.toLocaleString('vi-VN')} bài viết</span>
         </div>
       </div>
 
@@ -598,7 +631,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                       </h2>
                       <Link
                         href={pageToHref({ name: 'news', category: group.category })}
-                        onClick={() => setCategory(group.category)}
+                        onClick={() => { setCategory(group.category); setKeyword(''); setPage(1); }}
                         className="text-sm text-red-600 font-semibold hover:underline flex items-center gap-1"
                       >
                         Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
@@ -617,6 +650,13 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                 )
               )}
             </>
+          )}
+          {!loading && totalPages > 1 && (
+            <nav className="mt-8 flex items-center justify-center gap-2" aria-label="Phân trang tin tức">
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="rounded-lg border border-gray-200 p-2 text-gray-600 disabled:opacity-40" aria-label="Trang trước"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="text-sm font-semibold text-gray-700">Trang {page} / {totalPages}</span>
+              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="rounded-lg border border-gray-200 p-2 text-gray-600 disabled:opacity-40" aria-label="Trang sau"><ChevronRight className="h-4 w-4" /></button>
+            </nav>
           )}
         </div>
 

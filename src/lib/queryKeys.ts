@@ -14,7 +14,7 @@ export const qk = {
 
   // Properties
   properties: (filters?: PropertyFilters) => ['properties', filters ?? {}] as const,
-  propertiesMap: (f?: { areaId?: string; typeId?: string }) => ['propertiesMap', f ?? {}] as const,
+  propertiesMap: (filters?: PropertyFilters) => ['propertiesMap', filters ?? {}] as const,
   property: (id: string) => ['property', id] as const,
   relatedProperties: (id: string) => ['relatedProperties', id] as const,
   areaProperties: (areaId?: string) => ['areaProperties', areaId ?? 'none'] as const,
@@ -22,6 +22,7 @@ export const qk = {
 
   // News
   news: (category?: string, limit = 20) => ['news', category ?? 'all', limit] as const,
+  newsPage: (filters: { category?: string; keyword?: string; page?: number; limit?: number }) => ['newsPage', filters] as const,
   newsArticle: (id: string) => ['newsArticle', id] as const,
 
   // CMS / trang

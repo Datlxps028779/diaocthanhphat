@@ -15,6 +15,7 @@ interface PropertyMapProps {
   centerLng?: number;
   zoom?: number;
   onBoundsChange?: (bounds: MapBounds) => void;
+  onSelectProperty?: (property: Property) => void;
   showCountBadge?: boolean;
   // Tự thu bản đồ khít vào các marker đang hiển thị. Khi lọc theo khu vực/quận/xã,
   // bản đồ tự zoom về đúng vùng có tin — càng lọc cụ thể càng zoom sát.
@@ -175,6 +176,7 @@ export function PropertyMap({
   centerLng = 106.7,
   zoom = 10,
   onBoundsChange,
+  onSelectProperty,
   showCountBadge = true,
   fitToMarkers = false,
 }: PropertyMapProps) {
@@ -221,7 +223,7 @@ export function PropertyMap({
       nextMap.on('zoomend', emitBounds);
       boundsTimer = setTimeout(emitBounds, 300);
 
-      addMarkers(L, nextMap, properties, onNavigate);
+      addMarkers(L, nextMap, properties, onNavigate, onSelectProperty);
     });
 
     return () => {
@@ -245,7 +247,7 @@ export function PropertyMap({
       map.eachLayer(layer => {
         if ((layer as { _isMarker?: boolean })._isMarker) map.removeLayer(layer);
       });
-      addMarkers(L, map, properties, onNavigate);
+      addMarkers(L, map, properties, onNavigate, onSelectProperty);
 
       // Tự thu bản đồ khít các marker đang hiển thị: lọc khu vực/quận/xã càng cụ
       // thể thì vùng nhìn càng sát. Một điểm → panTo + zoom gần; nhiều điểm →
@@ -262,7 +264,7 @@ export function PropertyMap({
       }
     });
     return () => { cancelled = true; };
-  }, [properties, onNavigate, fitToMarkers]);
+  }, [properties, onNavigate, onSelectProperty, fitToMarkers]);
 
   const visibleCount = properties.filter(p => p.latitude && p.longitude).length;
 
@@ -330,6 +332,7 @@ function addMarkers(
   map: import('leaflet').Map,
   properties: Property[],
   onNavigate: (p: Page) => void,
+  onSelectProperty?: (property: Property) => void,
 ) {
   const valid = properties.filter(p => p.latitude && p.longitude);
 
@@ -352,8 +355,9 @@ function addMarkers(
       offset: [6, 0],
     });
 
-    // Hover opens popup
+    // Hover opens popup; click also focuses the matching listing card.
     marker.on('mouseover', () => marker.openPopup());
+    marker.on('click', () => onSelectProperty?.(p));
 
     // Click delegation on popup content via data-nav-id attribute
     marker.on('popupopen', () => {
