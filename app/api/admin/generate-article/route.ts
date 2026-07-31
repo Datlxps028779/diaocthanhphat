@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, adminClient } from '@/lib/server/requireAdmin';
+import { requireOwner, adminClient } from '@/lib/server/requireAdmin';
 import { generateArticle } from '@/lib/server/articleGen';
 import { buildSlug } from '@/lib/slug';
 
@@ -25,7 +25,7 @@ async function uniqueSlug(admin: ReturnType<typeof adminClient>, title: string):
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req);
+  const auth = await requireOwner(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
   const body = await req.json().catch(() => null);

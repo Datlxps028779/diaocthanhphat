@@ -3,8 +3,8 @@ import { getSiteUrl } from '@/lib/siteUrl';
 
 const SITE_URL = getSiteUrl();
 
-// robots.txt động — Next phục vụ tại /robots.txt. Cho phép AI crawler (SEO AI) +
-// search engine, chặn khu quản trị và trang riêng tư.
+// robots.txt động — Next phục vụ tại /robots.txt. Private routes dùng authorization
+// và noindex trực tiếp; không liệt kê chúng ở đây để tránh biến robots thành chỉ dẫn discovery.
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -17,7 +17,6 @@ export default function robots(): MetadataRoute.Robots {
           'PerplexityBot', 'Google-Extended', 'Applebot-Extended',
         ],
         allow: '/',
-        disallow: ['/quantrihethong', '/tai-khoan', '/tin-cua-toi', '/dat-lai-mat-khau', '/xac-nhan-email'],
       },
     ],
     sitemap: [`${SITE_URL}/sitemap.xml`, `${SITE_URL}/sitemap-images.xml`],

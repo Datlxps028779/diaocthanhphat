@@ -9,7 +9,6 @@ import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
-import { ADMIN_PATH } from '../lib/router';
 import { SlaBell } from './admin/shared/SlaBell';
 import { ChatOpsBell } from './admin/shared/ChatOpsBell';
 
@@ -39,7 +38,7 @@ const AiRagTab = lazy(() => import('./admin/tabs/AiRagTab').then(m => ({ default
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
-export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
+export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihethong' }: AdminPanelProps) {
   // Memo hoá theo role → tham chiếu ổn định cho dep của effect popstate bên dưới.
   const allowedTabs = useMemo(() => visibleTabs(role), [role]);
   // Tab mặc định: initialTab nếu hợp quyền, else tab đầu tiên staff/admin được thấy.
@@ -52,7 +51,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
   // để nút Back lùi tab-qua-tab; mode='replace' cho lần chuẩn hoá URL khi mở.
   const syncTabUrl = (t: AdminTab, mode: 'push' | 'replace' = 'push') => {
     if (typeof window === 'undefined') return;
-    const next = `${ADMIN_PATH}/${t}`;
+    const next = `${basePath}/${t}`;
     if (window.location.pathname === next) return;
     if (mode === 'push') window.history.pushState(null, '', next);
     else window.history.replaceState(null, '', next);
@@ -73,7 +72,7 @@ export function AdminPanel({ onLogout, initialTab, role }: AdminPanelProps) {
   useEffect(() => {
     const onPop = () => {
       if (typeof window === 'undefined') return;
-      const seg = window.location.pathname.replace(`${ADMIN_PATH}/`, '').split('/')[0];
+      const seg = window.location.pathname.replace(`${basePath}/`, '').split('/')[0];
       if (seg && allowedTabs.includes(seg as AdminTab)) setTabRaw(seg as AdminTab);
     };
     window.addEventListener('popstate', onPop);

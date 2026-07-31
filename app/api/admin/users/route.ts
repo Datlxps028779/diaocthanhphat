@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { validateAdminUserAction } from '@/lib/adminUserAction';
+import { adminClient, callerClient, requireOwner } from '@/lib/server/requireAdmin';
 
 // API route quản lý người dùng cho admin. Chạy SERVER-SIDE (service_role không bao giờ
 // tới client). Thiết kế degrade an toàn:
@@ -11,42 +11,8 @@ import { validateAdminUserAction } from '@/lib/adminUserAction';
 
 export const runtime = 'nodejs';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-// Client gắn token của caller — dùng để xác thực danh tính + quyền qua RLS.
-function callerClient(token: string) {
-  return createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-// Client service_role — BỎ QUA RLS, chỉ tạo khi có key. null nếu chưa cấu hình.
-function adminClient() {
-  if (!SERVICE_ROLE_KEY) return null;
-  return createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-// Xác thực caller là admin. Trả userId nếu hợp lệ, hoặc lỗi kèm HTTP status.
-async function requireAdmin(req: NextRequest): Promise<{ ok: true; token: string } | { ok: false; status: number; msg: string }> {
-  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-  if (!token) return { ok: false, status: 401, msg: 'Chưa đăng nhập.' };
-  const client = callerClient(token);
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) return { ok: false, status: 401, msg: 'Phiên đăng nhập không hợp lệ.' };
-  const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if ((profile as { role?: string } | null)?.role !== 'admin') {
-    return { ok: false, status: 403, msg: 'Tài khoản không có quyền quản trị.' };
-  }
-  return { ok: true, token };
-}
-
 export async function GET(req: NextRequest) {
-  const auth = await requireAdmin(req);
+  const auth = await requireOwner(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
   // profiles luôn đọc được (RLS admin). Là nguồn tên/SĐT/role.
@@ -88,7 +54,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req);
+  const auth = await requireOwner(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
   const body = await req.json().catch(() => null);

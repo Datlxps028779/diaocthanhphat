@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 // Client browser. LƯU Ý: trong bundle client, Next chỉ inline biến NEXT_PUBLIC_*
@@ -9,7 +9,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     'lúc build. Kiểm tra Vercel → Settings → Environment Variables rồi Redeploy.');
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export type Area = {
   id: string; name: string; description: string | null;
@@ -122,13 +122,13 @@ export type RagMatch = {
   score: number;
 };
 
-// Tài liệu admin upload để đào tạo AI (Word/Excel/PDF…). Text đã trích ở client lưu
-// vào extracted_text; refresh_rag_index đẩy thành chunk vào rag_chunks (nguồn admin_docs).
+// Tài liệu nội bộ owner upload (Word/Excel/PDF…). Text đã trích ở client lưu
+// vào extracted_text; file_path là object path private trong bucket admin-uploads.
 export type AdminDocument = {
   id: string;
   title: string;
   file_name: string | null;
-  file_url: string | null;
+  file_path: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   extracted_text: string;

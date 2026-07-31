@@ -44,14 +44,12 @@ export function UsersTab() {
     finally { setBusy(null); }
   };
 
-  const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff' | 'admin') => {
+  const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff') => {
     if (next === u.role) return;
     const who = u.display_name || u.email || u.id;
-    const msg = next === 'admin'
-      ? `Cấp quyền QUẢN TRỊ cho "${who}"? Toàn quyền vào trang quản trị.`
-      : next === 'staff'
-        ? `Đặt "${who}" làm NHÂN VIÊN? Chỉ vào được CRM khách hàng + duyệt tin đăng.`
-        : `Chuyển "${who}" về người dùng thường? Sẽ mất quyền vào trang quản trị.`;
+    const msg = next === 'staff'
+      ? `Đặt "${who}" làm NHÂN VIÊN? Chỉ vào được CRM khách hàng + duyệt tin đăng.`
+      : `Chuyển "${who}" về người dùng thường? Sẽ mất quyền vào workspace nội bộ.`;
     setConfirm({ msg, run: () => runAction(u.id, () => setUserRole(u.id, next)) });
   };
 
@@ -130,12 +128,11 @@ export function UsersTab() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <select disabled={busy === u.id} value={u.role}
-                        onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff' | 'admin')}
+                        onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff')}
                         title="Đổi quyền"
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-red-400 outline-none disabled:opacity-40">
                         <option value="user">Người dùng</option>
                         <option value="staff">Nhân viên</option>
-                        <option value="admin">Quản trị</option>
                       </select>
                       <button disabled={busy === u.id} onClick={() => handleToggleBan(u)}
                         title={u.banned ? 'Mở khóa' : 'Khóa tài khoản'}

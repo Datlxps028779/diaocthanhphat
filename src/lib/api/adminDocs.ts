@@ -1,9 +1,7 @@
 import { supabase, type AdminDocument } from '../supabase';
-import { publicImageUrlToStoragePath } from '../siteUrl';
 
-// CRUD tài liệu đào tạo AI (admin-only qua RLS is_admin()). Text đã trích sẵn ở
-// client (documentParse.ts) rồi lưu vào extracted_text; refresh_rag_index('admin_docs')
-// chunk hoá thành rag_chunks. File gốc nằm trên bucket admin-uploads.
+// CRUD tài liệu nội bộ owner-only. Text trích ở client được lưu riêng, không tự
+// đưa vào public RAG; file gốc nằm trong bucket private admin-uploads.
 
 export async function adminListDocuments(): Promise<AdminDocument[]> {
   const { data, error } = await supabase
@@ -17,7 +15,7 @@ export async function adminListDocuments(): Promise<AdminDocument[]> {
 export interface AdminDocumentInput {
   title: string;
   extracted_text: string;
-  file_url?: string | null;
+  file_path?: string | null;
   file_name?: string | null;
   mime_type?: string | null;
   size_bytes?: number | null;
@@ -29,7 +27,7 @@ export async function adminCreateDocument(payload: AdminDocumentInput): Promise<
     .insert({
       title: payload.title,
       extracted_text: payload.extracted_text,
-      file_url: payload.file_url ?? null,
+      file_path: payload.file_path ?? null,
       file_name: payload.file_name ?? null,
       mime_type: payload.mime_type ?? null,
       size_bytes: payload.size_bytes ?? null,
@@ -51,14 +49,17 @@ export async function adminUpdateDocument(
   if (error) throw error;
 }
 
-// Xóa record + file gốc trên storage (best-effort, theo pattern deleteUserMedia).
-export async function adminDeleteDocument(doc: Pick<AdminDocument, 'id' | 'file_url'>): Promise<void> {
+export async function adminDeleteDocument(doc: Pick<AdminDocument, 'id' | 'file_path'>): Promise<void> {
   const { error } = await supabase.from('admin_documents').delete().eq('id', doc.id);
   if (error) throw error;
-  if (doc.file_url) {
-    try {
-      const storage = publicImageUrlToStoragePath(doc.file_url);
-      if (storage) await supabase.storage.from(storage.bucket).remove([storage.path]);
-    } catch { /* file gốc mồ côi không chặn xóa record */ }
+  if (doc.file_path) {
+    try { await supabase.storage.from('admin-uploads').remove([doc.file_path]); } catch { /* file gốc mồ côi không chặn xóa record */ }
   }
+}
+
+export async function adminCreateDocumentSignedUrl(filePath: string): Promise<string | null> {
+  if (!filePath) return null;
+  const { data, error } = await supabase.storage.from('admin-uploads').createSignedUrl(filePath, 60);
+  if (error) throw error;
+  return data.signedUrl;
 }

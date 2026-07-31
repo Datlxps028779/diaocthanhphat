@@ -10,9 +10,8 @@ describe('validateAdminUserAction', () => {
       .toEqual({ action: 'set_role', userId: 'u1', role: 'user' });
   });
 
-  it('set_role hợp lệ (admin) → chuẩn hoá', () => {
-    expect(validateAdminUserAction({ action: 'set_role', userId: 'u1', role: 'admin' }))
-      .toEqual({ action: 'set_role', userId: 'u1', role: 'admin' });
+  it('từ chối cấp role admin vì console chỉ có một owner', () => {
+    expect(validateAdminUserAction({ action: 'set_role', userId: 'u1', role: 'admin' })).toBeNull();
   });
 
   it('set_role hợp lệ (staff) → chuẩn hoá', () => {
@@ -20,7 +19,7 @@ describe('validateAdminUserAction', () => {
       .toEqual({ action: 'set_role', userId: 'u1', role: 'staff' });
   });
 
-  it('set_role role lạ → null (chỉ nhận user|staff|admin)', () => {
+  it('set_role role lạ → null (chỉ nhận user|staff)', () => {
     expect(validateAdminUserAction({ action: 'set_role', userId: 'u1', role: 'superuser' })).toBeNull();
   });
 
@@ -61,12 +60,8 @@ describe('validateAdminUserAction', () => {
         .toEqual({ action: 'create_staff', email: 'nv@shop.vn', password: 'matkhau123', role: 'staff', display_name: 'An' });
     });
 
-    it('hợp lệ (admin)', () => {
-      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'admin' }))
-        .toEqual({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'admin', display_name: null });
-    });
-
-    it('role user → null (tab NV chỉ tạo staff/admin)', () => {
+    it('role admin/user → null vì UI chỉ tạo staff', () => {
+      expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'admin' })).toBeNull();
       expect(validateAdminUserAction({ action: 'create_staff', email: 'a@b.co', password: 'abcdef', role: 'user' })).toBeNull();
     });
 

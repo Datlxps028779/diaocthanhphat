@@ -16,6 +16,7 @@ import { buildNewsImageAlt } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
 import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
+import { DetailShareButtons } from '../components/DetailShareButtons';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
 
@@ -236,6 +237,7 @@ function ArticleDetail({
             </span>
           )}
           <h1 className="article-headline text-2xl md:text-3xl font-bold text-white leading-snug max-w-3xl">{article.title}</h1>
+          <DetailShareButtons title={article.title} canonicalPathname={articleHref(article)} className="mt-4" />
         </div>
       </div>
 
@@ -340,6 +342,7 @@ function ArticleDetail({
               Gọi ngay: {phone}
             </a>
           </div>
+          <DetailShareButtons title={article.title} canonicalPathname={articleHref(article)} className="mt-5" />
         </article>
 
         {/* Sidebar */}

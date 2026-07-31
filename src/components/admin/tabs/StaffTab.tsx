@@ -11,9 +11,8 @@ const ROLE_META: Record<string, { label: string; badge: string }> = {
 };
 const roleMeta = (r: string) => ROLE_META[r] ?? ROLE_META.user;
 
-// Tab Nhân viên (chỉ admin). Quản lý ĐỘI NGŨ (role admin/staff): tạo tài khoản NV mới
-// bằng email/mật khẩu, nâng người dùng đã đăng ký lên NV, đổi quyền, khóa/mở khóa.
-// Tách khỏi tab Người dùng (chỉ hiện role=user — khách tự đăng ký).
+// Tab Nhân viên (chỉ owner). Quản lý tài khoản staff bằng email/mật khẩu, nâng người
+// dùng đã đăng ký lên staff, đổi quyền và khóa/mở khóa. Owner không cấp được quyền admin.
 export function StaffTab() {
   const [all, setAll] = useState<AdminUserRow[]>([]);
   const [serviceRole, setServiceRole] = useState(true);
@@ -35,7 +34,7 @@ export function StaffTab() {
   };
   useEffect(() => { load(); }, []);
 
-  const team = all.filter(u => u.role === 'admin' || u.role === 'staff');
+  const team = all.filter(u => u.role === 'staff');
 
   const runAction = async (userId: string, fn: () => Promise<void>) => {
     setBusy(userId); setError('');
@@ -44,14 +43,12 @@ export function StaffTab() {
     finally { setBusy(null); }
   };
 
-  const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff' | 'admin') => {
+  const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff') => {
     if (next === u.role) return;
     const who = u.display_name || u.email || u.id;
-    const msg = next === 'admin'
-      ? `Cấp quyền QUẢN TRỊ cho "${who}"? Toàn quyền vào trang quản trị.`
-      : next === 'staff'
-        ? `Đặt "${who}" làm NHÂN VIÊN?`
-        : `Đưa "${who}" RA KHỎI đội ngũ (về người dùng thường)? Sẽ mất quyền vào trang quản trị.`;
+    const msg = next === 'staff'
+      ? `Đặt "${who}" làm NHÂN VIÊN?`
+      : `Đưa "${who}" RA KHỎI đội ngũ (về người dùng thường)? Sẽ mất quyền vào workspace nội bộ.`;
     setConfirm({ msg, run: () => runAction(u.id, () => setUserRole(u.id, next)) });
   };
 
@@ -133,11 +130,10 @@ export function StaffTab() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <select disabled={busy === u.id} value={u.role}
-                        onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff' | 'admin')}
+                        onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff')}
                         title="Đổi quyền"
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-red-400 outline-none disabled:opacity-40">
                         <option value="staff">Nhân viên</option>
-                        <option value="admin">Quản trị</option>
                         <option value="user">Đưa ra khỏi đội ngũ</option>
                       </select>
                       <button disabled={busy === u.id} onClick={() => handleToggleBan(u)}
@@ -175,7 +171,7 @@ export function StaffTab() {
 
 // ─── Modal tạo tài khoản NV mới (email/mật khẩu) ────────────────────────────────
 function CreateStaffModal({ serviceRole, onClose, onCreated }: { serviceRole: boolean; onClose: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({ display_name: '', email: '', password: '', role: 'staff' as 'staff' | 'admin' });
+  const [form, setForm] = useState({ display_name: '', email: '', password: '', role: 'staff' as const });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -216,11 +212,7 @@ function CreateStaffModal({ serviceRole, onClose, onCreated }: { serviceRole: bo
             placeholder="Email đăng nhập *" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
           <input type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             placeholder="Mật khẩu (tối thiểu 6 ký tự) *" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
-          <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as 'staff' | 'admin' }))}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 outline-none">
-            <option value="staff">Nhân viên (CRM + duyệt tin)</option>
-            <option value="admin">Quản trị (toàn quyền)</option>
-          </select>
+          <p className="text-xs bg-blue-50 border border-blue-100 text-blue-800 rounded-lg px-3 py-2">Tài khoản mới chỉ có quyền nhân viên: CRM và duyệt tin. Console chủ hệ thống yêu cầu UUID owner và MFA riêng.</p>
         </div>
 
         <div className="flex justify-end gap-2">
@@ -238,7 +230,7 @@ function CreateStaffModal({ serviceRole, onClose, onCreated }: { serviceRole: bo
 // ─── Modal nâng người dùng đã đăng ký lên NV ────────────────────────────────────
 function PromoteUserModal({ candidates, busyId, onClose, onPromote }: {
   candidates: AdminUserRow[]; busyId: string | null;
-  onClose: () => void; onPromote: (u: AdminUserRow, role: 'staff' | 'admin') => void;
+  onClose: () => void; onPromote: (u: AdminUserRow, role: 'staff') => void;
 }) {
   const [kw, setKw] = useState('');
   const filtered = candidates.filter(u => {

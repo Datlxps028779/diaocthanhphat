@@ -2,10 +2,10 @@
 // về union rõ ràng hoặc trả null để route từ chối (400) trước khi chạm service_role
 // (bỏ qua RLS). Chỉ nhận đúng action + tham số hợp lệ, không đoán.
 export type AdminUserAction =
-  | { action: 'set_role'; userId: string; role: 'user' | 'staff' | 'admin' }
+  | { action: 'set_role'; userId: string; role: 'user' | 'staff' }
   | { action: 'ban'; userId: string }
   | { action: 'unban'; userId: string }
-  | { action: 'create_staff'; email: string; password: string; role: 'staff' | 'admin'; display_name: string | null };
+  | { action: 'create_staff'; email: string; password: string; role: 'staff'; display_name: string | null };
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
@@ -25,16 +25,16 @@ export function validateAdminUserAction(body: unknown): AdminUserAction | null {
   if (b.action === 'create_staff') {
     if (!isEmail(b.email)) return null;
     if (!isNonEmptyString(b.password) || b.password.length < 6) return null;
-    if (b.role !== 'staff' && b.role !== 'admin') return null;   // tab NV không tạo role 'user'
+    if (b.role !== 'staff') return null;
     const display_name = isNonEmptyString(b.display_name) ? b.display_name.trim() : null;
-    return { action: 'create_staff', email: (b.email as string).trim().toLowerCase(), password: b.password, role: b.role, display_name };
+    return { action: 'create_staff', email: (b.email as string).trim().toLowerCase(), password: b.password, role: 'staff', display_name };
   }
 
   // Các action còn lại thao tác trên user có sẵn → bắt buộc userId.
   if (!isNonEmptyString(b.userId)) return null;
 
   if (b.action === 'set_role') {
-    if (b.role === 'user' || b.role === 'staff' || b.role === 'admin') {
+    if (b.role === 'user' || b.role === 'staff') {
       return { action: 'set_role', userId: b.userId, role: b.role };
     }
     return null;

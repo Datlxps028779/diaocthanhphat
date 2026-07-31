@@ -154,14 +154,14 @@ function assertSafeDocument(file: File) {
 }
 
 export interface UploadedDocument {
-  url: string;
+  path: string;
   file_name: string;
   mime_type: string;
   size_bytes: number;
 }
 
-// Upload file tài liệu gốc vào bucket admin-uploads (RLS admin-only). Trả metadata
-// để lưu kèm vào admin_documents. KHÔNG ghi user_media (đó là thư viện ảnh).
+// Upload file tài liệu gốc vào bucket private admin-uploads. Chỉ lưu object path;
+// URL truy cập phải được ký theo phiên owner tại thời điểm mở file.
 export async function uploadDocument(file: File, isAdmin = true): Promise<UploadedDocument> {
   assertSafeDocument(file);
   const maxSize = await getMaxFileSize();
@@ -175,9 +175,8 @@ export async function uploadDocument(file: File, isAdmin = true): Promise<Upload
   const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
   if (error) throw error;
 
-  const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);
   return {
-    url: storageUrlToPublicImageUrl(data.publicUrl),
+    path: filename,
     file_name: file.name,
     mime_type: file.type || '',
     size_bytes: file.size,

@@ -25,20 +25,21 @@ export function adminClient(): SupabaseClient | null {
   });
 }
 
-type AdminAuthResult =
+type OwnerAuthResult =
   | { ok: true; token: string; userId: string }
   | { ok: false; status: number; msg: string };
 
-// Trả token + userId nếu caller là admin, hoặc lỗi kèm HTTP status.
-export async function requireAdmin(req: NextRequest): Promise<AdminAuthResult> {
+export async function requireOwner(req: NextRequest): Promise<OwnerAuthResult> {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   if (!token) return { ok: false, status: 401, msg: 'Chưa đăng nhập.' };
   const client = callerClient(token);
   const { data: { user }, error } = await client.auth.getUser();
   if (error || !user) return { ok: false, status: 401, msg: 'Phiên đăng nhập không hợp lệ.' };
-  const { data: profile } = await client.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if ((profile as { role?: string } | null)?.role !== 'admin') {
-    return { ok: false, status: 403, msg: 'Tài khoản không có quyền quản trị.' };
+  const { data: ownerMfa, error: ownerError } = await client.rpc('is_owner_mfa');
+  if (ownerError || ownerMfa !== true) {
+    return { ok: false, status: 403, msg: 'Tài khoản không có quyền truy cập.' };
   }
   return { ok: true, token, userId: user.id };
 }
+
+export const requireAdmin = requireOwner;

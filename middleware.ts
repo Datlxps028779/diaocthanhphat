@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { buildLegacyAreaRedirectPath } from '@/lib/areaRedirect';
 import { buildProductPath, parseProductCode } from '@/lib/productPath';
@@ -31,13 +32,50 @@ function productNotFound(req: NextRequest): NextResponse {
   return NextResponse.rewrite(new URL('/_product-not-found', req.url), { status: 404 });
 }
 
+function privateNotFound(req: NextRequest): NextResponse {
+  return NextResponse.rewrite(new URL('/_private-not-found', req.url), { status: 404 });
+}
+
+async function checkPrivateAccess(req: NextRequest, res: NextResponse): Promise<{ owner: boolean; ownerMfa: boolean; staff: boolean }> {
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll: () => req.cookies.getAll(),
+      setAll: (cookies) => {
+        for (const cookie of cookies) res.cookies.set(cookie.name, cookie.value, cookie.options);
+      },
+    },
+  });
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return { owner: false, ownerMfa: false, staff: false };
+  const [{ data: owner }, { data: ownerMfa }, { data: staff }] = await Promise.all([
+    supabase.rpc('is_owner'),
+    supabase.rpc('is_owner_mfa'),
+    supabase.rpc('is_admin_or_staff'),
+  ]);
+  return { owner: owner === true, ownerMfa: ownerMfa === true, staff: staff === true };
+}
+
 // Middleware chạy TRƯỚC khi Next stream shell (root loading.tsx flush 200 sớm), nên đây
 // là chỗ DUY NHẤT set được status redirect cứng (308) cho link cũ đã share/index.
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return NextResponse.next();
+  const privatePath = pathname.startsWith('/quantrihethong') || pathname.startsWith('/noi-bo') || pathname.startsWith('/xac-thuc-chu-he-thong');
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return privatePath ? privateNotFound(req) : NextResponse.next();
+  }
 
   try {
+    if (privatePath) {
+      const res = NextResponse.next();
+      const access = await checkPrivateAccess(req, res);
+      const allowed = pathname.startsWith('/quantrihethong')
+        ? access.ownerMfa
+        : pathname.startsWith('/noi-bo')
+          ? access.staff
+          : access.owner;
+      return allowed ? res : privateNotFound(req);
+    }
+
     const sb = sbClient();
 
     // A. URL khu vực cũ: /mua-ban|/cho-thue?area=<uuid> → path khu vực mới.
@@ -90,10 +128,14 @@ export async function middleware(req: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    return NextResponse.next();
+    return privatePath ? privateNotFound(req) : NextResponse.next();
   }
 }
 
 export const config = {
-  matcher: ['/mua-ban', '/mua-ban/:path*', '/cho-thue', '/cho-thue/:path*', '/bat-dong-san/:slug*'],
+  matcher: [
+    '/mua-ban', '/mua-ban/:path*', '/cho-thue', '/cho-thue/:path*', '/bat-dong-san/:slug*',
+    '/quantrihethong', '/quantrihethong/:path*', '/noi-bo', '/noi-bo/:path*',
+    '/xac-thuc-chu-he-thong',
+  ],
 };

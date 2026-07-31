@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  MapPin, Phone, CheckCircle, Heart, Share2, Shield,
+  MapPin, Phone, CheckCircle, Heart, Shield,
   Maximize2, FileText, Clock, Eye, ChevronRight, Star,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight,
@@ -18,7 +18,7 @@ import { captureSignalFromProperty } from '../lib/captureSignal';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
-import { useNeighborhoods } from '../lib/hooks/useTaxonomy';
+import { useAreas, useDistricts, useNeighborhoods } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { VerifiedBadge } from '../components/VerifiedBadge';
@@ -36,6 +36,8 @@ import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
+import { DetailShareButtons } from '../components/DetailShareButtons';
+import { getProductSuggestions } from '../lib/productSuggestions';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -55,7 +57,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const [callbackOpen, setCallbackOpen] = useState(false);
   const [callbackForm, setCallbackForm] = useState<{ name: string; phone: string; timePreset: CallbackTimePreset; customTime: string; note: string }>({ name: '', phone: '', timePreset: 'asap', customTime: '', note: '' });
   const [callbackSent, setCallbackSent] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
   const responseTime = useSetting('lead_response_time', '30 phút');
@@ -79,6 +80,9 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const neighborhood = property?.neighborhood_slug
     ? allNeighborhoods.find(n => n.slug === property.neighborhood_slug) ?? null
     : null;
+  const { data: areas = [] } = useAreas();
+  const { data: districts = [] } = useDistricts();
+  const listingTaxonomy = { areas, districts };
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
   // để giữ đúng thứ tự hooks.
@@ -197,27 +201,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     callbackMutation.mutate();
   };
 
-  // Link chia sẻ theo URL canonical (path khu vực + slug-pr{code} khi đủ dữ liệu).
-  // Web Share API trên mobile, fallback copy clipboard trên desktop.
-  const handleShare = async () => {
-    if (!property) return;
-    const shareUrl = `${window.location.origin}${buildPropertyPath(property)}`;
-    const shareData = { title: property.title, text: property.title, url: shareUrl };
-    try {
-      if (navigator.share && navigator.canShare?.(shareData)) {
-        await navigator.share(shareData);
-        return;
-      }
-    } catch { /* user hủy share → rơi xuống copy */ }
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
-    } catch {
-      window.prompt('Sao chép link để chia sẻ:', shareUrl);
-    }
-  };
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
@@ -268,6 +251,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const gmapsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${property.latitude},${property.longitude}`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([property.address, property.district, property.city].filter(Boolean).join(', '))}`;
+
+  const productSuggestions = getProductSuggestions(property);
 
   const attrs = [
     property.area_sqm && { icon: <Maximize2 className="w-4 h-4 text-red-500" />, label: 'Diện tích', value: `${property.area_sqm} m²` },
@@ -339,19 +324,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 {property.badge && (
                   <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded">{property.badge}</span>
                 )}
-                <div className="absolute top-3 right-3 flex gap-2">
+                <div className="absolute top-3 right-3">
                   <button onClick={() => !preview && property && favMutation.mutate(property.id)} aria-label={liked ? 'Bỏ yêu thích' : 'Lưu yêu thích'}
                     className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
                     <Heart className={`w-4 h-4 ${liked ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
-                  </button>
-                  <button onClick={handleShare} title="Chia sẻ" aria-label="Chia sẻ"
-                    className="relative w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-                    {shareCopied ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4 text-gray-500" />}
-                    {shareCopied && (
-                      <span className="absolute top-full mt-1 right-0 whitespace-nowrap bg-gray-900 text-white text-[10px] font-medium px-2 py-1 rounded shadow">
-                        Đã sao chép link
-                      </span>
-                    )}
                   </button>
                 </div>
                 {/* Nút phóng to */}
@@ -413,7 +389,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {/* Title & price */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
-              <h1 className="text-xl font-black text-gray-900 leading-tight mb-2">{property.title}</h1>
+              <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{property.title}</h1>
+              <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
               <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span>{[property.address, property.district, property.city].filter(Boolean).join(', ')}</span>
@@ -788,6 +765,26 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               ))}
             </div>
           </div>
+        )}
+
+        <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mt-8 border-t border-gray-200 pt-6" />
+
+        {productSuggestions.length > 0 && (
+          <section className="mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-gray-900">Khám phá thêm lựa chọn phù hợp</h2>
+            <p className="mt-1 text-sm text-gray-500">Lọc nhanh các bất động sản cùng nhu cầu.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {productSuggestions.map(({ label, filters }) => (
+                <Link
+                  key={`${label}-${filters.listingType}-${filters.areaId ?? ''}-${filters.minPrice ?? ''}-${filters.maxPrice ?? ''}`}
+                  href={pageToHref({ name: 'listings', ...filters }, listingTaxonomy)}
+                  className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
 
         {!preview && <ForYou excludeId={property.id} />}

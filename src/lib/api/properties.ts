@@ -37,8 +37,9 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
     const kw = filters.keyword.replace(/[,()\\%]/g, ' ').trim();
     if (kw) q = q.or(`title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`);
   }
-  if (filters?.minPrice !== undefined) q = q.gte('price', filters.minPrice);
-  if (filters?.maxPrice !== undefined) q = q.lte('price', filters.maxPrice);
+  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
+  if (filters?.minPrice !== undefined) q = q.gte(priceColumn, filters.minPrice);
+  if (filters?.maxPrice !== undefined) q = q.lte(priceColumn, filters.maxPrice);
   if (filters?.minArea !== undefined) q = q.gte('area_sqm', filters.minArea);
   if (filters?.maxArea !== undefined) q = q.lte('area_sqm', filters.maxArea);
   if (filters?.bedrooms && filters.bedrooms !== 'all') q = q.gte('bedrooms', parseInt(filters.bedrooms));
@@ -47,8 +48,8 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
   if (filters?.isFeatured) q = q.eq('is_featured', true);
   if (filters?.isHot) q = q.eq('is_hot', true);
 
-  if (filters?.sort === 'price_asc') q = q.order('price', { ascending: true });
-  else if (filters?.sort === 'price_desc') q = q.order('price', { ascending: false });
+  if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true });
+  else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false });
   else if (filters?.sort === 'views') q = q.order('views', { ascending: false });
   else q = q.order('created_at', { ascending: false });
 

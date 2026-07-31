@@ -15,7 +15,7 @@ const Spinner = ({ dark }: { dark?: boolean }) => (
   </div>
 );
 
-export function AdminClient({ initialTab }: { initialTab?: string } = {}) {
+export function AdminClient({ initialTab, forceStaff = false, forceOwner = false }: { initialTab?: string; forceStaff?: boolean; forceOwner?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth();
   const [role, setRole] = useState<Role | null>(null);
   const [roleChecked, setRoleChecked] = useState(false);
@@ -30,16 +30,23 @@ export function AdminClient({ initialTab }: { initialTab?: string } = {}) {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!authLoading && !user && forceOwner) window.location.replace('/quyen-chu-he-thong');
+    if (!authLoading && !user && forceStaff) window.location.replace('/');
+  }, [authLoading, forceOwner, forceStaff, user]);
+
+  const panelRole: Role | null = forceOwner ? 'admin' : forceStaff ? 'staff' : role;
+
   if (authLoading) return <Spinner />;
-  if (!user || !canAccessPanel(role)) {
-    if (!roleChecked) return <Spinner dark />;
+  if (!user || !canAccessPanel(panelRole)) {
+    if (!roleChecked || forceOwner || forceStaff) return <Spinner dark />;
     return <AdminLogin onSuccess={() => setEntered(true)} />;
   }
   // user + quyền vào panel (admin|staff) OK
   void entered;
   return (
     <Suspense fallback={<Spinner dark />}>
-      <AdminPanel role={role!} initialTab={initialTab} onLogout={async () => { await supabase.auth.signOut(); }} />
+      <AdminPanel role={panelRole!} initialTab={initialTab} basePath={forceStaff ? '/noi-bo' : '/quantrihethong'} onLogout={async () => { await supabase.auth.signOut(); }} />
     </Suspense>
   );
 }

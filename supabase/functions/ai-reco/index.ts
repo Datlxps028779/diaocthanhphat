@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { callClaude } from "../_shared/anthropic.ts";
+import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
 
 // ── Kiểu dữ liệu vào ──────────────────────────────────────────────────────────
 // profileDigest: hồ sơ sở thích ĐÃ ẨN DANH do FE tính (tên khu vực/loại/loại-tin ưa
@@ -116,10 +117,19 @@ Deno.serve(async (req: Request) => {
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
   try {
+    if (isRateLimited(`ai-reco:${clientIp(req)}`, 6, 60_000)) {
+      return json({ ranked: null, error: "Too many requests" }, 429);
+    }
     const input = (await req.json()) as RecoInput;
-    if (!input?.candidates?.length) return json({ ranked: null });
-    // Chốt trần số ứng viên để prompt gọn + chi phí ổn định.
-    input.candidates = input.candidates.slice(0, MAX_CANDIDATES);
+    if (!input || !Array.isArray(input.candidates) || !input.candidates.length || input.candidates.length > MAX_CANDIDATES) {
+      return json({ ranked: null }, 400);
+    }
+    if (typeof input.profileDigest !== "object" || input.profileDigest === null) return json({ ranked: null }, 400);
+    input.candidates = input.candidates.filter((candidate) =>
+      typeof candidate?.id === "string" && candidate.id.length <= 64 &&
+      typeof candidate.title === "string" && candidate.title.length <= 300,
+    );
+    if (!input.candidates.length) return json({ ranked: null }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

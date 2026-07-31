@@ -3,7 +3,7 @@ import { BrainCircuit, RefreshCw, Search, ChevronRight, ExternalLink, AlertCircl
 import type { RagChunk, RagMatch, RagSourceTable, AdminDocument } from '../../../lib/supabase';
 import {
   adminRefreshRagIndex, adminGetRagStats, adminGetRagRuns, adminGetRagChunks, testRagRetrieval,
-  adminListDocuments, adminCreateDocument, adminUpdateDocument, adminDeleteDocument, uploadDocument,
+  adminListDocuments, adminCreateDocument, adminUpdateDocument, adminDeleteDocument, adminCreateDocumentSignedUrl, uploadDocument,
   type RagSourceStat,
 } from '../../../lib/api';
 import { parseDocument } from '../../../lib/documentParse';
@@ -19,9 +19,9 @@ const SOURCE_LABELS: Record<RagSourceTable, string> = {
   areas: 'Khu vực',
   price_stats: 'Dữ liệu giá',
   ai_chat_knowledge: 'Tri thức Q&A',
-  admin_docs: 'Tài liệu admin',
+  admin_docs: 'Tài liệu nội bộ',
 };
-const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge', 'admin_docs'];
+const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge'];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -71,12 +71,12 @@ export function AiRagTab() {
       await adminCreateDocument({
         title: file.name.replace(/\.[^.]+$/, ''),
         extracted_text: text,
-        file_url: meta?.url ?? null,
+        file_path: meta?.path ?? null,
         file_name: meta?.file_name ?? file.name,
         mime_type: meta?.mime_type ?? file.type,
         size_bytes: meta?.size_bytes ?? file.size,
       });
-      setMsg({ kind: 'ok', text: `Đã thêm tài liệu "${file.name}". Bấm "Đồng bộ" nguồn Tài liệu admin để đưa vào kho AI.` });
+      setMsg({ kind: 'ok', text: `Đã thêm tài liệu nội bộ "${file.name}". Nội dung này không được phát hành cho chatbot công khai.` });
       await loadDocs();
     } catch (e) {
       setMsg({ kind: 'err', text: (e as Error).message });
@@ -93,6 +93,16 @@ export function AiRagTab() {
       setMsg({ kind: 'err', text: (e as Error).message });
     }
     setDocBusy(null);
+  };
+
+  const openDoc = async (doc: AdminDocument) => {
+    if (!doc.file_path) return;
+    try {
+      const signedUrl = await adminCreateDocumentSignedUrl(doc.file_path);
+      if (signedUrl) window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setMsg({ kind: 'err', text: (e as Error).message });
+    }
   };
 
   const removeDoc = async (doc: AdminDocument) => {
@@ -212,7 +222,7 @@ export function AiRagTab() {
               onChange={e => { onUploadDoc(e.target.files?.[0]); e.target.value = ''; }} className="hidden" />
           </label>
         </div>
-        <p className="text-gray-500 text-xs mb-3">Tải file Word (.docx), Excel (.xlsx/.csv), PDF hoặc text — AI đọc nội dung để trả lời (chỉ dùng nội dung thật, không bịa). Sau khi thêm/sửa, bấm "Đồng bộ" nguồn Tài liệu admin ở trên để đưa vào kho AI.</p>
+        <p className="text-gray-500 text-xs mb-3">Tải file Word (.docx), Excel (.xlsx/.csv), PDF hoặc text để lưu tri thức nội bộ. File và nội dung chỉ dành cho chủ hệ thống, không tự đưa vào chatbot công khai.</p>
         {docsLoading ? (
           <div className="py-8 text-center"><div className="inline-block w-6 h-6 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>
         ) : docs.length === 0 ? (
@@ -226,13 +236,13 @@ export function AiRagTab() {
                   <p className={`font-semibold text-sm truncate ${doc.is_active ? 'text-gray-900' : 'text-gray-400'}`}>{doc.title}</p>
                   <p className="text-gray-400 text-xs mt-0.5">
                     {(doc.extracted_text?.length ?? 0).toLocaleString('vi-VN')} ký tự · {fmtDate(doc.created_at)}
-                    {doc.file_url && ' · có file gốc'}
+                    {doc.file_path && ' · có file gốc riêng tư'}
                   </p>
                 </div>
-                {doc.file_url && (
-                  <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0" title="Mở file gốc">
+                {doc.file_path && (
+                  <button onClick={() => openDoc(doc)} className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0" title="Mở file gốc riêng tư">
                     <ExternalLink className="w-4 h-4" />
-                  </a>
+                  </button>
                 )}
                 <button onClick={() => toggleDoc(doc)} disabled={docBusy === doc.id}
                   className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0 disabled:opacity-40 ${doc.is_active ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-gray-100'}`}

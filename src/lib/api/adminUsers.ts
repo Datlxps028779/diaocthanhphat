@@ -39,7 +39,7 @@ async function postAction(body: Record<string, unknown>): Promise<void> {
   if (!res.ok) throw new Error(json.error ?? 'Thao tác thất bại.');
 }
 
-export async function setUserRole(userId: string, role: 'user' | 'staff' | 'admin'): Promise<void> {
+export async function setUserRole(userId: string, role: 'user' | 'staff'): Promise<void> {
   await postAction({ action: 'set_role', userId, role });
 }
 export async function banUser(userId: string): Promise<void> {
@@ -50,7 +50,7 @@ export async function unbanUser(userId: string): Promise<void> {
 }
 
 // Admin tạo tài khoản nhân viên mới (email/mật khẩu). Server tạo auth user + set role.
-export async function createStaff(input: { email: string; password: string; role: 'staff' | 'admin'; display_name?: string | null }): Promise<void> {
+export async function createStaff(input: { email: string; password: string; role: 'staff'; display_name?: string | null }): Promise<void> {
   await postAction({ action: 'create_staff', ...input });
 }
 
