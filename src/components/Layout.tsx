@@ -405,14 +405,15 @@ export function SidebarCta({ onContact }: { onContact: () => void }) {
   const sub = useSetting('sidebar_cta_sub', 'Chuyên gia sẵn sàng hỗ trợ 7:00–21:00');
   const btnLabel = useSetting('sidebar_cta_btn', 'Gửi yêu cầu tư vấn');
   return (
-    <div className="bg-red-600 rounded-xl p-4 text-white sticky top-20">
-      <h4 className="font-bold text-sm mb-1">{title}</h4>
-      <p className="text-red-100 text-xs mb-3">{sub}</p>
+    <div className="sticky top-20 overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-red-950 p-4 text-white shadow-[var(--cnv-shadow-soft)]">
+      <div className="mb-3 h-1 w-10 bg-gradient-to-r from-red-500 to-amber-400" />
+      <h4 className="mb-1 text-sm font-bold">{title}</h4>
+      <p className="mb-3 text-xs text-slate-300">{sub}</p>
       <a href={`tel:${phone.replace(/\s/g, '')}`}
-        className="block w-full bg-white text-red-600 font-bold text-xs py-2.5 rounded-lg hover:bg-red-50 transition-colors text-center mb-2">
-        <Phone className="w-3.5 h-3.5 inline mr-1" />{phone}
+        className="mb-2 block w-full bg-white py-2.5 text-center text-xs font-bold text-red-700 transition-colors hover:bg-amber-50">
+        <Phone className="mr-1 inline h-3.5 w-3.5" />{phone}
       </a>
-      <button onClick={onContact} className="w-full border border-red-400 text-red-100 font-semibold text-xs py-2 rounded-lg hover:bg-red-700 transition-colors">
+      <button onClick={onContact} className="w-full border border-white/30 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10">
         {btnLabel}
       </button>
     </div>

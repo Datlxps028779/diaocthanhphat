@@ -308,8 +308,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       case 'why_us': return (
         <section key="why_us" className="py-12 bg-white">
           <div className="max-w-6xl mx-auto px-4">
-            <div className="text-center mb-8">
-              <h2 className="inline-block text-2xl font-black text-gray-900">{sec('why_us')('title', 'Tại sao chọn chúng tôi?')}</h2>
+            <div className="mb-8 flex flex-col items-center text-center">
+              <span className="mb-3 h-1 w-12 rounded-full bg-gradient-to-r from-red-600 to-amber-500" />
+              <h2 className="inline-block text-2xl font-black text-slate-900">{sec('why_us')('title', 'Tại sao chọn chúng tôi?')}</h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {[
@@ -319,8 +320,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 { icon: <TrendingUp className="w-6 h-6" />, title: sec('why_us')('f4_title', 'Pháp lý an toàn'), desc: sec('why_us')('f4_desc', 'Hỗ trợ đầy đủ thủ tục pháp lý từ A đến Z') },
               ].map((f, i) => (
                 <div key={i} className="text-center">
-                  <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-red-600 mx-auto mb-3">{f.icon}</div>
-                  <h3 className="font-bold text-sm text-gray-900 mb-1.5">{f.title}</h3>
+                  <div className="w-14 h-14 bg-gradient-to-br from-red-50 to-amber-50 rounded-2xl flex items-center justify-center text-red-600 mx-auto mb-3">{f.icon}</div>
+                  <h3 className="font-bold text-sm text-slate-900 mb-1.5">{f.title}</h3>
                   <p className="text-gray-500 text-xs leading-relaxed">{f.desc}</p>
                 </div>
               ))}
@@ -329,25 +330,26 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         </section>
       );
       case 'testimonials': return testimonials.length > 0 ? (
-        <section key="testimonials" className="py-10 bg-gray-50">
+        <section key="testimonials" className="border-y border-slate-100 bg-slate-50 py-12">
           <div className="max-w-6xl mx-auto px-4">
-            <div className="text-center mb-6">
-              <h2 className="inline-block text-xl font-black text-gray-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
+            <div className="mb-7 flex flex-col items-center text-center">
+              <span className="mb-3 h-1 w-12 rounded-full bg-gradient-to-r from-red-600 to-amber-500" />
+              <h2 className="inline-block text-xl font-black text-slate-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
             </div>
             <div className="grid md:grid-cols-3 gap-4">
               {testimonials.slice(0, secNum('testimonials', 'max_count', 3)).map(t => (
-                <div key={t.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex gap-0.5 mb-3">
+                <div key={t.id} className="border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex gap-0.5">
                     {Array.from({ length: t.rating }).map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
                   </div>
-                  <p className="text-gray-700 text-sm italic leading-relaxed mb-4">"{t.content}"</p>
+                  <p className="mb-4 text-sm italic leading-relaxed text-slate-700">"{t.content}"</p>
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 font-bold text-sm">{t.name.charAt(0)}</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-red-100 to-amber-100">
+                      <span className="text-sm font-bold text-red-700">{t.name.charAt(0)}</span>
                     </div>
                     <div>
-                      <p className="font-bold text-sm text-gray-900">{t.name}</p>
-                      {t.location && <p className="text-gray-400 text-xs">{t.location}</p>}
+                      <p className="text-sm font-bold text-slate-900">{t.name}</p>
+                      {t.location && <p className="text-xs text-slate-400">{t.location}</p>}
                     </div>
                   </div>
                 </div>
@@ -393,22 +395,25 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         </section>
       ) : null;
       case 'faq': return (
-        <section key="faq" className="py-12 bg-gray-50 border-t border-gray-100">
+        <section key="faq" className="border-t border-slate-100 bg-slate-50 py-14">
           <div className="max-w-3xl mx-auto px-4">
-            <h2 className="text-2xl md:text-3xl font-black text-gray-900 text-center mb-2">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
-            <p className="text-gray-500 text-sm text-center mb-8">{sec('faq')('subtitle', 'Những điều bạn cần biết trước khi mua bán, cho thuê bất động sản')}</p>
+            <div className="mb-8 flex flex-col items-center text-center">
+              <span className="mb-3 h-1 w-12 rounded-full bg-gradient-to-r from-red-600 to-amber-500" />
+              <h2 className="text-2xl font-black text-slate-900 md:text-3xl">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
+              <p className="mt-2 text-sm text-slate-500">{sec('faq')('subtitle', 'Những điều bạn cần biết trước khi mua bán, cho thuê bất động sản')}</p>
+            </div>
             <div className="space-y-3">
               {FAQ_ITEMS.map((item, i) => {
                 const open = openFaq === i;
                 return (
-                  <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div key={i} className="overflow-hidden border border-slate-200 bg-white shadow-sm">
                     <button onClick={() => setOpenFaq(open ? null : i)}
-                      className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+                      className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
                       aria-expanded={open}>
-                      <span className="font-semibold text-gray-900 text-sm">{item.q}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                      <span className="text-sm font-semibold text-slate-900">{item.q}</span>
+                      <ChevronDown className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
-                    {open && <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed">{item.a}</div>}
+                    {open && <div className="px-5 pb-4 text-sm leading-relaxed text-slate-600">{item.a}</div>}
                   </div>
                 );
               })}
