@@ -491,7 +491,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       />
 
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
-      <section className="relative z-10 min-h-[720px] overflow-hidden bg-slate-950 pt-[132px] md:pt-[184px] lg:min-h-[760px]">
+      <section className="relative z-10 min-h-[680px] overflow-hidden bg-slate-950 pt-[82px] md:pt-[164px] lg:min-h-[720px]">
         <div className="absolute inset-0">
           <Image src={heroBg} alt="Khu dân cư và bất động sản tại Bình Dương" fill priority sizes="100vw" className="object-cover object-center" />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/35 via-slate-950/35 to-slate-950/80" />

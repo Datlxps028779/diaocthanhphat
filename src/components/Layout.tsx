@@ -88,31 +88,31 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
         </div>
       </div>
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-3 md:py-6">
-        <Link href="/" onClick={closeMenus} className="flex flex-shrink-0 items-center gap-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:py-4">
+        <Link href="/" onClick={closeMenus} className="flex min-w-0 flex-shrink-0 items-center gap-2.5">
           {logoUrl && !logoError ? (
             <img
               src={logoUrl}
               alt={siteName}
               onError={() => setLogoError(true)}
-              className="h-10 w-auto max-w-[190px] object-contain md:h-12"
+              className="h-9 w-auto max-w-[150px] object-contain md:h-10 md:max-w-[170px]"
             />
           ) : (
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-amber-500 shadow-sm md:h-12 md:w-12">
-              <Home className="h-6 w-6 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-600 to-amber-500 shadow-sm md:h-11 md:w-11">
+              <Home className="h-5 w-5 text-white" />
             </div>
           )}
-          <div className="hidden leading-tight sm:block">
-            <div className="font-display text-lg font-extrabold tracking-tight text-red-700 md:text-2xl">{siteName}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 md:text-xs">{siteSub}</div>
+          <div className="hidden min-w-0 leading-tight sm:block">
+            <div className="truncate font-display text-base font-extrabold tracking-tight text-red-700 md:text-xl">{siteName}</div>
+            <div className="truncate text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400 md:text-[10px]">{siteSub}</div>
           </div>
         </Link>
 
-        <nav className="hidden flex-1 items-center justify-center gap-2 xl:flex">
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex">
           {primaryNav.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[15px] font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
+                className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
                 {item.label}<ChevronDown className="h-4 w-4" />
               </button>
               {desktopMenuOpen === item.key && (
@@ -140,21 +140,21 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`rounded-full px-4 py-2.5 text-[15px] font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
+              className={`rounded-full px-3 py-2 text-sm font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
               {item.label}
             </Link>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden flex-shrink-0 items-center gap-2 md:flex">
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2.5 transition-colors hover:bg-slate-50">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50">
-                  <span className="text-sm font-bold text-red-700">{user.email?.charAt(0).toUpperCase()}</span>
+                className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 transition-colors hover:bg-slate-50">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-50">
+                  <span className="text-xs font-bold text-red-700">{user.email?.charAt(0).toUpperCase()}</span>
                 </div>
-                <span className="max-w-[120px] truncate text-sm font-bold text-slate-700">{user.email}</span>
+                <span className="max-w-[110px] truncate text-sm font-bold text-slate-700">{user.email}</span>
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </button>
               {userMenuOpen && (
@@ -178,12 +178,12 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <button onClick={() => onShowAuth?.('login')}
-              className="flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700">
+              className="flex items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700">
               <User className="h-4 w-4" />{nav.btn_login || 'Đăng nhập'}
             </button>
           )}
           <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-            className="rounded-full bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
+            className="whitespace-nowrap rounded-full bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
             {nav.btn_post || 'Đăng tin'}
           </Link>
         </div>
