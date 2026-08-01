@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
-import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
+import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Tag } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area } from '../lib/supabase';
@@ -32,6 +32,9 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
   const logoUrl = useSetting('site_logo_url', '');
+  const phoneHotline = useSetting('phone_hotline', '0901 234 567');
+  const supportHours = useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00');
+  const promoText = useSetting('header_promo_text', 'Đăng tin miễn phí — tiếp cận hàng nghìn người mua mỗi ngày');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -57,63 +60,77 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   // Menu item bật "mở tab mới" (admin cấu hình) → target=_blank + chống tabnabbing.
   const newTabProps = (item: NavigationItem) => item.openNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
+  const primaryNav = navItems.slice(0, 6);
+  const secondaryNav: { label: string; href: string }[] = [
+    { label: 'Nhà đất bán', href: pageToHref({ name: 'listings', listingType: 'mua_ban' }) },
+    { label: 'Nhà đất cho thuê', href: pageToHref({ name: 'listings', listingType: 'cho_thue' }) },
+    { label: 'Dự án', href: pageToHref({ name: 'projects' }) },
+    { label: 'Khu vực', href: pageToHref({ name: 'regions' }) },
+    { label: 'Dữ liệu giá', href: '/du-lieu-gia' },
+  ];
+
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white/95 shadow-[var(--cnv-shadow-soft)] backdrop-blur-xl' : 'bg-white/90 shadow-sm backdrop-blur-xl'}`}>
-      {/* Top bar */}
-      <div className="bg-gradient-to-r from-red-700 via-red-600 to-amber-500 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />Hotline: {useSetting('phone_hotline', '0901 234 567')}</span>
-          <span className="opacity-60">|</span>
-          <span>{useSetting('address', 'Thủ Dầu Một, Bình Dương')}</span>
-        </div>
-        <div className="flex items-center gap-3 text-red-100">
-          <span>{useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00')}</span>
+    <header className={`fixed inset-x-0 top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? 'shadow-[var(--cnv-shadow-soft)]' : 'shadow-sm'}`}>
+      <div className="hidden bg-gradient-to-r from-red-800 via-red-600 to-amber-500 text-white md:block">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2 text-[13px] font-semibold">
+          <div className="flex min-w-0 items-center gap-3">
+            <Tag className="h-4 w-4 flex-shrink-0 text-white/90" />
+            <span className="truncate">{promoText}</span>
+            <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus} className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-white/30">
+              Đăng ngay →
+            </Link>
+          </div>
+          <div className="flex flex-shrink-0 items-center gap-4 text-white/90">
+            <a href={`tel:${phoneHotline.replace(/\s/g, '')}`} className="flex items-center gap-1.5 font-bold text-white"><Phone className="h-3.5 w-3.5" />{phoneHotline}</a>
+            <span className="h-4 w-px bg-white/25" />
+            <span className="hidden lg:inline">{supportHours}</span>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
-        <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-3 md:py-6">
+        <Link href="/" onClick={closeMenus} className="flex flex-shrink-0 items-center gap-3">
           {logoUrl && !logoError ? (
             <img
               src={logoUrl}
               alt={siteName}
               onError={() => setLogoError(true)}
-              className="h-9 w-auto max-w-[160px] rounded-lg object-contain"
+              className="h-10 w-auto max-w-[190px] object-contain md:h-12"
             />
           ) : (
-            <div className="w-9 h-9 bg-gradient-to-br from-red-600 to-amber-500 rounded-xl flex items-center justify-center shadow-sm">
-              <Home className="w-5 h-5 text-white" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-amber-500 shadow-sm md:h-12 md:w-12">
+              <Home className="h-6 w-6 text-white" />
             </div>
           )}
-          <div className="hidden sm:block leading-tight">
-            <div className="text-red-600 font-black text-sm tracking-tight">{siteName}</div>
-            <div className="text-gray-400 text-[9px] tracking-wider uppercase">{siteSub}</div>
+          <div className="hidden leading-tight sm:block">
+            <div className="font-display text-lg font-extrabold tracking-tight text-red-700 md:text-2xl">{siteName}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 md:text-xs">{siteSub}</div>
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-0.5 flex-1 justify-center">
-          {navItems.map(item => item.children ? (
+        <nav className="hidden flex-1 items-center justify-center gap-2 xl:flex">
+          {primaryNav.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`px-3.5 py-2 text-[13px] font-medium rounded-full transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-700 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-700 hover:bg-red-50/70'}`}>
-                {item.label}<ChevronDown className="w-3 h-3" />
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[15px] font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
+                {item.label}<ChevronDown className="h-4 w-4" />
               </button>
               {desktopMenuOpen === item.key && (
-                <div className="absolute left-0 top-full pt-2 z-50">
-                  <div className="w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
+                <div className="absolute left-0 top-full z-50 pt-2">
+                  <div className="max-h-[70vh] w-64 overflow-y-auto rounded-2xl border border-slate-100 bg-white py-2 shadow-xl">
                     {item.children.map(child => child.children ? (
                       <div key={child.key} className="py-1">
-                        <p className="px-4 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
+                        <p className="px-4 pb-0.5 pt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">{child.label}</p>
                         {child.children.map(grand => (
                           <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            className="block px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-red-50 hover:text-red-600">
                             {grand.label}
                           </Link>
                         ))}
                       </div>
                     ) : (
                       <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                        className="block px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-red-50 hover:text-red-600">
                         {child.label}
                       </Link>
                     ))}
@@ -123,112 +140,124 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded-full transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-700 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-700 hover:bg-red-50/70'}`}>
+              className={`rounded-full px-4 py-2.5 text-[15px] font-bold transition-colors whitespace-nowrap ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50 hover:text-red-700'}`}>
               {item.label}
             </Link>
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+        <div className="hidden items-center gap-3 md:flex">
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-                <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                  <span className="text-red-600 font-bold text-xs">{user.email?.charAt(0).toUpperCase()}</span>
+                className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2.5 transition-colors hover:bg-slate-50">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50">
+                  <span className="text-sm font-bold text-red-700">{user.email?.charAt(0).toUpperCase()}</span>
                 </div>
-                <span className="text-xs font-medium text-gray-700 max-w-[100px] truncate">{user.email}</span>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
+                <span className="max-w-[120px] truncate text-sm font-bold text-slate-700">{user.email}</span>
+                <ChevronDown className="h-4 w-4 text-slate-400" />
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 min-w-[180px]">
+                <div className="absolute right-0 top-full z-50 mt-2 min-w-[190px] rounded-2xl border border-slate-100 bg-white py-1.5 shadow-xl">
                   <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />Tin đăng của tôi
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
+                    <User className="h-4 w-4 text-slate-400" />Tin đăng của tôi
                   </Link>
                   <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-gray-400" />Đăng tin mới
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
+                    <Tag className="h-4 w-4 text-slate-400" />Đăng tin mới
                   </Link>
-                  <div className="border-t border-gray-100 mt-1 pt-1">
+                  <div className="mt-1 border-t border-slate-100 pt-1">
                     <button onClick={onLogout}
-                      className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />Đăng xuất
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50">
+                      <LogOut className="h-4 w-4" />Đăng xuất
                     </button>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <>
-              <button onClick={() => onShowAuth?.('login')}
-                className="border border-red-200 text-red-700 text-[13px] font-semibold px-4 py-2 rounded-full hover:bg-red-50 transition-colors">
-                {nav.btn_login || 'Đăng nhập'}
-              </button>
-              <button onClick={() => onShowAuth?.('register')}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[13px] font-semibold px-4 py-2 rounded-full transition-colors shadow-sm">
-                {nav.btn_post || 'Đăng tin'}
-              </button>
-            </>
+            <button onClick={() => onShowAuth?.('login')}
+              className="flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700">
+              <User className="h-4 w-4" />{nav.btn_login || 'Đăng nhập'}
+            </button>
           )}
-          {user && (
-            <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-[13px] font-semibold px-4 py-2 rounded-full transition-colors flex items-center gap-1 shadow-sm">
-              <Plus className="w-3.5 h-3.5" />Đăng tin
-            </Link>
-          )}
+          <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
+            className="rounded-full bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700">
+            {nav.btn_post || 'Đăng tin'}
+          </Link>
         </div>
 
-        <button className="xl:hidden p-1.5 text-gray-600" onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        <button className="xl:hidden rounded-full border border-slate-200 p-2 text-slate-700" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Mở menu">
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
-      {mobileOpen && (
-        <div className="xl:hidden bg-white/95 backdrop-blur-xl border-t px-4 py-3 space-y-0.5 shadow-lg">
-          {navItems.map(item => item.children ? (
-            <div key={item.key}>
-              <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
-                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
-                <span>{item.label}</span><ChevronDown className={`w-4 h-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
-              </button>
-              {mobileSubmenuOpen === item.key && (
-                <div className="ml-3 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
-                  {item.children.map(child => child.children ? (
-                    <div key={child.key}>
-                      <p className="px-3 pt-1.5 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
-                      {child.children.map(grand => (
-                        <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                          className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
-                          {grand.label}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
-                      className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
-                      {child.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
-              {item.label}
+      <div className="hidden border-y border-slate-100 bg-slate-50/95 md:block">
+        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2">
+          {secondaryNav.map((item, i) => (
+            <Link key={item.href} href={item.href} onClick={closeMenus}
+              className="whitespace-nowrap px-4 py-1.5 text-sm font-semibold text-slate-600 transition-colors hover:text-red-700">
+              {item.label}{i < secondaryNav.length - 1 && <span className="ml-4 text-slate-300">|</span>}
             </Link>
           ))}
-          <div className="flex gap-2 pt-2 border-t border-gray-100">
+        </div>
+      </div>
+
+      {mobileOpen && (
+        <div className="xl:hidden border-t bg-white/98 px-4 py-3 shadow-lg backdrop-blur-xl">
+          <div className="mb-3 flex gap-2 overflow-x-auto border-b border-slate-100 pb-3">
+            {secondaryNav.slice(0, 4).map(item => (
+              <Link key={item.href} href={item.href} onClick={closeMenus} className="whitespace-nowrap rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="space-y-0.5">
+            {navItems.map(item => item.children ? (
+              <div key={item.key}>
+                <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-colors ${isActive(item) ? 'bg-red-50 font-semibold text-red-600' : 'text-slate-700 hover:bg-red-50 hover:text-red-600'}`}>
+                  <span>{item.label}</span><ChevronDown className={`h-4 w-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
+                </button>
+                {mobileSubmenuOpen === item.key && (
+                  <div className="ml-3 mt-1 space-y-0.5 border-l border-slate-100 pl-2">
+                    {item.children.map(child => child.children ? (
+                      <div key={child.key}>
+                        <p className="px-3 pb-0.5 pt-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400">{child.label}</p>
+                        {child.children.map(grand => (
+                          <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
+                            className="block rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600">
+                            {grand.label}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
+                        className="block rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600">
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
+                className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${isActive(item) ? 'bg-red-50 font-semibold text-red-600' : 'text-slate-700 hover:bg-red-50 hover:text-red-600'}`}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
             {user ? (
               <>
-                <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus} className="flex-1 border border-red-500 text-red-600 text-xs font-semibold py-2 rounded-lg text-center">Tin của tôi</Link>
-                <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus} className="flex-1 bg-red-600 text-white text-xs font-semibold py-2 rounded-lg text-center">Đăng tin</Link>
+                <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus} className="flex-1 rounded-xl border border-red-500 py-2 text-center text-xs font-semibold text-red-600">Tin của tôi</Link>
+                <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus} className="flex-1 rounded-xl bg-red-600 py-2 text-center text-xs font-semibold text-white">Đăng tin</Link>
               </>
             ) : (
               <>
-                <button onClick={() => { onShowAuth?.('login'); setMobileOpen(false); }} className="flex-1 border border-red-500 text-red-600 text-xs font-semibold py-2 rounded-lg">Đăng nhập</button>
-                <button onClick={() => { onShowAuth?.('register'); setMobileOpen(false); }} className="flex-1 bg-red-600 text-white text-xs font-semibold py-2 rounded-lg">Đăng ký</button>
+                <button onClick={() => { onShowAuth?.('login'); setMobileOpen(false); }} className="flex-1 rounded-xl border border-red-500 py-2 text-xs font-semibold text-red-600">Đăng nhập</button>
+                <button onClick={() => { onShowAuth?.('register'); setMobileOpen(false); }} className="flex-1 rounded-xl bg-red-600 py-2 text-xs font-semibold text-white">Đăng ký</button>
               </>
             )}
           </div>
