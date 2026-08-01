@@ -98,7 +98,7 @@ export function BannersTab() {
           ))}
           <div>
             <label className="text-xs font-semibold text-gray-700 block mb-1">Ảnh nền</label>
-            <ImageUrlInput value={form.image_url ?? ''} onChange={url => setForm(f => ({ ...f, image_url: url }))} />
+            <ImageUrlInput value={form.image_url ?? ''} onChange={url => setForm(f => ({ ...f, image_url: url }))} folder="banners" isAdmin />
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-700 block mb-1">Màu nền dự phòng</label>

@@ -14,6 +14,13 @@ function seoFilename(file: File, folder: string, caption?: string): string {
   return `${folder}/${slug}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 }
 
+function publicImageFolder(folder: string, userId?: string, isAdmin = false): string {
+  const clean = folder.split('/').filter(Boolean).join('/') || 'properties';
+  if (isAdmin) return clean;
+  if (!userId) throw new Error('Bạn cần đăng nhập để tải ảnh lên.');
+  return `${clean}/${userId}`;
+}
+
 // ─── Image Upload ─────────────────────────────────────────────────────────────
 // Chỉ cho phép ảnh raster an toàn. Chặn SVG/HTML — chúng có thể chứa <script> →
 // stored XSS khi mở trực tiếp URL public. Kiểm cả MIME lẫn đuôi file.
@@ -53,11 +60,10 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
     throw new Error(`File vượt quá dung lượng cho phép (${maxSize}MB). Vui lòng chọn file nhỏ hơn.`);
   }
 
-  // Chọn bucket phù hợp
-  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
-
-  // Tên file chuẩn SEO (slug mô tả + hậu tố chống trùng)
-  const filename = seoFilename(file, folder, caption);
+  const { data: { user } } = await supabase.auth.getUser();
+  const bucketName = 'public-media';
+  const storageFolder = publicImageFolder(folder, user?.id, isAdmin);
+  const filename = seoFilename(file, storageFolder, caption);
 
   // upsert:false — tên đã random nên không đụng độ; tránh ghi đè file người khác.
   const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
@@ -68,7 +74,6 @@ export async function uploadImage(file: File, folder = 'properties', isAdmin = f
 
   // Ghi metadata vào user_media để hỗ trợ thư viện ảnh
   try {
-    const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('user_media').insert({
         user_id: user.id,
@@ -98,12 +103,13 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
     }
   }
 
-  const bucketName = isAdmin ? 'admin-uploads' : 'user-uploads';
+  const bucketName = 'public-media';
   const urls: string[] = [];
   const { data: { user } } = await supabase.auth.getUser();
+  const storageFolder = publicImageFolder(folder, user?.id, isAdmin);
 
   for (const file of files) {
-    const filename = seoFilename(file, folder);
+    const filename = seoFilename(file, storageFolder);
     const { error } = await supabase.storage.from(bucketName).upload(filename, file, { upsert: false });
     if (error) throw error;
     const { data } = supabase.storage.from(bucketName).getPublicUrl(filename);

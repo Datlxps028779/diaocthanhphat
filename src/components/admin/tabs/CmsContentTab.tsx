@@ -85,7 +85,7 @@ export function CmsContentTab() {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
                     />
                   ) : item.type === 'image_url' ? (
-                    <ImageUrlInput value={editVals[item.id] ?? ''} onChange={url => setEditVals(v => ({ ...v, [item.id]: url }))} />
+                    <ImageUrlInput value={editVals[item.id] ?? ''} onChange={url => setEditVals(v => ({ ...v, [item.id]: url }))} folder="cms" isAdmin />
                   ) : (
                     <input
                       type="text"

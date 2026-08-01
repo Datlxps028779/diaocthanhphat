@@ -654,6 +654,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                     value={form.image_url}
                     onChange={url => set('image_url', url)}
                     placeholder="https://..."
+                    folder="user-listings"
                   />
                   <p className="text-gray-400 text-xs mt-1 flex items-center gap-1">
                     <Info className="w-3 h-3" />Dán link ảnh từ Pexels, ImgBB hoặc dịch vụ lưu ảnh

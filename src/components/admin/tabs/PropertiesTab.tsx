@@ -812,7 +812,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           {/* Images */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">Ảnh đại diện</label>
-            <ImageUrlInput value={form.image_url} onChange={url => setField('image_url', url)} placeholder="URL ảnh đại diện" />
+            <ImageUrlInput value={form.image_url} onChange={url => setField('image_url', url)} placeholder="URL ảnh đại diện" folder="properties" isAdmin />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">Thư viện ảnh</label>
