@@ -57,7 +57,7 @@ function markerHtml(p: Property): string {
       <div style="
         background:${badgeBg};
         color:#fff;
-        font-family:Inter,system-ui,sans-serif;
+        font-family:var(--font-sans),system-ui,sans-serif;
         font-size:11px;
         font-weight:800;
         padding:4px 9px;
@@ -109,7 +109,7 @@ function popupHtml(p: Property): string {
   ].filter(Boolean);
 
   return `
-    <div style="width:252px;font-family:Inter,system-ui,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.16);">
+    <div style="width:252px;font-family:var(--font-sans),system-ui,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.16);">
       <!-- Image -->
       <div style="position:relative;height:140px;overflow:hidden;background:#f3f4f6;">
         ${p.image_url

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Be_Vietnam_Pro, Manrope } from 'next/font/google';
 import '@/index.css';
 import { serializeJsonLd, buildLocalBusinessJsonLd } from '@/lib/seo';
 import { getSiteUrl } from '@/lib/siteUrl';
@@ -9,11 +9,18 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { AnalyticsConsent } from './_components/AnalyticsConsent';
 
-const inter = Inter({
+const sans = Be_Vietnam_Pro({
   subsets: ['latin', 'vietnamese'],
   weight: ['400', '500', '600', '700', '800', '900'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-sans',
+});
+
+const display = Manrope({
+  subsets: ['latin', 'vietnamese'],
+  weight: ['600', '700', '800'],
+  display: 'swap',
+  variable: '--font-display',
 });
 
 const SITE_URL = getSiteUrl();
@@ -67,7 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   };
 
   return (
-    <html lang="vi" className={inter.variable}>
+    <html lang="vi" className={`${sans.variable} ${display.variable}`}>
       <head>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgJsonLd) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }} />

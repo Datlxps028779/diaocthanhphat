@@ -17,7 +17,7 @@
   }
   html { scroll-behavior: smooth; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
     color: var(--cnv-ink);
     background: var(--cnv-surface-soft);
     -webkit-font-smoothing: antialiased;
@@ -85,7 +85,7 @@
    Preflight của Tailwind reset hết margin/bullet của h*, p, ul, ol, blockquote nên phải khai báo lại
    để bài viết có phân cấp, giãn dòng và dễ đọc. Chỉ áp trong .prose để không rò ra phần còn lại. */
 .prose {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   font-size: 1.075rem;    /* ~17px — dễ đọc dài */
   line-height: 1.75;
   letter-spacing: 0.005em;
@@ -101,6 +101,7 @@
 .prose p { margin: 1.15em 0; }
 
 .prose h2 {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
   font-size: 1.6rem;
   line-height: 1.3;
   font-weight: 700;
@@ -110,6 +111,7 @@
   border-bottom: 1px solid #f3f4f6;
 }
 .prose h3 {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
   font-size: 1.3rem;
   line-height: 1.35;
   font-weight: 700;
@@ -117,6 +119,7 @@
   margin: 1.6em 0 0.5em;
 }
 .prose h4 {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
   font-size: 1.1rem;
   font-weight: 600;
   color: #1f2937;

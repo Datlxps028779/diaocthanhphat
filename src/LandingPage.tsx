@@ -503,7 +503,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             <div className="mb-5 inline-flex items-center gap-2 border border-white/25 bg-slate-950/30 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
               <MapPin className="h-3 w-3 text-amber-300" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
             </div>
-            <h1 className="max-w-3xl text-4xl font-black leading-[1.08] text-white md:text-6xl">
+            <h1 className="max-w-3xl font-display text-4xl font-bold leading-[1.12] text-white md:text-6xl">
               {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
             </h1>
             <p className="mt-5 max-w-2xl text-sm leading-6 text-white/85 md:text-base md:leading-7">

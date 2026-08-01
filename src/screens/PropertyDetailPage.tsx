@@ -945,7 +945,7 @@ function PropertyLocationMap({ lat, lng, title }: { lat: number; lng: number; ti
       });
 
       const popup = document.createElement('div');
-      popup.style.cssText = 'font-family:Inter,sans-serif;font-size:12px;font-weight:600;max-width:160px;line-height:1.4';
+      popup.style.cssText = 'font-family:var(--font-sans),system-ui,sans-serif;font-size:12px;font-weight:600;max-width:160px;line-height:1.4';
       popup.textContent = title;
 
       L.marker([lat, lng], { icon })

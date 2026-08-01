@@ -393,7 +393,7 @@ export function Breadcrumb({ items }: { items: { label: string; href?: string; o
 export function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-8">
-      <h2 className="inline-block text-2xl md:text-3xl font-black text-gray-900 leading-tight">{title}</h2>
+      <h2 className="inline-block font-display text-2xl font-bold leading-tight text-gray-900 md:text-3xl">{title}</h2>
       {subtitle && <p className="text-gray-500 mt-2 text-sm">{subtitle}</p>}
     </div>
   );
