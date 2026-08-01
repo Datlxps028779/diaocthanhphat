@@ -30,6 +30,7 @@ import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
+import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -114,6 +115,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     const found = pageLayout.find(s => s.id === id);
     const settings = (found?.settings ?? {}) as Record<string, unknown>;
     return typeof settings[key] === 'number' ? (settings[key] as number) : def;
+  };
+  const sectionConfig = (id: string) => {
+    const settings = (pageLayout.find(s => s.id === id)?.settings ?? {}) as Record<string, unknown>;
+    return getHomeSectionDisplayConfig(settings);
   };
 
   const favoriteMutation = useMutation({
@@ -220,47 +225,64 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </div>
         </section>
       );
-      case 'featured_sections': return (
-        <React.Fragment key="featured_sections">
-          {sections.map(({ section, properties }) => properties.length > 0 && (
-            <section key={section.id} className="py-10 bg-gray-50">
-              <div className="max-w-7xl mx-auto px-4">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="inline-block text-xl font-black text-gray-900">{section.title}</h2>
-                    {section.subtitle && <p className="text-gray-500 text-sm mt-1">{section.subtitle}</p>}
+      case 'featured_sections': {
+        const config = sectionConfig('featured_sections');
+        const isLoading = featuredSections.length > 0 && sectionQueries.some(query => query.isLoading);
+
+        if (isLoading) return (
+          <section key="featured_sections_loading" className="bg-gray-50 py-10">
+            <div className="max-w-7xl mx-auto px-4"><HomeSectionLoading /></div>
+          </section>
+        );
+
+        if (sections.length === 0) return (
+          <section key="featured_sections_empty" className="bg-gray-50 py-10">
+            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+          </section>
+        );
+
+        return (
+          <React.Fragment key="featured_sections">
+            {sections.map(({ section, properties }) => (
+              <section key={section.id} className="py-10 bg-gray-50">
+                <div className="max-w-7xl mx-auto px-4">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="inline-block text-xl font-black text-gray-900">{section.title}</h2>
+                      {section.subtitle && <p className="text-gray-500 text-sm mt-1">{section.subtitle}</p>}
+                    </div>
+                    <Link href={pageToHref({ name: 'listings', ...(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {}) })}
+                      className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
+                      Xem tất cả<ChevronRight className="w-4 h-4" />
+                    </Link>
                   </div>
-                  <Link href={pageToHref({ name: 'listings', ...(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {}) })}
-                    className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
-                    Xem tất cả<ChevronRight className="w-4 h-4" />
-                  </Link>
-                </div>
-                {section.display_style === 'horizontal' ? (
-                  <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
-                    {properties.map(p => (
-                      <div key={p.id} className="flex-shrink-0 w-64 snap-start">
-                        <PropertyCard property={p}
+                  {section.display_style === 'horizontal' ? (
+                    <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+                      {properties.map(p => (
+                        <div key={p.id} className="flex-shrink-0 w-64 snap-start">
+                          <PropertyCard property={p}
+                            isFavorited={favoriteIds.has(p.id)}
+                            onToggleFavorite={() => handleToggleFavorite(p)}
+                            onContact={() => setContactProp(p)} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {properties.map(p => (
+                        <PropertyCard key={p.id} property={p}
                           isFavorited={favoriteIds.has(p.id)}
                           onToggleFavorite={() => handleToggleFavorite(p)}
                           onContact={() => setContactProp(p)} />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {properties.map(p => (
-                      <PropertyCard key={p.id} property={p}
-                        isFavorited={favoriteIds.has(p.id)}
-                        onToggleFavorite={() => handleToggleFavorite(p)}
-                        onContact={() => setContactProp(p)} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          ))}
-        </React.Fragment>
-      );
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            ))}
+          </React.Fragment>
+        );
+      }
       case 'region_banners': return (
         <section key="region_banners" className="py-10 bg-white">
           <div className="max-w-7xl mx-auto px-4">
@@ -318,70 +340,88 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </div>
         </section>
       );
-      case 'testimonials': return testimonials.length > 0 ? (
-        <section key="testimonials" className="py-10 bg-gray-50">
-          <div className="max-w-6xl mx-auto px-4">
-            <div className="text-center mb-6">
-              <h2 className="inline-block text-xl font-black text-gray-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
-            </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              {testimonials.slice(0, secNum('testimonials', 'max_count', 3)).map(t => (
-                <div key={t.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex gap-0.5 mb-3">
-                    {Array.from({ length: t.rating }).map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
-                  </div>
-                  <p className="text-gray-700 text-sm italic leading-relaxed mb-4">"{t.content}"</p>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 font-bold text-sm">{t.name.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="font-bold text-sm text-gray-900">{t.name}</p>
-                      {t.location && <p className="text-gray-400 text-xs">{t.location}</p>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null;
-      case 'news': return news.length > 0 ? (
-        <section key="news" className="py-10 bg-white">
-          <div className="max-w-7xl mx-auto px-4">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Newspaper className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="inline-block text-xl font-black text-gray-900">{sec('news')('title', 'Tin tức thị trường')}</h2>
+      case 'testimonials': {
+        const config = sectionConfig('testimonials');
+        if (testimonials.length === 0) return (
+          <section key="testimonials_empty" className="py-10 bg-gray-50">
+            <div className="max-w-6xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+          </section>
+        );
+
+        return (
+          <section key="testimonials" className="py-10 bg-gray-50">
+            <div className="max-w-6xl mx-auto px-4">
+              <div className="text-center mb-6">
+                <h2 className="inline-block text-xl font-black text-gray-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
               </div>
-              <Link href={pageToHref({ name: 'news' })} className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
-                {sec('news')('btn_view_all', 'Xem tất cả')}<ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {news.slice(0, secNum('news', 'max_count', 3)).map(a => (
-                <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
-                  className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
-                  {a.image_url && (
-                    <BlurFillImage src={a.image_url} alt={buildNewsImageAlt(a)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
-                  )}
-                  <div className="p-4">
-                    <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">{a.category}</span>
-                    <h3 className="font-bold text-sm text-gray-900 mt-2 line-clamp-2 group-hover:text-red-600 transition-colors">{a.title}</h3>
-                    {a.excerpt && <p className="text-gray-500 text-xs mt-1.5 line-clamp-2">{a.excerpt}</p>}
-                    <div className="flex items-center gap-3 text-gray-400 text-xs mt-3">
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(a.created_at).toLocaleDateString('vi-VN')}</span>
-                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{a.views}</span>
+              <div className="grid md:grid-cols-3 gap-4">
+                {testimonials.slice(0, secNum('testimonials', 'max_count', 3)).map(t => (
+                  <div key={t.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div className="flex gap-0.5 mb-3">
+                      {Array.from({ length: t.rating }).map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
+                    </div>
+                    <p className="text-gray-700 text-sm italic leading-relaxed mb-4">"{t.content}"</p>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 bg-red-100 rounded-full flex items-center justify-center">
+                        <span className="text-red-600 font-bold text-sm">{t.name.charAt(0)}</span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-gray-900">{t.name}</p>
+                        {t.location && <p className="text-gray-400 text-xs">{t.location}</p>}
+                      </div>
                     </div>
                   </div>
-                </Link>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
-      ) : null;
+          </section>
+        );
+      }
+      case 'news': {
+        const config = sectionConfig('news');
+        if (news.length === 0) return (
+          <section key="news_empty" className="py-10 bg-white">
+            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+          </section>
+        );
+
+        return (
+          <section key="news" className="py-10 bg-white">
+            <div className="max-w-7xl mx-auto px-4">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <Newspaper className="w-4 h-4 text-white" />
+                  </div>
+                  <h2 className="inline-block text-xl font-black text-gray-900">{sec('news')('title', 'Tin tức thị trường')}</h2>
+                </div>
+                <Link href={pageToHref({ name: 'news' })} className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
+                  {sec('news')('btn_view_all', 'Xem tất cả')}<ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {news.slice(0, secNum('news', 'max_count', 3)).map(a => (
+                  <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
+                    className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
+                    {a.image_url && (
+                      <BlurFillImage src={a.image_url} alt={buildNewsImageAlt(a)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
+                    )}
+                    <div className="p-4">
+                      <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">{a.category}</span>
+                      <h3 className="font-bold text-sm text-gray-900 mt-2 line-clamp-2 group-hover:text-red-600 transition-colors">{a.title}</h3>
+                      {a.excerpt && <p className="text-gray-500 text-xs mt-1.5 line-clamp-2">{a.excerpt}</p>}
+                      <div className="flex items-center gap-3 text-gray-400 text-xs mt-3">
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(a.created_at).toLocaleDateString('vi-VN')}</span>
+                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{a.views}</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      }
       case 'faq': return (
         <section key="faq" className="py-12 bg-gray-50 border-t border-gray-100">
           <div className="max-w-3xl mx-auto px-4">
