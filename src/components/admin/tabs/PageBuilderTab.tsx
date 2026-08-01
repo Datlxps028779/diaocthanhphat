@@ -73,6 +73,41 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
     </div>
   );
 
+  const ContentStrategy = () => (
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div>
+        <p className="text-xs font-bold text-slate-700">Nguồn dữ liệu & khi thiếu nội dung</p>
+        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Chỉ dùng dữ liệu thật trong hệ thống. Không đủ dữ liệu, trang public sẽ xử lý theo lựa chọn bên dưới.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Select label="Nguồn hiển thị" k="source_mode" emptyLabel="Tự động từ dữ liệu thật"
+          options={[{ value: 'manual', label: 'Admin chọn thủ công' }, { value: 'mixed', label: 'Kết hợp tự động + thủ công' }]} />
+        <Select label="Khi không có dữ liệu" k="empty_behavior" emptyLabel="Tự ẩn section"
+          options={[{ value: 'empty_state', label: 'Hiện thông báo + CTA' }]} />
+      </div>
+      {get('empty_behavior', '') === 'empty_state' && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Tiêu đề empty state" k="empty_title" def="Chưa có nội dung phù hợp" />
+          <Field label="Nút CTA" k="empty_cta_label" def="" placeholder="Ví dụ: Khám phá bất động sản" />
+          <div className="sm:col-span-2">
+            <Field label="Mô tả empty state" k="empty_description" def="Nội dung sẽ xuất hiện khi có dữ liệu đã được xác thực." multiline />
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Đường dẫn CTA" k="empty_cta_href" def="" placeholder="Ví dụ: /mua-ban" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const contentDriven = new Set(['featured_sections', 'testimonials', 'news']);
+  const withContentStrategy = (children: React.ReactNode) => (
+    <div className="space-y-3">
+      {children}
+      {contentDriven.has(sectionId) && <ContentStrategy />}
+    </div>
+  );
+
   switch (sectionId) {
     case 'hero': return (
       <div className="space-y-3">
@@ -138,13 +173,13 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
         })}
       </div>
     );
-    case 'featured_sections': return (
+    case 'featured_sections': return withContentStrategy(
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
         <p className="text-sm font-semibold text-amber-800 mb-1">Cấu hình trong tab riêng</p>
         <p className="text-xs text-amber-700">Section này hiển thị các nhóm tin đăng được cấu hình trong tab <strong>"Tin nổi bật"</strong>. Mỗi nhóm có tiêu đề, bộ lọc, kiểu hiển thị riêng.</p>
       </div>
     );
-    case 'region_banners': return (
+    case 'region_banners': return withContentStrategy(
       <div className="space-y-3">
         <Field label="Tiêu đề section" k="title" def="Khám phá theo khu vực" />
         {[
@@ -183,8 +218,8 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
         ))}
       </div>
     );
-    case 'testimonials': return (
-      <div className="space-y-3">
+    case 'testimonials': return withContentStrategy(
+      <>
         <Field label="Tiêu đề section" k="title" def="Khách hàng nói gì về chúng tôi" />
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Số lượng hiển thị (1–6)</label>
@@ -193,10 +228,10 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
             className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
         </div>
         <p className="text-xs text-gray-400">Nội dung đánh giá được quản lý trong tab <strong>Đánh giá</strong>.</p>
-      </div>
+      </>
     );
-    case 'news': return (
-      <div className="space-y-3">
+    case 'news': return withContentStrategy(
+      <>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tiêu đề section" k="title" def="Tin tức thị trường" />
           <Field label="Nút Xem tất cả" k="btn_view_all" def="Xem tất cả" />
@@ -208,7 +243,7 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
             className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
         </div>
         <p className="text-xs text-gray-400">Nội dung bài viết được quản lý trong tab <strong>Tin tức</strong>.</p>
-      </div>
+      </>
     );
     case 'cta': return (
       <div className="space-y-3">

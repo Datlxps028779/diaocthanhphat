@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -26,6 +26,7 @@ const CmsContentTab = lazy(() => import('./admin/tabs/CmsContentTab').then(m => 
 const BannersTab = lazy(() => import('./admin/tabs/BannersTab').then(m => ({ default: m.BannersTab })));
 const FeaturedSectionsTab = lazy(() => import('./admin/tabs/FeaturedSectionsTab').then(m => ({ default: m.FeaturedSectionsTab })));
 const PageBuilderTab = lazy(() => import('./admin/tabs/PageBuilderTab').then(m => ({ default: m.PageBuilderTab })));
+const HomeExperienceTab = lazy(() => import('./admin/tabs/HomeExperienceTab').then(m => ({ default: m.HomeExperienceTab })));
 const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default: m.PagesTab })));
 const NeighborhoodsTab = lazy(() => import('./admin/tabs/NeighborhoodsTab').then(m => ({ default: m.NeighborhoodsTab })));
 const MenuTab = lazy(() => import('./admin/tabs/MenuTab').then(m => ({ default: m.MenuTab })));
@@ -106,6 +107,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     { id: 'banners', label: 'Banners', icon: <ImageIcon className="w-4 h-4" /> },
     { id: 'featured-sections', label: 'Tin nổi bật', icon: <Layers className="w-4 h-4" /> },
     { id: 'page-builder', label: 'Bố cục trang', icon: <PanelLeft className="w-4 h-4" /> },
+    { id: 'home-experience', label: 'Trải nghiệm trang chủ', icon: <Home className="w-4 h-4" /> },
     { id: 'pages', label: 'Quản lý trang', icon: <FileText className="w-4 h-4" /> },
     { id: 'neighborhoods', label: 'Khu dân cư', icon: <MapPin className="w-4 h-4" /> },
     { id: 'menu', label: 'Menu điều hướng', icon: <LinkIcon className="w-4 h-4" /> },
@@ -205,6 +207,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           {tab === 'banners' && <BannersTab />}
           {tab === 'featured-sections' && <FeaturedSectionsTab />}
           {tab === 'page-builder' && <PageBuilderTab />}
+          {tab === 'home-experience' && <HomeExperienceTab />}
           {tab === 'pages' && <PagesTab />}
           {tab === 'neighborhoods' && <NeighborhoodsTab />}
           {tab === 'menu' && <MenuTab />}
