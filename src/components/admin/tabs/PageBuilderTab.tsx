@@ -100,7 +100,7 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
     </div>
   );
 
-  const contentDriven = new Set(['featured_sections', 'testimonials', 'news']);
+  const contentDriven = new Set(['featured_sections', 'region_banners', 'testimonials', 'news']);
   const withContentStrategy = (children: React.ReactNode) => (
     <div className="space-y-3">
       {children}

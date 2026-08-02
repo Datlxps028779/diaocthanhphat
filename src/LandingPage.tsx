@@ -190,9 +190,18 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         </section>
       );
       case 'categories': return (
-        <section key="categories" className="py-8 bg-white border-b border-gray-100">
+        <section key="categories" className="border-b border-slate-100 bg-white py-10">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Khám phá theo nhu cầu</p>
+                <h2 className="mt-1 text-xl font-black text-slate-900">Loại hình bất động sản</h2>
+              </div>
+              <Link href={pageToHref({ name: 'listings' })} className="hidden items-center gap-1 text-sm font-bold text-red-700 hover:text-red-800 sm:flex">
+                Xem tất cả<ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
               {[1, 2, 3, 4, 5, 6].map((i) => {
                 const g = sec('categories');
                 const label = g(`cat${i}_label`, ['Nhà ở', 'Căn hộ', 'Đất nền', 'Đất nông nghiệp', 'Biệt thự', 'Văn phòng'][i - 1]);
@@ -206,11 +215,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 };
                 return (
                   <Link key={i} href={pageToHref(quickCategoryToPage(cfg))}
-                    className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-red-400 hover:bg-red-50 transition-all group">
-                    <div className="w-10 h-10 bg-red-50 group-hover:bg-red-100 rounded-full flex items-center justify-center text-red-600 transition-colors">
-                      <CategoryIcon name={iconName} className="w-5 h-5" />
+                    className="group flex min-h-28 flex-col items-center justify-center gap-2 border border-slate-100 bg-white p-3 text-center transition-all hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[var(--cnv-shadow-soft)]">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-red-50 to-amber-50 text-red-600 transition-colors group-hover:from-red-100 group-hover:to-amber-100">
+                      <CategoryIcon name={iconName} className="h-5 w-5" />
                     </div>
-                    <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{label}</span>
+                    <span className="text-xs font-bold leading-tight text-slate-700">{label}</span>
                   </Link>
                 );
               })}
@@ -283,40 +292,63 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </React.Fragment>
         );
       }
-      case 'region_banners': return (
-        <section key="region_banners" className="py-10 bg-white">
-          <div className="max-w-7xl mx-auto px-4">
-            <h2 className="inline-block text-xl font-black text-gray-900 mb-6">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                { n: 1, dt: 'Bình Dương', ds: 'Thị trường chính – sôi động nhất', dd: 'Thủ Dầu Một, Dĩ An, Thuận An, Bến Cát, Tân Uyên...', db: 'Trọng tâm', color: 'from-red-600 to-red-700', di: 'https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg', dslug: 'binh-duong' },
-                { n: 2, dt: 'Bình Phước', ds: 'Tiềm năng – Giá tốt', dd: 'Đồng Xoài, Bình Long, Phước Long...', db: 'Tiềm năng', color: 'from-orange-500 to-orange-600', di: 'https://images.pexels.com/photos/2119714/pexels-photo-2119714.jpeg', dslug: 'binh-phuoc' },
-                { n: 3, dt: 'Đồng Nai', ds: 'Khu vực mở rộng', dd: 'Biên Hòa, Long Thành, Nhơn Trạch...', db: 'Mở rộng', color: 'from-blue-600 to-blue-700', di: 'https://images.pexels.com/photos/280229/pexels-photo-280229.jpeg', dslug: 'dong-nai' },
-              ].map((r) => {
-                const title = sec('region_banners')(`region${r.n}_title`, r.dt);
-                const subtitle = sec('region_banners')(`region${r.n}_subtitle`, r.ds);
-                const desc = sec('region_banners')(`region${r.n}_desc`, r.dd);
-                const badge = sec('region_banners')(`region${r.n}_badge`, r.db);
-                const img = sec('region_banners')(`region${r.n}_image`, r.di);
-                const slug = sec('region_banners')(`region${r.n}_slug`, r.dslug);
-                const area = areas.find(a => a.name.toLowerCase().includes(title.toLowerCase().slice(0, 6)) || a.slug?.includes(slug));
-                return (
-                  <Link key={r.n} href={pageToHref({ name: 'listings', ...(area ? { areaId: area.id } : {}) })} className="relative rounded-2xl overflow-hidden h-44 group text-left w-full block">
-                    <Image src={img} alt={title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <div className={`absolute inset-0 bg-gradient-to-t ${r.color} opacity-75 group-hover:opacity-85 transition-opacity`} />
-                    <div className="absolute inset-0 p-5 flex flex-col justify-end">
-                      <span className="text-[10px] bg-white/20 text-white font-bold px-2 py-0.5 rounded-full w-fit mb-2">{badge}</span>
-                      <h3 className="text-white font-black text-xl">{title}</h3>
-                      <p className="text-white/90 text-xs font-semibold">{subtitle}</p>
-                      <p className="text-white/70 text-[11px] mt-0.5">{desc}</p>
+      case 'region_banners': {
+        const config = sectionConfig('region_banners');
+        const regionCards = [
+          { n: 1, dt: 'Bình Dương', ds: 'Thị trường trọng điểm', dd: 'Khám phá danh sách bất động sản đang hoạt động.', db: 'Trọng tâm', color: 'from-red-700 via-red-600 to-amber-500', di: 'https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg', dslug: 'binh-duong' },
+          { n: 2, dt: 'Bình Phước', ds: 'Khu vực tiềm năng', dd: 'Khám phá dữ liệu và tin đăng đã được xác thực.', db: 'Khám phá', color: 'from-amber-600 via-orange-500 to-red-500', di: 'https://images.pexels.com/photos/2119714/pexels-photo-2119714.jpeg', dslug: 'binh-phuoc' },
+          { n: 3, dt: 'Đồng Nai', ds: 'Khu vực mở rộng', dd: 'Theo dõi các bất động sản phù hợp nhu cầu của bạn.', db: 'Mở rộng', color: 'from-slate-800 via-slate-700 to-red-800', di: 'https://images.pexels.com/photos/280229/pexels-photo-280229.jpeg', dslug: 'dong-nai' },
+        ].map(r => {
+          const title = sec('region_banners')(`region${r.n}_title`, r.dt);
+          const slug = sec('region_banners')(`region${r.n}_slug`, r.dslug);
+          const area = areas.find(item => item.slug === slug || item.name.toLocaleLowerCase('vi-VN') === title.toLocaleLowerCase('vi-VN'));
+          return area ? {
+            ...r,
+            area,
+            title,
+            subtitle: sec('region_banners')(`region${r.n}_subtitle`, r.ds),
+            desc: sec('region_banners')(`region${r.n}_desc`, r.dd),
+            badge: sec('region_banners')(`region${r.n}_badge`, r.db),
+            image: sec('region_banners')(`region${r.n}_image`, r.di),
+          } : null;
+        }).filter((card): card is NonNullable<typeof card> => card !== null);
+
+        if (regionCards.length === 0) return (
+          <section key="region_banners_empty" className="bg-white py-10">
+            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+          </section>
+        );
+
+        return (
+          <section key="region_banners" className="bg-white py-12">
+            <div className="max-w-7xl mx-auto px-4">
+              <div className="mb-6 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Theo khu vực</p>
+                  <h2 className="mt-1 text-xl font-black text-slate-900">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
+                </div>
+                <Link href={pageToHref({ name: 'regions' })} className="hidden items-center gap-1 text-sm font-bold text-red-700 hover:text-red-800 sm:flex">
+                  Xem tất cả khu vực<ChevronRight className="h-4 w-4" />
+                </Link>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                {regionCards.map(card => (
+                  <Link key={card.area.id} href={pageToHref({ name: 'listings', areaId: card.area.id })} className="group relative block h-52 overflow-hidden text-left">
+                    <Image src={card.image} alt={card.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <div className={`absolute inset-0 bg-gradient-to-t ${card.color} opacity-80 transition-opacity group-hover:opacity-90`} />
+                    <div className="absolute inset-0 flex flex-col justify-end p-5">
+                      <span className="mb-2 w-fit border border-white/25 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">{card.badge}</span>
+                      <h3 className="text-xl font-black text-white">{card.title}</h3>
+                      <p className="mt-1 text-xs font-semibold text-white/90">{card.subtitle}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-white/70">{card.desc}</p>
                     </div>
                   </Link>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
-      );
+          </section>
+        );
+      }
       case 'why_us': return (
         <section key="why_us" className="py-12 bg-white">
           <div className="max-w-6xl mx-auto px-4">
