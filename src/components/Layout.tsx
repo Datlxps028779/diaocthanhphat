@@ -7,7 +7,6 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting, useMenu } from '../lib/cms';
-import { HeaderSearch } from './HeaderSearch';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const AiSearchChat = dynamic(() => import('./AiSearchChat').then(m => m.AiSearchChat), { ssr: false });
@@ -34,6 +33,8 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
   const logoUrl = useSetting('site_logo_url', '');
   const hotline = useSetting('phone_hotline', '0901 234 567');
+  const supportHours = useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00');
+  const topbarNote = useSetting('topbar_note', 'Tin đã xác thực, cập nhật mỗi ngày — đăng tin miễn phí');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -61,6 +62,29 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
   return (
     <header className={`fixed top-0 inset-x-0 z-50 border-b transition-all duration-200 ${scrolled ? 'border-slate-200 bg-white shadow-header' : 'border-slate-100 bg-white'}`}>
+      {/* Dải thông báo trên cùng: nhắc giá trị tin VIP + hotline + kênh liên hệ.
+          Nội dung lấy từ site settings nên admin sửa được, không hardcode. */}
+      <div className="w-full border-b border-red-700/40 bg-gradient-to-r from-red-800 via-red-600 to-amber-500">
+        <div className="max-w-7xl mx-auto flex h-8 items-center justify-between gap-3 px-4 md:h-9">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Tag className="h-3 w-3 flex-shrink-0 text-amber-100" />
+            <span className="truncate text-[11px] font-semibold text-white md:text-xs">{topbarNote}</span>
+            <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
+              className="ml-1 flex-shrink-0 whitespace-nowrap rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold text-white transition-colors hover:bg-white/30 md:text-[11px]">
+              Đăng ngay →
+            </Link>
+          </div>
+          <div className="hidden flex-shrink-0 items-center gap-4 md:flex">
+            <a href={`tel:${hotline.replace(/\s/g, '')}`} className="flex items-center gap-1.5 text-white/90 transition-colors hover:text-white">
+              <Phone className="h-3 w-3" />
+              <span className="text-xs font-bold tracking-wide">{hotline}</span>
+            </a>
+            <span className="h-3.5 w-px bg-white/30" />
+            <span className="text-[11px] font-medium text-white/80">{supportHours}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 px-4 py-2.5">
         <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
           {logoUrl && !logoError ? (
@@ -80,9 +104,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             <div className="text-[9px] uppercase tracking-wider text-slate-400">{siteSub}</div>
           </div>
         </Link>
-
-        {/* Ô tìm kiếm ngay trên thanh nav — điểm chính của bố cục marketplace */}
-        <HeaderSearch className="hidden min-w-0 flex-1 max-w-md lg:block" />
 
         <nav className="hidden items-center gap-0.5 lg:flex">
           {navItems.map(item => item.children ? (
@@ -123,11 +144,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
         </nav>
 
         <div className="hidden flex-shrink-0 items-center gap-2 md:flex">
-          {/* Hotline: trước ở dải đỏ trên cùng (đã bỏ) — giữ lại ở đây để không mất */}
-          <a href={`tel:${hotline.replace(/\s/g, '')}`}
-            className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-red-700 xl:flex">
-            <Phone className="h-3.5 w-3.5 text-red-600" />{hotline}
-          </a>
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -181,11 +197,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           aria-label={mobileOpen ? 'Đóng menu' : 'Mở menu'}>
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
-      </div>
-
-      {/* Ô tìm kiếm cho mobile/tablet: xuống hàng riêng vì thanh trên đã hết chỗ */}
-      <div className="border-t border-slate-100 px-4 py-2 lg:hidden">
-        <HeaderSearch />
       </div>
 
       {mobileOpen && (
