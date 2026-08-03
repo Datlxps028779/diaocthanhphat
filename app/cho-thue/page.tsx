@@ -30,7 +30,7 @@ export default async function Page({ searchParams }: { searchParams?: Record<str
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <ListingsClient listingType="cho_thue" filters={parseListingParams(searchParams)} initialData={{ data: props, total: props.length }} />
+      <ListingsClient listingType="cho_thue" filters={parseListingParams(searchParams)} initialData={props} />
     </>
   );
 }

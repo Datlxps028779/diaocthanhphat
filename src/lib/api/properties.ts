@@ -48,10 +48,10 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
   if (filters?.isFeatured) q = q.eq('is_featured', true);
   if (filters?.isHot) q = q.eq('is_hot', true);
 
-  if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true });
-  else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false });
-  else if (filters?.sort === 'views') q = q.order('views', { ascending: false });
-  else q = q.order('created_at', { ascending: false });
+  if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
+  else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
+  else if (filters?.sort === 'views') q = q.order('views', { ascending: false }).order('id', { ascending: false });
+  else q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
 
   const limit = filters?.limit ?? 20;
   const page = filters?.page ?? 1;
