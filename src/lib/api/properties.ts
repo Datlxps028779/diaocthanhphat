@@ -14,12 +14,9 @@ export interface PropertyFilters {
 }
 
 // ─── Properties (public) ──────────────────────────────────────────────────────
-export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
-  if (filters?.keyword || filters?.sort === 'relevance') {
-    const ranked = await getRankedPropertyMatches(filters);
-    if (ranked) return ranked;
-  }
-
+// Dựng query đã áp đủ filter + sort (chưa phân trang). Tách hàm để retry dùng
+// builder mới hoàn toàn — builder PostgREST đã await không dùng lại được.
+function buildPropertyQuery(filters?: PropertyFilters) {
   let q = supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' })
@@ -48,17 +45,35 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
   if (filters?.isFeatured) q = q.eq('is_featured', true);
   if (filters?.isHot) q = q.eq('is_hot', true);
 
+  // Luôn kèm id làm tie-breaker: cột sort trùng giá trị thì thứ tự vẫn xác định,
+  // nếu không đổi trang có thể lặp hoặc bỏ sót tin.
   if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
   else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
   else if (filters?.sort === 'views') q = q.order('views', { ascending: false }).order('id', { ascending: false });
   else q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
 
+  return q;
+}
+
+export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+  if (filters?.keyword || filters?.sort === 'relevance') {
+    const ranked = await getRankedPropertyMatches(filters);
+    if (ranked) return ranked;
+  }
+
   const limit = filters?.limit ?? 20;
   const page = filters?.page ?? 1;
-  q = q.range((page - 1) * limit, page * limit - 1);
 
-  const { data, error, count } = await q;
-  if (error) throw error;
+  const { data, error, count } = await buildPropertyQuery(filters).range((page - 1) * limit, page * limit - 1);
+  if (error) {
+    // PGRST103: offset vượt quá số bản ghi — xảy ra với link cũ ?page=N sau khi tin
+    // bị gỡ bớt. Đọc lại tổng thật để UI báo đúng số tin thay vì "0 bất động sản".
+    if (error.code === 'PGRST103') {
+      const { count: realTotal } = await buildPropertyQuery(filters).range(0, 0);
+      return { data: [], total: realTotal ?? 0 };
+    }
+    throw error;
+  }
   return { data: (data ?? []) as Property[], total: count ?? 0 };
 }
 
