@@ -43,7 +43,7 @@ export const LISTINGS_PER_PAGE = 16;
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
   const num = (v: string | string[] | undefined) => {
     const s = first(v);
@@ -51,7 +51,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
     const n = Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
-  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number } = {};
+  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
   const district = first(sp?.district);
@@ -79,6 +79,8 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   if (maxArea != null) out.maxArea = maxArea;
   if (bedrooms) out.bedrooms = bedrooms;
   if (direction) out.direction = direction;
+  if (first(sp?.featured) === '1') out.isFeatured = true;
+  if (first(sp?.hot) === '1') out.isHot = true;
   if (page != null && page > 1) out.page = page;
   return out;
 }
@@ -148,6 +150,8 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
       if (page.maxArea != null) q.set('maxArea', String(page.maxArea));
       if (page.bedrooms) q.set('bedrooms', page.bedrooms);
       if (page.direction) q.set('direction', page.direction);
+      if (page.isFeatured) q.set('featured', '1');
+      if (page.isHot) q.set('hot', '1');
       if (page.page != null && page.page > 1) q.set('page', String(page.page));
       const qs = q.toString();
       return qs ? `${base}?${qs}` : base;
