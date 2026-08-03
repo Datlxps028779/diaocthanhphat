@@ -19,6 +19,19 @@ export default {
         info: colors.blue,
         danger: colors.red,
         neutral: colors.gray,
+        // Thang đỏ thương hiệu dùng cho khung giao diện marketplace mới.
+        urban: {
+          50: '#ffffff',
+          100: '#fff7f7',
+          200: '#feebeb',
+          300: '#fcc8c8',
+          400: '#f99696',
+          500: '#dc2626',
+          600: '#c81e1e',
+          700: '#aa1919',
+          800: '#8b1414',
+          900: '#6e0f0f',
+        },
       },
       borderWidth: { 6: '6px' },
       borderRadius: {

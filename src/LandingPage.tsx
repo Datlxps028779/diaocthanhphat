@@ -31,6 +31,7 @@ import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
+import { DistributionCtaSection, KeyAreasSection, MarketStatsSection } from './components/HomeSections';
 import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -349,6 +350,17 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </section>
         );
       }
+      case 'market_stats': {
+        // Chỉ đưa vào số đã đếm được từ dữ liệu thật; chưa có nguồn thì bỏ ô đó
+        // (không hiển thị số bịa). Khối tự ẩn khi không còn ô nào.
+        const stats = [
+          areas.length > 0 ? { label: 'Tỉnh/Thành phố', value: String(areas.length), hint: 'đang phủ sóng' } : null,
+          types.length > 0 ? { label: 'Loại hình BĐS', value: String(types.length), hint: 'nhà, đất, căn hộ...' } : null,
+        ].filter((item): item is NonNullable<typeof item> => item !== null);
+        return <MarketStatsSection key="market_stats" stats={stats} />;
+      }
+      case 'key_areas': return <KeyAreasSection key="key_areas" areas={areas} />;
+      case 'distribution_cta': return <DistributionCtaSection key="distribution_cta" />;
       case 'why_us': return (
         <section key="why_us" className="py-12 bg-white">
           <div className="max-w-6xl mx-auto px-4">
@@ -519,7 +531,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
+  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'market_stats', 'key_areas', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'distribution_cta', 'faq', 'cta', 'social_proof'];
   const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
   // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
   // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
@@ -534,8 +546,23 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     const at = cmsOrder.indexOf('categories');
     if (at >= 0) cmsOrder.splice(at + 1, 0, 'for_you'); else cmsOrder.unshift('for_you');
   }
+  // Khung marketplace mới (market_stats / key_areas / distribution_cta) cũng chưa
+  // có row trong page_sections. Auto-chèn theo cùng khuôn với faq/for_you để hiện
+  // được mà không cần migration; admin thêm/ẩn row thì tôn trọng cấu hình CMS.
+  if (pageLayout.length > 0) {
+    const insertAfter = (id: string, anchor: string, fallbackIndex = cmsOrder.length) => {
+      if (pageLayout.some(s => s.id === id)) return;
+      const at = cmsOrder.indexOf(anchor);
+      if (at >= 0) cmsOrder.splice(at + 1, 0, id); else cmsOrder.splice(fallbackIndex, 0, id);
+    };
+    insertAfter('market_stats', 'categories', 0);
+    insertAfter('key_areas', 'market_stats', 1);
+    const ctaAt = cmsOrder.indexOf('news');
+    if (!pageLayout.some(s => s.id === 'distribution_cta')) {
+      if (ctaAt >= 0) cmsOrder.splice(ctaAt + 1, 0, 'distribution_cta'); else cmsOrder.push('distribution_cta');
+    }
+  }
   const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
-
   return (
     <div className="min-h-screen bg-white">
       <Header
