@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
@@ -20,6 +20,7 @@ import { VerifiedBadge } from '../components/VerifiedBadge';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
+import { nextListingPageParam } from '../lib/listingPaging';
 import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -101,9 +102,16 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
 
-  // Debounce keyword 300ms → tránh request mỗi lần gõ phím; reset về trang 1
+  // Debounce keyword 300ms → tránh request mỗi lần gõ phím; reset về trang 1.
+  // Bỏ qua lần chạy đầu: mount với ?page=N (deep-link/chia sẻ link) không được
+  // coi là user vừa gõ keyword, nếu không trang sẽ bị đá về 1 ngay khi vào.
+  const keywordSettled = useRef(false);
   useEffect(() => {
-    const t = setTimeout(() => { setDebouncedKeyword(keyword); setPage(1); }, 300);
+    const t = setTimeout(() => {
+      setDebouncedKeyword(keyword);
+      if (keywordSettled.current) setPage(1);
+      keywordSettled.current = true;
+    }, 300);
     return () => clearTimeout(t);
   }, [keyword]);
 
@@ -187,14 +195,51 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   // trang 1, không keyword/khu vực/loại/quận, khoảng giá & diện tích mặc định, mới nhất.
   const isDefaultView = page === 1 && !debouncedKeyword && !areaId && !typeId && !district && !ward
     && priceIdx === 0 && areaIdx === 0 && !bedrooms && !direction && !legal && sort === 'newest';
-  const { data: result, isFetching: loading } = useQuery({
+  // Phân trang giữ URL chia sẻ được (SEO/crawler), nhưng người dùng có thể bấm "Tải
+  // thêm" để nối tiếp trang sau vào cùng danh sách. useInfiniteQuery giữ từng trang
+  // riêng nên đổi filter/sort là reset sạch, không lẫn dữ liệu cũ.
+  const {
+    data: infiniteResult,
+    isFetching: fetchingListings,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
     queryKey: qk.properties(filters),
-    queryFn: () => getAllProperties(filters),
+    queryFn: ({ pageParam }) => getAllProperties({ ...filters, page: pageParam }),
+    initialPageParam: page,
+    getNextPageParam: (lastPage, allPages) => nextListingPageParam({
+      startPage: page,
+      perPage: PER_PAGE,
+      total: lastPage.total,
+      loaded: allPages.reduce((sum, part) => sum + part.data.length, 0),
+    }),
     placeholderData: keepPreviousData, // giữ grid khi đổi trang, không nháy
-    initialData: isDefaultView && initialData ? initialData : undefined,
+    initialData: isDefaultView && initialData
+      ? { pages: [initialData], pageParams: [1] }
+      : undefined,
   });
-  const properties = result?.data ?? [];
-  const total = result?.total ?? 0;
+  const properties = useMemo(
+    () => (infiniteResult?.pages ?? []).flatMap(part => part.data),
+    [infiniteResult],
+  );
+  const total = infiniteResult?.pages[0]?.total ?? 0;
+  // Skeleton chỉ cho lần tải danh sách đầu; tải trang kế đã có trạng thái riêng ở
+  // nút "Tải thêm" nên không được thay cả grid (đang xem thì list biến mất).
+  const loading = fetchingListings && !isFetchingNextPage;
+
+  // Sentinel tự bấm "Tải thêm" khi cuộn tới cuối danh sách. Chỉ là tiện ích: nút
+  // vẫn bấm tay được nếu observer không chạy (trình duyệt cũ, reduced motion...).
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting) && hasNextPage && !isFetchingNextPage) fetchNextPage();
+    }, { rootMargin: '400px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const autoSavedFilters = useMemo<SavedFilters>(() => ({
     listingType: listingType || undefined,
@@ -311,6 +356,12 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   };
 
   const totalPages = Math.ceil(total / PER_PAGE);
+
+  // Link cũ ?page=N trỏ quá số trang hiện có (tin đã bị gỡ bớt) → đưa về trang cuối
+  // thay vì để người dùng đứng ở danh sách rỗng.
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const hasActiveFilters = !!(keyword || areaId || typeId || district || ward || priceIdx || areaIdx || bedrooms || direction || legal);
   const setFilter = (fn: () => void) => { fn(); setPage(1); };
 
@@ -743,6 +794,19 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   ))}
                 </div>
               )
+            )}
+
+            {/* Tải thêm: nối trang kế vào danh sách. Nút luôn hiển thị (fallback khi
+                IntersectionObserver không chạy/JS chậm); sentinel chỉ tự bấm hộ. */}
+            {viewMode !== 'map' && hasNextPage && (
+              <div className="mt-8 flex flex-col items-center gap-2">
+                <div ref={loadMoreRef} aria-hidden className="h-px w-full" />
+                <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}
+                  className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60">
+                  {isFetchingNextPage ? 'Đang tải...' : 'Tải thêm'}
+                </button>
+                <p className="text-xs text-gray-400">Đã xem {properties.length}/{total} bất động sản</p>
+              </div>
             )}
 
             {/* Pagination */}
