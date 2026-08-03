@@ -37,6 +37,7 @@ export function scrollTop() {
 }
 
 export const ADMIN_PATH = '/quantrihethong';
+export const LISTINGS_PER_PAGE = 16;
 
 // Đọc ngược query string của trang danh sách (Next App Router truyền searchParams
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.

@@ -31,7 +31,7 @@ export default async function Page({ searchParams }: { searchParams?: Record<str
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <ListingsClient listingType="mua_ban" filters={parseListingParams(searchParams)} initialData={{ data: props, total: props.length }} />
+      <ListingsClient listingType="mua_ban" filters={parseListingParams(searchParams)} initialData={props} />
     </>
   );
 }

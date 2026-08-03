@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
 import type { Property, NewsArticle, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
+import { LISTINGS_PER_PAGE } from './router';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
 // Tạo MỚI mỗi lần gọi, KHÔNG singleton và KHÔNG persist session — tránh chia sẻ
@@ -98,20 +99,21 @@ export async function serverGetRecentProperties(limit = 8): Promise<Property[]> 
 }
 
 // Listing lượt-xem-đầu (không filter) để crawler thấy danh sách; filter/sort chạy client.
-export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', limit = 20): Promise<Property[]> {
+export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', limit = LISTINGS_PER_PAGE): Promise<{ data: Property[]; total: number }> {
   try {
     const sb = serverClient();
     let q = sb
       .from('properties')
-      .select(PROPERTY_SELECT)
+      .select(PROPERTY_SELECT, { count: 'exact' })
       .eq('is_active', true)
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(limit);
     if (listingType) q = q.eq('listing_type', listingType);
-    const { data } = await q;
-    return (data ?? []) as Property[];
+    const { data, count } = await q;
+    return { data: (data ?? []) as Property[], total: count ?? 0 };
   } catch {
-    return [];
+    return { data: [], total: 0 };
   }
 }
 

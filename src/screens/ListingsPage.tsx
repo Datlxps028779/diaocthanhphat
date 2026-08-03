@@ -19,7 +19,7 @@ import { CompareButton } from '../components/CompareButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
-import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
 import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -56,7 +56,7 @@ const LISTING_TYPES: { key: ListingTypeKey; label: string; icon: React.ReactNode
 
 // Price ranges & area ranges: dùng chung từ lib/priceRange (hero + listing khớp index).
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
-const PER_PAGE = 16;
+const PER_PAGE = LISTINGS_PER_PAGE;
 
 function filterByBounds(props: Property[], bounds: MapBounds | null): Property[] {
   if (!bounds) return props;
