@@ -173,4 +173,47 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     const sp = Object.fromEntries(new URLSearchParams(qs));
     expect(parseListingParams(sp)).toEqual({ minArea: 50, maxArea: 100, bedrooms: '2', direction: 'Tây Bắc' });
   });
+
+  it('trang 1 không lên URL, trang > 1 thì có', () => {
+    expect(pageToHref({ name: 'listings', page: 1 })).toBe('/danh-sach');
+    expect(pageToHref({ name: 'listings', page: 3 })).toBe('/danh-sach?page=3');
+  });
+
+  it('bóc page (ép số) và bỏ qua page <= 1 hoặc không hợp lệ', () => {
+    expect(parseListingParams({ page: '3' })).toEqual({ page: 3 });
+    expect(parseListingParams({ page: '1' })).toEqual({});
+    expect(parseListingParams({ page: 'abc' })).toEqual({});
+  });
+
+  it('round-trip page + sort giữ nguyên khi đổi trang trên filter đang áp dụng', () => {
+    const page = { name: 'listings' as const, sort: 'price_asc', keyword: 'đất nền', page: 4 };
+    const qs = pageToHref(page).split('?')[1];
+    const sp = Object.fromEntries(new URLSearchParams(qs));
+    expect(parseListingParams(sp)).toEqual({ sort: 'price_asc', keyword: 'đất nền', page: 4 });
+  });
+
+  it('round-trip page cùng path SEO khu vực: area lên path, page ở query', () => {
+    const taxonomy = {
+      areas: [{ id: 'a1', slug: 'binh-duong' }],
+      districts: [{ slug: 'di-an', name: 'Dĩ An', area_id: 'a1' }],
+    };
+    const href = pageToHref({ name: 'listings', listingType: 'mua_ban', areaId: 'a1', district: 'Dĩ An', page: 2 }, taxonomy);
+    const [path, qs] = href.split('?');
+    expect(path).toBe('/mua-ban/binh-duong/di-an');
+    expect(parseListingParams(Object.fromEntries(new URLSearchParams(qs)))).toEqual({ page: 2 });
+  });
+
+  it('round-trip isFeatured/isHot: link BĐS nổi bật và HOT chia sẻ được', () => {
+    const featuredQs = pageToHref({ name: 'listings', isFeatured: true }).split('?')[1];
+    expect(parseListingParams(Object.fromEntries(new URLSearchParams(featuredQs)))).toEqual({ isFeatured: true });
+
+    const hotQs = pageToHref({ name: 'listings', isHot: true, typeId: 't1' }).split('?')[1];
+    expect(parseListingParams(Object.fromEntries(new URLSearchParams(hotQs)))).toEqual({ isHot: true, typeId: 't1' });
+  });
+
+  it('không có featured/hot thì không sinh param và không tự bật cờ', () => {
+    expect(pageToHref({ name: 'listings', isFeatured: false, isHot: false })).toBe('/danh-sach');
+    expect(parseListingParams({})).toEqual({});
+    expect(parseListingParams({ featured: '0', hot: 'true' })).toEqual({});
+  });
 });
