@@ -31,7 +31,7 @@ import { ForYou } from './components/ForYou';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
-import { DistributionCtaSection, KeyAreasSection, MarketStatsSection } from './components/HomeSections';
+import { AreasByZoneSection, DistributionCtaSection, FengShuiSection, KeyAreasSection, MapDiscoverySection, MarketStatsSection } from './components/HomeSections';
 import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -360,6 +360,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         return <MarketStatsSection key="market_stats" stats={stats} />;
       }
       case 'key_areas': return <KeyAreasSection key="key_areas" areas={areas} />;
+      case 'map_discovery': return <MapDiscoverySection key="map_discovery" areas={areas} />;
+      case 'areas_by_zone': return <AreasByZoneSection key="areas_by_zone" areas={areas} />;
+      case 'feng_shui': {
+        // Lọc theo chuyên mục phong thủy trong tin tức thật; chưa có bài thì khối
+        // tự hiện thông báo trống (không dựng bài giả).
+        const items = news.filter(article => /phong th/i.test(article.category ?? ''));
+        return <FengShuiSection key="feng_shui" articles={items} href={pageToHref({ name: 'news' })} />;
+      }
       case 'distribution_cta': return <DistributionCtaSection key="distribution_cta" />;
       case 'why_us': return (
         <section key="why_us" className="py-12 bg-white">
@@ -531,7 +539,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'market_stats', 'key_areas', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'distribution_cta', 'faq', 'cta', 'social_proof'];
+  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'market_stats', 'key_areas', 'featured_sections', 'map_discovery', 'region_banners', 'areas_by_zone', 'why_us', 'testimonials', 'news', 'feng_shui', 'distribution_cta', 'faq', 'cta', 'social_proof'];
   const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
   // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
   // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
@@ -557,10 +565,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     };
     insertAfter('market_stats', 'categories', 0);
     insertAfter('key_areas', 'market_stats', 1);
-    const ctaAt = cmsOrder.indexOf('news');
-    if (!pageLayout.some(s => s.id === 'distribution_cta')) {
-      if (ctaAt >= 0) cmsOrder.splice(ctaAt + 1, 0, 'distribution_cta'); else cmsOrder.push('distribution_cta');
-    }
+    insertAfter('map_discovery', 'featured_sections');
+    insertAfter('areas_by_zone', 'region_banners');
+    insertAfter('feng_shui', 'news');
+    insertAfter('distribution_cta', 'feng_shui');
   }
   const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
   return (
