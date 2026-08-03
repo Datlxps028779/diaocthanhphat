@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+  /* Token dùng chung cho giao diện public. Đổi brand/độ nổi khối chỉ sửa ở đây.
+     --cnv-shadow-soft trước đây bị dùng ở LandingPage mà chưa hề khai báo nên
+     hiệu ứng hover im lặng không chạy. */
+  :root {
+    --cnv-shadow-soft: 0 6px 24px rgba(15, 23, 42, 0.08);
+    --cnv-shadow-lift: 0 14px 40px rgba(15, 23, 42, 0.14);
+    --cnv-shadow-header: 0 1px 0 rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.05);
+  }
   html { scroll-behavior: smooth; }
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;

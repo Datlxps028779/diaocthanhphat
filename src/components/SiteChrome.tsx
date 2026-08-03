@@ -42,7 +42,9 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
         onShowAuth={(mode) => setAuthModal({ mode })}
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />
-      <div className="pt-[52px] md:pt-[76px]">{children}</div>
+      {/* Bù chiều cao header fixed (đo thật: 114px dưới lg vì có thêm hàng ô tìm
+          kiếm, 61px từ lg khi ô tìm kiếm nằm cùng hàng nav). */}
+      <div className="pt-[114px] lg:pt-[61px]">{children}</div>
       <Footer areas={areas} onNavigate={navigate} />
       <FloatingButtons onNavigate={navigate} />
       <CompareBar />

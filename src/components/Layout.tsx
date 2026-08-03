@@ -7,6 +7,7 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area } from '../lib/supabase';
 import { useContent, useSetting, useMenu } from '../lib/cms';
+import { HeaderSearch } from './HeaderSearch';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const AiSearchChat = dynamic(() => import('./AiSearchChat').then(m => m.AiSearchChat), { ssr: false });
@@ -32,6 +33,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
   const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
   const logoUrl = useSetting('site_logo_url', '');
+  const hotline = useSetting('phone_hotline', '0901 234 567');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -58,20 +60,8 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const newTabProps = (item: NavigationItem) => item.openNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
-      {/* Top bar */}
-      <div className="bg-red-600 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />Hotline: {useSetting('phone_hotline', '0901 234 567')}</span>
-          <span className="opacity-60">|</span>
-          <span>{useSetting('address', 'Thủ Dầu Một, Bình Dương')}</span>
-        </div>
-        <div className="flex items-center gap-3 text-red-100">
-          <span>{useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00')}</span>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+    <header className={`fixed top-0 inset-x-0 z-50 border-b transition-all duration-200 ${scrolled ? 'border-slate-200 bg-white shadow-header' : 'border-slate-100 bg-white'}`}>
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 px-4 py-2.5">
         <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
           {logoUrl && !logoError ? (
             <img
@@ -81,39 +71,42 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               className="h-9 w-auto max-w-[160px] rounded-lg object-contain"
             />
           ) : (
-            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
-              <Home className="w-5 h-5 text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-600">
+              <Home className="h-5 w-5 text-white" />
             </div>
           )}
-          <div className="hidden sm:block leading-tight">
-            <div className="text-red-600 font-black text-sm tracking-tight">{siteName}</div>
-            <div className="text-gray-400 text-[9px] tracking-wider uppercase">{siteSub}</div>
+          <div className="hidden leading-tight sm:block">
+            <div className="text-sm font-black tracking-tight text-slate-900">{siteName}</div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-400">{siteSub}</div>
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-0.5 flex-1 justify-center">
+        {/* Ô tìm kiếm ngay trên thanh nav — điểm chính của bố cục marketplace */}
+        <HeaderSearch className="hidden min-w-0 flex-1 max-w-md lg:block" />
+
+        <nav className="hidden items-center gap-0.5 lg:flex">
           {navItems.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
-                {item.label}<ChevronDown className="w-3 h-3" />
+                className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                {item.label}<ChevronDown className="h-3 w-3" />
               </button>
               {desktopMenuOpen === item.key && (
                 <div className="absolute left-0 top-full pt-2 z-50">
-                  <div className="w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
+                  <div className="w-56 overflow-y-auto rounded-xl border border-slate-100 bg-white py-2 shadow-lift max-h-[70vh]">
                     {item.children.map(child => child.children ? (
                       <div key={child.key} className="py-1">
-                        <p className="px-4 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
+                        <p className="px-4 pb-0.5 pt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">{child.label}</p>
                         {child.children.map(grand => (
                           <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            className="block px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-red-50 hover:text-red-700">
                             {grand.label}
                           </Link>
                         ))}
                       </div>
                     ) : (
                       <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                        className="block px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-red-50 hover:text-red-700">
                         {child.label}
                       </Link>
                     ))}
@@ -123,37 +116,42 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors ${isActive(item) ? 'bg-red-50 text-red-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
               {item.label}
             </Link>
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+        <div className="hidden flex-shrink-0 items-center gap-2 md:flex">
+          {/* Hotline: trước ở dải đỏ trên cùng (đã bỏ) — giữ lại ở đây để không mất */}
+          <a href={`tel:${hotline.replace(/\s/g, '')}`}
+            className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-red-700 xl:flex">
+            <Phone className="h-3.5 w-3.5 text-red-600" />{hotline}
+          </a>
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-                <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                  <span className="text-red-600 font-bold text-xs">{user.email?.charAt(0).toUpperCase()}</span>
+                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 transition-colors hover:bg-slate-50">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100">
+                  <span className="text-xs font-bold text-red-700">{user.email?.charAt(0).toUpperCase()}</span>
                 </div>
-                <span className="text-xs font-medium text-gray-700 max-w-[100px] truncate">{user.email}</span>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
+                <span className="max-w-[100px] truncate text-xs font-medium text-slate-700">{user.email}</span>
+                <ChevronDown className="h-3 w-3 text-slate-400" />
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 min-w-[180px]">
+                <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-slate-100 bg-white py-1.5 shadow-lift">
                   <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />Tin đăng của tôi
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
+                    <User className="h-4 w-4 text-slate-400" />Tin đăng của tôi
                   </Link>
                   <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-gray-400" />Đăng tin mới
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
+                    <Tag className="h-4 w-4 text-slate-400" />Đăng tin mới
                   </Link>
-                  <div className="border-t border-gray-100 mt-1 pt-1">
+                  <div className="mt-1 border-t border-slate-100 pt-1">
                     <button onClick={onLogout}
-                      className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />Đăng xuất
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-700 hover:bg-red-50">
+                      <LogOut className="h-4 w-4" />Đăng xuất
                     </button>
                   </div>
                 </div>
@@ -162,30 +160,36 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           ) : (
             <>
               <button onClick={() => onShowAuth?.('login')}
-                className="border border-red-500 text-red-600 text-[13px] font-semibold px-4 py-1.5 rounded-md hover:bg-red-50 transition-colors">
+                className="rounded-lg px-3 py-1.5 text-[13px] font-bold text-slate-700 transition-colors hover:bg-slate-100">
                 {nav.btn_login || 'Đăng nhập'}
               </button>
               <button onClick={() => onShowAuth?.('register')}
-                className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors">
+                className="rounded-lg bg-red-600 px-4 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-red-700">
                 {nav.btn_post || 'Đăng tin'}
               </button>
             </>
           )}
           {user && (
             <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-              className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors flex items-center gap-1">
-              <Plus className="w-3.5 h-3.5" />Đăng tin
+              className="flex items-center gap-1 rounded-lg bg-red-600 px-4 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-red-700">
+              <Plus className="h-3.5 w-3.5" />Đăng tin
             </Link>
           )}
         </div>
 
-        <button className="xl:hidden p-1.5 text-gray-600" onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        <button className="p-1.5 text-slate-600 lg:hidden" onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? 'Đóng menu' : 'Mở menu'}>
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
+      {/* Ô tìm kiếm cho mobile/tablet: xuống hàng riêng vì thanh trên đã hết chỗ */}
+      <div className="border-t border-slate-100 px-4 py-2 lg:hidden">
+        <HeaderSearch />
+      </div>
+
       {mobileOpen && (
-        <div className="xl:hidden bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
+        <div className="lg:hidden bg-white border-t border-slate-100 px-4 py-3 space-y-0.5 shadow-lift">
           {navItems.map(item => item.children ? (
             <div key={item.key}>
               <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}

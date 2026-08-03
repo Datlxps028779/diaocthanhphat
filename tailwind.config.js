@@ -29,6 +29,9 @@ export default {
         card: '0 4px 20px rgba(0,0,0,0.06)',
         'card-hover': '0 12px 40px rgba(0,0,0,0.10)',
         pop: '0 8px 32px rgba(0,0,0,0.18)',
+        soft: 'var(--cnv-shadow-soft)',
+        lift: 'var(--cnv-shadow-lift)',
+        header: 'var(--cnv-shadow-header)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

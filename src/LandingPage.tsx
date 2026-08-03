@@ -215,7 +215,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 };
                 return (
                   <Link key={i} href={pageToHref(quickCategoryToPage(cfg))}
-                    className="group flex min-h-28 flex-col items-center justify-center gap-2 border border-slate-100 bg-white p-3 text-center transition-all hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[var(--cnv-shadow-soft)]">
+                    className="group flex min-h-28 flex-col items-center justify-center gap-2 border border-slate-100 bg-white p-3 text-center transition-all hover:-translate-y-0.5 hover:border-red-200 hover:shadow-soft">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-red-50 to-amber-50 text-red-600 transition-colors group-hover:from-red-100 group-hover:to-amber-100">
                       <CategoryIcon name={iconName} className="h-5 w-5" />
                     </div>
@@ -548,7 +548,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       />
 
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
-      <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-14">
+      <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-[114px] lg:pt-[61px]">
         <div className="absolute inset-0">
           <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/50 to-black/70" />
