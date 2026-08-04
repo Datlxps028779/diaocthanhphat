@@ -258,6 +258,9 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   const col3sub1 = useSetting('footer_col3_sub1', 'Chuyên sâu: Bình Dương');
   const col3sub2 = useSetting('footer_col3_sub2', 'Mở rộng: Bình Phước, Đồng Nai');
   const license = useSetting('footer_license', 'Giấy phép ĐKKD: 0000000000 | Bình Dương');
+  // Số ĐKKD toàn số 0 là placeholder chưa điền. Công bố số giả làm mất E-E-A-T
+  // (Google đánh giá độ tin cậy doanh nghiệp), nên thà ẩn còn hơn hiện số sai.
+  const hasRealLicense = !/\b0{6,}\b/.test(license);
 
   const fallbackLinks: { label: string; href: string }[] = [
     { label: 'Trang chủ', href: pageToHref({ name: 'home' }) },
@@ -358,7 +361,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
       <div className="border-t border-gray-800 py-4 px-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
           <p className="text-gray-500 text-[11px]">{footer.copyright || '© 2025 BĐS Bình Dương. Tất cả quyền được bảo lưu.'}</p>
-          <p className="text-gray-600 text-[11px]">{license}</p>
+          {hasRealLicense && <p className="text-gray-600 text-[11px]">{license}</p>}
         </div>
       </div>
     </footer>

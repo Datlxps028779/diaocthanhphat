@@ -6,6 +6,8 @@ import { buildAreaListingPath } from './areaPath';
 export interface HrefTaxonomy {
   areas: { id: string; slug: string }[];
   districts: { slug: string; name: string; area_id: string }[];
+  // Cho phép sinh URL lọc loại BĐS bằng slug (?loai=dat-nen) thay UUID.
+  propertyTypes?: { id: string; slug: string }[];
 }
 
 export type Page =
@@ -43,7 +45,7 @@ export const LISTINGS_PER_PAGE = 16;
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } {
+export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; typeSlug?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
   const num = (v: string | string[] | undefined) => {
     const s = first(v);
@@ -51,9 +53,10 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
     const n = Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
-  const out: { areaId?: string; typeId?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } = {};
+  const out: { areaId?: string; typeId?: string; typeSlug?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
+  const typeSlug = first(sp?.loai);
   const district = first(sp?.district);
   const ward = first(sp?.ward);
   const legal = first(sp?.legal);
@@ -68,6 +71,9 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   const page = num(sp?.page);
   if (area) out.areaId = area;
   if (type) out.typeId = type;
+  // ?loai=<slug> là dạng mới; trang danh sách tra slug→id qua taxonomy. Vẫn đọc
+  // ?type=<uuid> để link cũ đã share/index không vỡ.
+  if (typeSlug) out.typeSlug = typeSlug;
   if (district) out.district = district;
   if (ward) out.ward = ward;
   if (legal) out.legal = legal;
@@ -138,7 +144,12 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
       }
       const q = new URLSearchParams();
       if (page.areaId && !areaOnPath) q.set('area', page.areaId);
-      if (page.typeId) q.set('type', page.typeId);
+      // Ưu tiên slug thân thiện (?loai=dat-nen) khi tra được; không có taxonomy thì
+      // giữ ?type=<uuid> như cũ để không vỡ chỗ gọi chưa truyền propertyTypes.
+      if (page.typeId) {
+        const typeSlug = taxonomy?.propertyTypes?.find(t => t.id === page.typeId)?.slug;
+        if (typeSlug) q.set('loai', typeSlug); else q.set('type', page.typeId);
+      }
       if (page.district && !districtOnPath) q.set('district', page.district);
       if (page.ward) q.set('ward', page.ward);
       if (page.legal) q.set('legal', page.legal);

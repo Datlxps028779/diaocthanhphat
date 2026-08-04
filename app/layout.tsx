@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '@/index.css';
-import { serializeJsonLd, buildLocalBusinessJsonLd } from '@/lib/seo';
+import { serializeJsonLd, buildLocalBusinessJsonLd, DEFAULT_OG_IMAGE } from '@/lib/seo';
 import { getSiteUrl } from '@/lib/siteUrl';
 import { serverGetSiteSettings } from '@/lib/supabase-server';
 import { Providers } from './providers';
@@ -24,6 +24,9 @@ export async function generateMetadata(): Promise<Metadata> {
   // fallback file tĩnh app/icon.svg. Cho phép admin đổi icon không cần deploy.
   const settings = await serverGetSiteSettings();
   const fav = (settings.favicon_url || settings.site_favicon_url || '').trim();
+  // Ảnh OG mặc định cho toàn site: ưu tiên admin cấu hình, rồi logo, cuối cùng
+  // ảnh fallback. Thiếu thẻ này thì mọi trang share ra FB/Zalo đều hiện thẻ trắng.
+  const ogImage = (settings.og_image || settings.site_logo_url || '').trim() || DEFAULT_OG_IMAGE;
 
   return {
     metadataBase: new URL(SITE_URL),
@@ -39,8 +42,9 @@ export async function generateMetadata(): Promise<Metadata> {
       locale: 'vi_VN',
       siteName: SITE_NAME,
       url: SITE_URL,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: SITE_NAME }],
     },
-    twitter: { card: 'summary_large_image' },
+    twitter: { card: 'summary_large_image', images: [ogImage] },
     robots: { index: true, follow: true },
     verification: { google: 'SQuZJk44qo5W2grROs-c85eUQteVPZ7bZEB5bjECm8I' },
   };
