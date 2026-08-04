@@ -16,6 +16,7 @@ export type Area = {
   image_url: string | null; slug: string; order_index: number; created_at: string;
   meta_title?: string | null; meta_description?: string | null;
   focus_keywords?: string | null; schema_markup?: Record<string, unknown> | null;
+  region?: string | null; admin_note?: string | null;
 };
 export type District = {
   id: string; area_id: string; name: string; slug: string; order_index: number; created_at: string;

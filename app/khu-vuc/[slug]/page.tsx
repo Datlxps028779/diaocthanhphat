@@ -182,6 +182,11 @@ export default async function AreaPage({ params }: Props) {
                   {!evaluation.indexable && <span className="w-fit rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">Dữ liệu đang cập nhật</span>}
                 </div>
                 <p className="mt-4 text-sm leading-7 text-gray-600">{detail?.description || summary}</p>
+                {area.admin_note?.trim() ? (
+                  <p className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-6 text-blue-900">
+                    {area.admin_note}
+                  </p>
+                ) : null}
                 {detail?.highlights?.length ? (
                   <div className="mt-5 flex flex-wrap gap-2">
                     {detail.highlights.map(item => <span key={item} className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700">{item}</span>)}
