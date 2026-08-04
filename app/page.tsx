@@ -8,7 +8,9 @@ const fallback = {
   title: 'BĐS Bình Dương – Mua bán, cho thuê bất động sản uy tín',
   description: 'Cổng thông tin mua bán, cho thuê bất động sản Bình Dương và khu vực lân cận với tin thật, pháp lý minh bạch, tư vấn tận tâm.',
   path: PATH,
-  routeType: 'WebSite' as const,
+  // Schema WebSite (kèm SearchAction) đã phát ở app/layout.tsx với @id #website.
+  // Để 'WebSite' ở đây nữa sẽ sinh 2 block trùng trên trang chủ, nên dùng WebPage.
+  routeType: 'WebPage' as const,
 };
 
 // Home revalidate mỗi 30 phút (nội dung động: featured/hot/recent + CMS blocks).

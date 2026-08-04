@@ -32,7 +32,7 @@ import { buildPropertyImageAlt } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
 interface ListingsPageProps {
   initialFilters?: Partial<{
-    listingType: string; areaId: string; typeId: string; district: string; ward: string; keyword: string;
+    listingType: string; areaId: string; typeId: string; typeSlug: string; district: string; ward: string; keyword: string;
     minPrice: number; maxPrice: number; minArea: number; maxArea: number;
     bedrooms: string; direction: string; legal: string;
     isFeatured: boolean; isHot: boolean; sort: PropertySort; page: number;
@@ -119,6 +119,17 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const { data: areas = [] } = useAreas();
   const { data: types = [] } = usePropertyTypes();
   const { data: districts = [] } = useDistricts(areaId || undefined);
+
+  // URL dạng ?loai=dat-nen: taxonomy load bất đồng bộ nên chỉ map được slug→id
+  // sau khi types về. Chỉ chạy một lần cho giá trị seed từ URL, không ghi đè khi
+  // user tự đổi loại BĐS sau đó.
+  const typeSlugApplied = useRef(false);
+  useEffect(() => {
+    if (typeSlugApplied.current || !initialFilters?.typeSlug || types.length === 0) return;
+    const matched = types.find(item => item.slug === initialFilters.typeSlug);
+    if (matched) setTypeId(matched.id);
+    typeSlugApplied.current = true;
+  }, [initialFilters?.typeSlug, types]);
   // Reset district khi user đổi khu vực — nhưng bỏ qua lần mount đầu để không xoá
   // district đã seed sẵn từ link "Danh mục nhanh" (?district=...).
   const areaChangedOnce = useRef(false);
@@ -304,11 +315,11 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       isFeatured: initialFilters?.isFeatured || undefined,
       isHot: initialFilters?.isHot || undefined,
       page: page > 1 ? page : undefined,
-    }, { areas, districts });
+    }, { areas, districts, propertyTypes: types });
     const current = window.location.pathname + window.location.search;
     if (current !== href) window.history.replaceState(null, '', href);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, initialFilters?.isFeatured, initialFilters?.isHot]);
+  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, initialFilters?.isFeatured, initialFilters?.isHot]);
 
   // Map view: chỉ fetch khi ở chế độ bản đồ
   const { data: mapProperties = EMPTY_PROPS } = useQuery({
@@ -370,6 +381,20 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     : listingType === 'mua_ban' ? 'Mua bán bất động sản'
     : listingType === 'cho_thue' ? 'Cho thuê bất động sản'
     : 'Bất động sản';
+
+  // H1 phải mô tả đúng nội dung đang lọc để crawler hiểu trang. Ghép thêm loại
+  // BĐS và khu vực khi user đã chọn; tên lấy từ taxonomy thật, không bịa.
+  const heading = (() => {
+    const typeName = typeId ? types.find(item => item.id === typeId)?.name : '';
+    const areaName = areaId ? areas.find(item => item.id === areaId)?.name : '';
+    const place = [ward, district, areaName].filter(Boolean).join(', ');
+    const base = initialFilters?.isFeatured ? 'Bất động sản nổi bật'
+      : initialFilters?.isHot ? 'Bất động sản HOT'
+      : listingType === 'mua_ban' ? `${typeName || 'Nhà đất'} bán`
+      : listingType === 'cho_thue' ? `${typeName || 'Nhà đất'} cho thuê`
+      : typeName || 'Bất động sản';
+    return place ? `${base} tại ${place}` : base;
+  })();
 
   const FilterPanel = () => (
     <div className="space-y-5">
@@ -518,6 +543,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
             { label: pageTitle },
           ]} />
 
+          <h1 className="mt-1 mb-3 text-lg font-black text-gray-900 md:text-2xl">{heading}</h1>
+
           {/* Listing type tabs */}
           <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1 scrollbar-hide">
             {LISTING_TYPES.map(lt => (
@@ -574,7 +601,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="w-4 h-4 text-red-500" />
-                  <span className="font-bold text-sm text-gray-900">Bộ lọc nâng cao</span>
+                  <h2 className="font-bold text-sm text-gray-900">Bộ lọc nâng cao</h2>
                 </div>
                 {hasActiveFilters && <button onClick={resetFilters} className="text-xs text-red-600 hover:underline">Xóa tất cả</button>}
               </div>
@@ -758,6 +785,12 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                   )}
                 </div>
               </>
+            )}
+
+            {/* H2 mô tả tập kết quả — sr-only vì số lượng đã hiện ở thanh trên,
+                nhưng crawler cần một heading cấp 2 cho khối danh sách. */}
+            {viewMode !== 'map' && (
+              <h2 className="sr-only">Danh sách {heading.toLocaleLowerCase('vi-VN')}</h2>
             )}
 
             {viewMode === 'grid' && (

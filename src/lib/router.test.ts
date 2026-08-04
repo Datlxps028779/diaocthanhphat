@@ -216,4 +216,30 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     expect(parseListingParams({})).toEqual({});
     expect(parseListingParams({ featured: '0', hot: 'true' })).toEqual({});
   });
+
+  it('sinh ?loai=<slug> thân thiện khi tra được loại BĐS', () => {
+    const taxonomy = {
+      areas: [],
+      districts: [],
+      propertyTypes: [{ id: 't-uuid-1', slug: 'dat-nen' }],
+    };
+    expect(pageToHref({ name: 'listings', typeId: 't-uuid-1' }, taxonomy)).toBe('/danh-sach?loai=dat-nen');
+  });
+
+  it('không tra được slug thì giữ ?type=<uuid> để không vỡ link', () => {
+    expect(pageToHref({ name: 'listings', typeId: 't-uuid-9' })).toBe('/danh-sach?type=t-uuid-9');
+    const taxonomy = { areas: [], districts: [], propertyTypes: [{ id: 'khac', slug: 'can-ho' }] };
+    expect(pageToHref({ name: 'listings', typeId: 't-uuid-9' }, taxonomy)).toBe('/danh-sach?type=t-uuid-9');
+  });
+
+  it('đọc được cả ?loai=<slug> mới và ?type=<uuid> cũ', () => {
+    expect(parseListingParams({ loai: 'dat-nen' })).toEqual({ typeSlug: 'dat-nen' });
+    expect(parseListingParams({ type: 't-uuid-1' })).toEqual({ typeId: 't-uuid-1' });
+  });
+
+  it('round-trip loai: page → href → parse giữ đúng slug', () => {
+    const taxonomy = { areas: [], districts: [], propertyTypes: [{ id: 't1', slug: 'nha-pho' }] };
+    const qs = pageToHref({ name: 'listings', typeId: 't1', keyword: 'sổ hồng' }, taxonomy).split('?')[1];
+    expect(parseListingParams(Object.fromEntries(new URLSearchParams(qs)))).toEqual({ typeSlug: 'nha-pho', keyword: 'sổ hồng' });
+  });
 });

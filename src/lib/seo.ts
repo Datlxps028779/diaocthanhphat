@@ -64,11 +64,15 @@ export function buildLocalBusinessJsonLd(settings: Record<string, string>): Reco
 // ─── Static page → Metadata (DRY cho các route tĩnh) ──────────────────────────
 // Bổ sung OG/Twitter riêng cho từng trang (trước đây static route chỉ có
 // title/description/canonical → share ra FB/Zalo hiện thẻ generic của site).
+// Ảnh OG mặc định cho các route không tự cung cấp ảnh. Thiếu thẻ này thì FB/Zalo
+// hiện thẻ trắng khi chia sẻ. Admin đổi được qua site setting 'og_image'.
+export const DEFAULT_OG_IMAGE = FALLBACK_PROPERTY_IMAGE;
+
 export function staticPageMetadata(opts: { title: string; description: string; path: string; ogImage?: string }): Metadata {
   const { title, description, path, ogImage } = opts;
   const ogTtl = ogTitle(title);
   const ogDesc = ogDescription(description);
-  const images = ogImage ? [{ url: ogImage, width: 1200, height: 630, alt: ogTtl }] : undefined;
+  const images = [{ url: ogImage || DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: ogTtl }];
   return {
     title,
     description,
@@ -82,7 +86,7 @@ export function staticPageMetadata(opts: { title: string; description: string; p
       locale: 'vi_VN',
       images,
     },
-    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: ogImage ? [ogImage] : undefined },
+    twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: [ogImage || DEFAULT_OG_IMAGE] },
   };
 }
 
