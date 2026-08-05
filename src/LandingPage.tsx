@@ -442,19 +442,22 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       }
       case 'faq': return (
         <section key="faq" className="py-12 bg-gray-50 border-t border-gray-100">
-          <div className="max-w-3xl mx-auto px-4">
+          <div className="max-w-6xl mx-auto px-4">
             <h2 className="text-2xl md:text-3xl font-black text-gray-900 text-center mb-2">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
             <p className="text-gray-500 text-sm text-center mb-8">{sec('faq')('subtitle', 'Những điều bạn cần biết trước khi mua bán, cho thuê bất động sản')}</p>
-            <div className="space-y-3">
+            {/* items-start: câu mở rộng chỉ kéo dài thẻ của nó, không kéo giãn thẻ bên cạnh. */}
+            <div data-testid="faq-grid" className="grid items-start gap-4 md:grid-cols-2 md:gap-x-6">
               {FAQ_ITEMS.map((item, i) => {
                 const open = openFaq === i;
                 return (
-                  <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div key={i} data-testid="faq-item" className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                     <button onClick={() => setOpenFaq(open ? null : i)}
                       className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
                       aria-expanded={open}>
-                      <span className="font-semibold text-gray-900 text-sm">{item.q}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                      <span className="font-semibold text-gray-900 text-[15px] leading-6">{item.q}</span>
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gray-50 border border-gray-100">
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                      </span>
                     </button>
                     {open && <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed">{item.a}</div>}
                   </div>
