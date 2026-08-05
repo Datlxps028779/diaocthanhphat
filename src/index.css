@@ -34,6 +34,16 @@
 }
 .animate-fade-in { animation: fade-in 0.4s ease-out both; }
 
+/* Ảnh bìa hero phóng chậm rồi thu lại — tránh cảm giác ảnh tĩnh chết.
+   Chỉ chạy khi người dùng không tắt hiệu ứng chuyển động trong hệ điều hành. */
+@keyframes hero-zoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-hero-zoom { animation: hero-zoom 20s ease-in-out infinite alternate; }
+}
+
 /* Shimmer skeleton */
 @keyframes shimmer {
   0%   { background-position: -1000px 0; }

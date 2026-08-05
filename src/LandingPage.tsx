@@ -70,6 +70,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const [searchWard, setSearchWard] = useState('');
   const [searchTypeId, setSearchTypeId] = useState('');
   const [searchPriceIdx, setSearchPriceIdx] = useState(0);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
 
@@ -550,80 +551,64 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
       <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-14">
         <div className="absolute inset-0">
-          <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/50 to-black/70" />
+          <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover animate-hero-zoom" />
+          {/* Overlay nhạt để ảnh bìa sáng rõ; đậm hơn ở trên/dưới nơi có chữ. Ảnh do
+              admin tải nên độ sáng không đoán trước — chữ dựa thêm vào drop-shadow. */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/25 to-black/40" />
         </div>
 
         <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-12 text-center">
-          <div className="inline-flex items-center gap-2 bg-red-600/80 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4">
+          <div className="inline-flex items-center gap-2 bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4 shadow-lg shadow-black/20">
             <MapPin className="w-3 h-3" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3">
+          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3 drop-shadow-[0_2px_10px_rgba(0,0,0,0.75)]">
             {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
           </h1>
-          <p className="text-white/80 text-sm md:text-base mb-8 max-w-2xl mx-auto">
+          <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_6px_rgba(0,0,0,0.7)]">
             {sec('hero')('subtitle', 'Hơn 5.000 tin đăng nhà đất, căn hộ, đất nền uy tín tại Bình Dương, Bình Phước, Đồng Nai')}
           </p>
 
           {/* Search box */}
-          <div className="bg-white rounded-2xl shadow-2xl p-3 max-w-3xl mx-auto">
-            {/* Tabs */}
-            <div className="flex gap-1 mb-3 bg-gray-100 rounded-xl p-1">
+          <div className="bg-white rounded-2xl shadow-card p-3 md:p-4 max-w-4xl mx-auto">
+            {/* Tabs kiểu gạch chân — nhẹ hơn khay xám, hợp tông sáng */}
+            <div className="flex items-center gap-6 mb-4 px-1 border-b border-gray-100">
               {LISTING_TYPE_TABS.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => { setActiveTab(tab.key); setSearchPriceIdx(0); }}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === tab.key ? 'bg-red-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  className={`pb-3 text-[15px] font-bold border-b-2 -mb-px transition-colors ${activeTab === tab.key ? 'text-red-600 border-red-600' : 'text-slate-600 border-transparent hover:text-red-600'}`}
                 >
                   {tab.key === 'mua_ban' ? sec('hero')('tab_buy', tab.label) : sec('hero')('tab_rent', tab.label)}
                 </button>
               ))}
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="flex flex-col md:flex-row gap-2.5">
+              <div className="relative flex-[1.5] min-w-0 bg-gray-50 border border-gray-200 rounded-xl group focus-within:border-red-500 focus-within:bg-white transition-colors">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-red-500" />
                 <input
                   type="text"
                   value={searchKeyword}
                   onChange={e => setSearchKeyword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                   placeholder={sec('hero')('search_placeholder', 'Tìm theo tên dự án, địa chỉ, khu vực...')}
-                  className="w-full pl-9 pr-3 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  className="w-full h-12 pl-11 pr-3 bg-transparent text-[15px] text-gray-800 placeholder-gray-500 font-medium outline-none"
                 />
               </div>
               <select
                 value={searchAreaId}
                 onChange={e => { setSearchAreaId(e.target.value); setSearchDistrict(''); setSearchWard(''); }}
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                aria-label="Khu vực"
+                className="flex-1 h-12 min-w-0 md:min-w-[140px] bg-gray-50 border border-gray-200 rounded-xl px-3.5 text-[15px] text-gray-700 font-medium outline-none cursor-pointer focus:border-red-500 focus:bg-white transition-colors"
               >
                 <option value="">Tất cả khu vực</option>
                 {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
-              {searchDistricts.length > 0 && (
-                <select
-                  value={searchDistrict}
-                  onChange={e => { setSearchDistrict(e.target.value); setSearchWard(''); }}
-                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
-                >
-                  <option value="">Tất cả quận/huyện</option>
-                  {searchDistricts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
-              )}
-              {searchWards.length > 0 && (
-                <select
-                  value={searchWard}
-                  onChange={e => setSearchWard(e.target.value)}
-                  className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
-                >
-                  <option value="">Tất cả phường/xã</option>
-                  {searchWards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-                </select>
-              )}
               <select
                 value={searchTypeId}
                 onChange={e => setSearchTypeId(e.target.value)}
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                aria-label="Loại bất động sản"
+                className="flex-1 h-12 min-w-0 md:min-w-[140px] bg-gray-50 border border-gray-200 rounded-xl px-3.5 text-[15px] text-gray-700 font-medium outline-none cursor-pointer focus:border-red-500 focus:bg-white transition-colors"
               >
                 <option value="">Loại BĐS</option>
                 {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -632,7 +617,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 value={searchPriceIdx}
                 onChange={e => setSearchPriceIdx(Number(e.target.value))}
                 aria-label="Khoảng giá"
-                className="border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white min-w-[130px]"
+                className="flex-1 h-12 min-w-0 md:min-w-[140px] bg-gray-50 border border-gray-200 rounded-xl px-3.5 text-[15px] text-gray-700 font-medium outline-none cursor-pointer focus:border-red-500 focus:bg-white transition-colors"
               >
                 {(activeTab === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE).map((r, i) => (
                   <option key={i} value={i}>{r.label}</option>
@@ -640,15 +625,53 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               </select>
               <button
                 onClick={handleSearch}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
+                className="h-12 md:w-[140px] bg-red-600 hover:bg-red-700 text-white font-bold text-[15px] rounded-xl transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <Search className="w-4 h-4" />
                 {sec('hero')('btn_search', 'Tìm kiếm')}
               </button>
             </div>
 
+            {/* Quận/huyện + phường/xã tách khỏi hàng chính cho gọn. Tự mở khi đã có
+                giá trị để filter không âm thầm có hiệu lực mà người dùng không thấy. */}
+            {searchDistricts.length > 0 && (
+              <>
+                {(showMoreFilters || searchDistrict || searchWard) ? (
+                  <div className="flex flex-col md:flex-row gap-2.5 mt-2.5">
+                    <select
+                      value={searchDistrict}
+                      onChange={e => { setSearchDistrict(e.target.value); setSearchWard(''); }}
+                      aria-label="Quận/Huyện"
+                      className="flex-1 h-11 min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3.5 text-sm text-gray-700 font-medium outline-none cursor-pointer focus:border-red-500 focus:bg-white transition-colors"
+                    >
+                      <option value="">Tất cả quận/huyện</option>
+                      {searchDistricts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                    {searchWards.length > 0 && (
+                      <select
+                        value={searchWard}
+                        onChange={e => setSearchWard(e.target.value)}
+                        aria-label="Phường/Xã"
+                        className="flex-1 h-11 min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3.5 text-sm text-gray-700 font-medium outline-none cursor-pointer focus:border-red-500 focus:bg-white transition-colors"
+                      >
+                        <option value="">Tất cả phường/xã</option>
+                        {searchWards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                      </select>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowMoreFilters(true)}
+                    className="mt-2.5 text-xs font-semibold text-red-600 hover:text-red-700 transition-colors"
+                  >
+                    + Thêm bộ lọc quận/huyện, phường/xã
+                  </button>
+                )}
+              </>
+            )}
+
             {/* Quick search pills */}
-            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
               <span className="text-gray-400 text-xs">Tìm nhanh:</span>
               {areas.slice(0, 2).map(a => (
                 <button key={a.id} onClick={() => goListings({ listingType: 'mua_ban', areaId: a.id })}
