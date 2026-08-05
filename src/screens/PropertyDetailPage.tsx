@@ -1,16 +1,16 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MapPin, Phone, CheckCircle, Heart, Shield,
-  Maximize2, FileText, Clock, Eye, ChevronRight, Star,
+  Maximize2, FileText, Clock, Eye, ChevronRight,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight,
   Navigation, ExternalLink, Play, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getTestimonials, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
@@ -18,7 +18,7 @@ import { captureSignalFromProperty } from '../lib/captureSignal';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
-import { useAreas, useDistricts, useNeighborhoods } from '../lib/hooks/useTaxonomy';
+import { useAreas, useDistricts, useNeighborhoods, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import { VerifiedBadge } from '../components/VerifiedBadge';
@@ -38,6 +38,7 @@ import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { getProductSuggestions } from '../lib/productSuggestions';
+import { buildSimilarFilters } from '../lib/similarFilters';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -82,6 +83,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     : null;
   const { data: areas = [] } = useAreas();
   const { data: districts = [] } = useDistricts();
+  const { data: propertyTypes = [] } = usePropertyTypes();
   const listingTaxonomy = { areas, districts };
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
@@ -104,18 +106,17 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     };
   }, [lightboxOpen, property]);
 
-  const { data: testimonialsRaw = [] } = useQuery({
-    queryKey: qk.testimonials(),
-    queryFn: getTestimonials,
-    enabled: !preview,
-  });
-  const testimonials = testimonialsRaw.slice(0, 2);
-
   const { data: related = [] } = useQuery({
     queryKey: qk.relatedProperties(propertyId),
     queryFn: () => getRelatedProperties(property!),
     enabled: !!property && !preview,
   });
+
+  // Chip lọc nhanh sinh từ chính thuộc tính tin đang xem (quận, tầm giá, diện
+  // tích, phòng ngủ, pháp lý). Chiều nào tin không có thì không sinh chip.
+  const similarFilters = useMemo(() => (property ? buildSimilarFilters(property) : []), [property]);
+  // Có taxonomy thì chip sinh path SEO (/mua-ban/binh-duong/thuan-an) thay query UUID.
+  const hrefTaxonomy = useMemo(() => ({ areas, districts, propertyTypes }), [areas, districts, propertyTypes]);
 
   // Yêu thích: persist thật qua Supabase (dùng chung logic với card ở list/home),
   // trước đây chỉ là state cục bộ nên tim bấm xong mất khi rời trang.
@@ -611,24 +612,17 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               )}
             </div>
 
-            {/* Testimonials */}
-            {testimonials.length > 0 && (
+            {/* Lọc nhanh sang danh sách theo từng chiều tương đồng với tin đang xem */}
+            {similarFilters.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h2 className="font-bold text-gray-900 text-base mb-3">Đánh giá từ khách hàng</h2>
-                <div className="space-y-3">
-                  {testimonials.map(t => (
-                    <div key={t.id} className="border border-gray-100 rounded-xl p-3.5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-red-600 font-bold text-xs">{t.name.charAt(0)}</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-                          <div className="flex gap-0.5">{Array.from({ length: t.rating }).map((_, i) => <Star key={i} className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />)}</div>
-                        </div>
-                      </div>
-                      <p className="text-gray-600 text-xs italic">"{t.content}"</p>
-                    </div>
+                <h2 className="font-bold text-gray-900 text-base">Khám phá thêm lựa chọn phù hợp</h2>
+                <p className="text-gray-500 text-xs mt-0.5 mb-3">Lọc nhanh các bất động sản cùng nhu cầu.</p>
+                <div className="flex flex-wrap gap-2">
+                  {similarFilters.map(f => (
+                    <Link key={f.kind} href={pageToHref(f.page, hrefTaxonomy)}
+                      className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600">
+                      {f.label}
+                    </Link>
                   ))}
                 </div>
               </div>
