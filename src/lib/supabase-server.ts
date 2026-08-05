@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache';
 import type { Property, NewsArticle, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
+import type { LocationTaxonomy } from './neighborhoodLocation';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
 // Tạo MỚI mỗi lần gọi, KHÔNG singleton và KHÔNG persist session — tránh chia sẻ
@@ -193,6 +194,26 @@ export async function serverGetNeighborhoods(): Promise<Neighborhood[]> {
     return (data ?? []) as Neighborhood[];
   } catch {
     return [];
+  }
+}
+
+// Taxonomy 3 cấp cho trang khu dân cư (nhóm theo tỉnh, hiện nhãn đủ cấp). Một lượt
+// gọi 3 bảng nhỏ, rẻ hơn join lồng và dùng lại được cho resolveNeighborhoodLocation.
+export async function serverGetLocationTaxonomy(): Promise<LocationTaxonomy> {
+  try {
+    const sb = serverClient();
+    const [areas, districts, wards] = await Promise.all([
+      sb.from('areas').select('id,name,slug').order('order_index', { ascending: true }),
+      sb.from('districts').select('id,area_id,name,slug').order('order_index', { ascending: true }),
+      sb.from('wards').select('id,district_id,name,slug').order('order_index', { ascending: true }),
+    ]);
+    return {
+      areas: (areas.data ?? []) as LocationTaxonomy['areas'],
+      districts: (districts.data ?? []) as LocationTaxonomy['districts'],
+      wards: (wards.data ?? []) as LocationTaxonomy['wards'],
+    };
+  } catch {
+    return { areas: [], districts: [], wards: [] };
   }
 }
 

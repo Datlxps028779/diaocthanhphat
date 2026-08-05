@@ -4,9 +4,9 @@ import { supabase } from '../lib/supabase';
 import { type Page } from '../lib/router';
 import { useNavigate } from '../lib/useNavigate';
 import { useAuth } from '../lib/auth';
-import { getAreas } from '../lib/api';
+import { getAreas, getDistricts } from '../lib/api';
 import { SHOW_AUTH_EVENT } from '../lib/authModal';
-import { type Area } from '../lib/supabase';
+import { type Area, type District } from '../lib/supabase';
 import { Header, Footer, FloatingButtons } from './Layout';
 import { UserAuthModal } from './UserAuthModal';
 import { CompareBar } from './CompareBar';
@@ -17,9 +17,12 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
   const { user } = useAuth();
   const navigate = useNavigate();
   const [areas, setAreas] = useState<Area[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
   const [authModal, setAuthModal] = useState<{ mode: 'login' | 'register' } | null>(null);
 
   useEffect(() => { getAreas().then(setAreas).catch(() => {}); }, []);
+  // Footer liệt kê quận/huyện theo tỉnh nên cần cả districts, tải rời để không chặn header.
+  useEffect(() => { getDistricts().then(setDistricts).catch(() => {}); }, []);
 
   // Trang con (vd đăng tin) yêu cầu mở modal đăng nhập qua global event vì modal
   // sống ở shell này, không truyền onShowAuth xuống mọi page.
@@ -43,7 +46,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />
       <div className="pt-[52px] md:pt-[76px]">{children}</div>
-      <Footer areas={areas} onNavigate={navigate} />
+      <Footer areas={areas} districts={districts} onNavigate={navigate} />
       <FloatingButtons onNavigate={navigate} />
       <CompareBar />
       {authModal && (

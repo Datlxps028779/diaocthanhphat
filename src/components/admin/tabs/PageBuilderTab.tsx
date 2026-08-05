@@ -125,17 +125,6 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
         <ImageField label="Ảnh nền hero (để trống = dùng banner mặc định)" k="bg_image" />
       </div>
     );
-    case 'stats': return (
-      <div className="space-y-3">
-        <p className="text-xs text-gray-500">Dải 4 số liệu bên dưới hero. Mỗi ô gồm số và nhãn.</p>
-        {[1,2,3,4].map(i => (
-          <div key={i} className="grid grid-cols-2 gap-3">
-            <Field label={`Số #${i}`} k={`stat${i}_number`} def={['5.000+','10.000+','7 năm','3'][i-1]} />
-            <Field label={`Nhãn #${i}`} k={`stat${i}_label`} def={['Tin đăng','Khách hàng tin tưởng','Kinh nghiệm','Tỉnh phủ sóng'][i-1]} />
-          </div>
-        ))}
-      </div>
-    );
     case 'categories': return (
       <div className="space-y-3">
         <p className="text-xs text-gray-500">6 ô danh mục nhanh trên trang chủ. Mỗi ô có nhãn, icon và bộ lọc riêng — bấm vào sẽ mở trang danh sách đã lọc sẵn. Để trống chiều nào thì không lọc theo chiều đó.</p>

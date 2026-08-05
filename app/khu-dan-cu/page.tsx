@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { SiteChrome } from '@/components/SiteChrome';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
-import { serverGetNeighborhoods } from '@/lib/supabase-server';
+import { serverGetNeighborhoods, serverGetLocationTaxonomy } from '@/lib/supabase-server';
+import { resolveNeighborhoodLocation, formatLocationLabel } from '@/lib/neighborhoodLocation';
 
 const PATH = '/khu-dan-cu';
 const fallback = {
@@ -23,10 +24,23 @@ export async function generateMetadata() {
 export const revalidate = 1800;
 
 export default async function Page() {
-  const [{ jsonLd }, neighborhoods] = await Promise.all([
+  const [{ jsonLd }, neighborhoods, taxonomy] = await Promise.all([
     loadRouteSeo(PATH, fallback),
     serverGetNeighborhoods(),
+    serverGetLocationTaxonomy(),
   ]);
+
+  // Nhóm theo tỉnh, giữ thứ tự order_index của areas; khu chưa gắn tỉnh dồn xuống cuối.
+  const withLocation = neighborhoods.map(n => {
+    const loc = resolveNeighborhoodLocation(n, taxonomy);
+    return { n, loc, label: formatLocationLabel(loc) };
+  });
+  const groups = taxonomy.areas
+    .map(area => ({ area, rows: withLocation.filter(x => x.loc.area?.id === area.id) }))
+    .filter(g => g.rows.length > 0);
+  const ungrouped = withLocation.filter(x => !x.loc.area);
+  const sections = [...groups, ...(ungrouped.length ? [{ area: null, rows: ungrouped }] : [])];
+
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
@@ -45,21 +59,40 @@ export default async function Page() {
           </section>
 
           <section className="mx-auto max-w-7xl px-4 py-8 md:py-10">
-            {neighborhoods.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {neighborhoods.map(n => (
-                  <Link key={n.id} href={`/khu-dan-cu/${n.slug}`}
-                    className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl">
-                    {n.image_url && (
-                      <div className="relative h-40 overflow-hidden bg-gray-100">
-                        <img src={n.image_url} alt={n.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                      </div>
-                    )}
-                    <div className="space-y-2 p-5">
-                      <h2 className="text-lg font-black text-gray-900 transition-colors group-hover:text-red-600">Khu dân cư {n.name}</h2>
-                      {n.description && <p className="line-clamp-2 text-sm leading-6 text-gray-500">{n.description}</p>}
+            {sections.length > 0 ? (
+              <div className="space-y-10">
+                {sections.map(({ area, rows }) => (
+                  <div key={area?.id ?? 'khac'}>
+                    <div className="mb-4 flex items-center gap-3">
+                      <span className="h-6 w-1 rounded-full bg-red-600" />
+                      <h2 className="text-xl font-black text-gray-900 md:text-2xl">
+                        {area ? area.name : 'Khu vực khác'}
+                      </h2>
+                      <span className="text-xs font-semibold text-gray-400">{rows.length} khu dân cư</span>
+                      {area && (
+                        <Link href={`/khu-vuc/${area.slug}`} className="ml-auto text-xs font-bold text-red-600 hover:underline">
+                          Xem khu vực {area.name}
+                        </Link>
+                      )}
                     </div>
-                  </Link>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {rows.map(({ n, label }) => (
+                        <Link key={n.id} href={`/khu-dan-cu/${n.slug}`}
+                          className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                          {n.image_url && (
+                            <div className="relative h-40 overflow-hidden bg-gray-100">
+                              <img src={n.image_url} alt={n.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                            </div>
+                          )}
+                          <div className="space-y-2 p-5">
+                            <h3 className="text-lg font-black text-gray-900 transition-colors group-hover:text-red-600">Khu dân cư {n.name}</h3>
+                            {label && <p className="text-xs font-semibold text-gray-400">{label}</p>}
+                            {n.description && <p className="line-clamp-2 text-sm leading-6 text-gray-500">{n.description}</p>}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (

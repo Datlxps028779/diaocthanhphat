@@ -26,6 +26,7 @@ export type Ward = {
 };
 export type Neighborhood = {
   id: string; ward_id: string | null; name: string; slug: string;
+  area_id?: string | null; district_id?: string | null;
   description: string | null; image_url: string | null; order_index: number; created_at: string;
   meta_title?: string | null; meta_description?: string | null;
   focus_keywords?: string | null; schema_markup?: Record<string, unknown> | null;

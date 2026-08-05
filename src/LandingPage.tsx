@@ -82,6 +82,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   // Hero search cascade: Quận/Huyện theo tỉnh, Phường/Xã theo quận/huyện (district
   // lưu dạng TÊN nên map ra id để lấy wards).
   const { data: searchDistricts = [] } = useDistricts(searchAreaId || undefined);
+  // Footer liệt kê quận/huyện của mọi tỉnh nên cần danh sách đầy đủ, khác cascade hero.
+  const { data: allDistricts = [] } = useDistricts();
   const searchDistrictId = searchDistricts.find(d => d.name === searchDistrict)?.id;
   const { data: searchWards = [] } = useWards(searchDistrictId || undefined);
   const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
@@ -173,23 +175,6 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const renderSection = (id: string): React.ReactNode => {
     switch (id) {
       case 'hero': return null; // always rendered separately at the top
-      case 'stats': return (
-        <section key="stats" className="bg-red-600 text-white py-4">
-          <div className="max-w-5xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            {[
-              { num: sec('stats')('stat1_number', '5.000+'), label: sec('stats')('stat1_label', 'Tin đăng') },
-              { num: sec('stats')('stat2_number', '10.000+'), label: sec('stats')('stat2_label', 'Khách hàng tin tưởng') },
-              { num: sec('stats')('stat3_number', '7 năm'), label: sec('stats')('stat3_label', 'Kinh nghiệm') },
-              { num: sec('stats')('stat4_number', '3'), label: sec('stats')('stat4_label', 'Tỉnh phủ sóng') },
-            ].map((s, i) => (
-              <div key={i}>
-                <p className="text-2xl font-black">{s.num}</p>
-                <p className="text-red-100 text-xs">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      );
       case 'categories': return (
         <section key="categories" className="border-b border-slate-100 bg-white py-10">
           <div className="max-w-7xl mx-auto px-4">
@@ -520,7 +505,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['stats', 'categories', 'for_you', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
+  const DEFAULT_SECTION_ORDER = ['categories', 'for_you', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
   const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
   // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
   // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
@@ -549,22 +534,22 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       />
 
       {/* ─── HERO (always first, not controlled by page builder) ─── */}
-      <section className="relative min-h-[520px] flex items-center justify-center overflow-hidden pt-14">
+      <section className="relative min-h-[600px] flex items-center justify-center overflow-hidden pt-14">
         <div className="absolute inset-0">
           <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover animate-hero-zoom" />
-          {/* Overlay nhạt để ảnh bìa sáng rõ; đậm hơn ở trên/dưới nơi có chữ. Ảnh do
-              admin tải nên độ sáng không đoán trước — chữ dựa thêm vào drop-shadow. */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/25 to-black/40" />
+          {/* Overlay mỏng để ảnh bìa sáng rõ. Ảnh do admin tải nên độ sáng không đoán
+              trước — chữ dựa vào drop-shadow thay vì dựa vào nền tối. */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/15 to-black/30" />
         </div>
 
         <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-12 text-center">
           <div className="inline-flex items-center gap-2 bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4 shadow-lg shadow-black/20">
             <MapPin className="w-3 h-3" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3 drop-shadow-[0_2px_10px_rgba(0,0,0,0.75)]">
+          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3 drop-shadow-[0_2px_14px_rgba(0,0,0,0.9)]">
             {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
           </h1>
-          <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_6px_rgba(0,0,0,0.7)]">
+          <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_10px_rgba(0,0,0,0.85)]">
             {sec('hero')('subtitle', 'Hơn 5.000 tin đăng nhà đất, căn hộ, đất nền uy tín tại Bình Dương, Bình Phước, Đồng Nai')}
           </p>
 
@@ -693,7 +678,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
       {orderedIds.map(id => renderSection(id))}
 
-      <Footer areas={areas} onNavigate={onNavigate} />
+      <Footer areas={areas} districts={allDistricts} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)}
         onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />

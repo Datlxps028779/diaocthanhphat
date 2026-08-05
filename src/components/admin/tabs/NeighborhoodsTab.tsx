@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, ArrowDown, MapPin, RefreshCw, CheckCircle } from 'lucide-react';
-import type { Neighborhood, Ward, District, PageBlock } from '../../../lib/supabase';
+import type { Neighborhood, Ward, District, Area, PageBlock } from '../../../lib/supabase';
 import {
   getNeighborhoods, adminCreateNeighborhood, adminUpdateNeighborhood, adminDeleteNeighborhood,
-  getWards, getDistricts, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock, adminRefreshPriceStats,
+  getWards, getDistricts, getAreas, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock, adminRefreshPriceStats,
   adminEnsureManagedPage,
 } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { ImageUrlInput } from '../../ImageUpload';
 import { buildSlug, buildUniqueSlug } from '../../../lib/slug';
+import { resolveNeighborhoodLocation, formatLocationLabel, filterNeighborhoods, normalizeText } from '../../../lib/neighborhoodLocation';
 
 // page_blocks namespace cho khu dân cư — khớp app/khu-dan-cu/[slug]/page.tsx.
 function blockSlug(slug: string): string { return `khu-dan-cu:${slug}`; }
@@ -118,10 +119,11 @@ function FaqEditor({ pageSlug, pageTitle, faqBlocks, onChanged }: { pageSlug: st
   );
 }
 
-const EMPTY = { name: '', slug: '', ward_id: '', description: '', image_url: '', meta_title: '', meta_description: '', focus_keywords: '' };
+const EMPTY = { name: '', slug: '', area_id: '', district_id: '', ward_id: '', description: '', image_url: '', meta_title: '', meta_description: '', focus_keywords: '' };
 
 export function NeighborhoodsTab() {
   const [items, setItems] = useState<Neighborhood[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,18 +135,26 @@ export function NeighborhoodsTab() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [listFilter, setListFilter] = useState({ areaId: '', districtId: '', keyword: '' });
 
-  const load = () => Promise.all([getNeighborhoods(), getWards(), getDistricts()]).then(([n, w, d]) => { setItems(n); setWards(w); setDistricts(d); setLoading(false); });
+  const load = () => Promise.all([getNeighborhoods(), getWards(), getDistricts(), getAreas()])
+    .then(([n, w, d, a]) => { setItems(n); setWards(w); setDistricts(d); setAreas(a); setLoading(false); });
   useEffect(() => { load(); }, []);
+
+  const taxonomy = { areas, districts, wards };
 
   const openCreate = () => { setForm({ ...EMPTY }); setWardSearch(''); setSlugTouched(false); setEditing(null); setCreating(true); };
   const openEdit = (n: Neighborhood) => {
+    // Dữ liệu cũ chỉ có ward_id → suy ngược lên để 3 select hiện đúng cấp đã gắn.
+    const loc = resolveNeighborhoodLocation(n, taxonomy);
     setForm({
-      name: n.name, slug: n.slug, ward_id: n.ward_id ?? '', description: n.description ?? '',
+      name: n.name, slug: n.slug,
+      area_id: loc.area?.id ?? '', district_id: loc.district?.id ?? '', ward_id: loc.ward?.id ?? '',
+      description: n.description ?? '',
       image_url: n.image_url ?? '', meta_title: n.meta_title ?? '', meta_description: n.meta_description ?? '', focus_keywords: n.focus_keywords ?? '',
     });
     setSlugTouched(true); // đang sửa khu có sẵn → giữ slug, không auto-đè theo tên
-    setWardSearch(wards.find(w => w.id === n.ward_id)?.name ?? '');
+    setWardSearch('');
     setEditing(n); setCreating(true);
   };
 
@@ -153,25 +163,26 @@ export function NeighborhoodsTab() {
     ? buildSlug(form.slug)
     : (form.name.trim() ? buildSlug(form.name) : '');
 
-  const districtById = new Map(districts.map(d => [d.id, d]));
-  const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
-  const wardNeedle = normalize(wardSearch.trim());
-  const wardOptions = wards
-    .map(w => ({ ward: w, district: districtById.get(w.district_id) }))
-    .filter(({ ward, district }) => !wardNeedle || normalize(`${ward.name} ${district?.name ?? ''}`).includes(wardNeedle))
-    .sort((a, b) => {
-      const da = a.district?.name ?? '';
-      const db = b.district?.name ?? '';
-      return da.localeCompare(db, 'vi') || a.ward.name.localeCompare(b.ward.name, 'vi');
-    });
+  // Cascade form: huyện lọc theo tỉnh, xã lọc theo huyện. Tỉnh chưa chọn thì để trống
+  // thay vì đổ hết 500+ xã — buộc người dùng đi từ trên xuống.
+  const formDistricts = form.area_id ? districts.filter(d => d.area_id === form.area_id) : [];
+  const wardNeedle = normalizeText(wardSearch.trim());
+  const formWards = (form.district_id ? wards.filter(w => w.district_id === form.district_id) : [])
+    .filter(w => !wardNeedle || normalizeText(w.name).includes(wardNeedle))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+  // Bộ lọc danh sách: huyện chỉ liệt kê trong tỉnh đang lọc.
+  const filterDistricts = listFilter.areaId ? districts.filter(d => d.area_id === listFilter.areaId) : districts;
+  const visibleItems = filterNeighborhoods(items, listFilter, taxonomy);
 
   const save = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || !form.area_id) return;
     setSaving(true);
     try {
       const slug = form.slug.trim() ? buildSlug(form.slug) : buildUniqueSlug(form.name);
       const payload = {
         name: form.name.trim(), slug,
+        area_id: form.area_id || null, district_id: form.district_id || null,
         ward_id: form.ward_id || null, description: form.description.trim() || null,
         image_url: form.image_url.trim() || null, order_index: editing?.order_index ?? items.length,
         meta_title: form.meta_title.trim() || null, meta_description: form.meta_description.trim() || null,
@@ -239,30 +250,50 @@ export function NeighborhoodsTab() {
             </div>
           </div>
           {previewSlug && <PublicUrlPreview path={`/khu-dan-cu/${previewSlug}`} />}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Phường/Xã</label>
-              <input value={wardSearch} onChange={e => setWardSearch(e.target.value)}
-                placeholder="Gõ phường/xã hoặc quận/huyện để lọc..."
-                className="mb-2 w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              <select value={form.ward_id} onChange={e => {
-                const ward = wards.find(w => w.id === e.target.value);
-                setForm(f => ({ ...f, ward_id: e.target.value }));
-                if (ward) setWardSearch(ward.name);
-              }}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-                <option value="">— Chọn phường/xã —</option>
-                {wardOptions.map(({ ward, district }) => (
-                  <option key={ward.id} value={ward.id}>{ward.name}{district ? ` — ${district.name}` : ''}</option>
-                ))}
-              </select>
-              <p className="mt-1 text-[10px] text-gray-400">Đang hiển thị {wardOptions.length}/{wards.length} phường/xã, sắp xếp theo quận/huyện.</p>
+          <div className="rounded-xl border border-blue-200 bg-white p-3 space-y-2">
+            <p className="text-xs font-bold text-gray-700">Vị trí hành chính</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Tỉnh/Thành phố *</label>
+                <select value={form.area_id}
+                  onChange={e => setForm(f => ({ ...f, area_id: e.target.value, district_id: '', ward_id: '' }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                  <option value="">— Chọn tỉnh/thành —</option>
+                  {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Quận/Huyện <span className="font-normal text-gray-400">(không bắt buộc)</span></label>
+                <select value={form.district_id} disabled={!form.area_id}
+                  onChange={e => setForm(f => ({ ...f, district_id: e.target.value, ward_id: '' }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white disabled:bg-gray-50 disabled:text-gray-400">
+                  <option value="">{form.area_id ? '— Chọn quận/huyện —' : 'Chọn tỉnh trước'}</option>
+                  {formDistricts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Phường/Xã <span className="font-normal text-gray-400">(không bắt buộc)</span></label>
+                {form.district_id && wards.some(w => w.district_id === form.district_id) && (
+                  <input value={wardSearch} onChange={e => setWardSearch(e.target.value)}
+                    placeholder="Gõ để lọc phường/xã..."
+                    className="mb-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                )}
+                <select value={form.ward_id} disabled={!form.district_id}
+                  onChange={e => setForm(f => ({ ...f, ward_id: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white disabled:bg-gray-50 disabled:text-gray-400">
+                  <option value="">{form.district_id ? '— Chọn phường/xã —' : 'Chọn quận/huyện trước'}</option>
+                  {formWards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+                {form.district_id && formWards.length === 0 && (
+                  <p className="mt-1 text-[10px] text-amber-600">Quận/huyện này chưa có dữ liệu phường/xã — có thể bỏ trống.</p>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Ảnh đại diện</label>
-              <ImageUrlInput value={form.image_url} onChange={url => setForm(f => ({ ...f, image_url: url }))}
-                placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="neighborhoods" isAdmin />
-            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Ảnh đại diện</label>
+            <ImageUrlInput value={form.image_url} onChange={url => setForm(f => ({ ...f, image_url: url }))}
+              placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="neighborhoods" isAdmin />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Mô tả (tóm tắt tổng quan — hiển thị đầu trang)</label>
@@ -287,7 +318,7 @@ export function NeighborhoodsTab() {
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
           </div>
           <div className="flex gap-2">
-            <button onClick={save} disabled={saving || !form.name.trim()}
+            <button onClick={save} disabled={saving || !form.name.trim() || !form.area_id}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-40">
               <Save className="w-3.5 h-3.5" />{saving ? 'Đang lưu...' : 'Lưu'}
             </button>
@@ -301,12 +332,41 @@ export function NeighborhoodsTab() {
           <p className="text-sm text-gray-500">Chưa có khu dân cư nào. Bấm "Khu dân cư mới" để tạo trang pillar đầu tiên.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {items.map(n => (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-2">
+            <select value={listFilter.areaId}
+              onChange={e => setListFilter(f => ({ ...f, areaId: e.target.value, districtId: '' }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
+              <option value="">Tất cả tỉnh/thành</option>
+              {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <select value={listFilter.districtId}
+              onChange={e => setListFilter(f => ({ ...f, districtId: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
+              <option value="">Tất cả quận/huyện</option>
+              {filterDistricts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <input value={listFilter.keyword} onChange={e => setListFilter(f => ({ ...f, keyword: e.target.value }))}
+              placeholder="Tìm theo tên khu hoặc vị trí..."
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <p className="text-xs text-gray-400">Hiển thị {visibleItems.length}/{items.length} khu dân cư.</p>
+          {visibleItems.length === 0 ? (
+            <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-sm">
+              <p className="text-sm text-gray-500">Không có khu dân cư khớp bộ lọc.</p>
+            </div>
+          ) : visibleItems.map(n => {
+            const label = formatLocationLabel(resolveNeighborhoodLocation(n, taxonomy));
+            return (
             <div key={n.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4 shadow-sm">
               {n.image_url && <img src={n.image_url} alt="" className="w-14 h-10 object-cover rounded-lg flex-shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />}
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-gray-900 text-sm">{n.name}</span>
+                <p className="text-[11px] mt-0.5 flex items-center gap-1">
+                  {label
+                    ? <span className="text-gray-500"><MapPin className="w-3 h-3 inline -mt-0.5 mr-0.5" />{label}</span>
+                    : <span className="text-amber-600">Chưa gắn vị trí hành chính</span>}
+                </p>
                 {n.description && <p className="text-gray-400 text-xs mt-0.5 truncate">{n.description}</p>}
                 <p className="text-gray-400 text-[10px] mt-0.5">/khu-dan-cu/{n.slug}</p>
               </div>
@@ -319,7 +379,8 @@ export function NeighborhoodsTab() {
                   className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

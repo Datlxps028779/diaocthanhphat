@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { MapPin } from 'lucide-react';
 import type { Neighborhood, Property, PriceStat, PageBlock, ListingType, NewsArticle } from '../lib/supabase';
 import { isHtmlContent } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
@@ -12,9 +13,13 @@ import { buildProductPath } from '../lib/productPath';
 
 export type NeighborhoodFaq = { question: string; answer: string };
 
+// Vị trí hành chính đã resolve ở server (RSC) — screen chỉ hiển thị, không tự tra taxonomy.
+export type NeighborhoodPlace = { areaName?: string; areaSlug?: string; locationLabel?: string };
+
 type Props = {
   neighborhood: Neighborhood;
   summary: string;
+  place?: NeighborhoodPlace;
   sale: Property[];
   rent: Property[];
   activeCount: number;
@@ -82,7 +87,7 @@ function PropertyCard({ property }: { property: Property }) {
 
 // Bảng giá cho 1 loại giao dịch — chỉ hiện khi có dữ liệu thật.
 export function NeighborhoodEntityScreen(props: Props) {
-  const { neighborhood: n, summary, sale, rent, activeCount, priceStats, contentBlocks, faq, relatedNews, indexable } = props;
+  const { neighborhood: n, summary, place, sale, rent, activeCount, priceStats, contentBlocks, faq, relatedNews, indexable } = props;
   const heroImage = n.image_url || DEFAULT_HERO;
   const saleStat = pickOverallStat(priceStats, 'mua_ban' as ListingType);
   const answer = buildPriceAnswer(n.name, priceStats, 'mua_ban') ?? buildPriceAnswer(n.name, priceStats, 'cho_thue');
@@ -96,12 +101,23 @@ export function NeighborhoodEntityScreen(props: Props) {
             <Link href="/" className="hover:text-white">Trang chủ</Link>
             <span className="mx-2">/</span>
             <Link href="/khu-dan-cu" className="hover:text-white">Khu dân cư</Link>
+            {place?.areaName && place.areaSlug && (
+              <>
+                <span className="mx-2">/</span>
+                <Link href={`/khu-vuc/${place.areaSlug}`} className="hover:text-white">{place.areaName}</Link>
+              </>
+            )}
             <span className="mx-2">/</span>
             <span className="text-white">{n.name}</span>
           </nav>
           <div className="max-w-3xl border border-white/15 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm md:p-7" style={{ backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: '1.5rem' }}>
             <p className="mb-3 inline-flex rounded-full bg-red-600/90 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white ring-1 ring-white/20">Khu dân cư</p>
             <h1 className="text-3xl font-black leading-tight text-white drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)] md:text-5xl">Khu dân cư {n.name}</h1>
+            {place?.locationLabel && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-white/90">
+                <MapPin className="h-4 w-4 flex-shrink-0 text-red-400" />{place.locationLabel}
+              </p>
+            )}
             {/* Answer Block — câu trả lời trực tiếp đầu trang cho AIO/AEO. */}
             {answer && <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm font-semibold leading-7 text-white ring-1 ring-white/20">{answer}</p>}
             <p className="mt-4 text-sm font-medium leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] md:text-base">{summary}</p>

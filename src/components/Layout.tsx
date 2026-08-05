@@ -5,7 +5,8 @@ import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
-import { type Area } from '../lib/supabase';
+import { type Area, type District } from '../lib/supabase';
+import { districtDisplaySlug } from '../lib/areaPath';
 import { useContent, useSetting, useMenu } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -242,10 +243,54 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
 interface FooterProps {
   areas: Area[];
+  districts?: District[];
   onNavigate: (p: Page) => void;
 }
 
-export function Footer({ areas, onNavigate }: FooterProps) {
+// Chip quận/huyện của một tỉnh. Tỉnh nhiều huyện (TP.HCM 22) sẽ chiếm hết footer nên
+// chỉ hiện 12 chip đầu, phần còn lại xổ ra tại chỗ khi bấm "Xem thêm".
+const DISTRICT_CHIPS_VISIBLE = 12;
+
+function AreaDistrictChips({ area, districts }: { area: Area; districts: District[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const hidden = districts.length - DISTRICT_CHIPS_VISIBLE;
+  const shown = expanded ? districts : districts.slice(0, DISTRICT_CHIPS_VISIBLE);
+
+  return (
+    <div className="space-y-2" data-testid="area-district-chips">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Link href={`/khu-vuc/${area.slug}`} data-testid="area-name" className="text-sm font-bold text-gray-900 hover:text-red-600">
+          Bất động sản {area.name}
+        </Link>
+        {districts.length > 0 && <span className="text-[11px] text-gray-400">{districts.length} quận/huyện</span>}
+      </div>
+      {districts.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {shown.map(d => (
+            <Link
+              key={d.id}
+              data-testid="district-chip"
+              href={`/mua-ban/${area.slug}/${districtDisplaySlug(area.slug, d.slug)}`}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition-all duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+            >
+              {d.name}
+            </Link>
+          ))}
+          {hidden > 0 && !expanded && (
+            <button
+              onClick={() => setExpanded(true)}
+              className="rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600"
+            >
+              Xem thêm {hidden} quận/huyện
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Footer({ areas, districts = [], onNavigate }: FooterProps) {
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const footer = useContent('footer');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
@@ -258,6 +303,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   const col3sub1 = useSetting('footer_col3_sub1', 'Chuyên sâu: Bình Dương');
   const col3sub2 = useSetting('footer_col3_sub2', 'Mở rộng: Bình Phước, Đồng Nai');
   const license = useSetting('footer_license', 'Giấy phép ĐKKD: 0000000000 | Bình Dương');
+  const seoTagline = useSetting('seo_block_tagline', 'Nền tảng bất động sản thông minh — tìm kiếm căn hộ, nhà phố, đất nền, biệt thự với pháp lý minh bạch, dữ liệu giá cập nhật từ tin đăng thực tế.');
   // Số ĐKKD toàn số 0 là placeholder chưa điền. Công bố số giả làm mất E-E-A-T
   // (Google đánh giá độ tin cậy doanh nghiệp), nên thà ẩn còn hơn hiện số sai.
   const hasRealLicense = !/\b0{6,}\b/.test(license);
@@ -293,7 +339,63 @@ export function Footer({ areas, onNavigate }: FooterProps) {
   })();
 
   return (
-    <footer className="bg-gray-900 text-white">
+    <>
+      {/* Khối liên kết nội bộ trên footer: chip khu vực sinh từ bảng areas nên chỉ
+          trỏ tới tỉnh có dữ liệu thật, không dẫn khách vào trang rỗng. */}
+      {areas.length > 0 && (
+        <div className="relative overflow-hidden border-t border-gray-100 bg-[#fafafa] py-9">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.15]"
+            style={{ backgroundImage: 'radial-gradient(#d1d5db 0.8px, transparent 0.8px)', backgroundSize: '12px 12px' }}
+          />
+          <div className="relative z-10 mx-auto max-w-7xl px-4">
+            <div className="space-y-6 text-sm leading-relaxed text-gray-600">
+              <div className="space-y-3 text-center">
+                <p className="text-2xl font-black tracking-tight text-gray-900">
+                  {siteName} — <span className="text-red-600">Mua bán, cho thuê bất động sản</span> toàn quốc
+                </p>
+                <p className="mx-auto max-w-3xl text-base font-medium text-gray-600">
+                  {seoTagline}
+                </p>
+              </div>
+
+              <div className="space-y-5 pt-2">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-[13px] font-bold uppercase tracking-widest text-gray-500">Khu vực trọng điểm</h2>
+                  <div className="h-px flex-grow bg-gray-200" />
+                </div>
+                {areas.map(a => (
+                  <AreaDistrictChips key={a.id} area={a} districts={districts.filter(d => d.area_id === a.id)} />
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-[13px] font-bold uppercase tracking-widest text-gray-500">Tìm kiếm nhanh</h2>
+                  <div className="h-px flex-grow bg-gray-200" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {areas.flatMap(a => [
+                    { key: `${a.id}-buy`, label: `Nhà đất bán ${a.name}`, href: `/mua-ban/${a.slug}` },
+                    { key: `${a.id}-rent`, label: `Cho thuê ${a.name}`, href: `/cho-thue/${a.slug}` },
+                  ]).map(item => (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      data-testid="quick-search-chip"
+                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2.5 mb-3">
@@ -365,6 +467,7 @@ export function Footer({ areas, onNavigate }: FooterProps) {
         </div>
       </div>
     </footer>
+    </>
   );
 }
 
