@@ -41,7 +41,7 @@
   to   { transform: scale(1.06); }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .animate-hero-zoom { animation: hero-zoom 20s ease-in-out infinite alternate; }
+  .animate-hero-zoom { animation: hero-zoom 10s ease-in-out infinite alternate; }
 }
 
 /* Shimmer skeleton */
