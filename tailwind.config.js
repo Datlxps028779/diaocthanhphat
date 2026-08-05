@@ -31,7 +31,19 @@ export default {
         pop: '0 8px 32px rgba(0,0,0,0.18)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--font-roboto)', 'Roboto', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+      // Roboto nạp qua next/font không có weight 600 và 800. Để nguyên thì browser tự
+      // làm dày giả (synthetic bold) — chữ Việt có dấu bị nhoè và nặng. Map sang nét
+      // thật đã tải: 600→500, 800→700.
+      fontWeight: {
+        light: '300',
+        normal: '400',
+        medium: '500',
+        semibold: '500',
+        bold: '700',
+        extrabold: '700',
+        black: '900',
       },
     },
   },

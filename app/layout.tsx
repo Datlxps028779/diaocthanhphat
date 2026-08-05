@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Roboto } from 'next/font/google';
 import '@/index.css';
 import { serializeJsonLd, buildLocalBusinessJsonLd, DEFAULT_OG_IMAGE } from '@/lib/seo';
 import { getSiteUrl } from '@/lib/siteUrl';
@@ -9,11 +9,15 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { AnalyticsConsent } from './_components/AnalyticsConsent';
 
-const inter = Inter({
+// Roboto để khớp phong cách chodat.vn. Next 14 chỉ chấp nhận các weight rời của
+// Roboto (100/300/400/500/700/900) — KHÔNG có 600, nên tailwind.config map
+// font-semibold → 500 để luôn dùng nét thật, tránh browser làm dày giả khiến chữ
+// Việt có dấu bị nhoè.
+const roboto = Roboto({
   subsets: ['latin', 'vietnamese'],
-  weight: ['400', '500', '600', '700', '800', '900'],
+  weight: ['300', '400', '500', '700', '900'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-roboto',
 });
 
 const SITE_URL = getSiteUrl();
@@ -71,7 +75,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   };
 
   return (
-    <html lang="vi" className={inter.variable}>
+    <html lang="vi" className={roboto.variable}>
       <head>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(orgJsonLd) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }} />

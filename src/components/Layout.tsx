@@ -87,34 +87,34 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           )}
           <div className="hidden sm:block leading-tight">
-            <div className="text-red-600 font-black text-sm tracking-tight">{siteName}</div>
-            <div className="text-gray-400 text-[9px] tracking-wider uppercase">{siteSub}</div>
+            <div className="text-red-600 font-black text-base tracking-tight">{siteName}</div>
+            <div className="text-gray-400 text-[10px] font-medium tracking-wide">{siteSub}</div>
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-0.5 flex-1 justify-center">
+        <nav className="hidden xl:flex items-center gap-1 flex-1 justify-center">
           {navItems.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
-                {item.label}<ChevronDown className="w-3 h-3" />
+                className={`px-3 py-2 text-[15px] rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-bold' : 'font-normal text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+                {item.label}<ChevronDown className="w-3.5 h-3.5 opacity-60" />
               </button>
               {desktopMenuOpen === item.key && (
                 <div className="absolute left-0 top-full pt-2 z-50">
-                  <div className="w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
+                  <div className="w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
                     {item.children.map(child => child.children ? (
                       <div key={child.key} className="py-1">
-                        <p className="px-4 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
+                        <p className="px-4 pt-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
                         {child.children.map(grand => (
                           <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            className="block px-4 py-2 text-[14px] text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                             {grand.label}
                           </Link>
                         ))}
                       </div>
                     ) : (
                       <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                        className="block px-4 py-2.5 text-[14px] text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                         {child.label}
                       </Link>
                     ))}
@@ -124,7 +124,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`px-3.5 py-2 text-[13px] font-medium rounded transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-600 hover:text-red-600 hover:bg-gray-50'}`}>
+              className={`px-3 py-2 text-[15px] rounded-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-bold' : 'font-normal text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
               {item.label}
             </Link>
           ))}
@@ -163,18 +163,18 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           ) : (
             <>
               <button onClick={() => onShowAuth?.('login')}
-                className="border border-red-500 text-red-600 text-[13px] font-semibold px-4 py-1.5 rounded-md hover:bg-red-50 transition-colors">
+                className="border border-red-500 text-red-600 text-[14px] font-semibold px-4 py-2 rounded-md hover:bg-red-50 transition-colors">
                 {nav.btn_login || 'Đăng nhập'}
               </button>
               <button onClick={() => onShowAuth?.('register')}
-                className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors">
+                className="bg-red-600 hover:bg-red-700 text-white text-[14px] font-semibold px-4 py-2 rounded-md transition-colors">
                 {nav.btn_post || 'Đăng tin'}
               </button>
             </>
           )}
           {user && (
             <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-              className="bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 py-1.5 rounded-md transition-colors flex items-center gap-1">
+              className="bg-red-600 hover:bg-red-700 text-white text-[14px] font-semibold px-4 py-2 rounded-md transition-colors flex items-center gap-1">
               <Plus className="w-3.5 h-3.5" />Đăng tin
             </Link>
           )}
