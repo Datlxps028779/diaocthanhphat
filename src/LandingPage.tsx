@@ -678,7 +678,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
       {orderedIds.map(id => renderSection(id))}
 
-      <Footer areas={areas} districts={allDistricts} onNavigate={onNavigate} />
+      <Footer areas={areas} districts={allDistricts} propertyTypes={types} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)}
         onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />

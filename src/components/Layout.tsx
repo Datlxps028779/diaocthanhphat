@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
-import { type Area, type District } from '../lib/supabase';
+import { type Area, type District, type PropertyType } from '../lib/supabase';
 import { districtDisplaySlug } from '../lib/areaPath';
 import { useContent, useSetting, useMenu } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -244,53 +244,56 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 interface FooterProps {
   areas: Area[];
   districts?: District[];
+  propertyTypes?: PropertyType[];
   onNavigate: (p: Page) => void;
 }
 
-// Chip quận/huyện của một tỉnh. Tỉnh nhiều huyện (TP.HCM 22) sẽ chiếm hết footer nên
-// chỉ hiện 12 chip đầu, phần còn lại xổ ra tại chỗ khi bấm "Xem thêm".
-const DISTRICT_CHIPS_VISIBLE = 12;
+// Khối liên kết nội bộ dạng cột (kiểu batdongsan.com.vn): mỗi cột một chủ đề, link
+// chữ xếp dọc, quá dài thì ẩn sau "Xem thêm" và xổ tại chỗ.
+//
+// Mọi link sinh từ dữ liệu thật (areas/districts/propertyTypes) nên không dẫn vào
+// trang rỗng; cột nào không có dữ liệu thì tự biến mất thay vì hiện mục chết.
+const COLUMN_LINKS_VISIBLE = 5;
+const DISTRICTS_PER_AREA = 5;
 
-function AreaDistrictChips({ area, districts }: { area: Area; districts: District[] }) {
+type FooterLink = { label: string; href: string };
+
+function LinkColumn({ title, links }: { title: string; links: FooterLink[] }) {
   const [expanded, setExpanded] = useState(false);
-  const hidden = districts.length - DISTRICT_CHIPS_VISIBLE;
-  const shown = expanded ? districts : districts.slice(0, DISTRICT_CHIPS_VISIBLE);
+  const hidden = links.length - COLUMN_LINKS_VISIBLE;
+  const shown = expanded ? links : links.slice(0, COLUMN_LINKS_VISIBLE);
+  if (links.length === 0) return null;
 
   return (
-    <div className="space-y-2" data-testid="area-district-chips">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Link href={`/khu-vuc/${area.slug}`} data-testid="area-name" className="text-sm font-bold text-gray-900 hover:text-red-600">
-          Bất động sản {area.name}
-        </Link>
-        {districts.length > 0 && <span className="text-[11px] text-gray-400">{districts.length} quận/huyện</span>}
-      </div>
-      {districts.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {shown.map(d => (
+    <div data-testid="footer-link-column">
+      <h3 data-testid="footer-column-title" className="text-[15px] font-bold text-gray-900">{title}</h3>
+      <ul className="mt-3 space-y-2.5">
+        {shown.map(l => (
+          <li key={l.href + l.label}>
             <Link
-              key={d.id}
-              data-testid="district-chip"
-              href={`/mua-ban/${area.slug}/${districtDisplaySlug(area.slug, d.slug)}`}
-              className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm transition-all duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+              href={l.href}
+              data-testid="footer-column-link"
+              className="text-sm leading-6 text-gray-600 transition-colors hover:text-red-600"
             >
-              {d.name}
+              {l.label}
             </Link>
-          ))}
-          {hidden > 0 && !expanded && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-500 transition-colors hover:border-red-300 hover:text-red-600"
-            >
-              Xem thêm {hidden} quận/huyện
-            </button>
-          )}
-        </div>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          data-testid="footer-column-more"
+          className="mt-3 text-sm font-bold text-red-600 transition-colors hover:text-red-700"
+        >
+          Xem thêm
+        </button>
       )}
     </div>
   );
 }
 
-export function Footer({ areas, districts = [], onNavigate }: FooterProps) {
+export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }: FooterProps) {
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const footer = useContent('footer');
   const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
@@ -359,36 +362,71 @@ export function Footer({ areas, districts = [], onNavigate }: FooterProps) {
                 </p>
               </div>
 
-              <div className="space-y-5 pt-2">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-[13px] font-bold uppercase tracking-widest text-gray-500">Khu vực trọng điểm</h2>
-                  <div className="h-px flex-grow bg-gray-200" />
-                </div>
-                {areas.map(a => (
-                  <AreaDistrictChips key={a.id} area={a} districts={districts.filter(d => d.area_id === a.id)} />
-                ))}
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-[13px] font-bold uppercase tracking-widest text-gray-500">Tìm kiếm nhanh</h2>
-                  <div className="h-px flex-grow bg-gray-200" />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {areas.flatMap(a => [
-                    { key: `${a.id}-buy`, label: `Nhà đất bán ${a.name}`, href: `/mua-ban/${a.slug}` },
-                    { key: `${a.id}-rent`, label: `Cho thuê ${a.name}`, href: `/cho-thue/${a.slug}` },
-                  ]).map(item => (
-                    <Link
-                      key={item.key}
-                      href={item.href}
-                      data-testid="quick-search-chip"
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-8 pt-2 md:grid-cols-4 md:gap-x-8">
+                <LinkColumn
+                  title="Nhà đất bán"
+                  links={propertyTypes.map(t => ({ label: `Bán ${t.name.toLowerCase()}`, href: `/mua-ban?loai=${t.slug}` }))}
+                />
+                <LinkColumn
+                  title="Nhà đất cho thuê"
+                  links={propertyTypes.map(t => ({ label: `Cho thuê ${t.name.toLowerCase()}`, href: `/cho-thue?loai=${t.slug}` }))}
+                />
+                <LinkColumn
+                  title="Bất động sản theo tỉnh"
+                  links={[
+                    ...areas.flatMap(a => [
+                      { label: `Nhà đất bán ${a.name}`, href: `/mua-ban/${a.slug}` },
+                      { label: `Cho thuê ${a.name}`, href: `/cho-thue/${a.slug}` },
+                    ]),
+                    { label: 'Tất cả khu vực', href: '/khu-vuc' },
+                  ]}
+                />
+                <LinkColumn
+                  title="Quận/Huyện nổi bật"
+                  links={areas.flatMap(a =>
+                    districts
+                      .filter(d => d.area_id === a.id)
+                      // Lấy 5 huyện đầu mỗi tỉnh: xổ hết 53 mục làm footer dài quá, còn
+                      // ai muốn xem đủ thì đã có link tỉnh ở cột bên.
+                      .slice(0, DISTRICTS_PER_AREA)
+                      .map(d => ({
+                        label: `Nhà đất ${d.name}`,
+                        href: `/mua-ban/${a.slug}/${districtDisplaySlug(a.slug, d.slug)}`,
+                      })),
+                  )}
+                />
+                <LinkColumn
+                  title="Giá bất động sản"
+                  links={[
+                    { label: 'Dữ liệu giá nhà đất', href: '/du-lieu-gia' },
+                    { label: 'Định giá bất động sản', href: '/dinh-gia' },
+                    { label: 'So sánh bất động sản', href: '/so-sanh' },
+                  ]}
+                />
+                <LinkColumn
+                  title="Tin tức & kiến thức"
+                  links={[
+                    { label: 'Tin tức bất động sản', href: '/tin-tuc' },
+                    { label: 'Kiến thức bất động sản', href: '/kien-thuc' },
+                    { label: 'Bất động sản đầu tư', href: '/dau-tu' },
+                    { label: 'Về chúng tôi', href: '/ve-chung-toi' },
+                  ]}
+                />
+                <LinkColumn
+                  title="Khu dân cư & dự án"
+                  links={[
+                    { label: 'Tất cả khu dân cư', href: '/khu-dan-cu' },
+                    { label: 'Dự án bất động sản', href: '/du-an' },
+                    { label: 'Đăng tin bán nhà đất', href: '/dang-tin' },
+                  ]}
+                />
+                <LinkColumn
+                  title="Tìm kiếm nhanh"
+                  links={[
+                    { label: 'Toàn bộ tin đăng', href: '/danh-sach' },
+                    ...areas.map(a => ({ label: `Bất động sản ${a.name}`, href: `/khu-vuc/${a.slug}` })),
+                  ]}
+                />
               </div>
             </div>
           </div>
