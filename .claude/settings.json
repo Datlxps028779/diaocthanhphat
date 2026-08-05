@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout .:*)",
+      "Bash(git restore .:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git commit --amend:*)",
+      "Bash(git commit --no-verify:*)",
+      "Bash(git push --no-verify:*)",
+      "Bash(supabase db reset:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -7,6 +22,10 @@
           {
             "type": "command",
             "command": "/Users/macbucdatle/.local/bin/graphify hook-guard search"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/verify-gate.mjs guard"
           }
         ]
       },

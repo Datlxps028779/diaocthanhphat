@@ -37,3 +37,7 @@ supabase/_restore_once/
 .env*
 
 testsprite_tests/tmp/config.json
+
+# Biên nhận cổng verify — trạng thái cục bộ từng máy, không chia sẻ qua git
+.claude/.verify-receipt.json
+.claude/.verify-receipt.selftest-bak
