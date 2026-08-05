@@ -20,6 +20,7 @@ import { VerifiedBadge } from '../components/VerifiedBadge';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
+import { shouldResetChild } from '../lib/cascadeReset';
 import { nextListingPageParam } from '../lib/listingPaging';
 import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
@@ -130,22 +131,23 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     if (matched) setTypeId(matched.id);
     typeSlugApplied.current = true;
   }, [initialFilters?.typeSlug, types]);
-  // Reset district khi user đổi khu vực — nhưng bỏ qua lần mount đầu để không xoá
-  // district đã seed sẵn từ link "Danh mục nhanh" (?district=...).
-  const areaChangedOnce = useRef(false);
+  // Reset district khi user đổi khu vực. So sánh giá trị trước/sau chứ không đếm số
+  // lần chạy: effect còn chạy lại lúc taxonomy về, lần đó không được xoá district
+  // đã seed từ URL khu vực (/mua-ban/binh-duong/thuan-an).
+  const prevAreaId = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!areaChangedOnce.current) { areaChangedOnce.current = true; return; }
-    setDistrict('');
+    if (shouldResetChild(prevAreaId.current, areaId)) setDistrict('');
+    prevAreaId.current = areaId;
   }, [areaId]);
 
   // Phường/xã theo quận/huyện đã chọn. district lưu dạng TÊN nên map ra id để fetch.
   const selectedDistrictId = districts.find(d => d.name === district)?.id;
   const { data: wards = [] } = useWards(selectedDistrictId || undefined);
-  // Reset ward khi user đổi quận/huyện — bỏ qua mount đầu để giữ ward seed từ ?ward=.
-  const districtChangedOnce = useRef(false);
+  // Reset ward khi user đổi quận/huyện — cùng lý do như district ở trên.
+  const prevDistrict = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!districtChangedOnce.current) { districtChangedOnce.current = true; return; }
-    setWard('');
+    if (shouldResetChild(prevDistrict.current, district)) setWard('');
+    prevDistrict.current = district;
   }, [district]);
 
   const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
@@ -296,6 +298,9 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   // để không đổi URL mỗi lần gõ phím. price/area lưu dạng index nên phát ra min/max thật.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // Chờ taxonomy về mới ghi URL: thiếu nó pageToHref sinh dạng ?area=<uuid> rồi
+    // mới sửa lại thành path SEO, khiến thanh địa chỉ nhấp nháy và lịch sử bẩn.
+    if (areaId && areas.length === 0) return;
     const href = pageToHref({
       name: 'listings',
       listingType: listingType || undefined,
