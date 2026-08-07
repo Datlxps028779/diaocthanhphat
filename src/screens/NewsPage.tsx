@@ -16,6 +16,8 @@ import { buildNewsImageAlt } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
 import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
+import { extractHeadings, injectHeadingIds, TOC_MIN_HEADINGS } from '../lib/tableOfContents';
+import { ArticleToc } from '../components/ArticleToc';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 
 const CATEGORIES = ['Tất cả', 'Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính'];
@@ -191,9 +193,20 @@ function ArticleDetail({
     ...areas.map(a => ({ name: a.name, href: `/khu-vuc/${a.slug}` })),
   ], [neighborhoods, areas]);
   // Sanitize TRƯỚC rồi mới auto-link: link chèn vào HTML đã sạch, anchor không bị strip.
+  // Mục lục tự sinh từ h2. Trích heading từ nội dung GỐC, nhưng gắn id vào bản đã
+  // sanitize — sanitizeHtml không cho thuộc tính id nên gắn trước sẽ bị xoá sạch và
+  // bấm mục lục không nhảy đâu cả.
+  const tocHeadings = useMemo(
+    () => (contentIsHtml ? extractHeadings(rawContent) : []),
+    [rawContent, contentIsHtml],
+  );
   const safeHtml = useMemo(
-    () => (contentIsHtml ? autoLinkContent(sanitizeArticleHtml(rawContent), linkTargets) : ''),
-    [rawContent, contentIsHtml, linkTargets],
+    () => {
+      if (!contentIsHtml) return '';
+      const clean = autoLinkContent(sanitizeArticleHtml(rawContent), linkTargets);
+      return injectHeadingIds(clean, tocHeadings);
+    },
+    [rawContent, contentIsHtml, linkTargets, tocHeadings],
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
@@ -275,6 +288,9 @@ function ArticleDetail({
               {geoEntity && <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Chủ thể: {geoEntity}</span>}
             </div>
           )}
+
+          {/* Mục lục — ẩn hẳn khi bài quá ít mục (1/23 bài thật không có heading nào) */}
+          {tocHeadings.length >= TOC_MIN_HEADINGS && <ArticleToc headings={tocHeadings} />}
 
           {/* Content */}
           {contentIsHtml ? (
