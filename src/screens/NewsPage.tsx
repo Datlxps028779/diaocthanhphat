@@ -479,10 +479,10 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     onNavigate({ name: 'news' }); // điều hướng thật → URL về /tin-tuc, không kẹt ở /tin-tuc/{slug}
   };
 
-  // Layout tạp chí: 1 bài nổi bật lớn + 3 bài phụ cạnh bên, phần còn lại xuống lưới.
+  // Layout tạp chí: 1 bài nổi bật lớn + tối đa 4 bài phụ trong lưới 2x2.
   const featured = articles[0];
-  const heroSide = articles.slice(1, 4);
-  const gridArticles = articles.slice(4);
+  const heroSide = articles.slice(1, 5);
+  const gridArticles = articles.slice(5);
 
   // Sidebar "Xem nhiều nhất": sắp theo lượt xem, LOẠI các bài đã hiện ở khối nổi bật
   // trên cùng (featured + 3 phụ) để không lặp nội dung. Rơi về bài mới nếu chưa có view.
@@ -603,14 +603,14 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
               {/* Khối nổi bật: 1 bài lớn (2/3) + tối đa 3 bài phụ (1/3) giãn đều theo
                   chiều cao bài lớn để không hở khoảng trống. */}
               {featured && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8 lg:items-stretch">
-                  <div className="lg:col-span-2">
+                <div className="grid grid-cols-1 gap-5 mb-8 lg:grid-cols-2 lg:items-stretch">
+                  <div>
                     <ArticleCard article={featured} large />
                   </div>
                   {heroSide.length > 0 && (
-                    <div className="flex flex-col gap-3 lg:h-full">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:h-full">
                       {heroSide.map((a) => (
-                        <div key={a.id} className="lg:flex-1 lg:min-h-0">
+                        <div key={a.id} className="min-h-24 lg:min-h-0">
                           <HorizontalCard article={a} />
                         </div>
                       ))}

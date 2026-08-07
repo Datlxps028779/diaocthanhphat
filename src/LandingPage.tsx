@@ -6,7 +6,7 @@ import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/rea
 import {
   Search, MapPin, TrendingUp, Shield, Phone,
   Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight, ChevronDown,
-  CheckCircle, Newspaper, Users, Clock
+  CheckCircle, Users
 } from 'lucide-react';
 import { type Property } from './lib/supabase';
 import {
@@ -87,7 +87,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const searchDistrictId = searchDistricts.find(d => d.name === searchDistrict)?.id;
   const { data: searchWards = [] } = useWards(searchDistrictId || undefined);
   const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
-  const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 6), queryFn: () => getNews(undefined, 6) });
+  const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 10), queryFn: () => getNews(undefined, 10) });
   const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
   const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
@@ -403,38 +403,103 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </section>
         );
 
+        const leadNews = news[0];
+        const highlightNews = news.slice(1, 5);
+        const popularNews = [...news].slice(1).sort((a, b) => b.views - a.views).slice(0, 5);
+        const newsHref = (article: typeof news[number]) =>
+          pageToHref({ name: 'news', slug: article.slug ?? undefined, articleId: article.id });
+
         return (
-          <section key="news" className="py-10 bg-white">
+          <section key="news" className="bg-white py-12 md:py-16">
             <div className="max-w-7xl mx-auto px-4">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Newspaper className="w-4 h-4 text-white" />
-                  </div>
-                  <h2 className="inline-block text-xl font-black text-gray-900">{sec('news')('title', 'Tin tức thị trường')}</h2>
+              <div className="mb-8 text-center">
+                <div className="mb-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-red-600">
+                  <span className="h-7 w-1 rounded-full bg-red-600" />
+                  Tin tức bất động sản
+                  <span className="h-7 w-1 rounded-full bg-red-600" />
                 </div>
-                <Link href={pageToHref({ name: 'news' })} className="text-red-600 text-sm font-semibold hover:underline flex items-center gap-1">
-                  {sec('news')('btn_view_all', 'Xem tất cả')}<ChevronRight className="w-4 h-4" />
-                </Link>
+                <h2 className="text-3xl font-black tracking-tight text-gray-900 md:text-4xl">
+                  {sec('news')('title', 'Cập nhật thị trường')}
+                </h2>
+                <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-500 md:text-base">
+                  Những thông tin mới nhất về thị trường bất động sản Việt Nam
+                </p>
               </div>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {news.slice(0, secNum('news', 'max_count', 3)).map(a => (
-                  <Link key={a.id} href={pageToHref({ name: 'news', slug: a.slug ?? undefined, articleId: a.id })}
-                    className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow text-left group block">
-                    {a.image_url && (
-                      <BlurFillImage src={a.image_url} alt={buildNewsImageAlt(a)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
-                    )}
-                    <div className="p-4">
-                      <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">{a.category}</span>
-                      <h3 className="font-bold text-sm text-gray-900 mt-2 line-clamp-2 group-hover:text-red-600 transition-colors">{a.title}</h3>
-                      {a.excerpt && <p className="text-gray-500 text-xs mt-1.5 line-clamp-2">{a.excerpt}</p>}
-                      <div className="flex items-center gap-3 text-gray-400 text-xs mt-3">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(a.created_at).toLocaleDateString('vi-VN')}</span>
-                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{a.views}</span>
+
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(250px,0.9fr)] lg:items-start">
+                <div className="order-2 lg:order-1">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-xl font-black text-gray-900">Tin nổi bật</h3>
+                    <Link href={pageToHref({ name: 'news' })} className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:underline">
+                      Xem tất cả <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                  <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white px-3 shadow-sm">
+                    {highlightNews.map(article => (
+                      <Link key={article.id} href={newsHref(article)} className="group flex gap-3 py-3 text-left">
+                        <div className="h-[4.5rem] w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                          {article.image_url && <BlurFillImage src={article.image_url} alt={buildNewsImageAlt(article)} sizes="96px" wrapperClassName="h-full w-full" />}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">{article.title}</h4>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
+                            <span>{new Date(article.created_at).toLocaleDateString('vi-VN')}</span>
+                            <span>•</span>
+                            <span>{Math.max(1, Math.round((article.content ?? article.excerpt ?? '').split(/\s+/).length / 200))} phút đọc</span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                {leadNews && (
+                  <div className="order-1 lg:order-2">
+                    <div className="mb-4 flex items-center justify-center">
+                      <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-500">
+                        {['Tin tức', 'Thị trường', 'Đầu tư'].map(tab => (
+                          <Link key={tab} href={tab === 'Tin tức' ? pageToHref({ name: 'news' }) : pageToHref({ name: 'news', category: tab })}
+                            className={`rounded-lg px-4 py-2 transition-colors ${tab === 'Tin tức' ? 'bg-white text-red-600 shadow-sm' : 'hover:text-red-600'}`}>
+                            {tab}
+                          </Link>
+                        ))}
                       </div>
                     </div>
-                  </Link>
-                ))}
+                    <Link href={newsHref(leadNews)} className="group block overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-xl">
+                      <div className="relative h-64 overflow-hidden md:h-72">
+                        {leadNews.image_url && <BlurFillImage src={leadNews.image_url} alt={buildNewsImageAlt(leadNews)} sizes="(max-width: 768px) 100vw, 50vw" wrapperClassName="h-full w-full" />}
+                        <div className="absolute left-4 top-4 rounded bg-red-600 px-2 py-1 text-[10px] font-bold uppercase text-white">{leadNews.category || 'Tin tức'}</div>
+                      </div>
+                      <div className="p-5">
+                        <h3 className="line-clamp-3 text-xl font-black leading-tight text-gray-900 transition-colors group-hover:text-red-600 md:text-2xl">{leadNews.title}</h3>
+                        <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
+                          <span>{new Date(leadNews.created_at).toLocaleDateString('vi-VN')}</span>
+                          <span>•</span>
+                          <span>{Math.max(1, Math.round((leadNews.content ?? leadNews.excerpt ?? '').split(/\s+/).length / 200))} phút đọc</span>
+                        </div>
+                      </div>
+                      {leadNews.excerpt && <p className="line-clamp-2 px-5 py-4 text-sm leading-relaxed text-gray-600">{leadNews.excerpt}</p>}
+                    </Link>
+                  </div>
+                )}
+
+                <div className="order-3">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-xl font-black text-gray-900">Đọc nhiều nhất</h3>
+                    <Eye className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white px-4 shadow-sm">
+                    {popularNews.map((article, index) => (
+                      <Link key={article.id} href={newsHref(article)} className="group flex gap-3 py-3 text-left">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-black ${index === 0 ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-400'}`}>{index + 1}</span>
+                        <div className="min-w-0">
+                          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-gray-800 transition-colors group-hover:text-red-600">{article.title}</h4>
+                          <span className="mt-1 flex items-center gap-1 text-[11px] text-gray-400"><Eye className="h-3 w-3" />{article.views.toLocaleString('vi-VN')} lượt xem</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
