@@ -1,5 +1,31 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { buildAutoSchema } from './seoAuto';
+import { stripHtml } from './markdown';
+
+export const META_DESCRIPTION_MAX = 155;
+
+// Mô tả tin đăng nhập từ trình soạn thảo là HTML. Cắt thô bằng substring sẽ đẩy
+// nguyên thẻ vào meta description và còn cắt đứt giữa một thẻ ("<strong>" mở không
+// đóng) — Google hiển thị meta thô nên lỗi này lộ ra ngoài kết quả tìm kiếm.
+// Lột thẻ trước, rồi cắt theo ranh giới TỪ để mô tả không cụt giữa chữ.
+export function buildMetaDescription(raw: string): string {
+  if (typeof raw !== 'string') return '';
+  // stripHtml đổi thẻ thành khoảng trắng để "a<br>b" không dính thành "ab", nhưng
+  // "<strong>xã Long Hòa</strong>," lại thành "xã Long Hòa ," — dấu câu lơ lửng đó
+  // hiện thẳng trên kết quả Google.
+  const text = stripHtml(raw).replace(/\s+([,.;:!?])/g, '$1');
+  // Đếm/cắt theo CODE POINT chứ không theo .length: mô tả BĐS đầy emoji (🔥📍📐),
+  // mà .length tính mỗi emoji ngoài BMP là 2 nên vừa đếm sai (Postgres char_length
+  // đếm 154 trong khi .length ra 159 → DB và app lệch nhau), vừa có thể slice() đứt
+  // đôi cặp surrogate làm meta dính nửa emoji lỗi (�) đẩy thẳng ra Google.
+  const chars = [...text];
+  if (chars.length <= META_DESCRIPTION_MAX) return text;
+
+  const cut = chars.slice(0, META_DESCRIPTION_MAX - 1).join('');
+  const lastSpace = cut.lastIndexOf(' ');
+  // Chuỗi không có khoảng trắng (hiếm) thì đành cắt cứng, vẫn còn chỗ cho dấu …
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SEOFields {
@@ -116,8 +142,7 @@ export function useSEOAutofill(input: SEOInput) {
 
   useEffect(() => {
     if (!touched.meta_description) {
-      const auto = input.description ? input.description.substring(0, 155) : '';
-      setMetaDescription(auto);
+      setMetaDescription(buildMetaDescription(input.description || ''));
     }
   }, [input.description, touched.meta_description]);
 
@@ -164,7 +189,8 @@ export function useSEOAutofill(input: SEOInput) {
 
   // Validation: độ dài title (60) và description (155)
   const titleValid = metaTitle.length > 0 && metaTitle.length <= 60;
-  const descValid = metaDescription.length > 0 && metaDescription.length <= 155;
+  const descCount = [...metaDescription].length;
+  const descValid = descCount > 0 && descCount <= META_DESCRIPTION_MAX;
 
   return {
     metaTitle, setMetaTitle: handleMetaTitleChange,
@@ -174,7 +200,7 @@ export function useSEOAutofill(input: SEOInput) {
     resetAuto,
     titleValid, descValid,
     titleLength: metaTitle.length,
-    descLength: metaDescription.length,
+    descLength: descCount,
   };
 }
 
@@ -186,7 +212,7 @@ export function SEOPreview({ metaTitle, metaDescription, focusKeywords }: {
   focusKeywords: string;
 }) {
   const titleLen = metaTitle.length;
-  const descLen = metaDescription.length;
+  const descLen = [...metaDescription].length;
   const titleColor = titleLen === 0 ? 'text-red-500' : titleLen <= 60 ? 'text-emerald-500' : 'text-amber-500';
   const descColor = descLen === 0 ? 'text-red-500' : descLen <= 155 ? 'text-emerald-500' : 'text-amber-500';
 

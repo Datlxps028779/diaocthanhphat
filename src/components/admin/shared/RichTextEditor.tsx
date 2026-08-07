@@ -46,12 +46,12 @@ const AlignableImage = Image.extend({
 
 type AlignDir = 'left' | 'center' | 'right' | 'justify';
 
-function ToolButton({ label, icon, active, onClick }: { label: string; icon: ReactNode; active?: boolean; onClick: () => void }) {
+function ToolButton({ label, icon, active, onClick, hint }: { label: string; icon: ReactNode; active?: boolean; onClick: () => void; hint?: string }) {
   return (
     <button
       type="button"
-      title={label}
-      aria-label={label}
+      title={hint || label}
+      aria-label={hint || label}
       aria-pressed={active}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
@@ -151,7 +151,7 @@ function Toolbar({
   return (
     <>
     <div className="sticky top-0 z-20 flex flex-wrap gap-1 rounded-t-lg border-b border-gray-100 bg-gray-50/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-gray-50/80">
-      <ToolButton label="H2" icon={<Heading2 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
+      <ToolButton label="H2" hint="H2 — Mục lớn (hiện trong mục lục bài viết)" icon={<Heading2 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
       <ToolButton label="H3" icon={<Heading3 className="h-3.5 w-3.5" />} active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
       <ToolButton label="Đậm" icon={<Bold className="h-3.5 w-3.5" />} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
       <ToolButton label="Nghiêng" icon={<Italic className="h-3.5 w-3.5" />} active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />

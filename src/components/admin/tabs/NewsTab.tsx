@@ -501,7 +501,10 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               </div>
             )}
             {contentMode === 'visual' ? (
-              <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+              <>
+                <RichTextEditor value={form.content} onChange={html => set('content', html)} internalLinks={internalLinks} placeholder="Viết nội dung bài viết. Dùng thanh công cụ để in đậm, nghiêng, tiêu đề, căn lề, chèn ảnh, liên kết nội bộ..." />
+                <p className="mt-1 text-[11px] text-gray-500">Mục lục bài viết lấy từ các mục lớn: bôi đen dòng tiêu đề rồi bấm <span className="font-semibold">H2</span> để đưa dòng đó vào mục lục.</p>
+              </>
             ) : (
               <textarea
                 value={form.content}
