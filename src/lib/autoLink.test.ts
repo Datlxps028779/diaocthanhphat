@@ -77,4 +77,28 @@ describe('autoLinkContent', () => {
     const out = autoLinkContent(body, many);
     expect((out.match(/<a\b/g) || []).length).toBeLessThanOrEqual(4);
   });
+
+  it('bài viết có hạn mức riêng, không giành chỗ của khu dân cư', () => {
+    // Trộn 8 khu + 8 bài trong cùng một đoạn. Nếu dùng chung quota 4 thì bài viết
+    // gần như không bao giờ được link vì khu dân cư đứng trước đã ăn hết.
+    const places: LinkTarget[] = Array.from({ length: 8 }, (_, i) => ({
+      name: `Khu${i}`, href: `/khu-dan-cu/khu-${i}`, group: 'place' as const,
+    }));
+    const articles: LinkTarget[] = Array.from({ length: 8 }, (_, i) => ({
+      name: `Bài viết số ${i}`, href: `/tin-tuc/bai-${i}`, group: 'article' as const,
+    }));
+    const body = '<p>' + [...places, ...articles].map(t => t.name).join(' và ') + '.</p>';
+    const out = autoLinkContent(body, [...places, ...articles]);
+
+    const placeLinks = (out.match(/href="\/khu-dan-cu\//g) || []).length;
+    const articleLinks = (out.match(/href="\/tin-tuc\//g) || []).length;
+    expect(placeLinks).toBe(4);
+    expect(articleLinks).toBe(3);
+  });
+
+  it('target không ghi group thì tính vào hạn mức khu dân cư (giữ hành vi cũ)', () => {
+    const many: LinkTarget[] = Array.from({ length: 8 }, (_, i) => ({ name: `Khu${i}`, href: `/khu-dan-cu/khu-${i}` }));
+    const body = '<p>' + many.map(m => m.name).join(' và ') + '.</p>';
+    expect((autoLinkContent(body, many).match(/<a\b/g) || []).length).toBe(4);
+  });
 });

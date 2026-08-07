@@ -1,4 +1,5 @@
 import { isHtmlContent, stripHtml } from './markdown';
+import { findDuplicateHeadings } from './tableOfContents';
 
 export type ReadinessLevel = 'error' | 'warning' | 'pass';
 export type ReadinessStatus = 'blocked' | 'needs-work' | 'ready';
@@ -76,6 +77,7 @@ export function evaluateNewsReadiness(input: NewsReadinessInput): ReadinessResul
   const internalLinks = countInternalLinks(input.content);
   const missingAlt = countImagesWithoutAlt(input.content);
   const relatedCount = input.relatedCount ?? 0;
+  const duplicateHeadings = findDuplicateHeadings(input.content);
 
   const items: ReadinessItem[] = [
     title
@@ -129,6 +131,14 @@ export function evaluateNewsReadiness(input: NewsReadinessInput): ReadinessResul
     relatedCount > 0
       ? item('related', 'Bài viết liên quan', 'pass', `Đã chọn ${relatedCount} bài liên quan thủ công.`)
       : item('related', 'Bài viết liên quan', 'warning', 'Nên chọn bài liên quan thủ công; hệ thống vẫn tự bù nếu thiếu.'),
+    duplicateHeadings.length === 0
+      ? item('heading-duplicate', 'Tiêu đề mục', 'pass', 'Các mục H2 đều có tên riêng.')
+      : item(
+          'heading-duplicate',
+          'Tiêu đề mục',
+          'warning',
+          `H2 bị lặp tên (${duplicateHeadings.slice(0, 3).join(', ')}) — mục lục tự sinh sẽ bỏ qua. Nên đổi thành tên riêng hoặc hạ xuống H3.`,
+        ),
   ];
 
   const errors = items.filter(i => i.level === 'error');

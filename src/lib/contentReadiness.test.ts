@@ -35,6 +35,28 @@ describe('contentReadiness', () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it('cảnh báo khi bài có h2 trùng tên nhau', () => {
+    // 3/26 bài thật dùng h2 làm nhãn lặp ("Trả lời nhanh" 13 lần) — mục lục tự sinh
+    // phải bỏ chúng, nên người soạn cần biết trước khi xuất bản.
+    const result = evaluateNewsReadiness({
+      ...completeNews,
+      content: `${completeNews.content}<h2>Trả lời nhanh</h2><p>a</p><h2>1. Bối cảnh</h2><p>b</p><h2>Trả lời nhanh</h2><p>c</p>`,
+    });
+    const found = result.warnings.find(w => w.key === 'heading-duplicate');
+    expect(found).toBeTruthy();
+    expect(found!.message).toContain('Trả lời nhanh');
+    // Chỉ là cảnh báo, không được chặn xuất bản.
+    expect(result.canPublish).toBe(true);
+  });
+
+  it('không cảnh báo khi các h2 đều khác tên', () => {
+    const result = evaluateNewsReadiness({
+      ...completeNews,
+      content: `${completeNews.content}<h2>1. Bối cảnh</h2><p>a</p><h2>2. Tác động</h2><p>b</p>`,
+    });
+    expect(result.warnings.find(w => w.key === 'heading-duplicate')).toBeUndefined();
+  });
+
   it('blocks public news when required SEO/GEO fields are missing', () => {
     const result = evaluateNewsReadiness({
       ...completeNews,

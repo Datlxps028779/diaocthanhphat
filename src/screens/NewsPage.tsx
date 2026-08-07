@@ -188,10 +188,26 @@ function ArticleDetail({
   // Nguồn target cho auto internal-link: khu dân cư + khu vực (mục 8 doc).
   const { data: neighborhoods = [] } = useNeighborhoods();
   const { data: areas = [] } = useAreas();
+  // Bài viết khác cũng làm đích link. `related` chỉ có 5 bài nên không đủ; lấy rộng
+  // hơn bằng query riêng. Key riêng (không dùng qk.news) vì limit khác — chung key
+  // sẽ ghi đè cache của danh sách tin tức.
+  const { data: linkableArticles = [] } = useQuery({
+    queryKey: ['news-link-targets'],
+    queryFn: () => getNews(undefined, 100),
+    staleTime: 5 * 60_000,
+  });
   const linkTargets = useMemo<LinkTarget[]>(() => [
-    ...neighborhoods.map(n => ({ name: n.name, href: `/khu-dan-cu/${n.slug}` })),
-    ...areas.map(a => ({ name: a.name, href: `/khu-vuc/${a.slug}` })),
-  ], [neighborhoods, areas]);
+    ...neighborhoods.map(n => ({ name: n.name, href: `/khu-dan-cu/${n.slug}`, group: 'place' as const })),
+    ...areas.map(a => ({ name: a.name, href: `/khu-vuc/${a.slug}`, group: 'place' as const })),
+    // Loại chính bài đang đọc, nếu không bài sẽ tự link vào mình.
+    ...linkableArticles
+      .filter(n => n.id !== article.id && n.title && (n.slug || n.id))
+      .map(n => ({
+        name: n.title,
+        href: pageToHref({ name: 'news', slug: n.slug || n.id }),
+        group: 'article' as const,
+      })),
+  ], [neighborhoods, areas, linkableArticles, article.id]);
   // Sanitize TRƯỚC rồi mới auto-link: link chèn vào HTML đã sạch, anchor không bị strip.
   // Mục lục tự sinh từ h2. Trích heading từ nội dung GỐC, nhưng gắn id vào bản đã
   // sanitize — sanitizeHtml không cho thuộc tính id nên gắn trước sẽ bị xoá sạch và

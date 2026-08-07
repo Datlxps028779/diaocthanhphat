@@ -32,14 +32,43 @@ describe('extractHeadings — nội dung HTML', () => {
     expect(extractHeadings(html)[0].id).toBe('muc-gia-dat-di-an-2026');
   });
 
-  it('heading trùng tên vẫn có id khác nhau', () => {
-    // 2/23 bài thật có heading trùng tên — trùng id thì bấm mục sau nhảy về mục đầu.
+  it('bỏ hẳn heading trùng tên — đó là nhãn cấu trúc, không phải mục', () => {
+    // Đo 26 bài thật: "Trả lời nhanh" xuất hiện 13 lần, "Phân tích" 4 lần. Đây là
+    // nhãn lặp trong thân bài chứ không phải mục riêng — liệt kê ra thì mục lục
+    // toàn dòng giống nhau.
     const html = '<h2>Tổng quan</h2><h2>Tổng quan</h2><h2>Tổng quan</h2>';
-    const ids = extractHeadings(html).map(h => h.id);
-    expect(new Set(ids).size).toBe(3);
-    expect(ids[0]).toBe('muc-tong-quan');
-    expect(ids[1]).toBe('muc-tong-quan-2');
-    expect(ids[2]).toBe('muc-tong-quan-3');
+    expect(extractHeadings(html)).toEqual([]);
+  });
+
+  it('giữ mục thật, chỉ bỏ nhãn lặp xen giữa', () => {
+    // Ca nguy hiểm nhất: nhãn lặp nằm XEN GIỮA mục thật. Nếu lọc lệch thì id gắn
+    // vào sai heading và bấm mục lục nhảy nhầm chỗ.
+    const html = [
+      '<h2>Trả lời nhanh</h2><p>a</p>',
+      '<h2>1. Bối cảnh</h2><p>b</p>',
+      '<h2>Trả lời nhanh</h2><p>c</p>',
+      '<h2>2. Tác động</h2><p>d</p>',
+      '<h2>Trả lời nhanh</h2><p>e</p>',
+    ].join('');
+    expect(extractHeadings(html).map(h => h.text)).toEqual(['1. Bối cảnh', '2. Tác động']);
+  });
+
+  it('bỏ h2 tên "Mục lục" có sẵn trong thân bài', () => {
+    // 1/26 bài thật đã tự chèn h2 "Mục lục" — giữ lại thì mục lục trỏ vào chính nó.
+    const html = '<h2>Mục lục</h2><h2>Bối cảnh</h2><h2>Tác động</h2>';
+    expect(extractHeadings(html).map(h => h.text)).toEqual(['Bối cảnh', 'Tác động']);
+  });
+
+  it('bỏ h2 "MỤC LỤC" bất kể hoa thường và khoảng trắng thừa', () => {
+    const html = '<h2>  MỤC LỤC </h2><h2>Bối cảnh</h2><h2>Tác động</h2>';
+    expect(extractHeadings(html).map(h => h.text)).toEqual(['Bối cảnh', 'Tác động']);
+  });
+
+  it('bài toàn nhãn lặp thì không còn mục nào', () => {
+    // Bài "Sửa Luật Đất đai" thật: 14/14 heading đều là nhãn lặp.
+    const html = ['Trả lời nhanh', 'Căn cứ', 'Phân tích', 'Trả lời nhanh', 'Căn cứ', 'Phân tích']
+      .map(t => `<h2>${t}</h2>`).join('');
+    expect(extractHeadings(html)).toEqual([]);
   });
 
   it('tiêu đề toàn ký tự đặc biệt vẫn có id dùng được', () => {
@@ -122,10 +151,32 @@ describe('injectHeadingIds', () => {
   });
 
   it('id gắn vào khớp đúng với id trong mục lục', () => {
-    const html = '<h2>Tổng quan</h2><h2>Tổng quan</h2>';
+    const html = '<h2>Bối cảnh</h2><h2>Tác động</h2>';
     const heads = extractHeadings(html);
     const out = injectHeadingIds(html, heads);
     for (const h of heads) expect(out).toContain(`id="${h.id}"`);
+  });
+
+  it('gắn id ĐÚNG heading khi có nhãn lặp xen giữa', () => {
+    // Chốt an toàn quan trọng nhất của đợt lọc: extractHeadings bỏ nhãn lặp, nên
+    // injectHeadingIds phải bỏ y hệt. Lệch một nhịp là id "muc-1-boi-canh" rơi vào
+    // thẻ "Trả lời nhanh" và bấm mục lục nhảy sai chỗ.
+    const html = [
+      '<h2>Trả lời nhanh</h2>',
+      '<h2>1. Bối cảnh</h2>',
+      '<h2>Trả lời nhanh</h2>',
+      '<h2>2. Tác động</h2>',
+    ].join('');
+    const heads = extractHeadings(html);
+    const out = injectHeadingIds(html, heads);
+
+    // Mỗi id phải nằm trên đúng thẻ chứa chữ của mục đó.
+    for (const h of heads) {
+      const re = new RegExp(`<h2 id="${h.id}"[^>]*>([^<]*)</h2>`);
+      expect(out.match(re)?.[1]).toBe(h.text);
+    }
+    // Nhãn lặp không được gắn id.
+    expect(out).toContain('<h2>Trả lời nhanh</h2>');
   });
 });
 

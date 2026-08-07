@@ -1,15 +1,21 @@
 // Tự chèn internal link vào body bài viết (mục 8 updateweb.md): khi tên một khu
-// dân cư / khu vực đã biết xuất hiện trong bài, chèn 1 link tới Entity Page tương
-// ứng. Bảo thủ để không phá HTML: chỉ chèn ở TEXT ngoài thẻ, bỏ qua nội dung nằm
+// dân cư / khu vực / BÀI VIẾT khác đã biết xuất hiện trong bài, chèn 1 link tới trang
+// tương ứng. Bảo thủ để không phá HTML: chỉ chèn ở TEXT ngoài thẻ, bỏ qua nội dung nằm
 // trong <a>...</a> và trong heading (<h1>-<h4>), mỗi target chỉ link LẦN ĐẦU,
-// và giới hạn tổng số link để tránh spam (xấu cho SEO/AIO).
+// và giới hạn số link THEO TỪNG NHÓM để tránh spam (xấu cho SEO/AIO).
 
 export interface LinkTarget {
   name: string; // cụm chính xác cần dò, vd "Phú Hồng Thịnh 8"
   href: string; // vd "/khu-dan-cu/phu-hong-thinh-8"
+  // Hạn mức tính RIÊNG theo nhóm: bài viết không giành chỗ của khu dân cư. Dùng
+  // chung một quota thì bài nào nhắc nhiều địa danh sẽ không còn chỗ link bài.
+  // Bỏ trống = 'place' để giữ nguyên hành vi cũ.
+  group?: LinkGroup;
 }
 
-const MAX_LINKS = 4;
+export type LinkGroup = 'place' | 'article';
+
+const MAX_LINKS: Record<LinkGroup, number> = { place: 4, article: 3 };
 
 // Tách HTML thành mảng đoạn: mỗi phần tử là {text, linkable}. Không linkable khi:
 // nằm trong 1 thẻ (<...>), trong <a>...</a>, hoặc trong heading.
@@ -49,21 +55,23 @@ export function autoLinkContent(html: string, targets: LinkTarget[]): string {
     const sorted = [...targets].filter(t => t.name.trim() && t.href.trim())
       .sort((a, b) => b.name.length - a.name.length);
     const used = new Set<string>();
-    let linkCount = 0;
+    const counts: Record<LinkGroup, number> = { place: 0, article: 0 };
+    const groupOf = (t: LinkTarget): LinkGroup => t.group ?? 'place';
+    const full = () => counts.place >= MAX_LINKS.place && counts.article >= MAX_LINKS.article;
     const segs = segment(html);
 
     for (const seg of segs) {
-      if (!seg.linkable || linkCount >= MAX_LINKS) continue;
+      if (!seg.linkable || full()) continue;
 
       // Thu thập match trên TEXT GỐC của đoạn (chưa chèn gì) rồi mới chèn một lượt
       // từ phải sang trái. Không exec lại trên chuỗi đã có markup → không bao giờ
       // chèn link lồng vào giữa href/thẻ <a> của link vừa tạo.
-      const hits: { index: number; length: number; href: string; name: string }[] = [];
+      const hits: { index: number; length: number; href: string; name: string; group: LinkGroup }[] = [];
       for (const t of sorted) {
         if (used.has(t.href)) continue;
         const idx = seg.raw.indexOf(t.name);
         if (idx === -1) continue;
-        hits.push({ index: idx, length: t.name.length, href: t.href, name: t.name });
+        hits.push({ index: idx, length: t.name.length, href: t.href, name: t.name, group: groupOf(t) });
       }
       if (hits.length === 0) continue;
 
@@ -77,9 +85,13 @@ export function autoLinkContent(html: string, targets: LinkTarget[]): string {
         cursor = h.index + h.length;
       }
 
-      // Áp mức trần tổng số link; cắt phần vượt.
-      const room = MAX_LINKS - linkCount;
-      const applied = nonOverlap.slice(0, Math.max(0, room));
+      // Áp trần theo TỪNG nhóm; nhóm đầy thì bỏ qua match của nhóm đó, nhóm kia vẫn chèn.
+      const pending = { ...counts };
+      const applied = nonOverlap.filter(h => {
+        if (pending[h.group] >= MAX_LINKS[h.group]) return false;
+        pending[h.group]++;
+        return true;
+      });
       if (applied.length === 0) continue;
 
       // Chèn từ PHẢI sang TRÁI để index của các match trước không bị lệch.
@@ -91,9 +103,9 @@ export function autoLinkContent(html: string, targets: LinkTarget[]): string {
         const anchor = `<a href="${h.href}">${h.name}</a>`;
         out = out.slice(0, h.index) + anchor + out.slice(h.index + h.length);
         used.add(h.href); // đánh dấu ĐÃ dùng chỉ khi thật sự chèn (mỗi target 1 lần/bài)
+        counts[h.group]++;
       }
       seg.raw = out;
-      linkCount += applied.length;
     }
     return segs.map(s => s.raw).join('');
   } catch {
