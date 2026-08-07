@@ -2,6 +2,7 @@ import { NewsListClient } from '../_clients/pageClients';
 import { serverGetNews } from '@/lib/supabase-server';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
+import { NEWS_CATEGORIES } from '@/lib/newsCategories';
 
 const PATH = '/tin-tuc';
 const fallback = {
@@ -22,12 +23,13 @@ export async function generateMetadata() {
 export const revalidate = 1800;
 
 export default async function Page({ searchParams }: { searchParams?: { category?: string | string[] } }) {
-  const [{ jsonLd }, articles] = await Promise.all([
-    loadRouteSeo(PATH, fallback),
-    serverGetNews(),
-  ]);
   const rawCat = searchParams?.category;
-  const initialCategory = (Array.isArray(rawCat) ? rawCat[0] : rawCat) || undefined;
+  const requestedCategory = (Array.isArray(rawCat) ? rawCat[0] : rawCat) || undefined;
+  const initialCategory = NEWS_CATEGORIES.includes(requestedCategory as typeof NEWS_CATEGORIES[number])
+    ? requestedCategory
+    : undefined;
+  const articles = await serverGetNews(20, initialCategory);
+  const { jsonLd } = await loadRouteSeo(PATH, fallback);
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />

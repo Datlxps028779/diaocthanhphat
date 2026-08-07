@@ -22,6 +22,7 @@ import { FAQ_ITEMS } from './lib/faq';
 import { track, EVENTS } from './lib/analytics';
 import { qk } from './lib/queryKeys';
 import { type Page, pageToHref } from './lib/router';
+import { NEWS_CATEGORIES } from './lib/newsCategories';
 import { quickCategoryToPage } from './lib/quickCategory';
 import { CategoryIcon } from './lib/categoryIcons';
 import { useSetting } from './lib/cms';
@@ -73,6 +74,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
+  const [activeNewsTab, setActiveNewsTab] = useState<'Tin tức' | typeof NEWS_CATEGORIES[number]>('Tin tức');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
 
@@ -87,7 +89,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const searchDistrictId = searchDistricts.find(d => d.name === searchDistrict)?.id;
   const { data: searchWards = [] } = useWards(searchDistrictId || undefined);
   const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
-  const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 10), queryFn: () => getNews(undefined, 10) });
+  const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 20), queryFn: () => getNews(undefined, 20) });
   const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
   const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
@@ -403,11 +405,23 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </section>
         );
 
-        const leadNews = news[0];
-        const highlightNews = news.slice(1, 5);
-        const popularNews = [...news].slice(1).sort((a, b) => b.views - a.views).slice(0, 5);
+        const newsTabs = ['Tin tức', ...NEWS_CATEGORIES] as const;
+        const currentNews = activeNewsTab === 'Tin tức'
+          ? news
+          : news.filter(article => article.category === activeNewsTab);
+        const leadNews = currentNews[0];
+        const highlightNews = currentNews.slice(1, 5);
+        const visibleNewsIds = new Set([leadNews, ...highlightNews].filter(Boolean).map(article => article.id));
+        const popularNews = currentNews
+          .filter(article => !visibleNewsIds.has(article.id))
+          .sort((a, b) => b.views - a.views)
+          .slice(0, 5);
         const newsHref = (article: typeof news[number]) =>
           pageToHref({ name: 'news', slug: article.slug ?? undefined, articleId: article.id });
+        const allNewsHref = pageToHref({
+          name: 'news',
+          category: activeNewsTab === 'Tin tức' ? undefined : activeNewsTab,
+        });
 
         return (
           <section key="news" className="bg-white py-12 md:py-16">
@@ -426,11 +440,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 </p>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(250px,0.9fr)] lg:items-start">
-                <div className="order-2 lg:order-1">
+              <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(250px,0.9fr)] lg:items-start">
+                <div className="order-2 min-w-0 lg:order-1">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-xl font-black text-gray-900">Tin nổi bật</h3>
-                    <Link href={pageToHref({ name: 'news' })} className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:underline">
+                    <Link href={allNewsHref} className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:underline">
                       Xem tất cả <ChevronRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -453,18 +467,23 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   </div>
                 </div>
 
-                {leadNews && (
-                  <div className="order-1 lg:order-2">
-                    <div className="mb-4 flex items-center justify-center">
-                      <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-500">
-                        {['Tin tức', 'Thị trường', 'Đầu tư'].map(tab => (
-                          <Link key={tab} href={tab === 'Tin tức' ? pageToHref({ name: 'news' }) : pageToHref({ name: 'news', category: tab })}
-                            className={`rounded-lg px-4 py-2 transition-colors ${tab === 'Tin tức' ? 'bg-white text-red-600 shadow-sm' : 'hover:text-red-600'}`}>
-                            {tab}
-                          </Link>
-                        ))}
-                      </div>
+                <div className="order-1 min-w-0 lg:order-2">
+                  <div className="mb-4 flex min-w-0 items-center justify-center">
+                    <div className="inline-flex min-w-0 max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-500">
+                      {newsTabs.map(tab => (
+                        <button
+                          key={tab}
+                          type="button"
+                          aria-pressed={activeNewsTab === tab}
+                          onClick={() => setActiveNewsTab(tab)}
+                          className={`shrink-0 rounded-lg px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-red-200 ${activeNewsTab === tab ? 'bg-white text-red-600 shadow-sm' : 'hover:text-red-600'}`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
                     </div>
+                  </div>
+                  {leadNews ? (
                     <Link href={newsHref(leadNews)} className="group block overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-xl">
                       <div className="relative h-64 overflow-hidden md:h-72">
                         {leadNews.image_url && <BlurFillImage src={leadNews.image_url} alt={buildNewsImageAlt(leadNews)} sizes="(max-width: 768px) 100vw, 50vw" wrapperClassName="h-full w-full" />}
@@ -480,10 +499,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       </div>
                       {leadNews.excerpt && <p className="line-clamp-2 px-5 py-4 text-sm leading-relaxed text-gray-600">{leadNews.excerpt}</p>}
                     </Link>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                      Chưa có bài viết trong danh mục này.
+                    </div>
+                  )}
+                </div>
 
-                <div className="order-3">
+                <div className="order-3 min-w-0">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-xl font-black text-gray-900">Đọc nhiều nhất</h3>
                     <Eye className="h-5 w-5 text-red-500" />
