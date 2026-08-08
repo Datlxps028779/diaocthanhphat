@@ -1,5 +1,9 @@
-import { supabase, type NewsArticle } from '../supabase';
+import { supabase, type NewsArticle, type NewsListItem, type NewsPageResult } from '../supabase';
 import { buildUniqueSlug } from '../slug';
+
+export const NEWS_PER_PAGE = 12;
+
+const NEWS_LIST_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,created_at,updated_at';
 
 // ─── News ─────────────────────────────────────────────────────────────────────
 export async function getNews(category?: string, limit = 20): Promise<NewsArticle[]> {
@@ -7,6 +11,40 @@ export async function getNews(category?: string, limit = 20): Promise<NewsArticl
   if (category && category !== 'Tất cả') q = q.eq('category', category);
   const { data } = await q;
   return (data ?? []) as NewsArticle[];
+}
+
+export async function getNewsPage({
+  category,
+  page = 1,
+  limit = NEWS_PER_PAGE,
+}: {
+  category?: string;
+  page?: number;
+  limit?: number;
+} = {}): Promise<NewsPageResult> {
+  let q = supabase
+    .from('news')
+    .select(NEWS_LIST_SELECT, { count: 'exact' })
+    .eq('is_published', true)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
+
+  if (category && category !== 'Tất cả') q = q.eq('category', category);
+
+  const { data, error, count } = await q.range((page - 1) * limit, page * limit - 1);
+  if (error) throw error;
+  return { data: (data ?? []) as NewsListItem[], total: count ?? 0 };
+}
+
+export async function getMostViewedNews(limit = 8): Promise<NewsListItem[]> {
+  const { data } = await supabase
+    .from('news')
+    .select(NEWS_LIST_SELECT)
+    .eq('is_published', true)
+    .order('views', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit);
+  return (data ?? []) as NewsListItem[];
 }
 export async function getNewsById(id: string): Promise<NewsArticle | null> {
   // Pure read — tăng view tách ra incrementNewsView, bắn 1 lần khi mount ở tầng UI.

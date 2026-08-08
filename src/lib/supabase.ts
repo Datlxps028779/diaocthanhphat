@@ -238,6 +238,17 @@ export type NewsArticle = {
   created_at: string; updated_at: string;
 };
 
+export type NewsListItem = Pick<
+  NewsArticle,
+  'id' | 'title' | 'slug' | 'excerpt' | 'image_url' | 'category' | 'author' |
+  'views' | 'focus_keywords' | 'geo_area' | 'created_at' | 'updated_at'
+>;
+
+export type NewsPageResult = {
+  data: NewsListItem[];
+  total: number;
+};
+
 export type SeoRouteOverride = {
   path: string;
   meta_title: string | null; meta_description: string | null; focus_keywords: string | null;

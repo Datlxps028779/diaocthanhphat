@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { NewsListClient } from '../_clients/pageClients';
-import { serverGetNews } from '@/lib/supabase-server';
+import { serverGetNewsPage, serverGetMostViewedNews } from '@/lib/supabase-server';
 import { loadRouteSeo, type RouteFallback } from '@/lib/routeSeo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 
@@ -26,14 +26,15 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function KnowledgeHubPage() {
-  const [articles, { jsonLd }] = await Promise.all([
-    serverGetNews(24, CATEGORY),
+  const [initialPage, initialMostViewed, { jsonLd }] = await Promise.all([
+    serverGetNewsPage({ category: CATEGORY }),
+    serverGetMostViewedNews(8),
     loadRouteSeo(PATH, fallback),
   ]);
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <NewsListClient initialArticles={articles} initialCategory={CATEGORY} />
+      <NewsListClient initialPage={initialPage} initialMostViewed={initialMostViewed} initialCategory={CATEGORY} />
     </>
   );
 }

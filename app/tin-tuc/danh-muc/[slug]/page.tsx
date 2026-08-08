@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { NewsListClient } from '../../../_clients/pageClients';
-import { serverGetNews } from '@/lib/supabase-server';
+import { serverGetNewsPage, serverGetMostViewedNews } from '@/lib/supabase-server';
 import { slugToCategory, NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { loadRouteSeo, type RouteFallback } from '@/lib/routeSeo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
@@ -43,15 +43,16 @@ export default async function NewsCategoryPage({ params }: Params) {
   if (!category) notFound();
 
   const path = `/tin-tuc/danh-muc/${params.slug}`;
-  const [articles, { jsonLd }] = await Promise.all([
-    serverGetNews(20, category),
+  const [initialPage, initialMostViewed, { jsonLd }] = await Promise.all([
+    serverGetNewsPage({ category, page: 1 }),
+    serverGetMostViewedNews(8),
     loadRouteSeo(path, categoryFallback(params.slug, category)),
   ]);
 
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <NewsListClient initialArticles={articles} initialCategory={category} />
+      <NewsListClient initialPage={initialPage} initialMostViewed={initialMostViewed} initialCategory={category} />
     </>
   );
 }

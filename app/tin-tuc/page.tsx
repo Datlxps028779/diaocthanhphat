@@ -1,5 +1,5 @@
 import { NewsListClient } from '../_clients/pageClients';
-import { serverGetNews } from '@/lib/supabase-server';
+import { serverGetNewsPage, serverGetMostViewedNews } from '@/lib/supabase-server';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
 import { NEWS_CATEGORIES } from '@/lib/newsCategories';
@@ -28,12 +28,15 @@ export default async function Page({ searchParams }: { searchParams?: { category
   const initialCategory = NEWS_CATEGORIES.includes(requestedCategory as typeof NEWS_CATEGORIES[number])
     ? requestedCategory
     : undefined;
-  const articles = await serverGetNews(20, initialCategory);
-  const { jsonLd } = await loadRouteSeo(PATH, fallback);
+  const [initialPage, initialMostViewed, { jsonLd }] = await Promise.all([
+    serverGetNewsPage({ category: initialCategory, page: 1 }),
+    serverGetMostViewedNews(8),
+    loadRouteSeo(PATH, fallback),
+  ]);
   return (
     <>
       <JsonLdScripts schemas={jsonLd} />
-      <NewsListClient initialArticles={articles} initialCategory={initialCategory} />
+      <NewsListClient initialPage={initialPage} initialMostViewed={initialMostViewed} initialCategory={initialCategory} />
     </>
   );
 }

@@ -13,7 +13,7 @@ import { PostListingPage } from '@/screens/PostListingPage';
 import { AccountHubPage } from '@/screens/AccountHubPage';
 import { StaticPageScreen } from '@/screens/StaticPageScreen';
 import type { ReactNode } from 'react';
-import type { Property, NewsArticle, ManagedPage, PageBlock } from '@/lib/supabase';
+import type { Property, NewsPageResult, ManagedPage, PageBlock } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
@@ -73,11 +73,11 @@ export function RegionsClient({ initialAreaId }: { initialAreaId?: string } = {}
   );
 }
 
-export function NewsListClient({ initialArticles, initialCategory }: { initialArticles?: NewsArticle[]; initialCategory?: string }) {
+export function NewsListClient({ initialPage, initialCategory, initialMostViewed }: { initialPage?: NewsPageResult; initialCategory?: string; initialMostViewed?: NewsPageResult['data'] }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'news' }}>
-      <NewsPage onNavigate={navigate} initialArticles={initialArticles} initialCategory={initialCategory} />
+      <NewsPage onNavigate={navigate} initialPage={initialPage} initialCategory={initialCategory} initialMostViewed={initialMostViewed} />
     </SiteChrome>
   );
 }

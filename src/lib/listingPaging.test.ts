@@ -27,3 +27,43 @@ describe('nextListingPageParam — nối trang cho "Tải thêm"', () => {
     expect(nextListingPageParam({ startPage: 1, perPage: 16, total: 20, loaded: 16 })).toBe(2);
   });
 });
+
+describe('feed tin tức — nối trang NEWS_PER_PAGE=12 không lặp ID', () => {
+  const PER_PAGE = 12;
+
+  it('nối tới hết rồi dừng đúng số bài', () => {
+    // 30 bài, mỗi trang 12 → trang 1 (12), 2 (24), 3 (30) rồi dừng.
+    expect(nextListingPageParam({ startPage: 1, perPage: PER_PAGE, total: 30, loaded: 12 })).toBe(2);
+    expect(nextListingPageParam({ startPage: 1, perPage: PER_PAGE, total: 30, loaded: 24 })).toBe(3);
+    expect(nextListingPageParam({ startPage: 1, perPage: PER_PAGE, total: 30, loaded: 30 })).toBeUndefined();
+  });
+
+  it('flatten các trang liên tiếp không lặp ID (sort ổn định created_at,id DESC)', () => {
+    // Mô phỏng .range() phía server với thứ tự ổn định: page N trả id giảm dần liên
+    // tục. Nối các trang bằng flatMap phải cho tập ID duy nhất, đúng tổng.
+    const total = 30;
+    const pageOf = (page: number) =>
+      Array.from({ length: Math.min(PER_PAGE, total - (page - 1) * PER_PAGE) }, (_, i) => ({
+        id: `n-${total - ((page - 1) * PER_PAGE + i)}`,
+      }));
+    const pages: { id: string }[][] = [];
+    let page = 1;
+    // Nạp trang đầu, rồi hỏi helper trang kế cho tới khi dừng.
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      pages.push(pageOf(page));
+      const loaded = pages.reduce((s, p) => s + p.length, 0);
+      const next = nextListingPageParam({ startPage: 1, perPage: PER_PAGE, total, loaded });
+      if (next === undefined) break;
+      page = next;
+    }
+    const flat = pages.flat();
+    const ids = flat.map(a => a.id);
+    expect(flat.length).toBe(total);
+    expect(new Set(ids).size).toBe(total); // không lặp ID
+  });
+
+  it('danh mục rỗng thì không có trang kế', () => {
+    expect(nextListingPageParam({ startPage: 1, perPage: PER_PAGE, total: 0, loaded: 0 })).toBeUndefined();
+  });
+});

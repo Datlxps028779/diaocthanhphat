@@ -1,11 +1,12 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
-import { type NewsArticle } from '../lib/supabase';
-import { getNews, getNewsById, getNewsByIds, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { type NewsArticle, type NewsListItem, type NewsPageResult } from '../lib/supabase';
+import { getNews, getNewsById, getNewsByIds, getNewsPage, getMostViewedNews, NEWS_PER_PAGE, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
+import { nextListingPageParam } from '../lib/listingPaging';
 import { type Page, pageToHref } from '../lib/router';
 import { NEWS_CATEGORIES } from '../lib/newsCategories';
 import { Breadcrumb } from '../components/Layout';
@@ -23,7 +24,6 @@ import { DetailShareButtons } from '../components/DetailShareButtons';
 
 const CATEGORIES = ['Tất cả', ...NEWS_CATEGORIES] as const;
 type NewsCollection = typeof CATEGORIES[number];
-const NEWS_POOL_LIMIT = 20;
 
 function isNewsCollection(value: string | undefined): value is NewsCollection {
   return Boolean(value && CATEGORIES.includes(value as NewsCollection));
@@ -79,7 +79,7 @@ function ArticleCard({
   article,
   large = false,
 }: {
-  article: NewsArticle;
+  article: NewsListItem;
   large?: boolean;
 }) {
   const imgUrl =
@@ -142,7 +142,7 @@ function ArticleCard({
 }
 
 /* ────────────────── Horizontal Card (khối phụ cạnh bài nổi bật) ────────────────── */
-function HorizontalCard({ article }: { article: NewsArticle }) {
+function HorizontalCard({ article }: { article: NewsListItem }) {
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
@@ -402,7 +402,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticles, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticles?: NewsArticle[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
   const [category, setCategory] = useState<NewsCollection>(isNewsCollection(initialCategory) ? initialCategory : 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -416,15 +416,63 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
 
   const newsCategory = category === 'Tất cả' ? undefined : category;
-  // Category mà server đã prefetch initialArticles (route /tin-tuc → 'Tất cả',
-  // route /tin-tuc/danh-muc/{slug} → nhãn danh mục). Seed SSR khi view khớp đúng
+  // Category mà server đã prefetch (route /tin-tuc → 'Tất cả', route
+  // /tin-tuc/danh-muc/{slug} → nhãn danh mục). Seed SSR trang 1 khi view khớp đúng
   // cái server fetch để không nháy loading (kể cả trang danh mục).
   const seedCategory: NewsCollection = isNewsCollection(initialCategory) ? initialCategory : 'Tất cả';
-  const { data: articles = [], isLoading: loading } = useQuery({
-    queryKey: qk.news(newsCategory, NEWS_POOL_LIMIT),
-    queryFn: () => getNews(newsCategory, NEWS_POOL_LIMIT),
-    initialData: category === seedCategory && initialArticles ? initialArticles : undefined,
+  const seedMatch = category === seedCategory;
+
+  // Feed phân trang nhẹ: mỗi trang là NewsListItem (không có content), nối tiếp bằng
+  // "Tải thêm"/observer. Key riêng cho feed — KHÔNG dùng qk.news cũ (limit khác, shape
+  // khác) để không ghi đè cache danh sách link-target ở ArticleDetail.
+  const {
+    data: infiniteResult,
+    isLoading: loadingFeed,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['news-feed', newsCategory ?? 'all'],
+    queryFn: ({ pageParam }) => getNewsPage({ category: newsCategory, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => nextListingPageParam({
+      startPage: 1,
+      perPage: NEWS_PER_PAGE,
+      total: lastPage.total,
+      loaded: allPages.reduce((sum, part) => sum + part.data.length, 0),
+    }),
+    initialData: seedMatch && initialPage
+      ? { pages: [initialPage], pageParams: [1] }
+      : undefined,
   });
+  const articles = useMemo<NewsListItem[]>(
+    () => (infiniteResult?.pages ?? []).flatMap(part => part.data),
+    [infiniteResult],
+  );
+  const total = infiniteResult?.pages[0]?.total ?? 0;
+  const loading = loadingFeed && !isFetchingNextPage;
+
+  // "Đọc nhiều nhất" là query riêng sắp views DESC — không giới hạn bởi các bài đã
+  // load ở feed. Seed bằng SSR để không nháy. Key inline (queryKeys.ts bị khoá).
+  const { data: mostViewedRaw = [] } = useQuery({
+    queryKey: ['news-most-viewed'],
+    queryFn: () => getMostViewedNews(8),
+    initialData: initialMostViewed && initialMostViewed.length > 0 ? initialMostViewed : undefined,
+    staleTime: 5 * 60_000,
+  });
+
+  // Sentinel tự bấm "Tải thêm" khi cuộn tới cuối. Nút vẫn bấm tay được nếu observer
+  // không chạy (trình duyệt cũ). Chỉ đổi trạng thái ở control, không thay cả feed.
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting) && hasNextPage && !isFetchingNextPage) fetchNextPage();
+    }, { rootMargin: '400px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // activeArticle derive từ detail query — set articleId để mở, undefined để đóng
   const { data: activeArticle = null } = useQuery({
@@ -469,27 +517,30 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     onNavigate({ name: 'news' }); // điều hướng thật → URL về /tin-tuc, không kẹt ở /tin-tuc/{slug}
   };
 
-  // Layout tạp chí: 1 bài nổi bật lớn + tối đa 4 bài phụ trong lưới 2x2.
+  // Layout tạp chí: 1 bài nổi bật lớn + tối đa 4 bài phụ trong lưới 2x2. Phần còn
+  // lại KHÔNG cắt — mọi bài đã load đều xuống feed bên dưới để không rơi bài nào.
   const featured = articles[0];
   const heroSide = articles.slice(1, 5);
-  const gridArticles = articles.slice(5);
+  const restArticles = articles.slice(5);
+  const heroIds = useMemo(
+    () => new Set([featured, ...heroSide].filter(Boolean).map((a) => a.id)),
+    [featured, heroSide],
+  );
 
-  // Sidebar "Xem nhiều nhất": sắp theo lượt xem, LOẠI các bài đã hiện ở khối nổi bật
-  // trên cùng (featured + 3 phụ) để không lặp nội dung. Rơi về bài mới nếu chưa có view.
-  const heroIds = new Set([featured, ...heroSide].filter(Boolean).map((a) => a.id));
+  // "Đọc nhiều nhất": query riêng theo views. Loại bài đang ở hero nếu vẫn đủ 5 kết
+  // quả, còn không thì giữ nguyên để không trống sidebar.
   const mostViewed = useMemo(() => {
-    return [...articles]
-      .filter((a) => !heroIds.has(a.id))
-      .sort((a, b) => ((b as any).views ?? 0) - ((a as any).views ?? 0))
-      .slice(0, 5);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [articles]);
+    const filtered = mostViewedRaw.filter((a) => !heroIds.has(a.id));
+    return (filtered.length >= 5 ? filtered : mostViewedRaw).slice(0, 5);
+  }, [mostViewedRaw, heroIds]);
 
-  // Trang tổng nhóm theo danh mục; route danh mục chỉ có một section cùng chủ đề.
+  // Trang tổng (/tin-tuc): nhóm preview theo danh mục như thiết kế editorial. Route
+  // danh mục: một luồng "Mới cập nhật" phẳng gồm mọi bài sau hero.
   const showGroups = category === 'Tất cả';
   const grouped = useMemo(() => {
-    const byCat = new Map<string, NewsArticle[]>();
-    for (const a of gridArticles) {
+    if (!showGroups) return [];
+    const byCat = new Map<string, NewsListItem[]>();
+    for (const a of restArticles) {
       const c = a.category ?? 'Khác';
       if (!byCat.has(c)) byCat.set(c, []);
       byCat.get(c)!.push(a);
@@ -497,15 +548,30 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     const ordered = CATEGORIES.filter(c => c !== 'Tất cả').filter(c => byCat.has(c));
     const extras = Array.from(byCat.keys()).filter(c => !CATEGORIES.includes(c as NewsCollection));
     return [...ordered, ...extras].map(c => ({ category: c, items: byCat.get(c)! }));
-  }, [gridArticles]);
+  }, [restArticles, showGroups]);
+
+  // Feed đầy đủ ở dưới. Route danh mục: mọi bài sau hero. Trang tổng: mọi bài không
+  // nằm trong hero VÀ không thuộc preview chuyên mục (lead + 3 phụ mỗi nhóm) để một
+  // bài không xuất hiện lặp trong cùng view.
+  const feedArticles = useMemo<NewsListItem[]>(() => {
+    if (!showGroups) return restArticles;
+    const previewIds = new Set<string>();
+    for (const group of grouped) for (const a of group.items.slice(0, 4)) previewIds.add(a.id);
+    return articles.filter(a => !heroIds.has(a.id) && !previewIds.has(a.id));
+  }, [showGroups, restArticles, grouped, articles, heroIds]);
 
   // Detail view. LƯU Ý: đặt SAU mọi hook (useMemo ở trên) để không vi phạm
   // Rules-of-Hooks — nếu return sớm trước useMemo, render lúc activeArticle=null và
   // lúc có bài sẽ gọi số hook khác nhau → React throw "Rendered fewer hooks".
   if (activeArticle) {
-    // Pool = tin đã tải + bài liên quan chọn tay (dedup), rồi xếp: tay trước, tự bù sau.
+    // Pool = tin tóm tắt đã tải + bài liên quan chọn tay (dedup), xếp: tay trước, tự
+    // bù sau. Feed giờ là NewsListItem (không content); pickRelated chỉ chấm điểm theo
+    // id/category/focus_keywords/created_at và sidebar chỉ đọc title/slug/image_url —
+    // đều có trong NewsListItem, nên cast an toàn ở runtime. manualRelated (NewsArticle
+    // đủ trường) ghi đè lên bản tóm tắt cùng id.
     const poolMap = new Map<string, NewsArticle>();
-    for (const a of [...articles, ...manualRelated]) poolMap.set(a.id, a);
+    for (const a of articles) poolMap.set(a.id, a as unknown as NewsArticle);
+    for (const a of manualRelated) poolMap.set(a.id, a);
     const related = pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
     return (
       <ArticleDetail
@@ -564,8 +630,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
               {cat}
             </Link>
           ))}
-          {!loading && articles.length > 0 && (
-            <span className="ml-auto text-xs text-gray-400">{articles.length} bài viết</span>
+          {!loading && total > 0 && (
+            <span className="ml-auto text-xs text-gray-400">Đã xem {articles.length}/{total} bài viết</span>
           )}
         </div>
       </div>
@@ -610,8 +676,9 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                 </div>
               )}
 
-              {/* Các section editorial: mỗi nhóm có card chính và danh sách bài phụ, tránh grid phẳng. */}
-              {grouped.map((group) => {
+              {/* Trang tổng (/tin-tuc): preview theo danh mục — mỗi nhóm 1 card chính
+                  + tối đa 3 bài phụ. Đây chỉ là điểm nhấn editorial; feed đầy đủ ở dưới. */}
+              {showGroups && grouped.map((group) => {
                 const sectionLead = group.items[0];
                 const sectionSide = group.items.slice(1, 4);
                 return (
@@ -639,10 +706,38 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
                   </section>
                 );
               })}
-              {!showGroups && gridArticles.length === 0 && (
-                <p className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-                  Chưa có thêm bài viết trong danh mục này.
-                </p>
+
+              {/* Feed đầy đủ: route danh mục = "Mới cập nhật" mọi bài sau hero; trang
+                  tổng = "Tất cả tin tức" mọi bài không nằm trong hero. Không slice —
+                  mọi bài đã load đều render, trang tải thêm nối vào đây. */}
+              {feedArticles.length > 0 && (
+                <section className="mb-10">
+                  <h2 className="mb-4 flex items-center gap-3 text-xl font-black text-gray-900">
+                    <span className="h-7 w-1 rounded-full bg-red-600" />
+                    {showGroups ? 'Tất cả tin tức' : 'Mới cập nhật'}
+                  </h2>
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                    {feedArticles.map(article => <ArticleCard key={article.id} article={article} />)}
+                  </div>
+                </section>
+              )}
+
+              {/* Nút "Tải thêm" (bấm tay/bàn phím) + sentinel observer. Chỉ đổi trạng
+                  thái ở đây, không thay cả feed khi tải trang kế. */}
+              {(hasNextPage || isFetchingNextPage) && (
+                <div ref={loadMoreRef} className="mt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage || !hasNextPage}
+                    className="rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {isFetchingNextPage ? 'Đang tải...' : 'Tải thêm bài viết'}
+                  </button>
+                </div>
+              )}
+              {!hasNextPage && total > 0 && articles.length >= total && (
+                <p className="mt-2 text-center text-xs text-gray-400">Đã hiển thị tất cả {total} bài viết.</p>
               )}
             </>
           )}

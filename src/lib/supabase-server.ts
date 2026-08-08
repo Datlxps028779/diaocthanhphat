@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
+import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
 import type { LocationTaxonomy } from './neighborhoodLocation';
@@ -375,6 +375,50 @@ export async function serverGetNews(limit = 20, category?: string): Promise<News
     if (category && category !== 'Tất cả') q = q.eq('category', category);
     const { data } = await q;
     return (data ?? []) as NewsArticle[];
+  } catch {
+    return [];
+  }
+}
+
+const NEWS_LIST_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,created_at,updated_at';
+
+export async function serverGetNewsPage({
+  category,
+  page = 1,
+  limit = 12,
+}: {
+  category?: string;
+  page?: number;
+  limit?: number;
+} = {}): Promise<NewsPageResult> {
+  try {
+    const sb = serverClient();
+    let q = sb
+      .from('news')
+      .select(NEWS_LIST_SELECT, { count: 'exact' })
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    if (category && category !== 'Tất cả') q = q.eq('category', category);
+    const { data, error, count } = await q.range((page - 1) * limit, page * limit - 1);
+    if (error) return { data: [], total: 0 };
+    return { data: (data ?? []) as NewsListItem[], total: count ?? 0 };
+  } catch {
+    return { data: [], total: 0 };
+  }
+}
+
+export async function serverGetMostViewedNews(limit = 8): Promise<NewsListItem[]> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('news')
+      .select(NEWS_LIST_SELECT)
+      .eq('is_published', true)
+      .order('views', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
+    return (data ?? []) as NewsListItem[];
   } catch {
     return [];
   }
