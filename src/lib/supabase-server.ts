@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem } from './supabase';
+import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow } from './supabase';
+import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
 import type { LocationTaxonomy } from './neighborhoodLocation';
@@ -421,6 +422,31 @@ export async function serverGetMostViewedNews(limit = 8): Promise<NewsListItem[]
     return (data ?? []) as NewsListItem[];
   } catch {
     return [];
+  }
+}
+
+// Danh mục tin tức phía server (build-time cho generateStaticParams/sitemap + metadata
+// route danh mục). Fallback về danh sách tĩnh newsCategories.ts khi bảng rỗng/lỗi, để
+// route/sitemap vẫn có 5 danh mục cũ ngay cả trước khi chạy migration production.
+const STATIC_NEWS_CATEGORY_FALLBACK: NewsCategoryRow[] = NEWS_CATEGORIES.map((label, i) => ({
+  id: `static-${i}`,
+  label,
+  slug: categoryToSlug(label) ?? '',
+  badge_color: 'slate',
+  seo_description: null,
+  order_index: i,
+  created_at: '',
+  updated_at: '',
+}));
+
+export async function serverGetNewsCategories(): Promise<NewsCategoryRow[]> {
+  try {
+    const sb = serverClient();
+    const { data, error } = await sb.from('news_categories').select('*').order('order_index');
+    if (error || !data || data.length === 0) return STATIC_NEWS_CATEGORY_FALLBACK;
+    return data as NewsCategoryRow[];
+  } catch {
+    return STATIC_NEWS_CATEGORY_FALLBACK;
   }
 }
 

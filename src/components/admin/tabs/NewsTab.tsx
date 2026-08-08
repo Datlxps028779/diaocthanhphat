@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
-import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews } from '../../../lib/api';
+import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews, getNewsCategories } from '../../../lib/api';
+import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata, buildNewsJsonLd } from '../../../lib/seo';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -15,7 +16,9 @@ import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 
-const CATEGORIES = ['Thị trường', 'Hạ tầng', 'Đầu tư', 'Hướng dẫn', 'Tài chính', 'Quy hoạch'];
+// Fallback tĩnh khi bảng news_categories chưa nạp (dùng danh sách chuẩn 5 nhãn,
+// KHÔNG còn 'Quy hoạch' lệch). Danh mục thật đổ động từ DB qua prop categories.
+const CATEGORIES_FALLBACK: string[] = [...NEWS_CATEGORIES];
 
 type NewsFormState = SeoFieldsValue & {
   title: string;
@@ -112,7 +115,7 @@ function initialForm(article: NewsArticle | null): NewsFormState {
   };
 }
 
-function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArticle | null; allArticles: NewsArticle[]; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
+function NewsForm({ article, allArticles, categories, onSave, onCancel }: { article: NewsArticle | null; allArticles: NewsArticle[]; categories: string[]; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
   const [form, setForm] = useState<NewsFormState>(() => initialForm(article));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -332,7 +335,7 @@ function NewsForm({ article, allArticles, onSave, onCancel }: { article: NewsArt
               <label className="mb-1 block text-xs font-semibold text-gray-700">Danh mục</label>
               <select value={form.category} onChange={e => set('category', e.target.value)}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                {categories.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -653,6 +656,8 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  // Danh mục động từ DB (news_categories). Fallback danh sách chuẩn khi chưa nạp/lỗi.
+  const [categories, setCategories] = useState<string[]>(CATEGORIES_FALLBACK);
   // Modal "Tạo bài bằng AI"
   const [aiOpen, setAiOpen] = useState(false);
   const [aiKeyword, setAiKeyword] = useState('');
@@ -681,6 +686,11 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
 
   const load = async () => { setLoading(true); const d = await adminGetAllNews(); setArticles(d); setLoading(false); };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    getNewsCategories()
+      .then(rows => { if (rows.length) setCategories(rows.map(r => r.label)); })
+      .catch(() => { /* giữ fallback tĩnh */ });
+  }, []);
 
   // Mở thẳng form sửa khi được điều hướng từ Entity Audit (SeoGeoTab).
   useEffect(() => {
@@ -723,6 +733,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
       <NewsForm
         article={editing}
         allArticles={articles}
+        categories={categories}
         onSave={async (payload) => {
           if (creating) await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
           else if (editing) await updateNews(editing.id, payload);

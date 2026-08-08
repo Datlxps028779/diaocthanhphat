@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
 import { type NewsArticle, type NewsListItem, type NewsPageResult } from '../lib/supabase';
-import { getNews, getNewsById, getNewsByIds, getNewsPage, getMostViewedNews, NEWS_PER_PAGE, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { getNews, getNewsById, getNewsByIds, getNewsPage, getMostViewedNews, getNewsCategories, NEWS_PER_PAGE, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { nextListingPageParam } from '../lib/listingPaging';
 import { type Page, pageToHref } from '../lib/router';
-import { NEWS_CATEGORIES } from '../lib/newsCategories';
+import { NEWS_CATEGORIES, setNewsCategorySlugMap } from '../lib/newsCategories';
 import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
 import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown';
@@ -22,13 +22,20 @@ import { extractHeadings, injectHeadingIds, TOC_MIN_HEADINGS } from '../lib/tabl
 import { ArticleToc } from '../components/ArticleToc';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 
-const CATEGORIES = ['Tất cả', ...NEWS_CATEGORIES] as const;
-type NewsCollection = typeof CATEGORIES[number];
+// Danh mục là chuỗi tự do (đổ động từ news_categories). Giữ alias để đọc dễ.
+type NewsCollection = string;
 
-function isNewsCollection(value: string | undefined): value is NewsCollection {
-  return Boolean(value && CATEGORIES.includes(value as NewsCollection));
-}
+// Màu badge theo KHÓA (khớp news_categories.badge_color + BADGE_COLORS trong admin).
+const BADGE_CLASS: Record<string, string> = {
+  blue: 'bg-blue-100 text-blue-700',
+  green: 'bg-green-100 text-green-700',
+  amber: 'bg-amber-100 text-amber-700',
+  purple: 'bg-purple-100 text-purple-700',
+  red: 'bg-red-100 text-red-700',
+  slate: 'bg-gray-100 text-gray-600',
+};
 
+// Fallback tĩnh theo nhãn khi chưa nạp màu động từ DB (5 danh mục gốc).
 const categoryColors: Record<string, string> = {
   'Thị trường': 'bg-blue-100 text-blue-700',
   'Hạ tầng': 'bg-green-100 text-green-700',
@@ -37,8 +44,18 @@ const categoryColors: Record<string, string> = {
   'Tài chính': 'bg-red-100 text-red-700',
 };
 
+// Cache màu badge runtime (label→className) nạp từ DB. Cho phép ArticleCard/
+// HorizontalCard ở tầng module đọc màu động mà không phải luồn prop xuống từng card.
+// Rỗng cho tới khi NewsPage nạp xong → khi rỗng thì rơi về map tĩnh bên trên.
+let runtimeCategoryColors: Record<string, string> = {};
+function setCategoryColorMap(rows: { label: string; badge_color: string }[]): void {
+  const m: Record<string, string> = {};
+  for (const r of rows) if (r.label && r.badge_color) m[r.label] = BADGE_CLASS[r.badge_color] ?? '';
+  runtimeCategoryColors = m;
+}
+
 function categoryBadge(cat: string) {
-  return categoryColors[cat] ?? 'bg-gray-100 text-gray-600';
+  return runtimeCategoryColors[cat] || categoryColors[cat] || 'bg-gray-100 text-gray-600';
 }
 
 function formatDate(iso: string) {
@@ -403,7 +420,7 @@ function ArticleDetail({
 
 /* ────────────────── NewsPage ────────────────── */
 export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
-  const [category, setCategory] = useState<NewsCollection>(isNewsCollection(initialCategory) ? initialCategory : 'Tất cả');
+  const [category, setCategory] = useState<NewsCollection>(initialCategory || 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
@@ -419,7 +436,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
   // Category mà server đã prefetch (route /tin-tuc → 'Tất cả', route
   // /tin-tuc/danh-muc/{slug} → nhãn danh mục). Seed SSR trang 1 khi view khớp đúng
   // cái server fetch để không nháy loading (kể cả trang danh mục).
-  const seedCategory: NewsCollection = isNewsCollection(initialCategory) ? initialCategory : 'Tất cả';
+  const seedCategory: NewsCollection = initialCategory || 'Tất cả';
   const seedMatch = category === seedCategory;
 
   // Feed phân trang nhẹ: mỗi trang là NewsListItem (không có content), nối tiếp bằng
@@ -460,6 +477,28 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
     initialData: initialMostViewed && initialMostViewed.length > 0 ? initialMostViewed : undefined,
     staleTime: 5 * 60_000,
   });
+
+  // Danh mục động từ DB (news_categories) cho tabs/topic-links/preview-group + màu badge.
+  // Fallback danh sách chuẩn NEWS_CATEGORIES khi chưa nạp. Nạp xong thì đồng bộ 2 cache
+  // runtime (slug-map cho pageToHref, color-map cho badge) để các link/badge ra đúng.
+  const { data: categoryRows = [] } = useQuery({
+    queryKey: ['news-categories'],
+    queryFn: () => getNewsCategories(),
+    staleTime: 5 * 60_000,
+  });
+  useEffect(() => {
+    if (categoryRows.length) {
+      setNewsCategorySlugMap(categoryRows);
+      setCategoryColorMap(categoryRows);
+    }
+  }, [categoryRows]);
+  // Nhãn danh mục theo order_index (fallback hằng số khi DB chưa nạp). tabLabels có
+  // "Tất cả" ở đầu cho bộ lọc trang tổng.
+  const categoryLabels = useMemo<string[]>(
+    () => (categoryRows.length ? categoryRows.map(r => r.label) : [...NEWS_CATEGORIES]),
+    [categoryRows],
+  );
+  const tabLabels = useMemo<string[]>(() => ['Tất cả', ...categoryLabels], [categoryLabels]);
 
   // Sentinel tự bấm "Tải thêm" khi cuộn tới cuối. Nút vẫn bấm tay được nếu observer
   // không chạy (trình duyệt cũ). Chỉ đổi trạng thái ở control, không thay cả feed.
@@ -545,10 +584,10 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
       if (!byCat.has(c)) byCat.set(c, []);
       byCat.get(c)!.push(a);
     }
-    const ordered = CATEGORIES.filter(c => c !== 'Tất cả').filter(c => byCat.has(c));
-    const extras = Array.from(byCat.keys()).filter(c => !CATEGORIES.includes(c as NewsCollection));
+    const ordered = categoryLabels.filter(c => byCat.has(c));
+    const extras = Array.from(byCat.keys()).filter(c => !categoryLabels.includes(c));
     return [...ordered, ...extras].map(c => ({ category: c, items: byCat.get(c)! }));
-  }, [restArticles, showGroups]);
+  }, [restArticles, showGroups, categoryLabels]);
 
   // Feed đầy đủ ở dưới. Route danh mục: mọi bài sau hero. Trang tổng: mọi bài không
   // nằm trong hero VÀ không thuộc preview chuyên mục (lead + 3 phụ mỗi nhóm) để một
@@ -616,7 +655,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
       {/* Category filter */}
       <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-2">
-          {CATEGORIES.map((cat) => (
+          {tabLabels.map((cat) => (
             <Link
               key={cat}
               href={pageToHref({ name: 'news', category: cat })}
@@ -775,7 +814,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                 <span className="h-7 w-1 rounded-full bg-red-600" /> Chủ đề nổi bật
               </h4>
               <div className="flex flex-wrap gap-2">
-                {NEWS_CATEGORIES.map(cat => (
+                {categoryLabels.map(cat => (
                   <Link key={cat} href={pageToHref({ name: 'news', category: cat })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:border-red-300 hover:text-red-600">
                     {cat}
                   </Link>

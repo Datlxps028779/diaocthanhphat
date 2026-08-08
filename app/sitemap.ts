@@ -136,6 +136,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
+    // Danh mục tin tức động (news_categories): thêm các slug chưa có trong STATIC (STATIC
+    // đã liệt 5 slug gốc). Danh mục admin thêm mới sẽ vào sitemap sau revalidate.
+    const staticCatSlugs = new Set(NEWS_CATEGORY_SLUGS);
+    const catRows = await sb.from('news_categories').select('slug').limit(500);
+    for (const c of (catRows.data ?? []) as Array<{ slug: string }>) {
+      if (!c.slug || staticCatSlugs.has(c.slug)) continue;
+      entries.push({
+        url: `${SITE_URL}/tin-tuc/danh-muc/${c.slug}`,
+        changeFrequency: 'weekly',
+        priority: 0.55,
+      });
+    }
+
     const pages = await sb.from('managed_pages').select('slug,updated_at').eq('is_active', true).eq('is_system', false).limit(5000);
     for (const page of (pages.data ?? []) as Array<{ slug: string; updated_at?: string | null }>) {
       entries.push({

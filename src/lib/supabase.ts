@@ -34,6 +34,12 @@ export type Neighborhood = {
 export type PropertyType = {
   id: string; name: string; slug: string; icon: string | null; created_at: string;
 };
+// Danh mục tin tức động (bảng news_categories). label khớp CHÍNH XÁC cột news.category.
+export type NewsCategoryRow = {
+  id: string; label: string; slug: string;
+  badge_color: string; seo_description: string | null;
+  order_index: number; created_at: string; updated_at: string;
+};
 export type ListingType = 'mua_ban' | 'cho_thue';
 export type Property = {
   id: string; title: string; description: string | null;

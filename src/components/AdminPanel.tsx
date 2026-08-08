@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -30,6 +30,7 @@ const HomeExperienceTab = lazy(() => import('./admin/tabs/HomeExperienceTab').th
 const PagesTab = lazy(() => import('./admin/tabs/PagesTab').then(m => ({ default: m.PagesTab })));
 const NeighborhoodsTab = lazy(() => import('./admin/tabs/NeighborhoodsTab').then(m => ({ default: m.NeighborhoodsTab })));
 const MenuTab = lazy(() => import('./admin/tabs/MenuTab').then(m => ({ default: m.MenuTab })));
+const NewsCategoriesTab = lazy(() => import('./admin/tabs/NewsCategoriesTab').then(m => ({ default: m.NewsCategoriesTab })));
 const FooterTab = lazy(() => import('./admin/tabs/FooterTab').then(m => ({ default: m.FooterTab })));
 const SiteSettingsTab = lazy(() => import('./admin/tabs/SiteSettingsTab').then(m => ({ default: m.SiteSettingsTab })));
 const BackupTab = lazy(() => import('./admin/tabs/BackupTab').then(m => ({ default: m.BackupTab })));
@@ -102,6 +103,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
     { id: 'projects', label: 'Dự án', icon: <FolderOpen className="w-4 h-4" /> },
     { id: 'news', label: 'Tin tức', icon: <Newspaper className="w-4 h-4" /> },
+    { id: 'news-categories', label: 'Danh mục tin tức', icon: <Tag className="w-4 h-4" /> },
     { id: 'testimonials', label: 'Đánh giá', icon: <Star className="w-4 h-4" /> },
     { id: 'cms', label: 'Nội dung trang', icon: <Type className="w-4 h-4" /> },
     { id: 'banners', label: 'Banners', icon: <ImageIcon className="w-4 h-4" /> },
@@ -202,6 +204,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           {tab === 'staff' && <StaffTab />}
           {tab === 'projects' && <ProjectsTab />}
           {tab === 'news' && <NewsTab focusEditId={pendingEdit?.tab === 'news' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
+          {tab === 'news-categories' && <NewsCategoriesTab />}
           {tab === 'testimonials' && <TestimonialsTab />}
           {tab === 'cms' && <CmsContentTab />}
           {tab === 'banners' && <BannersTab />}

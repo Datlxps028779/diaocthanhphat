@@ -1,4 +1,4 @@
-import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType } from '../supabase';
+import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType, type NewsCategoryRow } from '../supabase';
 
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
@@ -81,4 +81,54 @@ export async function adminDeleteNeighborhood(id: string, slug?: string): Promis
 export async function getPropertyTypes(): Promise<PropertyType[]> {
   const { data } = await supabase.from('property_types').select('*').order('name');
   return data ?? [];
+}
+
+// ─── News Categories (Danh mục tin tức) ─────────────────────────────────────────
+export async function getNewsCategories(): Promise<NewsCategoryRow[]> {
+  const { data } = await supabase.from('news_categories').select('*').order('order_index');
+  return (data ?? []) as NewsCategoryRow[];
+}
+export async function adminCreateNewsCategory(c: Omit<NewsCategoryRow, 'id' | 'created_at' | 'updated_at'>): Promise<void> {
+  const { error } = await supabase.from('news_categories').insert(c);
+  if (error) throw error;
+}
+// Cập nhật danh mục. Nếu đổi label/slug so với giá trị cũ → gọi RPC rename_news_category
+// (atomic: đổi label/slug + cascade news.category cũ→mới), rồi update các trường còn lại
+// (badge_color/seo_description/order_index). Không đổi label/slug → update thường.
+export async function adminUpdateNewsCategory(
+  id: string,
+  c: Partial<NewsCategoryRow>,
+  oldLabel?: string,
+  oldSlug?: string,
+): Promise<void> {
+  const labelChanged = oldLabel != null && c.label != null && c.label !== oldLabel;
+  const slugChanged = oldSlug != null && c.slug != null && c.slug !== oldSlug;
+  if (labelChanged || slugChanged) {
+    const { error: rpcError } = await supabase.rpc('rename_news_category', {
+      p_id: id,
+      p_old_label: oldLabel,
+      p_new_label: c.label ?? oldLabel,
+      p_new_slug: c.slug ?? oldSlug,
+    });
+    if (rpcError) throw rpcError;
+    const { label: _label, slug: _slug, ...rest } = c;
+    if (Object.keys(rest).length) {
+      const { error } = await supabase.from('news_categories').update(rest).eq('id', id);
+      if (error) throw error;
+    }
+    return;
+  }
+  const { error } = await supabase.from('news_categories').update(c).eq('id', id);
+  if (error) throw error;
+}
+// Xoá danh mục — CHẶN nếu còn bài viết mang nhãn này (tránh bài mồ côi khỏi route).
+export async function adminDeleteNewsCategory(id: string, label: string): Promise<void> {
+  const { count, error: countError } = await supabase
+    .from('news').select('id', { count: 'exact', head: true }).eq('category', label);
+  if (countError) throw countError;
+  if ((count ?? 0) > 0) {
+    throw new Error(`Danh mục "${label}" còn ${count} bài viết. Hãy chuyển hoặc xoá bài trước khi xoá danh mục.`);
+  }
+  const { error } = await supabase.from('news_categories').delete().eq('id', id);
+  if (error) throw error;
 }
