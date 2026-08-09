@@ -12,7 +12,7 @@ import { type Property } from './lib/supabase';
 import {
   getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
-  getPageLayout, buildPropertyPath,
+  getPageLayout, buildPropertyPath, getNewsCategories,
 } from './lib/api';
 import { captureSignalFromProperty } from './lib/captureSignal';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
@@ -74,7 +74,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [activeTab, setActiveTab] = useState<'mua_ban' | 'cho_thue'>('mua_ban');
-  const [activeNewsTab, setActiveNewsTab] = useState<'Tin tức' | typeof NEWS_CATEGORIES[number]>('Tin tức');
+  // Tab tin tức là chuỗi tự do vì danh mục nay đổ động từ news_categories (admin xoá/
+  // thêm được). 'Tin tức' là tab "tất cả".
+  const [activeNewsTab, setActiveNewsTab] = useState<string>('Tin tức');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
 
@@ -90,6 +92,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const { data: searchWards = [] } = useWards(searchDistrictId || undefined);
   const { data: testimonials = [] } = useQuery({ queryKey: qk.testimonials(), queryFn: getTestimonials });
   const { data: news = [] } = useQuery({ queryKey: qk.news(undefined, 20), queryFn: () => getNews(undefined, 20) });
+  // Danh mục tin tức động từ DB (news_categories) — nguồn chân lý cho tab. Fallback
+  // NEWS_CATEGORIES tĩnh khi chưa nạp. Xoá danh mục trong admin → tab tự biến mất.
+  const { data: newsCategoryRows = [] } = useQuery({ queryKey: ['news-categories'], queryFn: () => getNewsCategories(), staleTime: 5 * 60_000 });
   const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
   const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
@@ -405,10 +410,16 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </section>
         );
 
-        const newsTabs = ['Tin tức', ...NEWS_CATEGORIES] as const;
-        const currentNews = activeNewsTab === 'Tin tức'
+        // Nhãn động theo order_index (fallback tĩnh khi DB chưa nạp). Nếu tab đang chọn
+        // đã bị xoá khỏi DB thì coi như 'Tin tức' để không lọc ra danh sách rỗng.
+        const newsCategoryLabels = newsCategoryRows.length
+          ? newsCategoryRows.map(r => r.label)
+          : [...NEWS_CATEGORIES];
+        const newsTabs = ['Tin tức', ...newsCategoryLabels];
+        const effectiveNewsTab = newsTabs.includes(activeNewsTab) ? activeNewsTab : 'Tin tức';
+        const currentNews = effectiveNewsTab === 'Tin tức'
           ? news
-          : news.filter(article => article.category === activeNewsTab);
+          : news.filter(article => article.category === effectiveNewsTab);
         const leadNews = currentNews[0];
         const highlightNews = currentNews.slice(1, 5);
         const visibleNewsIds = new Set([leadNews, ...highlightNews].filter(Boolean).map(article => article.id));
@@ -420,7 +431,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           pageToHref({ name: 'news', slug: article.slug ?? undefined, articleId: article.id });
         const allNewsHref = pageToHref({
           name: 'news',
-          category: activeNewsTab === 'Tin tức' ? undefined : activeNewsTab,
+          category: effectiveNewsTab === 'Tin tức' ? undefined : effectiveNewsTab,
         });
 
         return (
@@ -474,9 +485,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                         <button
                           key={tab}
                           type="button"
-                          aria-pressed={activeNewsTab === tab}
+                          aria-pressed={effectiveNewsTab === tab}
                           onClick={() => setActiveNewsTab(tab)}
-                          className={`shrink-0 rounded-lg px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-red-200 ${activeNewsTab === tab ? 'bg-white text-red-600 shadow-sm' : 'hover:text-red-600'}`}
+                          className={`shrink-0 rounded-lg px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-red-200 ${effectiveNewsTab === tab ? 'bg-white text-red-600 shadow-sm' : 'hover:text-red-600'}`}
                         >
                           {tab}
                         </button>
