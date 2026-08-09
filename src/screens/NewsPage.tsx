@@ -180,6 +180,34 @@ function HorizontalCard({ article }: { article: NewsListItem }) {
   );
 }
 
+/* ────────────────── List Row (danh sách chuyên mục 2 cột) ────────────────── */
+function NewsListRow({ article }: { article: NewsListItem }) {
+  const imgUrl =
+    (article as any).image_url ||
+    'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
+  const readMin = estimateReadTime((article as any).content ?? article.excerpt ?? '');
+  const href = articleHref(article);
+  return (
+    <Link href={href} className="group flex gap-4">
+      <BlurFillImage
+        src={imgUrl}
+        alt={buildNewsImageAlt(article)}
+        sizes="120px"
+        wrapperClassName="h-20 w-28 shrink-0 overflow-hidden rounded-xl"
+      />
+      <div className="flex min-w-0 flex-col justify-center">
+        <h3 className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
+          {article.title}
+        </h3>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}</span>
+          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {readMin} phút đọc</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 /* ────────────────── Article Detail ────────────────── */
 function ArticleDetail({
   article,
@@ -675,18 +703,19 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
         </div>
       </div>
 
+      {/* Thân trang: nội dung chính + sidebar (hero nằm trong cột chính, cạnh sidebar) */}
       <div className="max-w-7xl mx-auto px-4 py-10 lg:flex gap-8">
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-2xl overflow-hidden shadow animate-pulse h-72" />
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-24 animate-pulse shadow-sm" />)}
+            <div className="space-y-8">
+              <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
+                <div className="lg:col-span-2 h-72 rounded-3xl bg-white shadow animate-pulse md:h-[26rem]" />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:h-full">
+                  {Array.from({ length: 4 }).map((_, i) => <div key={i} className="min-h-40 rounded-2xl bg-white shadow-sm animate-pulse" />)}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             </div>
@@ -696,17 +725,17 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
             </div>
           ) : (
             <>
-              {/* Khối nổi bật: 1 bài lớn (2/3) + tối đa 3 bài phụ (1/3) giãn đều theo
-                  chiều cao bài lớn để không hở khoảng trống. */}
+              {/* Khối nổi bật: 1 bài lớn (2/3) + tối đa 4 bài phụ (1/3, lưới 2×2) giãn
+                  đều theo chiều cao bài lớn. */}
               {featured && (
-                <div className="grid grid-cols-1 gap-5 mb-8 lg:grid-cols-2 lg:items-stretch">
-                  <div>
+                <div className="mb-10 grid gap-4 lg:grid-cols-3 lg:items-stretch">
+                  <div className="lg:col-span-2">
                     <ArticleCard article={featured} large />
                   </div>
                   {heroSide.length > 0 && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:h-full">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:h-full">
                       {heroSide.map((a) => (
-                        <div key={a.id} className="min-h-24 lg:min-h-0">
+                        <div key={a.id} className="min-h-40 lg:min-h-0">
                           <HorizontalCard article={a} />
                         </div>
                       ))}
@@ -715,43 +744,40 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                 </div>
               )}
 
-              {/* Trang tổng (/tin-tuc): preview theo danh mục — mỗi nhóm 1 card chính
-                  + tối đa 3 bài phụ. Đây chỉ là điểm nhấn editorial; feed đầy đủ ở dưới. */}
-              {showGroups && grouped.map((group) => {
-                const sectionLead = group.items[0];
-                const sectionSide = group.items.slice(1, 4);
-                return (
-                  <section key={group.category} className="mb-10">
-                    <div className="mb-4 flex items-center justify-between">
-                      <h2 className="flex items-center gap-3 text-xl font-black text-gray-900">
-                        <span className="h-7 w-1 rounded-full bg-red-600" />
-                        {group.category}
-                      </h2>
-                      <Link
-                        href={pageToHref({ name: 'news', category: group.category })}
-                        className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:underline"
-                      >
-                        Xem thêm <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </div>
-                    <div className="grid gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                      {sectionLead && <ArticleCard article={sectionLead} />}
-                      {sectionSide.length > 0 && (
-                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
-                          {sectionSide.map(article => <HorizontalCard key={article.id} article={article} />)}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                );
-              })}
+              {/* Trang tổng (/tin-tuc): preview chuyên mục dạng DANH SÁCH gọn, 2 cột.
+                  Mỗi nhóm tối đa 4 bài + "Xem thêm"; feed đầy đủ nằm bên dưới. */}
+              {showGroups && grouped.length > 0 && (
+                <div className="mb-10 grid gap-x-8 gap-y-8 md:grid-cols-2">
+                  {grouped.map((group) => (
+                    <section key={group.category}>
+                      <div className="mb-4 flex items-center justify-between border-b-2 border-gray-100 pb-2">
+                        <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
+                          <span className="h-5 w-1 rounded-full bg-red-600" />
+                          {group.category}
+                        </h2>
+                        <Link
+                          href={pageToHref({ name: 'news', category: group.category })}
+                          className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline"
+                        >
+                          Xem thêm <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                      <div className="space-y-4">
+                        {group.items.slice(0, 4).map((article) => (
+                          <NewsListRow key={article.id} article={article} />
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
 
               {/* Feed đầy đủ: route danh mục = "Mới cập nhật" mọi bài sau hero; trang
                   tổng = "Tất cả tin tức" mọi bài không nằm trong hero. Không slice —
                   mọi bài đã load đều render, trang tải thêm nối vào đây. */}
               {feedArticles.length > 0 && (
                 <section className="mb-10">
-                  <h2 className="mb-4 flex items-center gap-3 text-xl font-black text-gray-900">
+                  <h2 className="mb-5 flex items-center gap-3 text-xl font-black text-gray-900">
                     <span className="h-7 w-1 rounded-full bg-red-600" />
                     {showGroups ? 'Tất cả tin tức' : 'Mới cập nhật'}
                   </h2>
