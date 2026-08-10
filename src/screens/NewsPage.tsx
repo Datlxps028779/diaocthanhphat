@@ -45,6 +45,15 @@ const categoryColors: Record<string, string> = {
   'Tài chính': 'bg-red-100 text-red-700',
 };
 
+const NEWS_FALLBACK_IMAGE =
+  'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=1200';
+
+function useFallbackNewsImage(event: React.SyntheticEvent<HTMLImageElement>) {
+  const image = event.currentTarget;
+  image.onerror = null;
+  image.src = NEWS_FALLBACK_IMAGE;
+}
+
 // Cache màu badge runtime (label→className) nạp từ DB. Cho phép ArticleCard/
 // HorizontalCard ở tầng module đọc màu động mà không phải luồn prop xuống từng card.
 // Rỗng cho tới khi NewsPage nạp xong → khi rỗng thì rơi về map tĩnh bên trên.
@@ -100,23 +109,21 @@ function ArticleCard({
   article: NewsListItem;
   large?: boolean;
 }) {
-  const imgUrl =
-    (article as any).image_url ||
-    'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=600';
+  const imgUrl = (article as any).image_url || NEWS_FALLBACK_IMAGE;
   const readMin = estimateReadTime((article as any).content ?? article.excerpt ?? '');
   const cat = (article as any).category ?? '';
   const href = articleHref(article);
 
   if (large) {
     return (
-      <Link href={href} className="group relative block min-h-[22rem] overflow-hidden rounded-2xl bg-gray-900 shadow-md transition-shadow hover:shadow-xl md:min-h-[30rem]">
-        <BlurFillImage
+      <Link href={href} className="group relative block min-h-[22rem] overflow-hidden rounded-2xl bg-gray-900 shadow-md transition-shadow hover:shadow-xl md:min-h-[30rem] lg:h-[34rem]">
+        <img
           src={imgUrl}
           alt={buildNewsImageAlt(article)}
-          sizes="(max-width: 768px) 100vw, 50vw"
-          wrapperClassName="absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-105"
+          onError={useFallbackNewsImage}
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-950/95 via-gray-900/20 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-5 text-white md:p-7">
           {cat && <span className="inline-flex rounded-lg bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">{cat}</span>}
           <h2 className="mt-4 line-clamp-3 text-2xl font-black leading-tight md:text-3xl">{article.title}</h2>
@@ -161,14 +168,12 @@ function ArticleCard({
 
 /* ────────────────── Horizontal Card (khối phụ cạnh bài nổi bật) ────────────────── */
 function HorizontalCard({ article }: { article: NewsListItem }) {
-  const imgUrl =
-    (article as any).image_url ||
-    'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
+  const imgUrl = (article as any).image_url || NEWS_FALLBACK_IMAGE;
   const cat = (article as any).category ?? '';
   const href = articleHref(article);
   return (
-    <Link href={href} className="group relative block min-h-40 overflow-hidden rounded-xl bg-gray-900 shadow-sm transition-shadow hover:shadow-lg sm:min-h-48">
-      <img src={imgUrl} alt={buildNewsImageAlt(article)} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+    <Link href={href} className="group relative block h-full min-h-44 overflow-hidden rounded-xl bg-gray-900 shadow-sm transition-shadow hover:shadow-lg sm:min-h-52 lg:min-h-0">
+      <img src={imgUrl} alt={buildNewsImageAlt(article)} onError={useFallbackNewsImage} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
       <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/20 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-4 text-white">
         {cat && <span className="inline-flex rounded-md bg-red-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide">{cat}</span>}
@@ -672,6 +677,62 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
     );
   }
 
+  const sidebar = (
+    <aside className="w-full min-w-0 lg:w-72">
+      <div className="space-y-5 lg:sticky lg:top-24">
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
+            <span className="h-7 w-1 rounded-full bg-red-600" /> Đọc nhiều nhất
+          </h4>
+          <div className="space-y-4">
+            {mostViewed.map((a, i) => {
+              const img = (a as any).image_url || NEWS_FALLBACK_IMAGE;
+              const views = (a as any).views ?? 0;
+              return (
+                <Link key={a.id} href={articleHref(a)} className="group flex w-full gap-3 text-left transition-opacity hover:opacity-80">
+                  <span className="w-5 shrink-0 pt-0.5 text-center text-lg font-black leading-none text-gray-300">{i + 1}</span>
+                  <img src={img} alt={buildNewsImageAlt(a)} onError={useFallbackNewsImage} className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{a.title}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-400"><Eye className="h-3 w-3" /> {views.toLocaleString('vi-VN')} lượt xem</p>
+                  </div>
+                </Link>
+              );
+            })}
+            {loading && <div className="h-20 animate-pulse rounded-lg bg-gray-100" />}
+            {!loading && mostViewed.length === 0 && <p className="text-sm text-gray-400">Chưa có bài viết nào khác.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
+            <span className="h-7 w-1 rounded-full bg-red-600" /> Chủ đề nổi bật
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {categoryLabels.map(cat => (
+              <Link key={cat} href={pageToHref({ name: 'news', category: cat })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:border-red-300 hover:text-red-600">
+                {cat}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-red-50 p-5">
+          <h5 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-800"><Mail className="h-4 w-4 text-red-500" />{g('newsletter','title','Nhận tin tức mới nhất')}</h5>
+          <p className="mb-3 text-xs text-gray-500">{g('newsletter','subtitle','Đăng ký để nhận cập nhật thị trường hàng tuần')}</p>
+          {newsletterSent ? (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700"><CheckCircle className="h-4 w-4" />Đã đăng ký thành công!</div>
+          ) : (
+            <>
+              <input type="email" value={newsletterEmail} onChange={e => setNewsletterEmail(e.target.value)} placeholder={g('newsletter','placeholder','Email của bạn')} className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-400" onKeyDown={e => e.key === 'Enter' && !newsletterLoading && handleNewsletterSubmit()} />
+              <button onClick={handleNewsletterSubmit} disabled={newsletterLoading || !newsletterEmail.trim()} className="w-full rounded-lg bg-red-600 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-60">{newsletterLoading ? 'Đang đăng ký...' : g('newsletter','btn','Đăng ký')}</button>
+            </>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
@@ -726,16 +787,15 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
         </div>
       </div>
 
-      {/* Thân trang: nội dung chính + sidebar (hero nằm trong cột chính, cạnh sidebar) */}
-      <div className="max-w-7xl mx-auto px-4 py-10 lg:flex gap-8">
-        {/* Main content */}
-        <div className="flex-1 min-w-0">
+      {/* Hero dùng trọn chiều rộng; sidebar chỉ bắt đầu ở phần nội dung phía dưới. */}
+      <div className="mx-auto max-w-7xl px-4 py-10">
+        <div className="min-w-0">
           {loading ? (
             <div className="space-y-8">
-              <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
-                <div className="lg:col-span-2 h-72 rounded-3xl bg-white shadow animate-pulse md:h-[26rem]" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:h-full">
-                  {Array.from({ length: 4 }).map((_, i) => <div key={i} className="min-h-40 rounded-2xl bg-white shadow-sm animate-pulse" />)}
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:items-stretch">
+                <div className="h-72 rounded-3xl bg-white shadow animate-pulse md:h-[30rem] lg:h-[34rem]" />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-rows-2">
+                  {Array.from({ length: 4 }).map((_, i) => <div key={i} className="min-h-44 rounded-2xl bg-white shadow-sm animate-pulse sm:min-h-52 lg:min-h-0" />)}
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
@@ -748,29 +808,25 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
             </div>
           ) : (
             <>
-              {/* Khối nổi bật: 1 bài lớn (2/3) + tối đa 4 bài phụ (1/3, lưới 2×2) giãn
-                  đều theo chiều cao bài lớn. */}
+              {/* Khối nổi bật dùng trọn chiều rộng: bài lớn + 4 bài phụ 2×2. */}
               {featured && (
-                <div className="mb-10 grid gap-4 lg:grid-cols-3 lg:items-stretch">
-                  <div className="lg:col-span-2">
-                    <ArticleCard article={featured} large />
-                  </div>
+                <div className="mb-10 grid gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:items-stretch">
+                  <ArticleCard article={featured} large />
                   {heroSide.length > 0 && (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:h-full">
-                      {heroSide.map((a) => (
-                        <div key={a.id} className="min-h-40 lg:min-h-0">
-                          <HorizontalCard article={a} />
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-rows-2">
+                      {heroSide.map((a) => <HorizontalCard key={a.id} article={a} />)}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Trang tổng (/tin-tuc): preview chuyên mục dạng DANH SÁCH gọn, 2 cột.
-                  Mỗi nhóm tối đa 4 bài + "Xem thêm"; feed đầy đủ nằm bên dưới. */}
-              {showGroups && grouped.length > 0 && (
-                <div className="mb-10 grid gap-x-8 gap-y-8 md:grid-cols-2">
+              {/* Nội dung dưới hero mới đặt cạnh sidebar để ảnh nổi bật không bị bó hẹp. */}
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+                <div className="min-w-0">
+                  {/* Trang tổng (/tin-tuc): preview chuyên mục dạng DANH SÁCH gọn, 2 cột.
+                      Mỗi nhóm tối đa 4 bài + "Xem thêm"; feed đầy đủ nằm bên dưới. */}
+                  {showGroups && grouped.length > 0 && (
+                    <div className="mb-10 grid gap-x-8 gap-y-8 md:grid-cols-2">
                   {grouped.map((group, index) => (
                     <section key={group.category} className={grouped.length % 2 === 1 && index === grouped.length - 1 ? 'md:col-span-2' : ''}>
                       <div className="mb-4 flex items-center justify-between border-b-2 border-gray-100 pb-2">
@@ -842,81 +898,29 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                 </section>
               )}
 
-              {/* Nút "Tải thêm" (bấm tay/bàn phím) + sentinel observer. Chỉ đổi trạng
-                  thái ở đây, không thay cả feed khi tải trang kế. */}
-              {(hasNextPage || isFetchingNextPage) && (
-                <div ref={loadMoreRef} className="mt-2 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => fetchNextPage()}
-                    disabled={isFetchingNextPage || !hasNextPage}
-                    className="rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
-                  >
-                    {isFetchingNextPage ? 'Đang tải...' : 'Tải thêm bài viết'}
-                  </button>
+                  {/* Nút "Tải thêm" (bấm tay/bàn phím) + sentinel observer. Chỉ đổi trạng
+                      thái ở đây, không thay cả feed khi tải trang kế. */}
+                  {(hasNextPage || isFetchingNextPage) && (
+                    <div ref={loadMoreRef} className="mt-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage || !hasNextPage}
+                        className="rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                      >
+                        {isFetchingNextPage ? 'Đang tải...' : 'Tải thêm bài viết'}
+                      </button>
+                    </div>
+                  )}
+                  {!hasNextPage && total > 0 && articles.length >= total && (
+                    <p className="mt-2 text-center text-xs text-gray-400">Đã hiển thị tất cả {total} bài viết.</p>
+                  )}
                 </div>
-              )}
-              {!hasNextPage && total > 0 && articles.length >= total && (
-                <p className="mt-2 text-center text-xs text-gray-400">Đã hiển thị tất cả {total} bài viết.</p>
-              )}
+                {sidebar}
+              </div>
             </>
           )}
         </div>
-
-        {/* Sidebar */}
-        <aside className="mt-8 w-full shrink-0 lg:mt-0 lg:w-72">
-          <div className="space-y-5 lg:sticky lg:top-24">
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
-                <span className="h-7 w-1 rounded-full bg-red-600" /> Đọc nhiều nhất
-              </h4>
-              <div className="space-y-4">
-                {mostViewed.map((a, i) => {
-                  const img = (a as any).image_url || 'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=200';
-                  const views = (a as any).views ?? 0;
-                  return (
-                    <Link key={a.id} href={articleHref(a)} className="group flex w-full gap-3 text-left transition-opacity hover:opacity-80">
-                      <span className="w-5 shrink-0 pt-0.5 text-center text-lg font-black leading-none text-gray-300">{i + 1}</span>
-                      <img src={img} alt={buildNewsImageAlt(a)} className="h-14 w-14 shrink-0 rounded-lg object-cover" />
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{a.title}</p>
-                        <p className="mt-1 flex items-center gap-1 text-xs text-gray-400"><Eye className="h-3 w-3" /> {views.toLocaleString('vi-VN')} lượt xem</p>
-                      </div>
-                    </Link>
-                  );
-                })}
-                {loading && <div className="h-20 animate-pulse rounded-lg bg-gray-100" />}
-                {!loading && mostViewed.length === 0 && <p className="text-sm text-gray-400">Chưa có bài viết nào khác.</p>}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
-                <span className="h-7 w-1 rounded-full bg-red-600" /> Chủ đề nổi bật
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {categoryLabels.map(cat => (
-                  <Link key={cat} href={pageToHref({ name: 'news', category: cat })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:border-red-300 hover:text-red-600">
-                    {cat}
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-red-50 p-5">
-              <h5 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-800"><Mail className="h-4 w-4 text-red-500" />{g('newsletter','title','Nhận tin tức mới nhất')}</h5>
-              <p className="mb-3 text-xs text-gray-500">{g('newsletter','subtitle','Đăng ký để nhận cập nhật thị trường hàng tuần')}</p>
-              {newsletterSent ? (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700"><CheckCircle className="h-4 w-4" />Đã đăng ký thành công!</div>
-              ) : (
-                <>
-                  <input type="email" value={newsletterEmail} onChange={e => setNewsletterEmail(e.target.value)} placeholder={g('newsletter','placeholder','Email của bạn')} className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-400" onKeyDown={e => e.key === 'Enter' && !newsletterLoading && handleNewsletterSubmit()} />
-                  <button onClick={handleNewsletterSubmit} disabled={newsletterLoading || !newsletterEmail.trim()} className="w-full rounded-lg bg-red-600 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-60">{newsletterLoading ? 'Đang đăng ký...' : g('newsletter','btn','Đăng ký')}</button>
-                </>
-              )}
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   );
