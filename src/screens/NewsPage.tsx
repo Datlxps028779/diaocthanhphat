@@ -187,24 +187,28 @@ function HorizontalCard({ article }: { article: NewsListItem }) {
 }
 
 /* ────────────────── List Row (danh sách chuyên mục 2 cột) ────────────────── */
-function NewsListRow({ article }: { article: NewsListItem }) {
+function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; showExcerpt?: boolean }) {
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
   const readMin = estimateReadTime((article as any).content ?? article.excerpt ?? '');
+  const excerpt = stripHtml(article.excerpt ?? '');
   const href = articleHref(article);
   return (
     <Link href={href} className="group flex gap-4">
       <BlurFillImage
         src={imgUrl}
         alt={buildNewsImageAlt(article)}
-        sizes="120px"
-        wrapperClassName="h-20 w-28 shrink-0 overflow-hidden rounded-xl"
+        sizes={showExcerpt ? '144px' : '120px'}
+        wrapperClassName={showExcerpt ? 'h-24 w-32 shrink-0 overflow-hidden rounded-xl sm:w-36' : 'h-20 w-28 shrink-0 overflow-hidden rounded-xl'}
       />
       <div className="flex min-w-0 flex-col justify-center">
-        <h3 className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
+        <h3 className={`${showExcerpt ? 'text-base' : 'text-sm'} line-clamp-2 font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600`}>
           {article.title}
         </h3>
+        {showExcerpt && excerpt && (
+          <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">{excerpt}</p>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
           <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}</span>
           <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {readMin} phút đọc</span>
@@ -458,7 +462,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
-  const [feedView, setFeedView] = useState<'grid' | 'list'>('grid');
+  const [feedView, setFeedView] = useState<'grid' | 'list'>('list');
 
   const { data: cms = {} } = useQuery({
     queryKey: qk.pageBlocks('news'),
@@ -889,8 +893,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                   ) : (
                     <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white px-4 shadow-sm">
                       {feedArticles.map(article => (
-                        <div key={article.id} className="py-3">
-                          <NewsListRow article={article} />
+                        <div key={article.id} className="py-4">
+                          <NewsListRow article={article} showExcerpt />
                         </div>
                       ))}
                     </div>
