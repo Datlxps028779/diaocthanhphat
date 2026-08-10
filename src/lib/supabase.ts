@@ -38,7 +38,8 @@ export type PropertyType = {
 export type NewsCategoryRow = {
   id: string; label: string; slug: string;
   badge_color: string; seo_description: string | null;
-  order_index: number; created_at: string; updated_at: string;
+  order_index: number; show_in_news_sections: boolean;
+  created_at: string; updated_at: string;
 };
 export type ListingType = 'mua_ban' | 'cho_thue';
 export type Property = {

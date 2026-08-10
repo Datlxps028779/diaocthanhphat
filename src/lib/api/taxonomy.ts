@@ -92,6 +92,13 @@ export async function adminCreateNewsCategory(c: Omit<NewsCategoryRow, 'id' | 'c
   const { error } = await supabase.from('news_categories').insert(c);
   if (error) throw error;
 }
+export async function adminReorderNewsCategories(items: Array<{ id: string; order_index: number }>): Promise<void> {
+  const results = await Promise.all(items.map(item =>
+    supabase.from('news_categories').update({ order_index: item.order_index }).eq('id', item.id),
+  ));
+  const failed = results.find(result => result.error);
+  if (failed?.error) throw failed.error;
+}
 // Cập nhật danh mục. Nếu đổi label/slug so với giá trị cũ → gọi RPC rename_news_category
 // (atomic: đổi label/slug + cascade news.category cũ→mới), rồi update các trường còn lại
 // (badge_color/seo_description/order_index). Không đổi label/slug → update thường.

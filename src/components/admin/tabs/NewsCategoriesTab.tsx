@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Tag, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Tag, AlertCircle, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react';
 import type { NewsCategoryRow } from '../../../lib/supabase';
-import { getNewsCategories, adminCreateNewsCategory, adminUpdateNewsCategory, adminDeleteNewsCategory } from '../../../lib/api';
+import { getNewsCategories, adminCreateNewsCategory, adminUpdateNewsCategory, adminDeleteNewsCategory, adminReorderNewsCategories } from '../../../lib/api';
 import { buildSlug } from '../../../lib/slug';
 
 // Quản lý danh mục tin tức (bảng news_categories). label khớp CHÍNH XÁC news.category.
@@ -21,8 +21,8 @@ function badgeClass(key: string) {
   return BADGE_COLORS.find(c => c.key === key)?.className ?? 'bg-gray-100 text-gray-600';
 }
 
-type FormState = { label: string; slug: string; badge_color: string; seo_description: string; order_index: number };
-const BLANK: FormState = { label: '', slug: '', badge_color: 'slate', seo_description: '', order_index: 0 };
+type FormState = { label: string; slug: string; badge_color: string; seo_description: string; order_index: number; show_in_news_sections: boolean };
+const BLANK: FormState = { label: '', slug: '', badge_color: 'slate', seo_description: '', order_index: 0, show_in_news_sections: true };
 
 export function NewsCategoriesTab() {
   const [items, setItems] = useState<NewsCategoryRow[]>([]);
@@ -42,8 +42,30 @@ export function NewsCategoriesTab() {
     setEditing(null); setSlugTouched(false); setError(''); setCreating(true);
   };
   const openEdit = (c: NewsCategoryRow) => {
-    setForm({ label: c.label, slug: c.slug, badge_color: c.badge_color, seo_description: c.seo_description ?? '', order_index: c.order_index });
+    setForm({ label: c.label, slug: c.slug, badge_color: c.badge_color, seo_description: c.seo_description ?? '', order_index: c.order_index, show_in_news_sections: c.show_in_news_sections !== false });
     setEditing(c); setSlugTouched(true); setError(''); setCreating(true);
+  };
+
+  // Bật/tắt hiển thị ở khối chuyên mục — lưu ngay, không cần mở form.
+  const toggleShow = async (c: NewsCategoryRow) => {
+    try {
+      await adminUpdateNewsCategory(c.id, { show_in_news_sections: !(c.show_in_news_sections !== false) });
+      await load();
+    } catch (e) { alert((e as Error).message); }
+  };
+
+  // Đổi vị trí danh mục rồi chuẩn hoá order_index = 0..n-1 và lưu bulk. Thứ tự này
+  // dùng chung cho tab lọc, Chủ đề nổi bật và khối chuyên mục trên /tin-tuc.
+  const move = async (index: number, dir: -1 | 1) => {
+    const next = index + dir;
+    if (next < 0 || next >= items.length) return;
+    const reordered = [...items];
+    [reordered[index], reordered[next]] = [reordered[next], reordered[index]];
+    setItems(reordered);
+    try {
+      await adminReorderNewsCategories(reordered.map((c, i) => ({ id: c.id, order_index: i })));
+      await load();
+    } catch (e) { alert((e as Error).message); await load(); }
   };
 
   // Nhập nhãn: nếu chưa động vào ô slug thì tự gợi ý slug bỏ dấu từ nhãn.
@@ -62,6 +84,7 @@ export function NewsCategoriesTab() {
         badge_color: form.badge_color,
         seo_description: form.seo_description.trim() || null,
         order_index: form.order_index,
+        show_in_news_sections: form.show_in_news_sections,
       };
       if (editing) await adminUpdateNewsCategory(editing.id, payload, editing.label, editing.slug);
       else await adminCreateNewsCategory(payload);
@@ -86,7 +109,7 @@ export function NewsCategoriesTab() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2"><Tag className="w-5 h-5 text-red-600" />Danh mục tin tức</h2>
-          <p className="text-gray-500 text-sm mt-1">Thêm/sửa/xoá danh mục. Đổi tên sẽ tự cập nhật mọi bài thuộc danh mục đó. Không xoá được danh mục còn bài.</p>
+          <p className="text-gray-500 text-sm mt-1">Thêm/sửa/xoá danh mục. Đổi tên sẽ tự cập nhật mọi bài thuộc danh mục đó. Không xoá được danh mục còn bài. Dùng mũi tên để sắp xếp và nút con mắt để chọn danh mục hiển thị ở khối chuyên mục trang tin tức (danh mục chưa có bài đã xuất bản sẽ chưa hiện).</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-colors flex-shrink-0">
           <Plus className="w-4 h-4" />Thêm danh mục
@@ -99,19 +122,35 @@ export function NewsCategoriesTab() {
         </div>
       ) : (
         <div className="space-y-2">
-          {items.map(c => (
+          {items.map((c, i) => {
+            const shown = c.show_in_news_sections !== false;
+            return (
             <div key={c.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3">
+              <div className="flex flex-col">
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="p-0.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:hover:text-gray-400" aria-label="Lên"><ArrowUp className="w-3.5 h-3.5" /></button>
+                <button onClick={() => move(i, 1)} disabled={i === items.length - 1} className="p-0.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:hover:text-gray-400" aria-label="Xuống"><ArrowDown className="w-3.5 h-3.5" /></button>
+              </div>
               <span className={`text-[11px] font-bold px-2.5 py-1 rounded ${badgeClass(c.badge_color)}`}>{c.label}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-gray-400 text-xs truncate">/tin-tuc/danh-muc/{c.slug}</p>
                 {c.seo_description && <p className="text-gray-500 text-xs mt-0.5 truncate">{c.seo_description}</p>}
               </div>
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => toggleShow(c)}
+                  title={shown ? 'Đang hiện ở khối chuyên mục — bấm để ẩn' : 'Đang ẩn khỏi khối chuyên mục — bấm để hiện'}
+                  aria-pressed={shown}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${shown ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                >
+                  {shown ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{shown ? 'Hiện' : 'Ẩn'}</span>
+                </button>
                 <button onClick={() => openEdit(c)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
                 <button onClick={() => del(c)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {creating && (
@@ -161,6 +200,12 @@ export function NewsCategoriesTab() {
               <textarea value={form.seo_description} onChange={e => setForm(f => ({ ...f, seo_description: e.target.value }))} rows={2} placeholder="Mô tả ngắn hiển thị ở đầu trang danh mục và thẻ meta."
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
             </div>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.show_in_news_sections} onChange={e => setForm(f => ({ ...f, show_in_news_sections: e.target.checked }))}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-400" />
+              <span className="text-xs text-gray-600">Hiện ở khối chuyên mục trên trang tin tức <span className="text-gray-400">(chỉ hiện khi danh mục đã có bài xuất bản)</span></span>
+            </label>
 
             <div className="flex gap-2 pt-2">
               <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition-colors disabled:opacity-60">

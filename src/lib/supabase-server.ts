@@ -435,6 +435,7 @@ const STATIC_NEWS_CATEGORY_FALLBACK: NewsCategoryRow[] = NEWS_CATEGORIES.map((la
   badge_color: 'slate',
   seo_description: null,
   order_index: i,
+  show_in_news_sections: true,
   created_at: '',
   updated_at: '',
 }));

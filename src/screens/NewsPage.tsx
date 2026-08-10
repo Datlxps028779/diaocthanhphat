@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query';
-import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle } from 'lucide-react';
+import { useQuery, useQueries, useMutation, useInfiniteQuery } from '@tanstack/react-query';
+import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle, LayoutGrid, List } from 'lucide-react';
 import { type NewsArticle, type NewsListItem, type NewsPageResult } from '../lib/supabase';
 import { getNews, getNewsById, getNewsByIds, getNewsPage, getMostViewedNews, getNewsCategories, NEWS_PER_PAGE, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
+import { buildNewsSections } from '../lib/newsLayout';
 import { qk } from '../lib/queryKeys';
 import { nextListingPageParam } from '../lib/listingPaging';
 import { type Page, pageToHref } from '../lib/router';
@@ -452,6 +453,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSent, setNewsletterSent] = useState(false);
+  const [feedView, setFeedView] = useState<'grid' | 'list'>('grid');
 
   const { data: cms = {} } = useQuery({
     queryKey: qk.pageBlocks('news'),
@@ -528,6 +530,34 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
   );
   const tabLabels = useMemo<string[]>(() => ['Tất cả', ...categoryLabels], [categoryLabels]);
 
+  // Danh mục được chọn hiển thị ở khối chuyên mục (show_in_news_sections !== false),
+  // theo đúng thứ tự admin. Chỉ áp dụng cho trang tổng /tin-tuc (showGroups).
+  const sectionCategoryLabels = useMemo<string[]>(
+    () => categoryRows.filter(r => r.show_in_news_sections !== false).map(r => r.label),
+    [categoryRows],
+  );
+  // Mỗi danh mục được chọn fetch RIÊNG (không phụ thuộc feed tổng), nên bài không bị
+  // "nuốt" bởi hero hay rơi ngoài trang đầu. limit 9 = 4 bài cần hiện + tối đa 5 bài
+  // có thể trùng hero để backfill. Chỉ chạy khi ở trang tổng.
+  const isAllView = category === 'Tất cả';
+  const sectionQueries = useQueries({
+    queries: (isAllView ? sectionCategoryLabels : []).map(label => ({
+      queryKey: ['news-section', label],
+      queryFn: () => getNewsPage({ category: label, page: 1, limit: 9 }),
+      staleTime: 5 * 60_000,
+    })),
+  });
+  // Chữ ký theo id bài của từng danh mục để useMemo tính lại khi query trả về dữ liệu.
+  const sectionSignature = sectionQueries.map(q => (q.data?.data ?? []).map(a => a.id).join('.')).join('|');
+  const sectionArticlesByCategory = useMemo<Map<string, NewsListItem[]>>(() => {
+    const map = new Map<string, NewsListItem[]>();
+    (isAllView ? sectionCategoryLabels : []).forEach((label, i) => {
+      map.set(label, sectionQueries[i]?.data?.data ?? []);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAllView, sectionCategoryLabels, sectionSignature]);
+
   // Sentinel tự bấm "Tải thêm" khi cuộn tới cuối. Nút vẫn bấm tay được nếu observer
   // không chạy (trình duyệt cũ). Chỉ đổi trạng thái ở control, không thay cả feed.
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -601,29 +631,22 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
     return (filtered.length >= 5 ? filtered : mostViewedRaw).slice(0, 5);
   }, [mostViewedRaw, heroIds]);
 
-  // Trang tổng (/tin-tuc): nhóm preview theo danh mục như thiết kế editorial. Route
-  // danh mục: một luồng "Mới cập nhật" phẳng gồm mọi bài sau hero.
+  // Trang tổng (/tin-tuc): khối preview theo danh mục ADMIN CHỌN, mỗi danh mục fetch
+  // riêng nên không bị hero nuốt hay rơi ngoài trang đầu. Route danh mục: một luồng
+  // "Mới cập nhật" phẳng gồm mọi bài sau hero (không có khối chuyên mục).
   const showGroups = category === 'Tất cả';
-  const grouped = useMemo(() => {
-    if (!showGroups) return [];
-    const byCat = new Map<string, NewsListItem[]>();
-    for (const a of restArticles) {
-      const c = a.category ?? 'Khác';
-      if (!byCat.has(c)) byCat.set(c, []);
-      byCat.get(c)!.push(a);
-    }
-    const ordered = categoryLabels.filter(c => byCat.has(c));
-    const extras = Array.from(byCat.keys()).filter(c => !categoryLabels.includes(c));
-    return [...ordered, ...extras].map(c => ({ category: c, items: byCat.get(c)! }));
-  }, [restArticles, showGroups, categoryLabels]);
+  const grouped = useMemo(
+    () => (showGroups ? buildNewsSections(sectionCategoryLabels, sectionArticlesByCategory, heroIds, 4) : []),
+    [showGroups, sectionCategoryLabels, sectionArticlesByCategory, heroIds],
+  );
 
   // Feed đầy đủ ở dưới. Route danh mục: mọi bài sau hero. Trang tổng: mọi bài không
-  // nằm trong hero VÀ không thuộc preview chuyên mục (lead + 3 phụ mỗi nhóm) để một
-  // bài không xuất hiện lặp trong cùng view.
+  // nằm trong hero VÀ không trùng bài đã hiện ở khối chuyên mục (tránh lặp trong cùng
+  // view). Bài fallback (danh mục chỉ có bài hero) đã nằm trong heroIds nên vẫn bị loại.
   const feedArticles = useMemo<NewsListItem[]>(() => {
     if (!showGroups) return restArticles;
     const previewIds = new Set<string>();
-    for (const group of grouped) for (const a of group.items.slice(0, 4)) previewIds.add(a.id);
+    for (const group of grouped) for (const a of group.items) previewIds.add(a.id);
     return articles.filter(a => !heroIds.has(a.id) && !previewIds.has(a.id));
   }, [showGroups, restArticles, grouped, articles, heroIds]);
 
@@ -748,8 +771,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                   Mỗi nhóm tối đa 4 bài + "Xem thêm"; feed đầy đủ nằm bên dưới. */}
               {showGroups && grouped.length > 0 && (
                 <div className="mb-10 grid gap-x-8 gap-y-8 md:grid-cols-2">
-                  {grouped.map((group) => (
-                    <section key={group.category}>
+                  {grouped.map((group, index) => (
+                    <section key={group.category} className={grouped.length % 2 === 1 && index === grouped.length - 1 ? 'md:col-span-2' : ''}>
                       <div className="mb-4 flex items-center justify-between border-b-2 border-gray-100 pb-2">
                         <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
                           <span className="h-5 w-1 rounded-full bg-red-600" />
@@ -777,13 +800,45 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
                   mọi bài đã load đều render, trang tải thêm nối vào đây. */}
               {feedArticles.length > 0 && (
                 <section className="mb-10">
-                  <h2 className="mb-5 flex items-center gap-3 text-xl font-black text-gray-900">
-                    <span className="h-7 w-1 rounded-full bg-red-600" />
-                    {showGroups ? 'Tất cả tin tức' : 'Mới cập nhật'}
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                    {feedArticles.map(article => <ArticleCard key={article.id} article={article} />)}
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-3 text-xl font-black text-gray-900">
+                      <span className="h-7 w-1 rounded-full bg-red-600" />
+                      {showGroups ? 'Tất cả tin tức' : 'Mới cập nhật'}
+                    </h2>
+                    <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+                      <button
+                        type="button"
+                        aria-label="Xem dạng thẻ"
+                        aria-pressed={feedView === 'grid'}
+                        onClick={() => setFeedView('grid')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${feedView === 'grid' ? 'bg-red-600 text-white' : 'bg-white text-gray-500 hover:text-red-600'}`}
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" /><span className="hidden sm:inline">Dạng thẻ</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Xem dạng danh sách"
+                        aria-pressed={feedView === 'list'}
+                        onClick={() => setFeedView('list')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${feedView === 'list' ? 'bg-red-600 text-white' : 'bg-white text-gray-500 hover:text-red-600'}`}
+                      >
+                        <List className="h-3.5 w-3.5" /><span className="hidden sm:inline">Dạng danh sách</span>
+                      </button>
+                    </div>
                   </div>
+                  {feedView === 'grid' ? (
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                      {feedArticles.map(article => <ArticleCard key={article.id} article={article} />)}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white px-4 shadow-sm">
+                      {feedArticles.map(article => (
+                        <div key={article.id} className="py-3">
+                          <NewsListRow article={article} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
 
