@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminClient } from '@/lib/server/requireAdmin';
 import { requireIngestAuth } from '@/lib/server/ingestAuth';
-import { normalizeArticlePayload } from '@/lib/apiIngest';
+import { normalizeArticlePayload, type ArticleRow } from '@/lib/apiIngest';
+import { evaluateArticleIngestQuality } from '@/lib/articleIngestQuality';
+import { pickRelated } from '@/lib/relatedNews';
+import { buildNewsJsonLd } from '@/lib/seo';
+import type { NewsArticle } from '@/lib/supabase';
 import { buildSlug } from '@/lib/slug';
 
 // POST /api/public/articles — tạo bài viết từ nguồn ngoài (make.com).
@@ -45,6 +49,39 @@ function isUniqueViolation(error: DbError): boolean {
   return error.code === '23505';
 }
 
+function articleSnapshot(
+  row: ArticleRow,
+  slug: string,
+  relatedIds: string[],
+  schemaMarkup: Record<string, unknown> | null,
+  timestamp: string,
+): NewsArticle {
+  return {
+    id: `ingest:${row.external_id}`,
+    title: row.title,
+    slug,
+    excerpt: row.excerpt,
+    content: row.content,
+    image_url: row.image_url,
+    category: row.category,
+    author: row.author,
+    is_published: false,
+    views: 0,
+    meta_title: row.meta_title,
+    meta_description: row.meta_description,
+    focus_keywords: row.focus_keywords,
+    schema_markup: schemaMarkup,
+    related_ids: relatedIds,
+    geo_area: row.geo_area,
+    geo_entity: row.geo_entity,
+    geo_notes: row.geo_notes,
+    faq: row.faq,
+    citations: row.citations,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
 export async function POST(req: NextRequest) {
   const auth = requireIngestAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
@@ -85,6 +122,22 @@ export async function POST(req: NextRequest) {
     if (existing.data) return duplicateResponse(existing.data);
   }
 
+  const bodyObject = body && typeof body === 'object' && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : null;
+  const rawContent = typeof bodyObject?.content === 'string' ? bodyObject.content : undefined;
+  const quality = evaluateArticleIngestQuality(parsed.row, { rawContent });
+  if (!quality.passed) {
+    return NextResponse.json(
+      {
+        error: 'ARTICLE_QUALITY_GATE_FAILED',
+        message: 'Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.',
+        quality_gate: quality,
+      },
+      { status: 422 },
+    );
+  }
+
   const { data: categoryRows, error: categoryError } = await admin
     .from('news_categories')
     .select('label')
@@ -113,14 +166,56 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const { data: relatedRows, error: relatedError } = await admin
+    .from('news')
+    .select('*')
+    .eq('is_published', true)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (relatedError) {
+    console.error('[api/public/articles] đọc bài liên quan lỗi:', relatedError.message);
+    return NextResponse.json({ error: 'Không tải được bài viết liên quan.' }, { status: 503 });
+  }
+
   const baseSlug = buildSlug(parsed.row.title) || 'bai-viet';
+  const timestamp = new Date().toISOString();
+  const relatedIds = pickRelated(
+    articleSnapshot(parsed.row, baseSlug, [], null, timestamp),
+    [],
+    (relatedRows ?? []) as NewsArticle[],
+    5,
+    Date.parse(timestamp),
+  ).map(article => article.id);
+  const warnings = [...quality.warnings];
+  if (!relatedIds.length) {
+    warnings.push({
+      code: 'RELATED_POOL_EMPTY',
+      field: 'related_ids',
+      message: 'Chưa có bài public phù hợp để tự chọn bài liên quan; server lưu mảng rỗng.',
+    });
+  }
+  const qualityResponse = {
+    ...quality,
+    warnings,
+    metrics: { ...quality.metrics, related_count: relatedIds.length },
+  };
   let lastError: DbError | null = null;
 
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt += 1) {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    const snapshot = articleSnapshot(parsed.row, slug, relatedIds, null, timestamp);
+    const schemaMarkup = buildNewsJsonLd(snapshot);
     const { data, error } = await admin
       .from('news')
-      .insert({ ...parsed.row, slug })
+      .insert({
+        ...parsed.row,
+        slug,
+        related_ids: relatedIds,
+        schema_markup: schemaMarkup,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
       .select('id, slug, is_published')
       .single();
 
@@ -131,6 +226,7 @@ export async function POST(req: NextRequest) {
           slug: data.slug,
           is_published: data.is_published,
           duplicate: false,
+          quality_gate: qualityResponse,
           message: 'Bài viết đã lưu nháp. Vào admin để xem lại và xuất bản.',
         },
         { status: 201 },

@@ -278,7 +278,8 @@ function ArticleDetail({
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
   const tags = asArray<string>((article as any).tags);
   const faqItems = asArray<{ question: string; answer: string }>(article.faq);
-  const citations = asArray<{ title?: string; url: string }>(article.citations);
+  const citations = asArray<{ title?: string; url: string }>(article.citations)
+    .filter(citation => /^https?:\/\//i.test(citation.url));
   const cat = (article as any).category ?? '';
   const geoArea = article.geo_area?.trim();
   const geoEntity = article.geo_entity?.trim();
@@ -401,7 +402,17 @@ function ArticleDetail({
               <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
                 {citations.map((c, i) => (
                   <li key={i} className="text-sm text-gray-700 break-words">
-                    {c.title || c.url}
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-red-700 underline decoration-red-200 underline-offset-2 hover:text-red-800"
+                    >
+                      {c.title || c.url}
+                    </a>
+                    {c.title && (
+                      <span className="mt-0.5 block text-xs text-gray-500">{c.url}</span>
+                    )}
                   </li>
                 ))}
               </ul>

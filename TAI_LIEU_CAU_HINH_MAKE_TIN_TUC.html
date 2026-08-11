@@ -1,0 +1,747 @@
+<title>Hướng dẫn cấu hình Make.com — API Tin tức Chọn Nhà Việt</title>
+<style>
+  :root {
+    --paper: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #eaf1f8;
+    --ink: #172033;
+    --muted: #55657a;
+    --rule: #c9d6e4;
+    --navy: #102a43;
+    --blue: #2563eb;
+    --teal: #0e7490;
+    --green: #18794e;
+    --green-soft: #e8f6ee;
+    --amber: #a65308;
+    --amber-soft: #fff4df;
+    --red: #b42318;
+    --red-soft: #fff0ee;
+    --code: #0b1f33;
+    --code-ink: #e7f1fb;
+    --shadow: 0 16px 42px rgba(16, 42, 67, 0.10);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b1520;
+      --surface: #111f2d;
+      --surface-soft: #172a3c;
+      --ink: #eef5fb;
+      --muted: #a9bbcc;
+      --rule: #30485e;
+      --navy: #d8ebff;
+      --blue: #72a7ff;
+      --teal: #55c2d9;
+      --green: #74d8a5;
+      --green-soft: #133527;
+      --amber: #f5bd65;
+      --amber-soft: #3a2b12;
+      --red: #ff938b;
+      --red-soft: #3d1d1d;
+      --code: #07111b;
+      --code-ink: #e7f1fb;
+      --shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0b1520;
+    --surface: #111f2d;
+    --surface-soft: #172a3c;
+    --ink: #eef5fb;
+    --muted: #a9bbcc;
+    --rule: #30485e;
+    --navy: #d8ebff;
+    --blue: #72a7ff;
+    --teal: #55c2d9;
+    --green: #74d8a5;
+    --green-soft: #133527;
+    --amber: #f5bd65;
+    --amber-soft: #3a2b12;
+    --red: #ff938b;
+    --red-soft: #3d1d1d;
+    --code: #07111b;
+    --code-ink: #e7f1fb;
+    --shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    overflow-x: hidden;
+  }
+
+  button, input, select { font: inherit; }
+
+  .document {
+    width: min(100% - 32px, 980px);
+    margin: 32px auto 64px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--rule);
+  }
+
+  .cover {
+    position: relative;
+    min-height: 620px;
+    padding: 72px 72px 54px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 56px;
+    background:
+      linear-gradient(122deg, color-mix(in srgb, var(--surface-soft) 70%, transparent), transparent 58%),
+      var(--surface);
+  }
+
+  .cover::after {
+    content: "";
+    position: absolute;
+    right: -90px;
+    top: -120px;
+    width: 360px;
+    height: 560px;
+    border: 54px solid color-mix(in srgb, var(--blue) 14%, transparent);
+    transform: rotate(18deg);
+    pointer-events: none;
+  }
+
+  .eyebrow {
+    color: var(--teal);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  h1, h2, h3, p { margin: 0; }
+
+  h1, h2 {
+    color: var(--navy);
+    font-family: Georgia, "Times New Roman", serif;
+    text-wrap: balance;
+  }
+
+  h1 {
+    max-width: 700px;
+    margin-top: 18px;
+    font-size: clamp(2.55rem, 6vw, 4.8rem);
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+  }
+
+  .dek {
+    max-width: 650px;
+    margin-top: 28px;
+    color: var(--muted);
+    font-size: 1.16rem;
+    line-height: 1.55;
+  }
+
+  .meta-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .meta-item {
+    min-height: 94px;
+    padding: 18px;
+    background: var(--surface);
+  }
+
+  .meta-label {
+    display: block;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .meta-value {
+    display: block;
+    margin-top: 5px;
+    color: var(--ink);
+    font-weight: 750;
+  }
+
+  .actions {
+    position: sticky;
+    top: 10px;
+    z-index: 10;
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 18px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    border-bottom: 1px solid var(--rule);
+    backdrop-filter: blur(12px);
+  }
+
+  .print-button {
+    appearance: none;
+    border: 0;
+    padding: 10px 16px;
+    background: var(--blue);
+    color: #ffffff;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 0 color-mix(in srgb, var(--blue) 70%, #000000);
+  }
+
+  .print-button:hover { transform: translateY(-1px); }
+  .print-button:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+  .section {
+    padding: 58px 72px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .section-heading {
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 34px;
+  }
+
+  .section-number {
+    color: var(--blue);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+
+  h2 {
+    font-size: clamp(1.9rem, 4vw, 2.8rem);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+  }
+
+  h3 {
+    color: var(--navy);
+    font-size: 1.08rem;
+    line-height: 1.35;
+  }
+
+  .lead {
+    max-width: 68ch;
+    margin-top: 12px;
+    color: var(--muted);
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--rule);
+    background: var(--rule);
+    gap: 1px;
+  }
+
+  .flow-step {
+    position: relative;
+    min-height: 122px;
+    padding: 18px 14px;
+    background: var(--surface);
+  }
+
+  .flow-step:not(:last-child)::after {
+    content: "›";
+    position: absolute;
+    right: -8px;
+    top: 44px;
+    z-index: 2;
+    width: 16px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    background: var(--blue);
+    color: #ffffff;
+    font-weight: 900;
+  }
+
+  .flow-kicker {
+    display: block;
+    color: var(--blue);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
+  .flow-title {
+    display: block;
+    margin-top: 8px;
+    color: var(--ink);
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.28;
+  }
+
+  .flow-note {
+    display: block;
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .callout {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 26px;
+    padding: 20px;
+    border: 1px solid var(--rule);
+    background: var(--surface-soft);
+  }
+
+  .callout-mark {
+    color: var(--blue);
+    font-family: Georgia, serif;
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .callout.warning { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 45%, var(--rule)); }
+  .callout.warning .callout-mark { color: var(--amber); }
+  .callout.danger { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 45%, var(--rule)); }
+  .callout.danger .callout-mark { color: var(--red); }
+  .callout.success { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 45%, var(--rule)); }
+  .callout.success .callout-mark { color: var(--green); }
+
+  .callout p { color: var(--muted); }
+  .callout strong { color: var(--ink); }
+
+  .step-list {
+    display: grid;
+    gap: 22px;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .step-index {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    color: var(--blue);
+    border: 2px solid var(--blue);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .step-body {
+    display: grid;
+    gap: 9px;
+    padding-top: 2px;
+  }
+
+  .step-body p, .step-body li { color: var(--muted); }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .panel {
+    padding: 22px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    break-inside: avoid;
+  }
+
+  .panel p { margin-top: 8px; color: var(--muted); }
+
+  .field-stack {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .field-name {
+    color: var(--blue);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 800;
+    word-break: break-word;
+  }
+
+  .field-desc { color: var(--muted); font-size: 0.9rem; }
+
+  .table-wrap { max-width: 100%; overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  th, td {
+    padding: 12px 13px;
+    text-align: left;
+    vertical-align: top;
+    border: 1px solid var(--rule);
+  }
+
+  th {
+    background: var(--surface-soft);
+    color: var(--navy);
+    font-size: 0.73rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  td { color: var(--muted); }
+  td strong { color: var(--ink); }
+
+  code, pre {
+    font-family: Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  code {
+    color: var(--teal);
+    font-size: 0.88em;
+    font-weight: 700;
+  }
+
+  pre {
+    max-width: 100%;
+    margin: 16px 0 0;
+    padding: 20px;
+    overflow-x: auto;
+    background: var(--code);
+    color: var(--code-ink);
+    font-size: 0.8rem;
+    line-height: 1.62;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .endpoint {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    padding: 17px 18px;
+    background: var(--code);
+    color: var(--code-ink);
+  }
+
+  .method {
+    padding: 8px 10px;
+    background: var(--teal);
+    color: #ffffff;
+    text-align: center;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .url {
+    min-width: 0;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+  }
+
+  .checklist {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .check-item {
+    display: grid;
+    grid-template-columns: 23px minmax(0, 1fr);
+    gap: 10px;
+    color: var(--muted);
+    break-inside: avoid;
+  }
+
+  .box {
+    width: 17px;
+    height: 17px;
+    margin-top: 4px;
+    border: 2px solid var(--blue);
+    background: var(--surface);
+  }
+
+  .status {
+    display: inline-block;
+    padding: 3px 8px;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .status.ok { color: var(--green); background: var(--green-soft); }
+  .status.warn { color: var(--amber); background: var(--amber-soft); }
+  .status.bad { color: var(--red); background: var(--red-soft); }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 24px 72px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .page-break { break-before: page; }
+  .avoid-break { break-inside: avoid; }
+
+  @media (max-width: 760px) {
+    .document { width: min(100% - 20px, 980px); margin: 10px auto 32px; }
+    .cover, .section { padding: 38px 26px; }
+    .cover { min-height: auto; }
+    .actions { padding: 10px; }
+    .meta-strip, .two-col { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr; }
+    .flow-step { min-height: 0; }
+    .flow-step:not(:last-child)::after { content: "↓"; right: 18px; top: auto; bottom: -14px; }
+    .section-heading { grid-template-columns: 1fr; gap: 8px; }
+    .section-number { display: inline; }
+    .field-row { grid-template-columns: 1fr; gap: 4px; }
+    .footer { padding: 22px 26px; flex-direction: column; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm 14mm 17mm;
+  }
+
+  @media print {
+    :root {
+      --paper: #ffffff;
+      --surface: #ffffff;
+      --surface-soft: #edf3f8;
+      --ink: #152238;
+      --muted: #45566c;
+      --rule: #b9c8d8;
+      --navy: #102a43;
+      --blue: #1f5fd2;
+      --teal: #0e667f;
+      --green: #176b48;
+      --green-soft: #e7f4ec;
+      --amber: #8b4809;
+      --amber-soft: #fff2dc;
+      --red: #9f2219;
+      --red-soft: #ffefed;
+      --code: #102a43;
+      --code-ink: #ffffff;
+      --shadow: none;
+    }
+
+    body { background: #ffffff; font-size: 10pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .document { width: 100%; margin: 0; border: 0; box-shadow: none; }
+    .actions { display: none; }
+    .cover { min-height: 247mm; padding: 20mm 14mm 14mm; }
+    .cover::after { opacity: 0.75; }
+    .section { padding: 12mm 8mm; }
+    h1 { font-size: 37pt; }
+    h2 { font-size: 23pt; }
+    .flow-step { min-height: 29mm; }
+    .panel, .callout, .step, .endpoint, table, pre { break-inside: avoid; }
+    .table-wrap { overflow: visible; }
+    pre { overflow: visible; }
+    a { color: inherit; text-decoration: none; }
+    .footer { padding: 8mm; }
+  }
+</style>
+
+<main class="document">
+  <div class="actions">
+    <button class="print-button" type="button" onclick="window.print()">In tài liệu / Lưu PDF</button>
+  </div>
+
+  <section class="cover">
+    <div>
+      <div class="eyebrow">Tài liệu vận hành · Make.com × Chọn Nhà Việt</div>
+      <h1>Tạo bài Tin tức đầy đủ SEO–GEO–AIO</h1>
+      <p class="dek">Cấu hình Make.com để AI chỉ viết từ dữ liệu đã kiểm chứng, Fact Checker đối chiếu nguồn, API chặn bài thiếu và lưu đầy đủ mọi ô trong Admin ở trạng thái nháp.</p>
+    </div>
+    <div class="meta-strip">
+      <div class="meta-item"><span class="meta-label">Phiên bản</span><span class="meta-value">2.0 · 11/08/2026</span></div>
+      <div class="meta-item"><span class="meta-label">Quality gate</span><span class="meta-value">article-ingest-v1</span></div>
+      <div class="meta-item"><span class="meta-label">Nguyên tắc</span><span class="meta-value">Kiểm chứng rồi lưu nháp</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading"><div class="section-number">TỔNG QUAN</div><div><h2>Luồng bắt buộc có bảy chặng</h2><p class="lead">Không cho AI viết xong rồi gửi thẳng tới website. Fact Checker phải nhìn thấy cả dữ liệu nguồn và bản nháp.</p></div></div>
+    <div class="flow" aria-label="Luồng Make.com">
+      <div class="flow-step"><span class="flow-kicker">01 · SOURCE</span><span class="flow-title">Nguồn đã kiểm chứng</span><span class="flow-note">Sheets, Notion, RSS, API hoặc Webhook</span></div>
+      <div class="flow-step"><span class="flow-kicker">02 · WRITER</span><span class="flow-title">AI viết bản nháp</span><span class="flow-note">Chỉ dùng dữ liệu nguồn được cấp</span></div>
+      <div class="flow-step"><span class="flow-kicker">03 · CHECKER</span><span class="flow-title">AI đối chiếu claim</span><span class="flow-note">Nguồn phải thật sự hỗ trợ nội dung</span></div>
+      <div class="flow-step"><span class="flow-kicker">04 · FILTER</span><span class="flow-title">Chỉ nhận PASS</span><span class="flow-note">checker.passed = true</span></div>
+      <div class="flow-step"><span class="flow-kicker">05 · JSON</span><span class="flow-title">Create JSON</span><span class="flow-note">Map đủ toàn bộ field biên tập</span></div>
+      <div class="flow-step"><span class="flow-kicker">06 · HTTP</span><span class="flow-title">POST tới API</span><span class="flow-note">x-api-key trong Connection an toàn</span></div>
+      <div class="flow-step"><span class="flow-kicker">07 · ADMIN</span><span class="flow-title">Con người duyệt</span><span class="flow-note">Bài luôn là nháp, không tự public</span></div>
+    </div>
+    <div class="callout warning"><div class="callout-mark">!</div><div><strong>Endpoint không thể chứng minh sự thật chỉ từ JSON.</strong><p>Nó kiểm tra cấu trúc, độ đầy đủ, URL, HTML, SEO, GEO, FAQ và nguồn. Fact Checker cùng người duyệt Admin vẫn là hai cổng kiểm chứng nội dung.</p></div></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 01</div><div><h2>Cấu hình endpoint và bảo mật</h2><p class="lead">Tạo module HTTP sau Filter của Fact Checker.</p></div></div>
+    <div class="endpoint"><span class="method">POST</span><span class="url">https://chonhaviet.com/api/public/articles</span></div>
+    <div class="step-list" style="margin-top:24px">
+      <div class="step"><span class="step-index">01</span><div class="step-body"><h3>Headers</h3><pre>Content-Type: application/json
+x-api-key: &lt;MAKE_API_KEY trong Connection/Secret&gt;</pre></div></div>
+      <div class="step"><span class="step-index">02</span><div class="step-body"><h3>Body</h3><p>Chọn <strong>Raw</strong> và <strong>application/json</strong>. Map output từ JSON → Create JSON, không tự nối chuỗi HTML.</p></div></div>
+      <div class="step"><span class="step-index">03</span><div class="step-body"><h3>Parse response</h3><p>Bật để đọc <code>id</code>, <code>slug</code>, <code>duplicate</code>, <code>quality_gate.issues</code>, <code>warnings</code> và <code>metrics</code>.</p></div></div>
+    </div>
+    <div class="callout danger"><div class="callout-mark">!</div><div><strong>Không đặt API key trong query string, JSON, prompt hoặc log.</strong><p>Giữ key ở Vercel và Make.com Connection/Secret. Khi retry phải giữ nguyên <code>external_id</code>.</p></div></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 02</div><div><h2>Điền đủ mọi ô biên tập trong Admin</h2><p class="lead">Không còn field nội dung quan trọng nào là tùy chọn đối với bài do Make tạo.</p></div></div>
+    <div class="two-col">
+      <article class="panel"><h3>Nội dung và nhận diện</h3><div class="field-stack">
+        <div class="field-row"><div class="field-name">external_id</div><div class="field-desc">Bắt buộc, bất biến, tối đa 200 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">title</div><div class="field-desc">20–180 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">excerpt</div><div class="field-desc">Answer Block 80–300 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">content</div><div class="field-desc">HTML sạch, tối thiểu 900 từ, tối đa 200.000 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">category</div><div class="field-desc">Khớp chính xác nhãn trong Admin.</div></div>
+        <div class="field-row"><div class="field-name">author</div><div class="field-desc">Tên tác giả hoặc Ban biên tập.</div></div>
+        <div class="field-row"><div class="field-name">image_url</div><div class="field-desc">URL HTTP(S) ảnh đại diện thật.</div></div>
+      </div></article>
+      <article class="panel"><h3>SEO, GEO và kiểm chứng</h3><div class="field-stack">
+        <div class="field-row"><div class="field-name">meta_title</div><div class="field-desc">30–65 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">meta_description</div><div class="field-desc">120–160 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">focus_keywords</div><div class="field-desc">3–6 cụm không trùng.</div></div>
+        <div class="field-row"><div class="field-name">geo_area</div><div class="field-desc">Khu vực thật được nguồn hỗ trợ.</div></div>
+        <div class="field-row"><div class="field-name">geo_entity</div><div class="field-desc">Chủ thể/entity chính.</div></div>
+        <div class="field-row"><div class="field-name">geo_notes</div><div class="field-desc">Ngữ cảnh, phạm vi và giới hạn dữ liệu.</div></div>
+        <div class="field-row"><div class="field-name">faq</div><div class="field-desc">4–6 cặp, answer tối thiểu 40 ký tự.</div></div>
+        <div class="field-row"><div class="field-name">citations</div><div class="field-desc">2–6 nguồn có title + URL HTTP(S).</div></div>
+      </div></article>
+    </div>
+    <div class="callout success"><div class="callout-mark">✓</div><div><strong>Server tự điền các field hệ thống.</strong><p><code>slug</code>, <code>related_ids</code>, <code>schema_markup</code>, timestamps, <code>views=0</code> và <code>is_published=false</code>. Không gửi schema hoặc UUID bài liên quan từ Make.</p></div></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 03</div><div><h2>JSON payload đưa vào Make.com</h2><p class="lead">Dùng JSON → Create JSON để escape đúng nội dung HTML và dấu ngoặc kép.</p></div></div>
+    <pre>{
+  &quot;external_id&quot;: &quot;make-news:{{source_system}}:{{source_article_id}}&quot;,
+  &quot;title&quot;: &quot;{{article_title}}&quot;,
+  &quot;content&quot;: &quot;{{clean_html_900_plus_words_with_4_h2_and_2_to_4_internal_links}}&quot;,
+  &quot;excerpt&quot;: &quot;{{direct_answer_80_to_300_chars}}&quot;,
+  &quot;category&quot;: &quot;{{exact_admin_category}}&quot;,
+  &quot;author&quot;: &quot;{{verified_author_or_Ban_bien_tap}}&quot;,
+  &quot;image_url&quot;: &quot;{{absolute_https_image_url}}&quot;,
+  &quot;meta_title&quot;: &quot;{{meta_title_30_to_65_chars}}&quot;,
+  &quot;meta_description&quot;: &quot;{{meta_description_120_to_160_chars}}&quot;,
+  &quot;focus_keywords&quot;: [&quot;{{primary_keyword}}&quot;, &quot;{{geo_keyword}}&quot;, &quot;{{intent_keyword}}&quot;],
+  &quot;geo_area&quot;: &quot;{{verified_target_area}}&quot;,
+  &quot;geo_entity&quot;: &quot;{{verified_main_entity}}&quot;,
+  &quot;geo_notes&quot;: &quot;{{verified_local_context_and_data_limits}}&quot;,
+  &quot;faq&quot;: [
+    {&quot;question&quot;: &quot;{{question_1}}?&quot;, &quot;answer&quot;: &quot;{{supported_answer_1}}&quot;},
+    {&quot;question&quot;: &quot;{{question_2}}?&quot;, &quot;answer&quot;: &quot;{{supported_answer_2}}&quot;},
+    {&quot;question&quot;: &quot;{{question_3}}?&quot;, &quot;answer&quot;: &quot;{{supported_answer_3}}&quot;},
+    {&quot;question&quot;: &quot;{{question_4}}?&quot;, &quot;answer&quot;: &quot;{{supported_answer_4}}&quot;}
+  ],
+  &quot;citations&quot;: [
+    {&quot;title&quot;: &quot;{{verified_source_1_title}}&quot;, &quot;url&quot;: &quot;{{verified_source_1_url}}&quot;},
+    {&quot;title&quot;: &quot;{{verified_source_2_title}}&quot;, &quot;url&quot;: &quot;{{verified_source_2_url}}&quot;}
+  ]
+}</pre>
+    <div class="callout warning"><div class="callout-mark">i</div><div><strong>Không dùng timestamp hoặc số ngẫu nhiên làm external_id khi retry.</strong><p>Ví dụ tốt: <code>make-news:notion:8f3c2a</code>. Cùng một bài nguồn phải luôn dùng cùng ID.</p></div></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 04</div><div><h2>Checklist quality gate article-ingest-v1</h2><p class="lead">Lỗi bắt buộc trả HTTP 422 và không tạo row trong DB.</p></div></div>
+    <div class="checklist">
+      <div class="check-item"><span class="box"></span><span>Block đầu tiên là <code>&lt;p&gt;</code> trả lời trực tiếp, ít nhất 50 ký tự.</span></div>
+      <div class="check-item"><span class="box"></span><span>Nội dung sau sanitize có ít nhất 900 từ; không có H1 hoặc script/event handler.</span></div>
+      <div class="check-item"><span class="box"></span><span>Có ít nhất 4 H2 có chữ, không lặp tên; FAQ không chèn lại trong body.</span></div>
+      <div class="check-item"><span class="box"></span><span>Có ít nhất 2 internal links tương đối; mọi ảnh inline có alt tối thiểu 8 ký tự.</span></div>
+      <div class="check-item"><span class="box"></span><span>Meta title 30–65; meta description 120–160; 3–6 keyword không trùng.</span></div>
+      <div class="check-item"><span class="box"></span><span>Đủ GEO area/entity/notes, 4–6 FAQ và 2–6 citation.</span></div>
+      <div class="check-item"><span class="box"></span><span>Mọi FAQ và citation thực sự được nguồn cung cấp hỗ trợ — Fact Checker xác nhận.</span></div>
+    </div>
+    <div class="callout warning"><div class="callout-mark">i</div><div><strong>Warnings vẫn cho phép lưu nháp.</strong><p>Bài trên 1.800 từ, bài dài thiếu list/table, hơn 4 internal links hoặc citation chỉ từ một domain sẽ được trả về để người duyệt chú ý.</p></div></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 05</div><div><h2>Router xử lý response</h2><p class="lead">Chỉ retry lỗi tạm thời; không retry nguyên payload khi mapping hoặc chất lượng sai.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>HTTP</th><th>Kết quả</th><th>Make.com cần làm</th></tr></thead><tbody>
+      <tr><td><span class="status ok">201</span></td><td>Tạo nháp mới</td><td>Lưu id, slug, score, warnings; báo Admin duyệt.</td></tr>
+      <tr><td><span class="status ok">200</span></td><td>Duplicate idempotent</td><td>Xem là thành công; không tạo lại.</td></tr>
+      <tr><td><span class="status bad">400</span></td><td>JSON/mapping/category sai</td><td>Sửa mapping; đọc <code>allowed_categories</code> nếu có.</td></tr>
+      <tr><td><span class="status bad">401</span></td><td>Sai API key</td><td>Kiểm tra Connection, không log key.</td></tr>
+      <tr><td><span class="status bad">413</span></td><td>Body quá 512KB</td><td>Giảm kích thước body.</td></tr>
+      <tr><td><span class="status warn">422</span></td><td>Quality gate fail</td><td>Đọc issues, sửa draft, chạy Fact Checker lại.</td></tr>
+      <tr><td><span class="status warn">500/503</span></td><td>Lỗi tạm thời</td><td>Exponential backoff, giữ nguyên external_id.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">BƯỚC 06</div><div><h2>Prompt Writer và Fact Checker</h2><p class="lead">Hai module phải độc lập. Checker không được chỉ tin rằng “có citation” là đủ.</p></div></div>
+    <article class="panel"><h3>Writer — quy tắc cốt lõi</h3><pre>Bạn là biên tập viên bất động sản. Chỉ dùng VERIFIED_SOURCE_DATA.
+Không bịa giá, tỷ lệ, dự án, địa danh, pháp lý, quy hoạch, hạ tầng hoặc dự báo.
+Nếu thiếu dữ liệu, ghi “Chưa đủ dữ liệu” thay vì suy diễn.
+Trả đúng một JSON object theo contract: 900–1.800 từ, 4+ H2, 2–4 internal link,
+đủ SEO, GEO, 4–6 FAQ và 2–6 citations. Không tạo field hệ thống.</pre></article>
+    <article class="panel" style="margin-top:18px"><h3>Fact Checker — output bắt buộc</h3><pre>Đối chiếu từng claim trong ARTICLE_DRAFT_JSON với VERIFIED_SOURCE_DATA.
+Citation phải thật sự hỗ trợ claim; kiểm tra URL, ngày, đơn vị, địa danh và mọi con số.
+Chỉ passed=true khi không còn claim không được nguồn hỗ trợ.
+
+{
+  &quot;passed&quot;: true,
+  &quot;unsupported_claims&quot;: [],
+  &quot;source_mismatches&quot;: [],
+  &quot;required_fixes&quot;: []
+}</pre></article>
+  </section>
+
+  <section class="section page-break">
+    <div class="section-heading"><div class="section-number">KIỂM TRA</div><div><h2>Phiếu kiểm tra trước khi bật lịch</h2><p class="lead">Dùng một bản ghi test riêng, sau đó dọn đúng row test.</p></div></div>
+    <div class="checklist">
+      <div class="check-item"><span class="box"></span><span>Scheduling đang OFF; chỉ một bản ghi test được phép chạy.</span></div>
+      <div class="check-item"><span class="box"></span><span>Fact Checker trả <code>passed:true</code> và không có unsupported claim.</span></div>
+      <div class="check-item"><span class="box"></span><span>HTTP trả 201; quality gate passed và related_count/schema đã có.</span></div>
+      <div class="check-item"><span class="box"></span><span>Admin hiển thị đủ nội dung, ảnh, SEO, GEO, FAQ, nguồn, bài liên quan và schema.</span></div>
+      <div class="check-item"><span class="box"></span><span>Bài vẫn là nháp và không xuất hiện trên trang Tin tức công khai.</span></div>
+      <div class="check-item"><span class="box"></span><span>Chạy lại cùng external_id nhận 200 duplicate và cùng article ID.</span></div>
+      <div class="check-item"><span class="box"></span><span>Sau khi duyệt thử, nguồn tham khảo mở đúng URL và schema khớp nội dung nhìn thấy.</span></div>
+      <div class="check-item"><span class="box"></span><span>Xóa bài test; chỉ bật Scheduling sau khi toàn bộ ô đã đạt.</span></div>
+    </div>
+    <div class="callout success"><div class="callout-mark">✓</div><div><strong>Quy tắc xuất bản cuối cùng</strong><p>AI tạo và kiểm tra bản nháp; API kiểm tra kỹ thuật; người quản trị kiểm chứng và tự bật xuất bản. Không bước nào được bỏ qua.</p></div></div>
+  </section>
+
+  <footer class="footer"><span>Chọn Nhà Việt · Tài liệu cấu hình Make.com</span><span>Quality gate: article-ingest-v1 · Bản in 11/08/2026</span></footer>
+</main>

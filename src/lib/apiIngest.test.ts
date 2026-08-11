@@ -148,26 +148,58 @@ describe('normalizeListingPayload', () => {
 });
 
 describe('normalizeArticlePayload', () => {
-  const valid = { title: 'Giá đất Dĩ An 2026', content: '<p>Nội dung bài</p>' };
+  const valid = {
+    external_id: 'make-news-9',
+    title: 'Giá đất Dĩ An 2026',
+    content: '<p>Nội dung bài</p>',
+    excerpt: 'Tóm tắt bài viết',
+    category: 'Thị trường',
+    author: 'Ban biên tập',
+    image_url: 'https://a.com/x.jpg',
+    meta_title: 'Giá đất Dĩ An 2026',
+    meta_description: 'Mô tả bài viết',
+    focus_keywords: ['giá đất Dĩ An', 'BẤT ĐỘNG SẢN', 'giá đất Dĩ An'],
+    geo_area: 'Dĩ An, Bình Dương',
+    geo_entity: 'thị trường đất ở Dĩ An',
+    geo_notes: 'Dữ liệu có ngày cập nhật và phạm vi mẫu rõ ràng.',
+    faq: [
+      { question: 'Giá này có phải giá giao dịch?', answer: 'Không, đây là dữ liệu tham khảo có nêu rõ phạm vi.' },
+    ],
+    citations: [
+      { title: 'Nguồn dữ liệu', url: 'https://example.com/source' },
+    ],
+  };
 
-  it('nhận payload tối thiểu hợp lệ', () => {
+  it('nhận và chuẩn hóa đầy đủ field biên tập do Make cung cấp', () => {
     const r = normalizeArticlePayload(valid);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.row.title).toBe('Giá đất Dĩ An 2026');
-    expect(r.row.content).toBe('<p>Nội dung bài</p>');
+    expect(r.row).toMatchObject({
+      title: 'Giá đất Dĩ An 2026',
+      content: '<p>Nội dung bài</p>',
+      category: 'Thị trường',
+      author: 'Ban biên tập',
+      external_id: 'make-news-9',
+      geo_area: 'Dĩ An, Bình Dương',
+      geo_entity: 'thị trường đất ở Dĩ An',
+      geo_notes: 'Dữ liệu có ngày cập nhật và phạm vi mẫu rõ ràng.',
+      faq: valid.faq,
+      citations: valid.citations,
+      focus_keywords: 'giá đất Dĩ An, BẤT ĐỘNG SẢN',
+      is_published: false,
+    });
   });
 
-  it('luôn ép is_published=false, bỏ qua cờ trong body', () => {
-    const r = normalizeArticlePayload({ ...valid, is_published: true });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.row.is_published).toBe(false);
-  });
-
-  it('báo lỗi khi thiếu title hoặc content', () => {
-    expect(normalizeArticlePayload({ title: 'chỉ có tiêu đề' }).ok).toBe(false);
-    expect(normalizeArticlePayload({ content: 'chỉ có nội dung' }).ok).toBe(false);
+  it('bắt buộc title, content, external_id, category và author', () => {
+    const r = normalizeArticlePayload({});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const errors = r.errors.join(' ');
+    expect(errors).toMatch(/title/);
+    expect(errors).toMatch(/content/);
+    expect(errors).toMatch(/external_id/);
+    expect(errors).toMatch(/category/);
+    expect(errors).toMatch(/author/);
   });
 
   it('từ chối body không phải object', () => {
@@ -176,38 +208,86 @@ describe('normalizeArticlePayload', () => {
     }
   });
 
-  it('mặc định category và author', () => {
-    const r = normalizeArticlePayload(valid);
+  it('luôn ép nháp và bỏ qua slug/views do caller gửi', () => {
+    const r = normalizeArticlePayload({
+      ...valid,
+      is_published: true,
+      slug: 'tu-dat-slug',
+      views: 9999,
+    });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.row.category).toBe('Thị trường');
-    expect(r.row.author).toBe('Ban biên tập');
-  });
-
-  it('không cho body tự đặt slug hay views', () => {
-    const r = normalizeArticlePayload({ ...valid, slug: 'tu-dat-slug', views: 9999 });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    expect(r.row.is_published).toBe(false);
     expect(r.row).not.toHaveProperty('slug');
     expect(r.row).not.toHaveProperty('views');
   });
 
-  it('chỉ nhận image_url http(s)', () => {
-    const ok = normalizeArticlePayload({ ...valid, image_url: 'https://a.com/x.jpg' });
-    expect(ok.ok).toBe(true);
-    if (!ok.ok) return;
-    expect(ok.row.image_url).toBe('https://a.com/x.jpg');
+  it('từ chối schema và related IDs do caller tự đặt', () => {
+    for (const field of ['schema_markup', 'related_ids'] as const) {
+      const r = normalizeArticlePayload({ ...valid, [field]: field === 'related_ids' ? [] : {} });
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.errors.join(' ')).toContain(field);
+    }
+  });
 
+  it('sanitize script, event handler và H1 trước khi trả row', () => {
+    const r = normalizeArticlePayload({
+      ...valid,
+      content: '<h1>Không hợp lệ</h1><p onclick="alert(1)">Nội dung</p><script>alert(1)</script>',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.row.content).not.toMatch(/<h1|onclick|<script/i);
+    expect(r.row.content).toContain('<p>Nội dung</p>');
+  });
+
+  it('chỉ nhận image_url http(s)', () => {
     const bad = normalizeArticlePayload({ ...valid, image_url: 'javascript:alert(1)' });
     expect(bad.ok).toBe(true);
     if (!bad.ok) return;
     expect(bad.row.image_url).toBeNull();
   });
 
-  it('giữ external_id để chống trùng', () => {
-    const r = normalizeArticlePayload({ ...valid, external_id: 'make-news-9' });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.row.external_id).toBe('make-news-9');
+  it('từ chối FAQ và citation sai shape hoặc URL', () => {
+    const badFaq = normalizeArticlePayload({ ...valid, faq: [{ question: 'Thiếu answer' }] });
+    expect(badFaq.ok).toBe(false);
+
+    const badCitation = normalizeArticlePayload({
+      ...valid,
+      citations: [{ title: 'Nguồn xấu', url: 'javascript:alert(1)' }],
+    });
+    expect(badCitation.ok).toBe(false);
+  });
+
+  it('từ chối quá 6 FAQ hoặc citation', () => {
+    const faq = Array.from({ length: 7 }, (_, index) => ({
+      question: `Câu hỏi ${index}?`,
+      answer: `Câu trả lời ${index}`,
+    }));
+    const citations = Array.from({ length: 7 }, (_, index) => ({
+      title: `Nguồn ${index}`,
+      url: `https://example.com/${index}`,
+    }));
+
+    expect(normalizeArticlePayload({ ...valid, faq }).ok).toBe(false);
+    expect(normalizeArticlePayload({ ...valid, citations }).ok).toBe(false);
+  });
+
+  it('từ chối field quá giới hạn thay vì âm thầm cắt mất dữ liệu', () => {
+    const longContent = normalizeArticlePayload({ ...valid, content: 'x'.repeat(200_001) });
+    expect(longContent.ok).toBe(false);
+    if (!longContent.ok) {
+      expect(longContent.errors).toHaveLength(1);
+      expect(longContent.errors.join(' ')).toMatch(/content.*200000/);
+    }
+
+    const longExternalId = normalizeArticlePayload({ ...valid, external_id: 'x'.repeat(201) });
+    expect(longExternalId.ok).toBe(false);
+    if (!longExternalId.ok) expect(longExternalId.errors.join(' ')).toMatch(/external_id.*200/);
+
+    const longGeoNotes = normalizeArticlePayload({ ...valid, geo_notes: 'x'.repeat(1001) });
+    expect(longGeoNotes.ok).toBe(false);
+    if (!longGeoNotes.ok) expect(longGeoNotes.errors.join(' ')).toMatch(/geo_notes.*1000/);
   });
 });
