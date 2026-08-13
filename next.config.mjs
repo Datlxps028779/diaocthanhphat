@@ -10,6 +10,9 @@ const supabaseHost = (() => {
 const nextConfig = {
   reactStrictMode: true,
   images: {
+    // Vercel Image Optimization đang trả 402 cho mọi cache MISS trên production.
+    // Giữ next/image cho layout/lazy-load nhưng tải thẳng URL nguồn để ảnh không vỡ.
+    unoptimized: true,
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       // Supabase Storage

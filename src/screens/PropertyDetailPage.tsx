@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import Image from 'next/image';
+import { SafeImage } from '../components/SafeImage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MapPin, Phone, CheckCircle, Heart, Shield,
@@ -30,7 +30,7 @@ import { ForYou } from '../components/ForYou';
 import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
-import { buildPropertyGallery, buildPropertyImageAlt } from '../lib/propertyImages';
+import { buildPropertyGallery, buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { formatUpdateDate } from '../lib/priceStatsFormat';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
@@ -304,7 +304,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     <button key={i} type="button" onClick={() => setLightboxOpen(true)}
                       className="relative flex-shrink-0 w-full h-full cursor-zoom-in"
                       aria-label="Phóng to ảnh">
-                      <Image src={img} alt={buildPropertyImageAlt(property, i)} fill
+                      <SafeImage src={img} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(property, i)} fill
                         priority={i === 0}
                         sizes="(max-width: 768px) 100vw, 66vw" className="object-contain" />
                     </button>
@@ -345,7 +345,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   {allImages.map((img, i) => (
                     <button key={i} onClick={() => setActiveImg(i)}
                       className={`flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden border-2 transition-colors ${activeImg === i ? 'border-red-500' : 'border-transparent'}`}>
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <img src={img} alt="" className="w-full h-full object-cover"
+                        onError={event => {
+                          if (event.currentTarget.src !== FALLBACK_PROPERTY_IMAGE) event.currentTarget.src = FALLBACK_PROPERTY_IMAGE;
+                        }} />
                     </button>
                   ))}
                 </div>
@@ -709,7 +712,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                       <button key={r.id} onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}
                         className="flex gap-3 w-full text-left hover:bg-gray-50 rounded-lg p-1.5 transition-colors group">
                         <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                          <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(r)} fill sizes="64px" className="object-cover" />
+                          <SafeImage src={r.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(r)} fill sizes="64px" className="object-cover" />
                         </span>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
@@ -748,7 +751,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 <div key={r.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 cursor-pointer group transition-all"
                   onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}>
                   <div className="relative aspect-[4/3] bg-gray-100">
-                    <Image src={r.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(r)} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <SafeImage src={r.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(r)} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3">
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
@@ -852,6 +855,9 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {activeImg + 1} / {allImages.length}
           </div>
           <img src={allImages[activeImg]} alt={buildPropertyImageAlt(property, activeImg)}
+            onError={event => {
+              if (event.currentTarget.src !== FALLBACK_PROPERTY_IMAGE) event.currentTarget.src = FALLBACK_PROPERTY_IMAGE;
+            }}
             onClick={e => e.stopPropagation()}
             className="max-w-[92vw] max-h-[85vh] object-contain select-none" />
           {allImages.length > 1 && (

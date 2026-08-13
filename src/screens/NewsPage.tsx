@@ -446,7 +446,7 @@ function ArticleDetail({
                     href={relatedHref(r)}
                     className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
                   >
-                    <img src={rImg} alt={buildNewsImageAlt(r)} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                    <img src={rImg} alt={buildNewsImageAlt(r)} onError={useFallbackNewsImage} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                     <div>
                       <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">{r.title}</p>
                       <p className="text-xs text-gray-400 mt-1">

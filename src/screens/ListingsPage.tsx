@@ -8,7 +8,7 @@ import {
   List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag, Bell
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { SafeImage } from '../components/SafeImage';
 import { type Property } from '../lib/supabase';
 import { captureSignalFromProperty } from '../lib/captureSignal';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, autoSaveSearch } from '../lib/api';
@@ -29,7 +29,7 @@ import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } fro
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
-import { buildPropertyImageAlt } from '../lib/propertyImages';
+import { buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
 interface ListingsPageProps {
   initialFilters?: Partial<{
@@ -742,7 +742,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                             onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                             className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                             <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                              <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
+                              <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                             </span>
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
@@ -773,7 +773,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                           onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                           className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                           <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                            <Image src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
+                            <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>

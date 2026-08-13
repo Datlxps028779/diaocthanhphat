@@ -20,11 +20,20 @@ export async function GET(_req: Request, { params }: Params) {
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const { data, error } = await sb.storage.from(target.bucket).download(target.path);
   if (error || !data) return new Response('Not found', { status: 404 });
+  if (data.type && !data.type.toLowerCase().startsWith('image/')) {
+    return new Response('Not found', { status: 404 });
+  }
 
+  const copyOnWriteObject = /-optimized-[a-zA-Z0-9_-]+\.(?:jpe?g|png|webp|gif|avif)$/i.test(target.path);
   return new Response(data.stream(), {
     headers: {
       'Content-Type': data.type || 'image/jpeg',
-      'Cache-Control': 'public, max-age=86400, s-maxage=31536000, immutable',
+      // Path copy-on-write không đổi bytes nên cache lâu; path legacy từng bị ghi đè
+      // chỉ cache ngắn để CDN không giữ phiên bản cũ hàng tháng.
+      'Cache-Control': copyOnWriteObject
+        ? 'public, max-age=86400, s-maxage=31536000, immutable'
+        : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
