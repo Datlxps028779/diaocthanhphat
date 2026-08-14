@@ -1,5 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
-import { parseVideoMarkerAttributes, serializeVideoMarker } from './videoMedia';
+import { parseVideoMarkerAttributes } from './videoMedia';
 
 // Dùng sanitize-html (pure JS, htmlparser2) thay isomorphic-dompurify (kéo jsdom →
 // html-encoding-sniffer → @exodus/bytes ESM → crash ERR_REQUIRE_ESM trên server
@@ -7,17 +7,29 @@ import { parseVideoMarkerAttributes, serializeVideoMarker } from './videoMedia';
 
 const ALLOWED_TAGS = ['p', 'h2', 'h3', 'h4', 'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'figure', 'figcaption', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'code', 'pre'];
 const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'target', 'rel', 'style', 'colspan', 'rowspan'];
-const VIDEO_MARKER_ATTRIBUTES = ['data-video-kind', 'data-video-id', 'data-video-src', 'data-video-title', 'data-video-start', 'data-video-poster'];
+const VIDEO_MARKER_ATTRIBUTES = ['data-video-kind', 'data-video-id', 'data-video-src', 'data-video-title', 'data-video-start', 'data-video-poster', 'data-video-aspect-ratio'];
 const IMAGE_MARKER_ATTRIBUTES = ['data-align'];
 
 function cleanVideoMarker(tagName: string, attribs: Record<string, string>) {
   const video = parseVideoMarkerAttributes(attribs);
   if (!video) return { tagName: 'span', attribs: {} };
-  const marker = serializeVideoMarker(video);
-  const match = marker.match(/^<figure\b([^>]*)>/i);
-  const attributes = Object.fromEntries(
-    [...(match?.[1].matchAll(/([\w:-]+)="([^"]*)"/g) ?? [])].map((item) => [item[1], item[2]]),
-  );
+  // Trả về giá trị thuộc tính chưa escape để sanitize-html escape đúng một lần.
+  // Nếu lấy lại từ serializeVideoMarker(), các entity như &amp; sẽ bị encode lần hai
+  // thành &amp;amp; và hiện nguyên entity trong caption/source mode lần kế tiếp.
+  const attributes = video.kind === 'youtube'
+    ? {
+      'data-video-kind': 'youtube',
+      'data-video-id': video.videoId,
+      'data-video-title': video.title,
+      ...(video.startSeconds ? { 'data-video-start': String(video.startSeconds) } : {}),
+    }
+    : {
+      'data-video-kind': 'upload',
+      'data-video-src': video.src,
+      'data-video-title': video.title,
+      ...(video.poster ? { 'data-video-poster': video.poster } : {}),
+      ...(video.aspectRatio ? { 'data-video-aspect-ratio': String(video.aspectRatio) } : {}),
+    };
   return { tagName, attribs: attributes };
 }
 

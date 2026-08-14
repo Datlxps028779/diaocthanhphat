@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2, Code2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
 import {
-  adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
+  adminGetPropertiesPage, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
   getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties,
-  propertyRevalidationSnapshot, revalidatePropertyContent,
+  propertyRevalidationSnapshot, revalidatePropertyContent, type AdminPropertyFilters,
 } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
@@ -30,24 +30,63 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   const [areas, setAreas] = useState<Area[]>([]);
   const [types, setTypes] = useState<PropertyType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filters, setFilters] = useState<AdminPropertyFilters>({
+    keyword: '', listingType: 'all', status: 'all', sort: 'newest', page: 1, limit: 25,
+  });
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
+  const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<Property | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // Bulk selection (Sprint 3c)
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const loadRequestRef = useRef(0);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
-  const load = async () => {
+  const activeFilters = useMemo(() => ({ ...filters, keyword: debouncedKeyword }), [filters, debouncedKeyword]);
+  const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
-    const [p, a, t] = await Promise.all([adminGetAllProperties(), getAreas(), getPropertyTypes()]);
-    setProperties(p); setAreas(a); setTypes(t);
-    setLoading(false);
+    try {
+      const [pageResult, a, t] = await Promise.all([
+        adminGetPropertiesPage(activeFilters), getAreas(), getPropertyTypes(),
+      ]);
+      if (requestId !== loadRequestRef.current) return;
+      setProperties(pageResult.data); setTotal(pageResult.total); setAreas(a); setTypes(t);
+    } catch (error) {
+      if (requestId !== loadRequestRef.current) return;
+      console.error('[AdminPanel] Không tải được danh mục BĐS:', error);
+      alert(`Không tải được danh mục BĐS: ${(error as Error).message}`);
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
+    }
+  }, [activeFilters]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedKeyword(filters.keyword ?? ''), 300);
+    return () => window.clearTimeout(timer);
+  }, [filters.keyword]);
+  useEffect(() => { load(); }, [load]);
+  // Hành động hàng loạt luôn chỉ áp dụng các hàng của kết quả đang xem. Không giữ
+  // lựa chọn khi đổi điều kiện hoặc trang để snapshot revalidation luôn đầy đủ.
+  useEffect(() => { setSelected(new Set()); }, [activeFilters]);
+
+  const updateFilters = (patch: Partial<AdminPropertyFilters>) => {
+    setFilters(current => ({ ...current, ...patch, page: patch.page ?? 1 }));
   };
-  useEffect(() => { load(); }, []);
+  const clearFilters = () => setFilters({ keyword: '', listingType: 'all', status: 'all', sort: 'newest', page: 1, limit: filters.limit ?? 25 });
+  const hasActiveFilters = Boolean(
+    filters.keyword || (filters.listingType && filters.listingType !== 'all') || filters.areaId || filters.typeId ||
+    (filters.status && filters.status !== 'all') || filters.isFeatured || filters.isHot || filters.isVerified ||
+    (filters.sort && filters.sort !== 'newest'),
+  );
+  const page = filters.page ?? 1;
+  const limit = filters.limit ?? 25;
+  const pageCount = Math.max(1, Math.ceil(total / limit));
+  const pageStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const pageEnd = Math.min(page * limit, total);
 
   // Mở thẳng form sửa khi được điều hướng từ Entity Audit (SeoGeoTab).
   useEffect(() => {
@@ -57,26 +96,21 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
     onFocusHandled?.();
   }, [focusEditId, loading, properties]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = properties.filter(p =>
-    (!search || p.title.toLowerCase().includes(search.toLowerCase()) || p.city.toLowerCase().includes(search.toLowerCase())) &&
-    (!filterType || p.listing_type === filterType)
-  );
-
   // ─── Bulk helpers ─────────────────────────────────────────────────────────
   const toggleOne = (id: string) => setSelected(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
-  const filteredIds = filtered.map(p => p.id);
-  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id));
+  const visibleIds = properties.map(p => p.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(prev => {
-    if (allFilteredSelected) {
+    if (allVisibleSelected) {
       const next = new Set(prev);
-      filteredIds.forEach(id => next.delete(id));
+      visibleIds.forEach(id => next.delete(id));
       return next;
     }
-    return new Set([...prev, ...filteredIds]);
+    return new Set([...prev, ...visibleIds]);
   });
   const clearSelection = () => setSelected(new Set());
 
@@ -164,23 +198,50 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Tìm BĐS..." className="pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white w-56" />
-          </div>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none">
-            <option value="">Tất cả loại</option>
-            <option value="mua_ban">Mua bán</option>
-            <option value="cho_thue">Cho thuê</option>
-          </select>
+        <div>
+          <h2 className="text-base font-bold text-gray-900">Danh mục bất động sản</h2>
+          <p className="mt-0.5 text-xs text-gray-500">Tìm và quản lý nhanh toàn bộ tin, kể cả tin đang ẩn.</p>
         </div>
         <button onClick={() => setCreating(true)}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors">
           <Plus className="w-4 h-4" />Thêm BĐS
         </button>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1.8fr)_repeat(4,minmax(0,1fr))]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={filters.keyword ?? ''} onChange={event => updateFilters({ keyword: event.target.value })}
+              placeholder="Tìm tiêu đề, mã tin, slug, địa chỉ..." className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <select value={filters.listingType ?? 'all'} onChange={event => updateFilters({ listingType: event.target.value as AdminPropertyFilters['listingType'] })}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+            <option value="all">Tất cả giao dịch</option><option value="mua_ban">Mua bán</option><option value="cho_thue">Cho thuê</option>
+          </select>
+          <select value={filters.areaId ?? ''} onChange={event => updateFilters({ areaId: event.target.value || undefined })}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+            <option value="">Tất cả khu vực</option>{areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+          </select>
+          <select value={filters.typeId ?? ''} onChange={event => updateFilters({ typeId: event.target.value || undefined })}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+            <option value="">Tất cả loại BĐS</option>{types.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+          </select>
+          <select value={filters.status ?? 'all'} onChange={event => updateFilters({ status: event.target.value as AdminPropertyFilters['status'] })}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+            <option value="all">Mọi trạng thái</option><option value="active">Đang hiển thị</option><option value="inactive">Đang ẩn</option>
+          </select>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isFeatured)} onChange={event => updateFilters({ isFeatured: event.target.checked || undefined })} className="accent-red-600" />Nổi bật</label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isHot)} onChange={event => updateFilters({ isHot: event.target.checked || undefined })} className="accent-red-600" />HOT</label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isVerified)} onChange={event => updateFilters({ isVerified: event.target.checked || undefined })} className="accent-red-600" />Đã xác minh</label>
+          <select value={filters.sort ?? 'newest'} onChange={event => updateFilters({ sort: event.target.value as AdminPropertyFilters['sort'] })}
+            className="ml-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400">
+            <option value="newest">Mới tạo nhất</option><option value="updated">Mới cập nhật</option><option value="views">Nhiều lượt xem</option><option value="price_asc">Giá tăng dần</option><option value="price_desc">Giá giảm dần</option>
+          </select>
+          {hasActiveFilters && <button type="button" onClick={clearFilters} className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50">Xóa bộ lọc</button>}
+        </div>
       </div>
 
       {/* Bulk action bar (Sprint 3c) — hiện khi có chọn */}
@@ -244,8 +305,8 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll}
-                      aria-label="Chọn tất cả" className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}
+                      aria-label="Chọn tất cả trên trang hiện tại" className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-400 cursor-pointer" />
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Tiêu đề</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden md:table-cell">Loại</th>
@@ -257,7 +318,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map(p => (
+                {properties.map(p => (
                   <tr key={p.id} className={`transition-colors ${selected.has(p.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
@@ -324,7 +385,20 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
               </tbody>
             </table>
           </div>
-          {filtered.length === 0 && <div className="text-center py-10 text-gray-400 text-sm">Không tìm thấy bất động sản nào</div>}
+          {properties.length === 0 && <div className="px-4 py-10 text-center text-sm text-gray-400">{hasActiveFilters ? <><p>Không có BĐS khớp bộ lọc hiện tại.</p><button type="button" onClick={clearFilters} className="mt-2 font-semibold text-red-600 hover:underline">Xóa bộ lọc</button></> : 'Chưa có bất động sản nào.'}</div>}
+          {total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
+              <span>Hiển thị {pageStart}–{pageEnd} trong {total} BĐS</span>
+              <div className="flex items-center gap-2">
+                <select value={limit} onChange={event => updateFilters({ limit: Number(event.target.value) })} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-400" aria-label="Số BĐS mỗi trang">
+                  <option value={25}>25 / trang</option><option value={50}>50 / trang</option><option value={100}>100 / trang</option>
+                </select>
+                <button type="button" disabled={page <= 1 || loading} onClick={() => updateFilters({ page: page - 1 })} className="rounded-lg border border-gray-200 px-2.5 py-1.5 font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">Trước</button>
+                <span className="font-semibold text-gray-700">Trang {page}/{pageCount}</span>
+                <button type="button" disabled={page >= pageCount || loading} onClick={() => updateFilters({ page: page + 1 })} className="rounded-lg border border-gray-200 px-2.5 py-1.5 font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">Sau</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

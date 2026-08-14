@@ -2,7 +2,7 @@ import { getSiteUrl } from './siteUrl';
 
 export type VideoMedia =
   | { kind: 'youtube'; videoId: string; title: string; startSeconds?: number }
-  | { kind: 'upload'; src: string; title: string; poster?: string };
+  | { kind: 'upload'; src: string; title: string; poster?: string; aspectRatio?: number };
 
 export type RichContentSegment =
   | { type: 'html'; html: string }
@@ -13,6 +13,9 @@ const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com'
 const VIDEO_MARKER_RE = /<figure\b([^>]*)>[\s\S]*?<\/figure\s*>/gi;
 const ATTRIBUTE_RE = /([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 const MAX_VIDEO_TITLE = 180;
+const UPLOADED_VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'ogg', 'mov']);
+const MIN_ASPECT_RATIO = 0.25;
+const MAX_ASPECT_RATIO = 4;
 
 function text(value: string | null | undefined, max = MAX_VIDEO_TITLE): string {
   return (value ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
@@ -72,9 +75,22 @@ function configuredStorageOrigins(): Set<string> {
   return origins;
 }
 
+function uploadedVideoExtension(pathname: string): string | null {
+  const extension = pathname.split('.').pop()?.toLowerCase() ?? '';
+  return UPLOADED_VIDEO_EXTENSIONS.has(extension) ? extension : null;
+}
+
+function parseAspectRatio(value: string | null | undefined): number | undefined {
+  if (!value || !/^\d+(?:\.\d+)?$/.test(value.trim())) return undefined;
+  const ratio = Number(value);
+  return Number.isFinite(ratio) && ratio >= MIN_ASPECT_RATIO && ratio <= MAX_ASPECT_RATIO
+    ? Math.round(ratio * 10_000) / 10_000
+    : undefined;
+}
+
 export function parseUploadedVideoUrl(raw: string | null | undefined, title = 'Video'): VideoMedia | null {
   const url = safeHttpsUrl(raw);
-  if (!url || !url.pathname.startsWith('/storage/v1/object/public/public-media/videos/') || !/\.mp4$/i.test(url.pathname)) return null;
+  if (!url || !url.pathname.startsWith('/storage/v1/object/public/public-media/videos/') || !uploadedVideoExtension(url.pathname)) return null;
   const origins = configuredStorageOrigins();
   if (origins.size === 0 || !origins.has(url.origin)) return null;
   return { kind: 'upload', src: url.toString(), title: text(title) || 'Video' };
@@ -105,7 +121,7 @@ export function serializeVideoMarker(video: VideoMedia): string {
   if (video.kind === 'youtube') {
     return `<figure data-video-kind="youtube" data-video-id="${video.videoId}" data-video-title="${escapeAttribute(video.title)}"${video.startSeconds ? ` data-video-start="${video.startSeconds}"` : ''}><figcaption>${escapeAttribute(video.title)}</figcaption></figure>`;
   }
-  return `<figure data-video-kind="upload" data-video-src="${escapeAttribute(video.src)}" data-video-title="${escapeAttribute(video.title)}"${video.poster ? ` data-video-poster="${escapeAttribute(video.poster)}"` : ''}><figcaption>${escapeAttribute(video.title)}</figcaption></figure>`;
+  return `<figure data-video-kind="upload" data-video-src="${escapeAttribute(video.src)}" data-video-title="${escapeAttribute(video.title)}"${video.poster ? ` data-video-poster="${escapeAttribute(video.poster)}"` : ''}${video.aspectRatio ? ` data-video-aspect-ratio="${video.aspectRatio}"` : ''}><figcaption>${escapeAttribute(video.title)}</figcaption></figure>`;
 }
 
 export function parseVideoMarkerAttributes(attributes: Record<string, string>): VideoMedia | null {
@@ -123,7 +139,8 @@ export function parseVideoMarkerAttributes(attributes: Record<string, string>): 
     if (!video) return null;
     const poster = safeHttpsUrl(attributes['data-video-poster']);
     const trustedPoster = poster && (poster.origin === safeHttpsUrl(getSiteUrl())?.origin || configuredStorageOrigins().has(poster.origin));
-    return { ...video, ...(trustedPoster ? { poster: poster.toString() } : {}) };
+    const aspectRatio = parseAspectRatio(attributes['data-video-aspect-ratio']);
+    return { ...video, ...(trustedPoster ? { poster: poster.toString() } : {}), ...(aspectRatio ? { aspectRatio } : {}) };
   }
   return null;
 }

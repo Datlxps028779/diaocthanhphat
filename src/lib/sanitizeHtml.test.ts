@@ -65,6 +65,12 @@ describe('sanitizeArticleHtml', () => {
     expect(out).not.toContain('data-video-kind');
   });
 
+  it('không encode kép tiêu đề marker video khi sanitize', () => {
+    const out = sanitizeArticleHtml('<figure data-video-kind="youtube" data-video-id="abc123XYZ_1" data-video-title="A &amp; B"><figcaption>A &amp; B</figcaption></figure>');
+    expect(out).toContain('data-video-title="A &amp; B"');
+    expect(out).not.toContain('&amp;amp;');
+  });
+
   it('giữ data-align ảnh nhưng chặn URI nguy hiểm', () => {
     const out = sanitizeArticleHtml('<img src="data:image/png;base64,x" data-align="center" onerror="alert(1)">');
     expect(out).toContain('data-align="center"');

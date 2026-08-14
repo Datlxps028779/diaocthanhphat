@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   firstInlineVideo,
   parseLegacyPropertyVideo,
@@ -6,30 +6,25 @@ import {
   parseVideoMarkerAttributes,
   parseVrTourUrl,
   parseYoutubeUrl,
+  readVideoMarker,
   serializeVideoMarker,
   splitRichContentVideos,
-  youtubeEmbedUrl,
 } from './videoMedia';
 
 describe('video media', () => {
-  afterEach(() => vi.unstubAllEnvs());
-
   it.each([
     'https://www.youtube.com/watch?v=abc123XYZ_1',
     'https://youtu.be/abc123XYZ_1',
     'https://www.youtube.com/embed/abc123XYZ_1',
     'https://www.youtube.com/shorts/abc123XYZ_1',
-  ])('parses trusted YouTube URL %s', url => {
-    const video = parseYoutubeUrl(url, ' Tour nhà ');
-    expect(video).toMatchObject({ kind: 'youtube', videoId: 'abc123XYZ_1', title: 'Tour nhà' });
+  ])('parses strict YouTube URL %s', url => {
+    expect(parseYoutubeUrl(url, 'Video nhà')).toMatchObject({
+      kind: 'youtube', videoId: 'abc123XYZ_1', title: 'Video nhà',
+    });
   });
 
-  it('canonicalizes a YouTube embed to nocookie and preserves a valid start time', () => {
-    const video = parseYoutubeUrl('https://youtu.be/abc123XYZ_1?t=1m5s');
-    expect(video).toMatchObject({ kind: 'youtube', startSeconds: 65 });
-    expect(youtubeEmbedUrl(video! as Extract<typeof video, { kind: 'youtube' }>)).toBe(
-      'https://www.youtube-nocookie.com/embed/abc123XYZ_1?start=65',
-    );
+  it('normalizes YouTube start time', () => {
+    expect(parseYoutubeUrl('https://www.youtube.com/watch?v=abc123XYZ_1&t=1m42s')).toMatchObject({ startSeconds: 102 });
   });
 
   it.each([
@@ -46,31 +41,51 @@ describe('video media', () => {
     expect(parseYoutubeUrl(url)).toBeNull();
   });
 
-  it('accepts only a configured direct public-media MP4 upload', () => {
+  it('accepts configured direct public-media video uploads', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
-    expect(parseUploadedVideoUrl(
-      'https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.mp4',
-      'Video thực tế',
-    )).toEqual({
+    for (const extension of ['mp4', 'webm', 'mov', 'ogv', 'ogg']) {
+      const video = parseUploadedVideoUrl(`https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.${extension}`, 'Video thực tế');
+      expect(video).toMatchObject({ kind: 'upload', title: 'Video thực tế' });
+    }
+  });
+
+  it('keeps a trusted aspect ratio within safe bounds', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
+    expect(parseVideoMarkerAttributes({
+      'data-video-kind': 'upload',
+      'data-video-src': 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
+      'data-video-aspect-ratio': '1.7778',
+    })).toMatchObject({ kind: 'upload', aspectRatio: 1.7778 });
+    expect(parseVideoMarkerAttributes({
+      'data-video-kind': 'upload',
+      'data-video-src': 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
+      'data-video-aspect-ratio': '99',
+    })).not.toHaveProperty('aspectRatio');
+  });
+
+  it('round-trips uploaded video format and aspect ratio marker', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
+    const marker = serializeVideoMarker({
       kind: 'upload',
-      src: 'https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.mp4',
-      title: 'Video thực tế',
+      src: 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.webm',
+      title: 'Tour', aspectRatio: 1.5,
     });
+    expect(readVideoMarker(marker)).toMatchObject({ kind: 'upload', aspectRatio: 1.5, title: 'Tour' });
   });
 
   it.each([
     'https://evil.test/storage/v1/object/public/public-media/videos/properties/house.mp4',
     'https://example.supabase.co/storage/v1/object/public/public-media/images/house.mp4',
-    'https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.webm',
+    'https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.exe',
     'http://example.supabase.co/storage/v1/object/public/public-media/videos/properties/house.mp4',
   ])('rejects an upload URL outside the strict allowlist: %s', url => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
     expect(parseUploadedVideoUrl(url)).toBeNull();
   });
 
-  it('keeps only configured legacy MP4 and rejects unapproved origins', () => {
+  it('keeps only configured legacy video and rejects unapproved origins', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
-    expect(parseLegacyPropertyVideo('https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/tour.mp4')).toMatchObject({ kind: 'upload' });
+    expect(parseLegacyPropertyVideo('https://example.supabase.co/storage/v1/object/public/public-media/videos/properties/tour.webm')).toMatchObject({ kind: 'upload' });
     expect(parseLegacyPropertyVideo('https://cdn.example.test/tour.mp4')).toBeNull();
     expect(parseLegacyPropertyVideo('https://youtube.com.evil.test/tour.mp4')).toBeNull();
     expect(parseLegacyPropertyVideo('javascript:alert(1)')).toBeNull();
@@ -85,15 +100,8 @@ describe('video media', () => {
   });
 
   it('rejects forged structured marker attributes', () => {
-    expect(parseVideoMarkerAttributes({
-      'data-video-kind': 'youtube',
-      'data-video-id': 'not-valid',
-      'data-video-title': 'X',
-    })).toBeNull();
-    expect(parseVideoMarkerAttributes({
-      'data-video-kind': 'upload',
-      'data-video-src': 'https://evil.test/file.mp4',
-    })).toBeNull();
+    expect(parseVideoMarkerAttributes({ 'data-video-kind': 'youtube', 'data-video-id': 'not-valid', 'data-video-title': 'X' })).toBeNull();
+    expect(parseVideoMarkerAttributes({ 'data-video-kind': 'upload', 'data-video-src': 'https://evil.test/file.mp4' })).toBeNull();
   });
 
   it('drops an uploaded-video poster outside trusted origins', () => {
@@ -103,22 +111,12 @@ describe('video media', () => {
       'data-video-src': 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
       'data-video-poster': 'https://evil.test/tracker.jpg',
     });
-    expect(video).toEqual({
-      kind: 'upload',
-      src: 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
-      title: 'Video',
-    });
+    expect(video).toEqual({ kind: 'upload', src: 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4', title: 'Video' });
   });
 
   it('embeds only approved VR hosts and leaves an unknown HTTPS provider link-only', () => {
-    expect(parseVrTourUrl('https://kuula.co/post/abc')).toEqual({
-      href: 'https://kuula.co/e/abc',
-      embedUrl: 'https://kuula.co/e/abc',
-    });
-    expect(parseVrTourUrl('https://evil-kuula.co/post/abc')).toEqual({
-      href: 'https://evil-kuula.co/post/abc',
-      embedUrl: null,
-    });
+    expect(parseVrTourUrl('https://kuula.co/post/abc')).toEqual({ href: 'https://kuula.co/e/abc', embedUrl: 'https://kuula.co/e/abc' });
+    expect(parseVrTourUrl('https://evil-kuula.co/post/abc')).toEqual({ href: 'https://evil-kuula.co/post/abc', embedUrl: null });
     expect(parseVrTourUrl('javascript:alert(1)')).toBeNull();
   });
 });

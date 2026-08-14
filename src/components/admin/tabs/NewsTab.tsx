@@ -526,7 +526,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
               <span className="rounded-lg bg-gray-50 px-2 py-1">{internalLinkCount} link nội bộ</span>
               <span className={`rounded-lg px-2 py-1 ${missingAltCount ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{missingAltCount} ảnh thiếu alt</span>
             </div>
-            <p className="mt-1 text-[11px] text-gray-400">Visual dùng thanh công cụ định dạng; View code cho phép dán HTML trực tiếp. HTML lạ có thể được TipTap chuẩn hóa khi quay lại Visual.</p>
+            <p className="mt-1 text-[11px] text-gray-400">Visual dùng toolbar chèn ảnh/video; View code cho phép sửa HTML trực tiếp. Khi chuyển lại Visual hoặc lưu, HTML sẽ được kiểm tra, giữ marker video hợp lệ và loại thẻ/URL không an toàn.</p>
             <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
 

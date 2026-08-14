@@ -1,4 +1,4 @@
-import { supabase, type Property } from '../supabase';
+import { supabase, type ListingType, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 
@@ -281,6 +281,84 @@ export async function getRelatedProperties(property: Property, limit = 6): Promi
 }
 
 // ─── Properties (admin) ───────────────────────────────────────────────────────
+export type AdminPropertyStatus = 'all' | 'active' | 'inactive';
+export type AdminPropertySort = 'newest' | 'updated' | 'views' | 'price_asc' | 'price_desc';
+
+export interface AdminPropertyFilters {
+  keyword?: string;
+  listingType?: ListingType | 'all';
+  areaId?: string;
+  typeId?: string;
+  status?: AdminPropertyStatus;
+  isFeatured?: boolean;
+  isHot?: boolean;
+  isVerified?: boolean;
+  sort?: AdminPropertySort;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminPropertyPage {
+  data: Property[];
+  total: number;
+}
+
+const ADMIN_PROPERTY_PAGE_LIMITS = new Set([25, 50, 100]);
+
+// Chuỗi .or() của PostgREST là cú pháp, không phải query parameter được encode tự động.
+// Bỏ ký tự cấu trúc để một ô tìm kiếm không thể mở rộng điều kiện truy vấn sang field khác.
+export function sanitizeAdminPropertyKeyword(value: string | undefined): string {
+  return (value ?? '').replace(/[,().\\%]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+export function normalizeAdminPropertyPage(value: number | undefined): number {
+  return Number.isSafeInteger(value) && (value ?? 0) > 0 ? value! : 1;
+}
+
+export function normalizeAdminPropertyLimit(value: number | undefined): number {
+  return value && ADMIN_PROPERTY_PAGE_LIMITS.has(value) ? value : 25;
+}
+
+export function buildAdminPropertyQuery(filters: AdminPropertyFilters = {}) {
+  let q = supabase
+    .from('properties')
+    .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' });
+
+  if (filters.listingType && filters.listingType !== 'all') q = q.eq('listing_type', filters.listingType);
+  if (filters.areaId) q = q.eq('area_id', filters.areaId);
+  if (filters.typeId) q = q.eq('property_type_id', filters.typeId);
+  if (filters.status === 'active') q = q.eq('is_active', true);
+  if (filters.status === 'inactive') q = q.eq('is_active', false);
+  if (filters.isFeatured) q = q.eq('is_featured', true);
+  if (filters.isHot) q = q.eq('is_hot', true);
+  if (filters.isVerified) q = q.eq('is_verified', true);
+
+  const keyword = sanitizeAdminPropertyKeyword(filters.keyword);
+  if (keyword) {
+    const search = `title.ilike.%${keyword}%,slug.ilike.%${keyword}%,address.ilike.%${keyword}%,city.ilike.%${keyword}%,district.ilike.%${keyword}%,ward.ilike.%${keyword}%`;
+    q = q.or(/^\d+$/.test(keyword) ? `${search},public_code.eq.${keyword}` : search);
+  }
+
+  if (filters.sort === 'updated') q = q.order('updated_at', { ascending: false }).order('id', { ascending: false });
+  else if (filters.sort === 'views') q = q.order('views', { ascending: false }).order('id', { ascending: false });
+  else if (filters.sort === 'price_asc') q = q.order('price', { ascending: true }).order('id', { ascending: true });
+  else if (filters.sort === 'price_desc') q = q.order('price', { ascending: false }).order('id', { ascending: false });
+  else q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
+
+  return q;
+}
+
+export async function adminGetPropertiesPage(filters: AdminPropertyFilters = {}): Promise<AdminPropertyPage> {
+  const page = normalizeAdminPropertyPage(filters.page);
+  const limit = normalizeAdminPropertyLimit(filters.limit);
+  const { data, error, count } = await buildAdminPropertyQuery(filters)
+    .range((page - 1) * limit, page * limit - 1);
+  if (error) throw error;
+  return { data: (data ?? []) as Property[], total: count ?? 0 };
+}
+
+// Giữ API cũ cho picker/section admin không thuộc danh mục BĐS. PropertiesTab dùng
+// adminGetPropertiesPage để không kéo toàn bộ kho dữ liệu về browser.
 export async function adminGetAllProperties(): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')

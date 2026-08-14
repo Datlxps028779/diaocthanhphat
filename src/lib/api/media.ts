@@ -138,33 +138,61 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
 export const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_VIDEO_FOLDER = new Set(['news', 'properties']);
 
-export function assertSafeVideoMetadata(file: Pick<File, 'name' | 'type' | 'size'>) {
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (ext !== 'mp4' || file.type !== 'video/mp4') {
-    throw new Error('Chỉ chấp nhận video MP4 (đuôi .mp4 và định dạng video/mp4).');
+// Không hứa phát được codec mà thiết bị không hỗ trợ: danh sách này gồm container phổ
+// biến mà HTML5 video có thể nhận, sau đó browser xác nhận thêm bằng loadedmetadata.
+export type UploadedVideoExtension = 'mp4' | 'mov' | 'webm' | 'ogv' | 'ogg';
+type VideoFormat = { mimes: Set<string>; signature: 'isoBmff' | 'ebml' | 'ogg' };
+const VIDEO_FORMATS: Record<UploadedVideoExtension, VideoFormat> = {
+  mp4: { mimes: new Set(['video/mp4', 'video/quicktime']), signature: 'isoBmff' },
+  mov: { mimes: new Set(['video/quicktime', 'video/mp4']), signature: 'isoBmff' },
+  webm: { mimes: new Set(['video/webm']), signature: 'ebml' },
+  ogv: { mimes: new Set(['video/ogg']), signature: 'ogg' },
+  ogg: { mimes: new Set(['video/ogg']), signature: 'ogg' },
+};
+
+function videoExtension(name: string): UploadedVideoExtension | null {
+  const extension = (name.split('.').pop() || '').toLowerCase();
+  return extension in VIDEO_FORMATS ? extension as UploadedVideoExtension : null;
+}
+
+export function assertSafeVideoMetadata(file: Pick<File, 'name' | 'type' | 'size'>): UploadedVideoExtension {
+  const extension = videoExtension(file.name);
+  if (!extension || !VIDEO_FORMATS[extension].mimes.has(file.type)) {
+    throw new Error('Chỉ chấp nhận video MP4, MOV, WebM hoặc OGV/OGG với định dạng tệp hợp lệ.');
   }
   if (!file.size) throw new Error('Video trống hoặc không đọc được.');
   if (file.size > MAX_VIDEO_SIZE_BYTES) throw new Error('Video tối đa 50MB. Vui lòng nén hoặc chọn file nhỏ hơn.');
+  return extension;
 }
 
-export function hasMp4Signature(header: Uint8Array): boolean {
-  // ISO-BMFF: bytes 4–7 là box type "ftyp". Đủ để chặn HTML/ảnh đổi đuôi;
-  // browser vẫn là lớp xác nhận media cuối khi phát metadata.
-  return header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70;
-}
-
-export async function assertSafeVideo(file: File) {
-  assertSafeVideoMetadata(file);
-  const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
-  if (!hasMp4Signature(header)) {
-    throw new Error('Tệp không có định dạng MP4 hợp lệ. Vui lòng xuất lại video dưới dạng MP4.');
+export function hasVideoSignature(header: Uint8Array, extension: UploadedVideoExtension): boolean {
+  // ISO-BMFF (MP4/MOV): box "ftyp" tại byte 4. WebM: EBML 1A 45 DF A3.
+  // Ogg: container OggS. Đây là guard chống đổi đuôi; loadedmetadata là xác nhận cuối.
+  if (VIDEO_FORMATS[extension].signature === 'isoBmff') {
+    return header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70;
   }
+  if (VIDEO_FORMATS[extension].signature === 'ebml') return header.length >= 4 && header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3;
+  return header.length >= 4 && header[0] === 0x4f && header[1] === 0x67 && header[2] === 0x67 && header[3] === 0x53;
 }
 
-function videoFilename(file: File, folder: 'news' | 'properties', caption?: string): string {
+// Giữ export cũ cho test/caller hiện tại; MP4 vẫn là ISO-BMFF.
+export function hasMp4Signature(header: Uint8Array): boolean {
+  return hasVideoSignature(header, 'mp4');
+}
+
+export async function assertSafeVideo(file: File): Promise<UploadedVideoExtension> {
+  const extension = assertSafeVideoMetadata(file);
+  const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+  if (!hasVideoSignature(header, extension)) {
+    throw new Error('Tệp không khớp với định dạng video đã chọn. Vui lòng xuất lại video trước khi tải lên.');
+  }
+  return extension;
+}
+
+function videoFilename(file: File, folder: 'news' | 'properties', extension: UploadedVideoExtension, caption?: string): string {
   const base = buildSlug(caption?.trim() || file.name.replace(/\.[^.]+$/, '') || 'video');
   const nonce = crypto.randomUUID?.().replace(/-/g, '').slice(0, 12) ?? Math.random().toString(36).slice(2, 14);
-  return `videos/${folder}/${base || 'video'}-${nonce}.mp4`;
+  return `videos/${folder}/${base || 'video'}-${nonce}.${extension}`;
 }
 
 export async function uploadVideo(
@@ -176,11 +204,11 @@ export async function uploadVideo(
   if (!isAdmin || !ALLOWED_VIDEO_FOLDER.has(folder)) {
     throw new Error('Bạn không có quyền tải video ở vị trí này.');
   }
-  await assertSafeVideo(file);
-  const filename = videoFilename(file, folder, caption);
+  const extension = await assertSafeVideo(file);
+  const filename = videoFilename(file, folder, extension, caption);
   const { error } = await supabase.storage.from('public-media').upload(filename, file, {
     upsert: false,
-    contentType: 'video/mp4',
+    contentType: file.type,
     cacheControl: '31536000',
   });
   if (error) throw error;

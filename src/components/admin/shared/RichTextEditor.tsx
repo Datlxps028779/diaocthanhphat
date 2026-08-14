@@ -17,7 +17,7 @@ import {
   Table as TableIcon, Rows3, Columns3, Trash2, Video, Upload,
 } from 'lucide-react';
 import { safeUrl } from '../../../lib/markdown';
-import { uploadVideo } from '../../../lib/api/media';
+import { assertSafeVideo, uploadVideo } from '../../../lib/api/media';
 import { parseUploadedVideoUrl, parseVideoMarkerAttributes, parseYoutubeUrl, type VideoMedia } from '../../../lib/videoMedia';
 import { ImageLibraryModal } from '../../ImageLibraryModal';
 
@@ -49,6 +49,7 @@ const VideoMarker = Node.create({
       title: { default: 'Video' },
       start: { default: null },
       poster: { default: null },
+      aspectRatio: { default: null },
     };
   },
   parseHTML() {
@@ -63,11 +64,12 @@ const VideoMarker = Node.create({
           'data-video-title': el.dataset.videoTitle ?? '',
           'data-video-start': el.dataset.videoStart ?? '',
           'data-video-poster': el.dataset.videoPoster ?? '',
+          'data-video-aspect-ratio': el.dataset.videoAspectRatio ?? '',
         });
         if (!video) return false;
         return video.kind === 'youtube'
           ? { kind: video.kind, videoId: video.videoId, title: video.title, start: video.startSeconds ?? null }
-          : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null };
+          : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null, aspectRatio: video.aspectRatio ?? null };
       },
     }];
   },
@@ -84,6 +86,7 @@ const VideoMarker = Node.create({
         'data-video-src': HTMLAttributes.src ?? '',
         'data-video-title': HTMLAttributes.title ?? '',
         'data-video-poster': HTMLAttributes.poster ?? '',
+        'data-video-aspect-ratio': HTMLAttributes.aspectRatio ? String(HTMLAttributes.aspectRatio) : '',
       });
     if (!video) return ['p', {}, 'Video không hợp lệ'];
     const attrs = video.kind === 'youtube'
@@ -98,6 +101,7 @@ const VideoMarker = Node.create({
         'data-video-src': video.src,
         'data-video-title': video.title,
         ...(video.poster ? { 'data-video-poster': video.poster } : {}),
+        ...(video.aspectRatio ? { 'data-video-aspect-ratio': String(video.aspectRatio) } : {}),
       };
     return ['figure', attrs, ['figcaption', {}, video.title]];
   },
@@ -351,40 +355,55 @@ function VideoDialog({ folder, onInsert, onClose }: { folder: 'news' | 'properti
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [localPreview, setLocalPreview] = useState<{ file: File; url: string; aspectRatio?: number; ready: boolean } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => { if (localPreview) URL.revokeObjectURL(localPreview.url); }, [localPreview]);
 
   const insertYoutube = () => {
     const video = parseYoutubeUrl(url, title || 'Video YouTube');
     if (!video) { setError('URL YouTube không hợp lệ. Chỉ nhận link HTTPS youtube.com hoặc youtu.be.'); return; }
     onInsert(video);
   };
-  const uploadMp4 = async (file: File | undefined) => {
+  const chooseVideo = async (file: File | undefined) => {
     if (!file) return;
+    setError('');
+    try {
+      await assertSafeVideo(file);
+      if (localPreview) URL.revokeObjectURL(localPreview.url);
+      setLocalPreview({ file, url: URL.createObjectURL(file), ready: false });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không đọc được video.');
+    } finally { if (fileRef.current) fileRef.current.value = ''; }
+  };
+  const uploadChosenVideo = async () => {
+    if (!localPreview?.ready) { setError('Hãy chờ trình duyệt tải metadata video trước khi chèn.'); return; }
     setError(''); setUploading(true);
     try {
-      const src = await uploadVideo(file, folder, true, title || file.name);
-      const video = parseUploadedVideoUrl(src, title || file.name);
-      if (!video) throw new Error('Không xác thực được URL video sau khi tải lên.');
-      onInsert(video);
+      const src = await uploadVideo(localPreview.file, folder, true, title || localPreview.file.name);
+      const parsed = parseUploadedVideoUrl(src, title || localPreview.file.name);
+      if (!parsed) throw new Error('Không xác thực được URL video sau khi tải lên.');
+      onInsert({ ...parsed, ...(localPreview.aspectRatio ? { aspectRatio: localPreview.aspectRatio } : {}) });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không tải được video.');
-    } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+    } finally { setUploading(false); }
   };
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onMouseDown={event => { if (event.target === event.currentTarget && !uploading) onClose(); }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={event => { if (event.target === event.currentTarget && !uploading) onClose(); }}>
       <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onMouseDown={event => event.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between"><div><h3 className="text-sm font-bold text-gray-900">Chèn video</h3><p className="mt-0.5 text-[11px] text-gray-500">Video sẽ được lưu theo định dạng an toàn, không chèn iframe thô.</p></div><button type="button" onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button></div>
+        <div className="mb-4 flex items-center justify-between"><div><h3 className="text-sm font-bold text-gray-900">Chèn video</h3><p className="mt-0.5 text-[11px] text-gray-500">Video được kiểm tra, xem trước và lưu bằng marker an toàn; không chèn iframe thô.</p></div><button type="button" disabled={uploading} onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button></div>
         <div className="mb-4 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
           <button type="button" onClick={() => { setMode('youtube'); setError(''); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${mode === 'youtube' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}>YouTube</button>
-          <button type="button" onClick={() => { setMode('upload'); setError(''); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${mode === 'upload' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}>Tải MP4</button>
+          <button type="button" onClick={() => { setMode('upload'); setError(''); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${mode === 'upload' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}>Tải video</button>
         </div>
         <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề video</label><input value={title} onChange={event => setTitle(event.target.value)} maxLength={180} placeholder="Ví dụ: Video tham quan thực tế" className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-        {mode === 'youtube' ? <><label className="mb-1 block text-xs font-semibold text-gray-700">URL YouTube HTTPS</label><input autoFocus value={url} onChange={event => setUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); insertYoutube(); } }} placeholder="https://www.youtube.com/watch?v=..." className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" /></> : <><input ref={fileRef} type="file" accept="video/mp4,.mp4" className="hidden" onChange={event => uploadMp4(event.target.files?.[0])} /><button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center rounded-xl border-2 border-dashed border-gray-200 px-4 py-7 text-sm font-semibold text-gray-700 hover:border-red-300 hover:bg-red-50 disabled:opacity-60"><Upload className="mb-2 h-7 w-7 text-gray-400" />{uploading ? 'Đang tải và kiểm tra MP4...' : 'Chọn video MP4 để tải lên'}<span className="mt-1 text-[11px] font-normal text-gray-400">Tối đa 50MB · chỉ MP4 có chữ ký hợp lệ</span></button></>}
+        {mode === 'youtube' ? <><label className="mb-1 block text-xs font-semibold text-gray-700">URL YouTube HTTPS</label><input autoFocus value={url} onChange={event => setUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); insertYoutube(); } }} placeholder="https://www.youtube.com/watch?v=..." className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" /></> : <>
+          <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/ogg,.mp4,.mov,.webm,.ogv,.ogg" className="hidden" onChange={event => chooseVideo(event.target.files?.[0])} />
+          <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center rounded-xl border-2 border-dashed border-gray-200 px-4 py-5 text-sm font-semibold text-gray-700 hover:border-red-300 hover:bg-red-50 disabled:opacity-60"><Upload className="mb-2 h-7 w-7 text-gray-400" />{localPreview ? 'Chọn video khác' : 'Chọn video để xem trước'}<span className="mt-1 text-[11px] font-normal text-gray-400">MP4, MOV, WebM, OGV/OGG · tối đa 50MB</span></button>
+          {localPreview && <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 bg-black"><video src={localPreview.url} controls preload="metadata" className="max-h-64 w-full object-contain" onLoadedMetadata={event => { const { videoWidth, videoHeight } = event.currentTarget; const aspectRatio = videoWidth && videoHeight ? videoWidth / videoHeight : undefined; setLocalPreview(current => current ? { ...current, ready: Boolean(aspectRatio), aspectRatio } : current); }} onError={() => { setError('Trình duyệt không thể đọc video này. Hãy xuất lại bằng định dạng/codec tương thích.'); setLocalPreview(current => current ? { ...current, ready: false } : current); }} />{!localPreview.ready && <p className="bg-gray-950 px-3 py-2 text-center text-xs text-gray-300">Đang tải metadata video...</p>}{localPreview.ready && <p className="bg-gray-950 px-3 py-2 text-center text-xs text-emerald-300">Đã sẵn sàng · tỷ lệ {localPreview.aspectRatio?.toFixed(2)}:1</p>}</div>}
+        </>}
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={uploading} onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60">Hủy</button>{mode === 'youtube' && <button type="button" onClick={insertYoutube} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700">Chèn video</button>}</div>
+        <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={uploading} onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60">Hủy</button>{mode === 'youtube' ? <button type="button" onClick={insertYoutube} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700">Chèn video</button> : <button type="button" disabled={!localPreview?.ready || uploading} onClick={uploadChosenVideo} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{uploading ? 'Đang tải lên...' : 'Tải lên & chèn video'}</button>}</div>
       </div>
     </div>
   );
@@ -437,7 +456,7 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
     if (!editor) return;
     const attrs = video.kind === 'youtube'
       ? { kind: video.kind, videoId: video.videoId, title: video.title, start: video.startSeconds ?? null }
-      : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null };
+      : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null, aspectRatio: video.aspectRatio ?? null };
     editor.chain().focus().insertContent({ type: 'videoMarker', attrs }).run();
     setVideoOpen(false);
   };
