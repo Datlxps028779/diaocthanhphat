@@ -71,16 +71,23 @@ export async function adminGetAllNews(): Promise<NewsArticle[]> {
   const { data } = await supabase.from('news').select('*').order('created_at', { ascending: false });
   return (data ?? []) as NewsArticle[];
 }
-export async function createNews(n: Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>): Promise<void> {
+export async function createNews(n: Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>): Promise<NewsArticle> {
   // Slug auto từ tiêu đề (+ hậu tố chống trùng). Chỉ dùng slug nhập tay khi admin
   // chủ động điền — còn lại luôn sinh tự động để đảm bảo chuẩn SEO.
   const slug = (n.slug && n.slug.trim()) || buildUniqueSlug(n.title);
-  const { error } = await supabase.from('news').insert({ ...n, slug });
+  const { data, error } = await supabase.from('news').insert({ ...n, slug }).select().single();
   if (error) throw error;
+  return data as NewsArticle;
 }
-export async function updateNews(id: string, n: Partial<NewsArticle>): Promise<void> {
-  const { error } = await supabase.from('news').update({ ...n, updated_at: new Date().toISOString() }).eq('id', id);
+export async function updateNews(id: string, n: Partial<NewsArticle>): Promise<NewsArticle> {
+  const { data, error } = await supabase
+    .from('news')
+    .update({ ...n, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
   if (error) throw error;
+  return data as NewsArticle;
 }
 export async function deleteNews(id: string): Promise<void> {
   const { error } = await supabase.from('news').delete().eq('id', id);

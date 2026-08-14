@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
-import { adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty, getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties } from '../../../lib/api';
+import {
+  adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
+  getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties,
+  propertyRevalidationSnapshot, revalidatePropertyContent,
+} from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
@@ -74,10 +78,23 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   });
   const clearSelection = () => setSelected(new Set());
 
-  const runBulk = async (fn: () => Promise<number>, label: string) => {
+  const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidatePropertyContent>[1]) => {
+    try {
+      await revalidatePropertyContent(action, targets);
+    } catch (error) {
+      console.error('[AdminPanel] Đã lưu BĐS nhưng chưa làm mới cache:', error);
+      alert('Đã lưu dữ liệu nhưng chưa làm mới được cache công khai. Hãy thử lưu lại hoặc liên hệ quản trị viên.');
+    }
+  };
+  const runBulk = async (
+    fn: () => Promise<number>,
+    label: string,
+    targets: Parameters<typeof revalidatePropertyContent>[1],
+  ) => {
     setBulkBusy(true);
     try {
       const n = await fn();
+      if (n > 0) await warnRevalidation('bulk', targets);
       clearSelection();
       await load(); onStatsRefresh?.();
       console.info(`[AdminPanel] Bulk ${label}: ${n} BĐS`);
@@ -87,12 +104,25 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
     } finally { setBulkBusy(false); }
   };
   const selectedIds = () => Array.from(selected);
+  const selectedPropertyTargets = (patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured' | 'is_verified'>>) =>
+    properties.filter(property => selected.has(property.id)).map(property => ({
+      previous: propertyRevalidationSnapshot(property),
+      current: propertyRevalidationSnapshot({ ...property, ...patch }),
+    }));
 
   const handleSave = async (data: Partial<Property>) => {
     setSaving(true);
     try {
-      if (creating) await createProperty(data as Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>);
-      else if (editing) await updateProperty(editing.id, data);
+      if (creating) {
+        const saved = await createProperty(data as Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>);
+        await warnRevalidation('create', [{ current: propertyRevalidationSnapshot(saved) }]);
+      } else if (editing) {
+        const saved = await updateProperty(editing.id, data);
+        await warnRevalidation('update', [{
+          previous: propertyRevalidationSnapshot(editing),
+          current: propertyRevalidationSnapshot(saved),
+        }]);
+      }
       await load(); onStatsRefresh?.();
       setEditing(null); setCreating(false);
     } catch (e) {
@@ -105,9 +135,16 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteProperty(id);
-    setConfirmDelete(null);
-    await load(); onStatsRefresh?.();
+    const previous = properties.find(property => property.id === id);
+    try {
+      await deleteProperty(id);
+      if (previous) await warnRevalidation('delete', [{ previous: propertyRevalidationSnapshot(previous) }]);
+      setConfirmDelete(null);
+      await load(); onStatsRefresh?.();
+    } catch (error) {
+      console.error('[AdminPanel] Xóa BĐS thất bại:', error);
+      alert(`Xóa BĐS thất bại: ${(error as Error).message}`);
+    }
   };
 
   if (editing || creating) {
@@ -148,23 +185,43 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
           <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_active: true }), 'hiện')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateProperties(selectedIds(), { is_active: true }),
+            'hiện',
+            selectedPropertyTargets({ is_active: true }),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Hiện
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_active: false }), 'ẩn')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateProperties(selectedIds(), { is_active: false }),
+            'ẩn',
+            selectedPropertyTargets({ is_active: false }),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <XCircle className="w-3.5 h-3.5" />Ẩn
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_hot: true }), 'gắn HOT')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateProperties(selectedIds(), { is_hot: true }),
+            'gắn HOT',
+            selectedPropertyTargets({ is_hot: true }),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-red-600 hover:bg-red-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Flame className="w-3.5 h-3.5" />HOT
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_featured: true }), 'gắn nổi bật')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateProperties(selectedIds(), { is_featured: true }),
+            'gắn nổi bật',
+            selectedPropertyTargets({ is_featured: true }),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Star className="w-3.5 h-3.5" />Nổi bật
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateProperties(selectedIds(), { is_verified: true }), 'xác minh')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateProperties(selectedIds(), { is_verified: true }),
+            'xác minh',
+            selectedPropertyTargets({ is_verified: true }),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <ShieldCheck className="w-3.5 h-3.5" />Xác minh
           </button>
@@ -229,7 +286,19 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                       <span className="font-bold text-red-600 text-sm">{p.price_label ?? `${p.price} ${p.price_unit}`}</span>
                     </td>
                     <td className="px-4 py-3 text-center hidden sm:table-cell">
-                      <button onClick={async () => { await updateProperty(p.id, { is_active: !p.is_active }); await load(); }}
+                      <button onClick={async () => {
+                        try {
+                          const saved = await updateProperty(p.id, { is_active: !p.is_active });
+                          await warnRevalidation(saved.is_active ? 'publish' : 'unpublish', [{
+                            previous: propertyRevalidationSnapshot(p),
+                            current: propertyRevalidationSnapshot(saved),
+                          }]);
+                          await load();
+                        } catch (error) {
+                          console.error('[AdminPanel] Cập nhật trạng thái BĐS thất bại:', error);
+                          alert(`Cập nhật trạng thái thất bại: ${(error as Error).message}`);
+                        }
+                      }}
                         className={`flex items-center justify-center mx-auto gap-1 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${p.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                         {p.is_active ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                         {p.is_active ? 'Hiển thị' : 'Ẩn'}
@@ -264,7 +333,11 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
 
       {confirmBulkDelete && (
         <ConfirmDialog message={`Xóa ${selected.size} bất động sản đã chọn? Thao tác không thể hoàn tác.`}
-          onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteProperties(selectedIds()), 'xóa'); }}
+          onConfirm={() => {
+            const targets = properties.filter(property => selected.has(property.id)).map(property => ({ previous: propertyRevalidationSnapshot(property) }));
+            setConfirmBulkDelete(false);
+            runBulk(() => bulkDeleteProperties(selectedIds()), 'xóa', targets);
+          }}
           onCancel={() => setConfirmBulkDelete(false)} />
       )}
     </div>

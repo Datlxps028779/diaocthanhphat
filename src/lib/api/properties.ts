@@ -318,9 +318,15 @@ export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'up
   if (error) throw error;
   return data as Property;
 }
-export async function updateProperty(id: string, p: Partial<Property>): Promise<void> {
-  const { error } = await supabase.from('properties').update({ ...p, updated_at: new Date().toISOString() }).eq('id', id);
+export async function updateProperty(id: string, p: Partial<Property>): Promise<Property> {
+  const { data, error } = await supabase
+    .from('properties')
+    .update({ ...p, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
   if (error) throw error;
+  return data as Property;
 }
 export async function deleteProperty(id: string): Promise<void> {
   const { error } = await supabase.from('properties').delete().eq('id', id);

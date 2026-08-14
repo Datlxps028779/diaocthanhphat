@@ -41,8 +41,7 @@ export default async function NewsArticlePage({ params }: Params) {
   return (
     <>
       <JsonLdScripts schemas={schemas} />
-      {/* NewsPage tra chi tiết theo id (UUID) — truyền article.id đã resolve từ slug */}
-      <NewsDetailClient articleId={article.id} />
+      <NewsDetailClient article={article} />
     </>
   );
 }

@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink } from 'lucide-react';
 import type { NewsArticle } from '../../../lib/supabase';
-import { adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews, getNewsCategories } from '../../../lib/api';
+import {
+  adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews, getNewsCategories,
+  newsRevalidationSnapshot, revalidateNewsContent,
+} from '../../../lib/api';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata, buildNewsJsonLd } from '../../../lib/seo';
@@ -715,10 +718,23 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
   const clearSelection = () => setSelected(new Set());
   const selectedIds = () => Array.from(selected);
-  const runBulk = async (fn: () => Promise<number>, label: string) => {
+  const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidateNewsContent>[1]) => {
+    try {
+      await revalidateNewsContent(action, targets);
+    } catch (error) {
+      console.error('[AdminPanel] Đã lưu Tin tức nhưng chưa làm mới cache:', error);
+      alert('Đã lưu dữ liệu nhưng chưa làm mới được cache công khai. Hãy thử lưu lại hoặc liên hệ quản trị viên.');
+    }
+  };
+  const runBulk = async (
+    fn: () => Promise<number>,
+    label: string,
+    targets: Parameters<typeof revalidateNewsContent>[1],
+  ) => {
     setBulkBusy(true);
     try {
       const n = await fn();
+      if (n > 0) await warnRevalidation('bulk', targets);
       clearSelection();
       await load();
       console.info(`[AdminPanel] Bulk ${label}: ${n} bài`);
@@ -735,8 +751,16 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         allArticles={articles}
         categories={categories}
         onSave={async (payload) => {
-          if (creating) await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
-          else if (editing) await updateNews(editing.id, payload);
+          if (creating) {
+            const saved = await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
+            await warnRevalidation('create', [{ current: newsRevalidationSnapshot(saved) }]);
+          } else if (editing) {
+            const saved = await updateNews(editing.id, payload);
+            await warnRevalidation('update', [{
+              previous: newsRevalidationSnapshot(editing),
+              current: newsRevalidationSnapshot(saved),
+            }]);
+          }
           await load(); setEditing(null); setCreating(false);
         }}
         onCancel={() => { setEditing(null); setCreating(false); }}
@@ -759,11 +783,25 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
           <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateNews(selectedIds(), { is_published: true }), 'đăng')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateNews(selectedIds(), { is_published: true }),
+            'đăng',
+            articles.filter(article => selected.has(article.id)).map(article => ({
+              previous: newsRevalidationSnapshot(article),
+              current: newsRevalidationSnapshot({ ...article, is_published: true }),
+            })),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Đăng
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkUpdateNews(selectedIds(), { is_published: false }), 'ẩn')}
+          <button disabled={bulkBusy} onClick={() => runBulk(
+            () => bulkUpdateNews(selectedIds(), { is_published: false }),
+            'ẩn',
+            articles.filter(article => selected.has(article.id)).map(article => ({
+              previous: newsRevalidationSnapshot(article),
+              current: newsRevalidationSnapshot({ ...article, is_published: false }),
+            })),
+          )}
             className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <XCircle className="w-3.5 h-3.5" />Chuyển nháp
           </button>
@@ -844,7 +882,19 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => setEditing(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={async () => { await updateNews(a.id, { is_published: !a.is_published }); await load(); }}
+                      <button onClick={async () => {
+                        try {
+                          const saved = await updateNews(a.id, { is_published: !a.is_published });
+                          await warnRevalidation(saved.is_published ? 'publish' : 'unpublish', [{
+                            previous: newsRevalidationSnapshot(a),
+                            current: newsRevalidationSnapshot(saved),
+                          }]);
+                          await load();
+                        } catch (error) {
+                          console.error('[AdminPanel] Cập nhật trạng thái Tin tức thất bại:', error);
+                          alert(`Cập nhật trạng thái thất bại: ${(error as Error).message}`);
+                        }
+                      }}
                         className={`p-1.5 rounded-lg transition-colors ${a.is_published ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}>
                         {a.is_published ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
                       </button>
@@ -865,10 +915,25 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           )}
         </div>
       )}
-      {confirmDelete && <ConfirmDialog message="Xóa bài viết này?" onConfirm={async () => { await deleteNews(confirmDelete); setConfirmDelete(null); await load(); }} onCancel={() => setConfirmDelete(null)} />}
+      {confirmDelete && <ConfirmDialog message="Xóa bài viết này?" onConfirm={async () => {
+        const previous = articles.find(article => article.id === confirmDelete);
+        try {
+          await deleteNews(confirmDelete);
+          if (previous) await warnRevalidation('delete', [{ previous: newsRevalidationSnapshot(previous) }]);
+          setConfirmDelete(null);
+          await load();
+        } catch (error) {
+          console.error('[AdminPanel] Xóa Tin tức thất bại:', error);
+          alert(`Xóa bài viết thất bại: ${(error as Error).message}`);
+        }
+      }} onCancel={() => setConfirmDelete(null)} />}
       {confirmBulkDelete && (
         <ConfirmDialog message={`Xóa ${selected.size} bài viết đã chọn? Thao tác không thể hoàn tác.`}
-          onConfirm={() => { setConfirmBulkDelete(false); runBulk(() => bulkDeleteNews(selectedIds()), 'xóa'); }}
+          onConfirm={() => {
+            const targets = articles.filter(article => selected.has(article.id)).map(article => ({ previous: newsRevalidationSnapshot(article) }));
+            setConfirmBulkDelete(false);
+            runBulk(() => bulkDeleteNews(selectedIds()), 'xóa', targets);
+          }}
           onCancel={() => setConfirmBulkDelete(false)} />
       )}
 

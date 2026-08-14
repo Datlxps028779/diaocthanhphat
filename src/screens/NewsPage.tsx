@@ -468,7 +468,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
   const [category, setCategory] = useState<NewsCollection>(initialCategory || 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -596,6 +596,10 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialPage,
     queryKey: qk.newsArticle(articleId ?? ''),
     queryFn: () => getNewsById(articleId!),
     enabled: !!articleId,
+    initialData: initialArticle && initialArticle.id === articleId ? initialArticle : undefined,
+    // Detail nhận server snapshot, nhưng cần refetch sớm khi tab quay lại để không giữ
+    // bản public cũ sau mutation/revalidation ở tab Admin.
+    staleTime: 30_000,
   });
 
   // Bài liên quan chọn tay (có thể khác category) — resolve theo id để đưa vào pool.
