@@ -22,6 +22,8 @@ import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
 import { extractHeadings, injectHeadingIds, TOC_MIN_HEADINGS } from '../lib/tableOfContents';
 import { ArticleToc } from '../components/ArticleToc';
 import { DetailShareButtons } from '../components/DetailShareButtons';
+import { RichVideo } from '../components/RichVideo';
+import { splitRichContentVideos } from '../lib/videoMedia';
 
 // Danh mục là chuỗi tự do (đổ động từ news_categories). Giữ alias để đọc dễ.
 type NewsCollection = string;
@@ -263,11 +265,19 @@ function ArticleDetail({
   );
   const safeHtml = useMemo(
     () => {
-      if (!contentIsHtml) return '';
+      if (!contentIsHtml) return [] as ReturnType<typeof splitRichContentVideos>;
       const clean = autoLinkContent(sanitizeArticleHtml(rawContent), linkTargets);
-      return injectHeadingIds(clean, tocHeadings);
+      return splitRichContentVideos(injectHeadingIds(clean, tocHeadings));
     },
     [rawContent, contentIsHtml, linkTargets, tocHeadings],
+  );
+
+  const renderSafeHtml = () => safeHtml.map((segment, index) =>
+    segment.type === 'video' ? (
+      <RichVideo key={`video-${index}`} video={segment.video} />
+    ) : segment.html.trim() ? (
+      <div key={`html-${index}`} dangerouslySetInnerHTML={{ __html: segment.html }} />
+    ) : null,
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
@@ -356,10 +366,9 @@ function ArticleDetail({
 
           {/* Content */}
           {contentIsHtml ? (
-            <div
-              className="prose prose-gray max-w-none text-gray-700 leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: safeHtml }}
-            />
+            <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed">
+              {renderSafeHtml()}
+            </div>
           ) : (
             <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed space-y-4">
               {markdownBlocks}

@@ -20,6 +20,8 @@ import { LEGAL_OPTIONS } from '../../../lib/legalOptions';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../../../lib/propertySpecs';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { stripHtml, isHtmlContent } from '../../../lib/markdown';
+import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
+import { parseLegacyPropertyVideo, parseVrTourUrl } from '../../../lib/videoMedia';
 import { buildProductPath } from '../../../lib/productPath';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
@@ -595,11 +597,23 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     }
     const cs = (v: string) => v?.trim() || null;
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
+    const videoUrl = cs(specForm.video_url);
+    const vrTourUrl = cs(specForm.vr_tour_url);
+    if (videoUrl && !parseLegacyPropertyVideo(videoUrl, `Video: ${specForm.title}`)) {
+      window.alert('Link video không hợp lệ. Chỉ chấp nhận YouTube HTTPS hoặc MP4 đã tải lên kho media của hệ thống.');
+      return;
+    }
+    if (vrTourUrl && !parseVrTourUrl(vrTourUrl)) {
+      window.alert('Link VR Tour không hợp lệ. Chỉ chấp nhận URL HTTPS.');
+      return;
+    }
     onSave({
       // Để trống → createProperty tự sinh slug duy nhất; có nhập → dùng nguyên
       slug: cs(specForm.slug),
       title: specForm.title,
-      description: cs(specForm.description),
+      // Dữ liệu từ visual/source editor được chuẩn hóa trước khi lưu, giống News.
+      // Renderer public vẫn sanitize lại như lớp phòng thủ thứ hai.
+      description: cs(sanitizeArticleHtml(specForm.description)),
       listing_type: specForm.listing_type,
       price: Number(specForm.price) || 0,
       price_unit: specForm.price_unit,
@@ -635,8 +649,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       floor_number: cn(specForm.floor_number),
       latitude: cn(specForm.latitude),
       longitude: cn(specForm.longitude),
-      vr_tour_url: cs(specForm.vr_tour_url),
-      video_url: cs(specForm.video_url),
+      vr_tour_url: vrTourUrl,
+      video_url: videoUrl,
       meta_title: cs(specForm.meta_title),
       meta_description: cs(specForm.meta_description),
       focus_keywords: cs(specForm.focus_keywords),
@@ -893,8 +907,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           </div>
 
           {/* Media */}
-          {fld('Link video thực tế (YouTube hoặc MP4)', 'video_url', { type: 'url', placeholder: 'https://youtube.com/...' })}
-          {fld('Link VR Tour 360°', 'vr_tour_url', { type: 'url', placeholder: 'https://...' })}
+          {fld('Link video thực tế (YouTube hoặc MP4 từ kho media)', 'video_url', { type: 'url', placeholder: 'https://youtube.com/watch?v=...' })}
+          {fld('Link VR Tour 360° (HTTPS)', 'vr_tour_url', { type: 'url', placeholder: 'https://kuula.co/...' })}
 
           {/* Description */}
           <div>

@@ -13,6 +13,8 @@ describe('isHtmlContent', () => {
     expect(isHtmlContent('<h2>Tiêu đề</h2>')).toBe(true);
     expect(isHtmlContent('<ul><li>a</li></ul>')).toBe(true);
     expect(isHtmlContent('<img src="/a.jpg" />')).toBe(true);
+    expect(isHtmlContent('<table><tr><td>Ô dữ liệu</td></tr></table>')).toBe(true);
+    expect(isHtmlContent('<figure data-video-kind="youtube"></figure>')).toBe(true);
   });
 });
 

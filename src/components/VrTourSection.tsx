@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Glasses, ExternalLink, Play, X } from 'lucide-react';
+import { parseVrTourUrl } from '../lib/videoMedia';
 
 interface VrTourSectionProps {
   vrTourUrl: string | null;
@@ -8,9 +9,10 @@ interface VrTourSectionProps {
 export function VrTourSection({ vrTourUrl }: VrTourSectionProps) {
   const [open, setOpen] = useState(false);
 
-  if (!vrTourUrl) return null;
+  const tour = parseVrTourUrl(vrTourUrl);
+  if (!tour) return null;
 
-  const embedUrl = normalizeEmbedUrl(vrTourUrl);
+  const { href, embedUrl } = tour;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -20,14 +22,25 @@ export function VrTourSection({ vrTourUrl }: VrTourSectionProps) {
             <Glasses className="w-4 h-4 text-red-500" />
             Tham quan thực tế 360°
           </h2>
-          <a href={vrTourUrl} target="_blank" rel="noreferrer"
+          <a href={href} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs text-red-600 hover:underline font-medium">
             <ExternalLink className="w-3 h-3" />Mở rộng
           </a>
         </div>
 
-        {!open ? (
-          <div className="relative bg-gray-900 rounded-xl overflow-hidden cursor-pointer group"
+        {!embedUrl ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl bg-gray-900 px-4 text-center"
+          >
+            <ExternalLink className="h-6 w-6 text-white" />
+            <p className="text-sm font-medium text-white">Mở tour ảo 360° trong cửa sổ mới</p>
+            <p className="text-xs text-gray-400">Nhà cung cấp này không hỗ trợ nhúng an toàn trên trang.</p>
+          </a>
+        ) : !open ? (
+          <button type="button" className="relative w-full cursor-pointer overflow-hidden rounded-xl bg-gray-900 text-left group"
             onClick={() => setOpen(true)}>
             <div className="h-40 flex flex-col items-center justify-center gap-3">
               <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
@@ -36,10 +49,10 @@ export function VrTourSection({ vrTourUrl }: VrTourSectionProps) {
               <p className="text-white text-sm font-medium">Bấm để xem tour ảo 360°</p>
               <p className="text-gray-400 text-xs">Trải nghiệm không gian thực tế ngay trên trình duyệt</p>
             </div>
-          </div>
+          </button>
         ) : (
           <div className="relative">
-            <button onClick={() => setOpen(false)}
+            <button type="button" onClick={() => setOpen(false)}
               className="absolute top-2 right-2 z-10 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
@@ -48,6 +61,7 @@ export function VrTourSection({ vrTourUrl }: VrTourSectionProps) {
               className="w-full h-72 rounded-xl border-0"
               allow="fullscreen; vr; gyroscope; accelerometer"
               allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
               title="VR Tour 360°"
             />
           </div>
@@ -55,14 +69,4 @@ export function VrTourSection({ vrTourUrl }: VrTourSectionProps) {
       </div>
     </div>
   );
-}
-
-function normalizeEmbedUrl(url: string): string {
-  if (url.includes('kuula.co') && !url.includes('/e/')) {
-    return url.replace('kuula.co/post/', 'kuula.co/e/').replace('kuula.co/share/', 'kuula.co/e/');
-  }
-  if (url.includes('panoee.com') && !url.includes('/embed/')) {
-    return url.replace('panoee.com/tour/', 'panoee.com/embed/tour/');
-  }
-  return url;
 }

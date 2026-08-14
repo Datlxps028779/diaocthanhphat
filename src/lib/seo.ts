@@ -5,6 +5,7 @@ import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { stripHtml, isHtmlContent } from './markdown';
 import { buildProductPath } from './productPath';
+import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
 
 const SITE_URL = getSiteUrl();
 const SITE_NAME = 'BĐS Bình Dương';
@@ -247,14 +248,9 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   ]).schema;
 }
 
-function youtubeId(u: string): string | null {
-  const m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
 function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
-  const src = p.video_url?.trim();
-  if (!src) return null;
+  const video = parseLegacyPropertyVideo(p.video_url, `Video: ${p.title}`);
+  if (!video) return null;
   const plainDesc = p.description
     ? (isHtmlContent(p.description) ? stripHtml(p.description) : p.description).trim()
     : '';
@@ -264,18 +260,17 @@ function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
     description: plainDesc || p.title,
     uploadDate: p.created_at,
   };
-  const yt = youtubeId(src);
-  if (yt) {
+  if (video.kind === 'youtube') {
     return {
       ...base,
-      thumbnailUrl: `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
-      embedUrl: `https://www.youtube.com/embed/${yt}`,
+      thumbnailUrl: youtubeThumbnailUrl(video.videoId),
+      embedUrl: youtubeEmbedUrl(video),
     };
   }
   const gallery = buildSeoImageGallery(p.image_url, p.images, { max: 1 });
   const thumb = gallery[0];
   if (!thumb) return null;
-  return { ...base, thumbnailUrl: thumb, contentUrl: src };
+  return { ...base, thumbnailUrl: thumb, contentUrl: video.src };
 }
 
 // ─── News → Metadata ──────────────────────────────────────────────────────────

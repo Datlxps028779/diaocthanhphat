@@ -27,7 +27,7 @@ export function renderInlineMarkdown(text: string): ReactNode[] {
   return nodes;
 }
 
-const HTML_BLOCK_TAG = /<\/?(p|h[1-6]|ul|ol|li|blockquote|img|figure|figcaption|a|strong|em|b|i|br|div|span)\b[^>]*>/i;
+const HTML_BLOCK_TAG = /<\/?(p|h[1-6]|ul|ol|li|blockquote|img|figure|figcaption|a|strong|em|b|i|br|div|span|table|thead|tbody|tr|th|td|code|pre)\b[^>]*>/i;
 
 export function isHtmlContent(value: string): boolean {
   return HTML_BLOCK_TAG.test(value);

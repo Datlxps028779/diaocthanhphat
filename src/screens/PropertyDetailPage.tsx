@@ -7,7 +7,7 @@ import {
   Maximize2, FileText, Clock, Eye, ChevronRight,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight,
-  Navigation, ExternalLink, Play, CalendarClock,
+  Navigation, ExternalLink, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
 import { getPropertyByIdOrSlug, getRelatedProperties, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
@@ -39,6 +39,8 @@ import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { getProductSuggestions } from '../lib/productSuggestions';
 import { buildSimilarFilters } from '../lib/similarFilters';
+import { RichVideo } from '../components/RichVideo';
+import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMedia';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -358,37 +360,11 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {/* VR Tour */}
             <VrTourSection vrTourUrl={property.vr_tour_url} />
 
-            {/* Video player */}
-            {property.video_url && (
-              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                <div className="px-5 pt-5 pb-3 flex items-center gap-2">
-                  <div className="w-7 h-7 bg-red-100 rounded-lg flex items-center justify-center">
-                    <Play className="w-3.5 h-3.5 text-red-600 fill-red-600" />
-                  </div>
-                  <h2 className="font-bold text-gray-900 text-base">Video thực tế</h2>
-                </div>
-                <div className="relative aspect-video bg-black">
-                  {property.video_url.includes('youtube.com') || property.video_url.includes('youtu.be') ? (
-                    <iframe
-                      src={property.video_url.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title="Video BĐS"
-                    />
-                  ) : (
-                    <video
-                      src={property.video_url}
-                      controls
-                      className="w-full h-full object-contain"
-                      preload="metadata"
-                    >
-                      Trình duyệt của bạn không hỗ trợ video HTML5.
-                    </video>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Video player: URL legacy chỉ được render sau khi parse/allowlist. */}
+            {(() => {
+              const video = parseLegacyPropertyVideo(property.video_url, `Video: ${property.title}`);
+              return video ? <RichVideo video={video} /> : null;
+            })()}
 
             {/* Title & price */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
@@ -470,8 +446,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Mô tả chi tiết</h2>
                 {isHtmlContent(property.description) ? (
-                  <div className="prose prose-gray max-w-none text-sm text-gray-600 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(property.description) }} />
+                  <div className="prose prose-gray max-w-none text-sm text-gray-600 leading-relaxed">
+                    {splitRichContentVideos(sanitizeArticleHtml(property.description)).map((segment, index) =>
+                      segment.type === 'video' ? (
+                        <RichVideo key={`video-${index}`} video={segment.video} />
+                      ) : segment.html.trim() ? (
+                        <div key={`html-${index}`} dangerouslySetInnerHTML={{ __html: segment.html }} />
+                      ) : null,
+                    )}
+                  </div>
                 ) : (
                   <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{property.description}</p>
                 )}

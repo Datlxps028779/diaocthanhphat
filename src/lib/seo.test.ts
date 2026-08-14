@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+
+afterEach(() => vi.unstubAllEnvs());
 import { buildLocalBusinessJsonLd, staticPageMetadata, buildBreadcrumbJsonLd, buildPropertyJsonLd, buildPropertyMetadata, buildNewsJsonLd, buildNewsMetadata } from './seo';
 import type { NewsArticle, Property } from './supabase';
 
@@ -170,16 +172,22 @@ describe('buildPropertyJsonLd', () => {
     const v = ld.video as Record<string, unknown>;
     expect(v['@type']).toBe('VideoObject');
     expect(v.thumbnailUrl).toBe('https://i.ytimg.com/vi/abc123XYZ_1/hqdefault.jpg');
-    expect(v.embedUrl).toBe('https://www.youtube.com/embed/abc123XYZ_1');
+    expect(v.embedUrl).toBe('https://www.youtube-nocookie.com/embed/abc123XYZ_1');
     expect(v.name).toBeTruthy();
     expect(v.uploadDate).toBe('2026-01-01T00:00:00.000Z');
   });
 
+  it('URL YouTube lookalike không tạo VideoObject', () => {
+    const ld = buildPropertyJsonLd(property({ video_url: 'https://youtube.com.evil.test/watch?v=abc123XYZ_1' }));
+    expect(ld).not.toHaveProperty('video');
+  });
+
   it('video MP4 dùng image_url làm thumbnail; không có ảnh → bỏ video (tránh VideoObject thiếu field)', () => {
-    const withImg = buildPropertyJsonLd(property({ video_url: 'https://x/clip.mp4', image_url: 'https://x/a.jpg' }));
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://x');
+    const withImg = buildPropertyJsonLd(property({ video_url: 'https://x/storage/v1/object/public/public-media/videos/properties/clip.mp4', image_url: 'https://x/a.jpg' }));
     const v = withImg.video as Record<string, unknown>;
     expect(v.thumbnailUrl).toBe('https://x/a.jpg');
-    expect(v.contentUrl).toBe('https://x/clip.mp4');
+    expect(v.contentUrl).toBe('https://x/storage/v1/object/public/public-media/videos/properties/clip.mp4');
 
     const noImg = buildPropertyJsonLd(property({ video_url: 'https://x/clip.mp4', image_url: null, images: null }));
     expect(noImg).not.toHaveProperty('video');

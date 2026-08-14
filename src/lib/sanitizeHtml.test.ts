@@ -44,4 +44,31 @@ describe('sanitizeArticleHtml', () => {
     const out = sanitizeArticleHtml('<a href="javascript:alert(1)">x</a>');
     expect(out).not.toContain('javascript:');
   });
+
+  it('loại raw iframe và video khỏi nội dung bài', () => {
+    const out = sanitizeArticleHtml('<iframe src="https://evil.test/x"></iframe><video src="https://evil.test/x.mp4"></video>');
+    expect(out).not.toContain('iframe');
+    expect(out).not.toContain('video');
+  });
+
+  it('chỉ giữ marker YouTube có dữ liệu hợp lệ', () => {
+    const out = sanitizeArticleHtml('<figure data-video-kind="youtube" data-video-id="abc123XYZ_1" data-video-title="Tour nhà" data-video-start="30"><figcaption>Giả mạo</figcaption></figure>');
+    expect(out).toContain('data-video-kind="youtube"');
+    expect(out).toContain('data-video-id="abc123XYZ_1"');
+    expect(out).toContain('data-video-title="Tour nhà"');
+    expect(out).toContain('data-video-start="30"');
+  });
+
+  it('loại marker video giả và data attribute tùy ý', () => {
+    const out = sanitizeArticleHtml('<p data-admin="1">nội dung</p><figure data-video-kind="youtube" data-video-id="sai"><figcaption>x</figcaption></figure>');
+    expect(out).not.toContain('data-admin');
+    expect(out).not.toContain('data-video-kind');
+  });
+
+  it('giữ data-align ảnh nhưng chặn URI nguy hiểm', () => {
+    const out = sanitizeArticleHtml('<img src="data:image/png;base64,x" data-align="center" onerror="alert(1)">');
+    expect(out).toContain('data-align="center"');
+    expect(out).not.toContain('src=');
+    expect(out).not.toContain('onerror');
+  });
 });
