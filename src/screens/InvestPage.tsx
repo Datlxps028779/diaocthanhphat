@@ -5,6 +5,7 @@ import { TrendingUp, Calculator, Shield, BarChart3, CheckCircle, ArrowRight, Bui
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb, SectionTitle } from '../components/Layout';
 import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
+import { track, EVENTS } from '../lib/analytics';
 import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
 import { isValidVnPhone } from '../lib/phone';
@@ -228,7 +229,10 @@ function ConsultationForm() {
 
   const submitMutation = useMutation({
     mutationFn: () => submitLead({ full_name: name, phone, message: notes, area_interest: 'Tư vấn đầu tư', source: 'invest_page' }),
-    onSuccess: () => { setError(''); setSent(true); },
+    onSuccess: () => {
+      setError(''); setSent(true);
+      track(EVENTS.LEAD_SUBMIT, { source: 'invest_page', hasMessage: Boolean(notes.trim()) });
+    },
     onError: () => setError('Có lỗi xảy ra, vui lòng thử lại sau.'),
   });
   const loading = submitMutation.isPending;

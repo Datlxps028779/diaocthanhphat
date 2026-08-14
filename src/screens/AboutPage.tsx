@@ -11,6 +11,7 @@ import { submitLead, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
 import { isValidVnPhone } from '../lib/phone';
+import { track, EVENTS } from '../lib/analytics';
 
 interface AboutPageProps { onNavigate: (p: Page) => void; }
 
@@ -32,7 +33,10 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
 
   const submitMutation = useMutation({
     mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung', source: 'about_page' }),
-    onSuccess: () => { setLeadError(''); setSent(true); },
+    onSuccess: () => {
+      setLeadError(''); setSent(true);
+      track(EVENTS.LEAD_SUBMIT, { source: 'about_page', hasMessage: Boolean(form.message.trim()) });
+    },
   });
   const loading = submitMutation.isPending;
 

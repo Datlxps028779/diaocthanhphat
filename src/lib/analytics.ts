@@ -1,8 +1,8 @@
 // Facade đo lường dùng chung — gom mọi event về một chỗ để: (1) đổi/ tắt nhà
 // cung cấp không phải sửa rải rác; (2) chuẩn hoá tên event; (3) lọc props về
 // đúng kiểu Vercel Analytics cho phép (string|number|boolean, không null/object).
-// Dispatch song song tới window.va (Vercel) và window.gtag (GA4) nếu có mặt —
-// vắng mặt (SSR / chưa consent) thì im lặng, không ném lỗi.
+// Dispatch song song tới window.va (Vercel) và window.gtag nếu có mặt — vắng mặt
+// (SSR / chưa consent) thì im lặng, không ném lỗi.
 
 export type EventProps = Record<string, unknown>;
 type CleanProps = Record<string, string | number | boolean>;
@@ -28,7 +28,9 @@ export function sanitizeProps(props?: EventProps): CleanProps {
 declare global {
   interface Window {
     va?: (event: 'event', props: { name: string } & CleanProps) => void;
-    gtag?: (command: 'event', name: string, props?: CleanProps) => void;
+    gtag?: (command: 'event' | 'consent', name: string, props?: CleanProps) => void;
+    googleAnalyticsConsentGranted?: boolean;
+    googleAdsLeadConversion?: string;
   }
 }
 
@@ -38,8 +40,12 @@ export function track(name: string, props?: EventProps): void {
   try {
     w.va?.('event', { name, ...clean });
   } catch { /* nuốt lỗi đo lường — không được ảnh hưởng UX */ }
+  if (!w.googleAnalyticsConsentGranted) return;
   try {
     w.gtag?.('event', name, clean);
+    if (name === EVENTS.LEAD_SUBMIT && w.googleAdsLeadConversion) {
+      w.gtag?.('event', 'conversion', { send_to: w.googleAdsLeadConversion });
+    }
   } catch { /* như trên */ }
 }
 

@@ -86,7 +86,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Providers>{children}</Providers>
         <Analytics />
         <SpeedInsights />
-        <AnalyticsConsent />
+        <AnalyticsConsent environmentGaId={process.env.NEXT_PUBLIC_GA_ID} />
       </body>
     </html>
   );

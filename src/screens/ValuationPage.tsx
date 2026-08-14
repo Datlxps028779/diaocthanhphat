@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Calculator, TrendingUp, Info, Phone, CheckCircle } from 'lucide-react';
 import { getComps } from '../lib/api/properties';
 import { submitLead } from '../lib/api';
+import { track, EVENTS } from '../lib/analytics';
 import { estimateValuation, type Valuation } from '../lib/valuation';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
@@ -46,7 +47,10 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
         : undefined,
       source: 'valuation_page',
     }),
-    onSuccess: () => setLeadErr(''),
+    onSuccess: () => {
+      setLeadErr('');
+      track(EVENTS.LEAD_SUBMIT, { source: 'valuation_page', hasEstimate: Boolean(result) });
+    },
     onError: () => setLeadErr('Có lỗi khi gửi, vui lòng thử lại.'),
   });
 

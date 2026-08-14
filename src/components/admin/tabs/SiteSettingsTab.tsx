@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, Save, Settings } from 'lucide-react';
 import type { SiteSetting } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, updateSiteSetting } from '../../../lib/api';
+import { parseGoogleAdsConversion, parseGoogleDestination } from '../../../lib/googleTag';
 import { ImageUrlInput } from '../../ImageUpload';
 
 // ─── Site Settings Tab ────────────────────────────────────────────────────────
@@ -26,11 +27,27 @@ export function SiteSettingsTab() {
   const groups = [...new Set(settings.map(s => s.group_name))];
   const groupSettings = settings.filter(s => s.group_name === activeGroup);
 
+  const validateSetting = (key: string, value: string): string | null => {
+    if (key === 'google_analytics_id' || key === 'google_ads_id') {
+      return value.trim() && !parseGoogleDestination(value) ? 'Mã phải có dạng G-... hoặc AW-... .' : null;
+    }
+    if (key === 'google_ads_lead_conversion') {
+      return value.trim() && !parseGoogleAdsConversion(value) ? 'Mã chuyển đổi phải có dạng AW-.../label.' : null;
+    }
+    return null;
+  };
+
   const handleSave = async (key: string) => {
+    const value = editVals[key] ?? '';
+    const validationError = validateSetting(key, value);
+    if (validationError) { window.alert(validationError); return; }
     setSaving(key);
     try {
-      await updateSiteSetting(key, editVals[key] ?? '');
+      await updateSiteSetting(key, value);
       setSavedKeys(s => ({ ...s, [key]: true }));
+      if (key === 'google_analytics_id' || key === 'google_ads_id' || key === 'google_ads_lead_conversion') {
+        window.alert('Đã lưu. Hãy tải lại trang công khai để Google tag nhận cấu hình mới.');
+      }
       setTimeout(() => setSavedKeys(s => ({ ...s, [key]: false })), 2000);
     } catch (e) { console.error("[AdminPanel]", e); } finally { setSaving(null); }
   };
@@ -71,6 +88,9 @@ export function SiteSettingsTab() {
         <div className="divide-y divide-gray-100">
           {groupSettings.map(setting => (
             <div key={setting.key} className="p-4">
+              {setting.key === 'google_analytics_id' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Nhập mã GA4 dạng <strong>G-...</strong>. Để đo chuyển đổi Google Ads, nhập thêm Google Ads ID và mã conversion ở bên dưới. Không dán nguyên thẻ script.</p>}
+              {setting.key === 'google_ads_id' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Nhập mã tài khoản Google Ads dạng <strong>AW-...</strong>. Thẻ Google sẽ được cài trên mọi trang khi mã hợp lệ.</p>}
+              {setting.key === 'google_ads_lead_conversion' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Nhập đích chuyển đổi dạng <strong>AW-.../label</strong>. Conversion chỉ gửi sau khi form lead lưu thành công.</p>}
               <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">{setting.label}</label>

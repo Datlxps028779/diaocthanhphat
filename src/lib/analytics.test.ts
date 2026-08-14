@@ -31,6 +31,8 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
     beforeEach(() => {
       delete (globalThis as Record<string, unknown>).va;
       delete (globalThis as Record<string, unknown>).gtag;
+      delete (globalThis as Record<string, unknown>).googleAnalyticsConsentGranted;
+      delete (globalThis as Record<string, unknown>).googleAdsLeadConversion;
     });
 
     it('gọi window.va với dạng ("event", {name, ...props}) đã sanitize', () => {
@@ -43,8 +45,27 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
     it('gọi window.gtag với dạng ("event", name, props) đã sanitize', () => {
       const gtag = vi.fn();
       (globalThis as Record<string, unknown>).gtag = gtag;
+      (globalThis as Record<string, unknown>).googleAnalyticsConsentGranted = true;
       track('contact_open', { listingId: 'abc', bad: { x: 1 } });
       expect(gtag).toHaveBeenCalledWith('event', 'contact_open', { listingId: 'abc' });
+    });
+
+    it('gửi Google Ads conversion đúng một lần sau lead_submit', () => {
+      const gtag = vi.fn();
+      (globalThis as Record<string, unknown>).gtag = gtag;
+      (globalThis as Record<string, unknown>).googleAnalyticsConsentGranted = true;
+      (globalThis as Record<string, unknown>).googleAdsLeadConversion = 'AW-18379274535/4QdoCJrk_uAcEKfy9btE';
+      track(EVENTS.LEAD_SUBMIT, { source: 'modal' });
+      expect(gtag).toHaveBeenNthCalledWith(1, 'event', 'lead_submit', { source: 'modal' });
+      expect(gtag).toHaveBeenNthCalledWith(2, 'event', 'conversion', { send_to: 'AW-18379274535/4QdoCJrk_uAcEKfy9btE' });
+    });
+
+    it('không gửi Google event khi chưa có consent', () => {
+      const gtag = vi.fn();
+      (globalThis as Record<string, unknown>).gtag = gtag;
+      (globalThis as Record<string, unknown>).googleAdsLeadConversion = 'AW-18379274535/4QdoCJrk_uAcEKfy9btE';
+      track(EVENTS.LEAD_SUBMIT, { source: 'modal' });
+      expect(gtag).not.toHaveBeenCalled();
     });
 
     it('không ném lỗi khi cả hai provider vắng mặt (SSR / chưa consent)', () => {
