@@ -122,7 +122,8 @@ export function parseVideoMarkerAttributes(attributes: Record<string, string>): 
     const video = parseUploadedVideoUrl(attributes['data-video-src'], title);
     if (!video) return null;
     const poster = safeHttpsUrl(attributes['data-video-poster']);
-    return { ...video, ...(poster ? { poster: poster.toString() } : {}) };
+    const trustedPoster = poster && (poster.origin === safeHttpsUrl(getSiteUrl())?.origin || configuredStorageOrigins().has(poster.origin));
+    return { ...video, ...(trustedPoster ? { poster: poster.toString() } : {}) };
   }
   return null;
 }

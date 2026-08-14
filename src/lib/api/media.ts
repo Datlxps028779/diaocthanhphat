@@ -134,6 +134,60 @@ export async function uploadImages(files: File[], folder = 'properties', isAdmin
   return urls;
 }
 
+// ─── Video Upload (News/Property rich editor, admin-only) ─────────────────────
+export const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_VIDEO_FOLDER = new Set(['news', 'properties']);
+
+export function assertSafeVideoMetadata(file: Pick<File, 'name' | 'type' | 'size'>) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext !== 'mp4' || file.type !== 'video/mp4') {
+    throw new Error('Chỉ chấp nhận video MP4 (đuôi .mp4 và định dạng video/mp4).');
+  }
+  if (!file.size) throw new Error('Video trống hoặc không đọc được.');
+  if (file.size > MAX_VIDEO_SIZE_BYTES) throw new Error('Video tối đa 50MB. Vui lòng nén hoặc chọn file nhỏ hơn.');
+}
+
+export function hasMp4Signature(header: Uint8Array): boolean {
+  // ISO-BMFF: bytes 4–7 là box type "ftyp". Đủ để chặn HTML/ảnh đổi đuôi;
+  // browser vẫn là lớp xác nhận media cuối khi phát metadata.
+  return header.length >= 12 && header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70;
+}
+
+export async function assertSafeVideo(file: File) {
+  assertSafeVideoMetadata(file);
+  const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+  if (!hasMp4Signature(header)) {
+    throw new Error('Tệp không có định dạng MP4 hợp lệ. Vui lòng xuất lại video dưới dạng MP4.');
+  }
+}
+
+function videoFilename(file: File, folder: 'news' | 'properties', caption?: string): string {
+  const base = buildSlug(caption?.trim() || file.name.replace(/\.[^.]+$/, '') || 'video');
+  const nonce = crypto.randomUUID?.().replace(/-/g, '').slice(0, 12) ?? Math.random().toString(36).slice(2, 14);
+  return `videos/${folder}/${base || 'video'}-${nonce}.mp4`;
+}
+
+export async function uploadVideo(
+  file: File,
+  folder: 'news' | 'properties',
+  isAdmin = false,
+  caption?: string,
+): Promise<string> {
+  if (!isAdmin || !ALLOWED_VIDEO_FOLDER.has(folder)) {
+    throw new Error('Bạn không có quyền tải video ở vị trí này.');
+  }
+  await assertSafeVideo(file);
+  const filename = videoFilename(file, folder, caption);
+  const { error } = await supabase.storage.from('public-media').upload(filename, file, {
+    upsert: false,
+    contentType: 'video/mp4',
+    cacheControl: '31536000',
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from('public-media').getPublicUrl(filename);
+  return data.publicUrl;
+}
+
 // ─── Document Upload (tài liệu đào tạo AI, admin-only) ──────────────────────────
 // Tài liệu KHÔNG phải ảnh nên không dùng assertSafeImage. Whitelist riêng docx/xlsx/
 // pdf/text. File gốc chỉ lưu để admin tải lại/đối chiếu; nội dung dùng cho AI là

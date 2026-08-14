@@ -96,6 +96,20 @@ describe('video media', () => {
     })).toBeNull();
   });
 
+  it('drops an uploaded-video poster outside trusted origins', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
+    const video = parseVideoMarkerAttributes({
+      'data-video-kind': 'upload',
+      'data-video-src': 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
+      'data-video-poster': 'https://evil.test/tracker.jpg',
+    });
+    expect(video).toEqual({
+      kind: 'upload',
+      src: 'https://example.supabase.co/storage/v1/object/public/public-media/videos/news/tour.mp4',
+      title: 'Video',
+    });
+  });
+
   it('embeds only approved VR hosts and leaves an unknown HTTPS provider link-only', () => {
     expect(parseVrTourUrl('https://kuula.co/post/abc')).toEqual({
       href: 'https://kuula.co/e/abc',

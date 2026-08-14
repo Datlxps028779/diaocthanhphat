@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Node } from '@tiptap/core';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -13,9 +14,11 @@ import TableCell from '@tiptap/extension-table-cell';
 import {
   Bold, Italic, Heading2, Heading3, List, Quote, Link as LinkIcon, Unlink,
   Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Search, X,
-  Table as TableIcon, Rows3, Columns3, Trash2,
+  Table as TableIcon, Rows3, Columns3, Trash2, Video, Upload,
 } from 'lucide-react';
 import { safeUrl } from '../../../lib/markdown';
+import { uploadVideo } from '../../../lib/api/media';
+import { parseUploadedVideoUrl, parseVideoMarkerAttributes, parseYoutubeUrl, type VideoMedia } from '../../../lib/videoMedia';
 import { ImageLibraryModal } from '../../ImageLibraryModal';
 
 export interface InternalLinkTarget {
@@ -29,7 +32,76 @@ interface RichTextEditorProps {
   placeholder?: string;
   internalLinks?: InternalLinkTarget[];
   enableImage?: boolean;
+  enableVideo?: boolean;
+  mediaFolder?: 'news' | 'properties';
 }
+
+const VideoMarker = Node.create({
+  name: 'videoMarker',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      kind: { default: null },
+      videoId: { default: null },
+      src: { default: null },
+      title: { default: 'Video' },
+      start: { default: null },
+      poster: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{
+      tag: 'figure[data-video-kind]',
+      getAttrs: element => {
+        const el = element as HTMLElement;
+        const video = parseVideoMarkerAttributes({
+          'data-video-kind': el.dataset.videoKind ?? '',
+          'data-video-id': el.dataset.videoId ?? '',
+          'data-video-src': el.dataset.videoSrc ?? '',
+          'data-video-title': el.dataset.videoTitle ?? '',
+          'data-video-start': el.dataset.videoStart ?? '',
+          'data-video-poster': el.dataset.videoPoster ?? '',
+        });
+        if (!video) return false;
+        return video.kind === 'youtube'
+          ? { kind: video.kind, videoId: video.videoId, title: video.title, start: video.startSeconds ?? null }
+          : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null };
+      },
+    }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const video = HTMLAttributes.kind === 'youtube'
+      ? parseVideoMarkerAttributes({
+        'data-video-kind': 'youtube',
+        'data-video-id': HTMLAttributes.videoId ?? '',
+        'data-video-title': HTMLAttributes.title ?? '',
+        'data-video-start': HTMLAttributes.start ? String(HTMLAttributes.start) : '',
+      })
+      : parseVideoMarkerAttributes({
+        'data-video-kind': 'upload',
+        'data-video-src': HTMLAttributes.src ?? '',
+        'data-video-title': HTMLAttributes.title ?? '',
+        'data-video-poster': HTMLAttributes.poster ?? '',
+      });
+    if (!video) return ['p', {}, 'Video không hợp lệ'];
+    const attrs = video.kind === 'youtube'
+      ? {
+        'data-video-kind': 'youtube',
+        'data-video-id': video.videoId,
+        'data-video-title': video.title,
+        ...(video.startSeconds ? { 'data-video-start': String(video.startSeconds) } : {}),
+      }
+      : {
+        'data-video-kind': 'upload',
+        'data-video-src': video.src,
+        'data-video-title': video.title,
+        ...(video.poster ? { 'data-video-poster': video.poster } : {}),
+      };
+    return ['figure', attrs, ['figcaption', {}, video.title]];
+  },
+});
 
 const AlignableImage = Image.extend({
   addAttributes() {
@@ -69,13 +141,17 @@ function ToolButton({ label, icon, active, onClick, hint }: { label: string; ico
 function Toolbar({
   editor,
   onImageClick,
+  onVideoClick,
   internalLinks,
   enableImage,
+  enableVideo,
 }: {
   editor: Editor;
   onImageClick: () => void;
+  onVideoClick: () => void;
   internalLinks: InternalLinkTarget[];
   enableImage: boolean;
+  enableVideo: boolean;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkText, setLinkText] = useState('');
@@ -188,6 +264,9 @@ function Toolbar({
           <ToolButton label="Ảnh" icon={<ImageIcon className="h-3.5 w-3.5" />} onClick={onImageClick} />
         </>
       )}
+      {enableVideo && (
+        <ToolButton label="Video" hint="Chèn YouTube hoặc tải MP4 tối đa 50MB" icon={<Video className="h-3.5 w-3.5" />} onClick={onVideoClick} />
+      )}
     </div>
 
     {linkOpen && (
@@ -266,8 +345,54 @@ function Toolbar({
   );
 }
 
-export function RichTextEditor({ value, onChange, placeholder = 'Viết nội dung bài viết...', internalLinks = [], enableImage = true }: RichTextEditorProps) {
+function VideoDialog({ folder, onInsert, onClose }: { folder: 'news' | 'properties'; onInsert: (video: VideoMedia) => void; onClose: () => void }) {
+  const [mode, setMode] = useState<'youtube' | 'upload'>('youtube');
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const insertYoutube = () => {
+    const video = parseYoutubeUrl(url, title || 'Video YouTube');
+    if (!video) { setError('URL YouTube không hợp lệ. Chỉ nhận link HTTPS youtube.com hoặc youtu.be.'); return; }
+    onInsert(video);
+  };
+  const uploadMp4 = async (file: File | undefined) => {
+    if (!file) return;
+    setError(''); setUploading(true);
+    try {
+      const src = await uploadVideo(file, folder, true, title || file.name);
+      const video = parseUploadedVideoUrl(src, title || file.name);
+      if (!video) throw new Error('Không xác thực được URL video sau khi tải lên.');
+      onInsert(video);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không tải được video.');
+    } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={event => { if (event.target === event.currentTarget && !uploading) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onMouseDown={event => event.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between"><div><h3 className="text-sm font-bold text-gray-900">Chèn video</h3><p className="mt-0.5 text-[11px] text-gray-500">Video sẽ được lưu theo định dạng an toàn, không chèn iframe thô.</p></div><button type="button" onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button></div>
+        <div className="mb-4 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          <button type="button" onClick={() => { setMode('youtube'); setError(''); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${mode === 'youtube' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}>YouTube</button>
+          <button type="button" onClick={() => { setMode('upload'); setError(''); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${mode === 'upload' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}>Tải MP4</button>
+        </div>
+        <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề video</label><input value={title} onChange={event => setTitle(event.target.value)} maxLength={180} placeholder="Ví dụ: Video tham quan thực tế" className="mb-3 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+        {mode === 'youtube' ? <><label className="mb-1 block text-xs font-semibold text-gray-700">URL YouTube HTTPS</label><input autoFocus value={url} onChange={event => setUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); insertYoutube(); } }} placeholder="https://www.youtube.com/watch?v=..." className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" /></> : <><input ref={fileRef} type="file" accept="video/mp4,.mp4" className="hidden" onChange={event => uploadMp4(event.target.files?.[0])} /><button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center rounded-xl border-2 border-dashed border-gray-200 px-4 py-7 text-sm font-semibold text-gray-700 hover:border-red-300 hover:bg-red-50 disabled:opacity-60"><Upload className="mb-2 h-7 w-7 text-gray-400" />{uploading ? 'Đang tải và kiểm tra MP4...' : 'Chọn video MP4 để tải lên'}<span className="mt-1 text-[11px] font-normal text-gray-400">Tối đa 50MB · chỉ MP4 có chữ ký hợp lệ</span></button></>}
+        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={uploading} onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60">Hủy</button>{mode === 'youtube' && <button type="button" onClick={insertYoutube} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700">Chèn video</button>}</div>
+      </div>
+    </div>
+  );
+}
+
+export function RichTextEditor({ value, onChange, placeholder = 'Viết nội dung bài viết...', internalLinks = [], enableImage = true, enableVideo = true, mediaFolder = 'news' }: RichTextEditorProps) {
   const [libOpen, setLibOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const [pendingSrc, setPendingSrc] = useState<string | null>(null);
   const [altText, setAltText] = useState('');
 
@@ -283,6 +408,7 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
       TableRow,
       TableHeader,
       TableCell,
+      VideoMarker,
     ],
     content: value,
     editorProps: {
@@ -307,13 +433,22 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
     setAltText('');
   };
 
+  const insertVideo = (video: VideoMedia) => {
+    if (!editor) return;
+    const attrs = video.kind === 'youtube'
+      ? { kind: video.kind, videoId: video.videoId, title: video.title, start: video.startSeconds ?? null }
+      : { kind: video.kind, src: video.src, title: video.title, poster: video.poster ?? null };
+    editor.chain().focus().insertContent({ type: 'videoMarker', attrs }).run();
+    setVideoOpen(false);
+  };
+
   if (!editor) {
     return <div className="min-h-[320px] rounded-lg border border-gray-200 bg-gray-50" aria-hidden />;
   }
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 focus-within:ring-2 focus-within:ring-red-400">
-      <Toolbar editor={editor} internalLinks={internalLinks} onImageClick={() => setLibOpen(true)} enableImage={enableImage} />
+      <Toolbar editor={editor} internalLinks={internalLinks} onImageClick={() => setLibOpen(true)} onVideoClick={() => setVideoOpen(true)} enableImage={enableImage} enableVideo={enableVideo} />
       <div className="max-h-[65vh] overflow-y-auto">
         <EditorContent editor={editor} />
       </div>
@@ -323,10 +458,12 @@ export function RichTextEditor({ value, onChange, placeholder = 'Viết nội du
           open={libOpen}
           onClose={() => setLibOpen(false)}
           onSelect={url => { setLibOpen(false); setPendingSrc(url); setAltText(''); }}
-          folder="news"
+          folder={mediaFolder}
           isAdmin
         />
       )}
+
+      {videoOpen && <VideoDialog folder={mediaFolder} onInsert={insertVideo} onClose={() => setVideoOpen(false)} />}
 
       {pendingSrc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

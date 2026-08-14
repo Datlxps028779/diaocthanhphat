@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2 } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2, Code2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
 import {
   adminGetAllProperties, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
@@ -449,6 +449,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     setGeocodeTarget({ query, zoom, nonce: ++geocodeNonce.current });
   }, []);
   const [showPreview, setShowPreview] = useState(false);
+  const [descriptionMode, setDescriptionMode] = useState<'visual' | 'html'>('visual');
   const [typeError, setTypeError] = useState('');
   const isRent = form.listing_type === 'cho_thue';
   const selectedPropertyType = types.find(t => t.id === form.property_type_id);
@@ -912,14 +913,27 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Mô tả chi tiết
-              <span className={`ml-2 text-[10px] font-normal ${descLen >= 120 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {descLen} ký tự (tối thiểu 120)
-              </span>
-            </label>
-            <RichTextEditor value={form.description} onChange={html => setField('description', html)}
-              placeholder="Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng..." />
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <label className="block text-xs font-semibold text-gray-700">
+                Mô tả chi tiết
+                <span className={`ml-2 text-[10px] font-normal ${descLen >= 120 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {descLen} ký tự (tối thiểu 120)
+                </span>
+              </label>
+              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                <button type="button" onClick={() => setDescriptionMode('visual')} className={`rounded-md px-2.5 py-1.5 text-xs font-bold ${descriptionMode === 'visual' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Visual</button>
+                <button type="button" onClick={() => setDescriptionMode('html')} className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-bold ${descriptionMode === 'html' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Code2 className="h-3.5 w-3.5" /> View code</button>
+              </div>
+            </div>
+            {descriptionMode === 'visual' ? (
+              <RichTextEditor value={form.description} onChange={html => setField('description', html)} mediaFolder="properties" enableVideo
+                placeholder="Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để định dạng, chèn ảnh, YouTube hoặc tải MP4..." />
+            ) : (
+              <textarea value={form.description} onChange={event => setField('description', event.target.value)} rows={22} spellCheck={false}
+                placeholder={'<h2>Thông tin nổi bật</h2>\n<p>Mô tả chi tiết...</p>'}
+                className="min-h-[420px] w-full rounded-lg border border-gray-200 bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-gray-100 shadow-inner focus:outline-none focus:ring-2 focus:ring-red-400" />
+            )}
+            <p className="mt-1 text-[11px] text-gray-400">Visual dùng toolbar để chèn ảnh, YouTube hoặc MP4. View code cho phép sửa HTML; nội dung được kiểm tra và lọc an toàn khi lưu.</p>
           </div>
 
           {/* FAQ nhập tay — ưu tiên hơn FAQ tự-sinh khi render public */}
