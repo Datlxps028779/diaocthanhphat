@@ -20,6 +20,7 @@ import { requestAuth } from '../lib/authModal';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { isValidVnPhone } from '../lib/phone';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
+import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../lib/locationSelection';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
@@ -85,7 +86,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     price_per_month: '',
     loan_support: '',
     area_sqm: '', address: '', city: '', district: '', ward: '', neighborhood_slug: '',
-    area_id: '', property_type_id: '',
+    area_id: '', district_id: '', property_type_id: '',
     image_url: '', images: [] as string[],
     video_url: '',
     legal_status: '', bedrooms: '', bathrooms: '', direction: '',
@@ -105,14 +106,23 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     setForm(f => clearIncompatibleSpecValues({ ...f, property_type_id: id }, nextType, 'user_listing'));
   };
 
-  // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query
+  // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query. ID là
+  // nguồn chọn chính; fallback unique-name chỉ để mở các tin cũ chưa có district_id.
   const { data: districts = [] } = useDistricts(form.area_id || undefined);
-  // Phường/xã theo quận/huyện đã chọn. form.district lưu dạng TÊN nên phải map ra id.
-  const selectedDistrictId = districts.find(d => d.name === form.district)?.id;
+  const selectedDistrictId = form.district_id
+    || resolveUniqueDistrict(districts, form.area_id, form.district)?.id;
   const { data: wards = [] } = useWards(selectedDistrictId || undefined);
   // Khu dân cư theo phường/xã đã chọn. form.ward lưu TÊN nên map ra id.
   const selectedWardId = wards.find(w => w.name === form.ward)?.id;
   const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined);
+
+  // Khi mở tin cũ, chỉ nâng cấp state từ text sang ID nếu có đúng một district
+  // trong area hiện tại. Không tự chọn khi dữ liệu taxonomy thay đổi/không rõ ràng.
+  useEffect(() => {
+    if (form.district_id || !form.area_id || !form.district) return;
+    const matched = resolveUniqueDistrict(districts, form.area_id, form.district);
+    if (matched) setForm(f => f.district_id ? f : { ...f, district_id: matched.id, district: matched.name });
+  }, [districts, form.area_id, form.district, form.district_id]);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -165,14 +175,24 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
   // form + reset district đã chọn + đồng bộ map search.
   const setArea = useCallback((areaId: string, areaName: string) => {
-    setForm(f => ({ ...f, area_id: areaId, city: areaName, district: '', ward: '' }));
+    setForm(f => applyAreaSelection(f, areaId, areaName));
     if (areaName) flyTo(areaName, 13);
   }, [flyTo]);
 
-  const setDistrict = useCallback((district: string) => {
+  const setDistrict = useCallback((districtId: string) => {
     setForm(f => {
+      const district = districts.find(d => d.id === districtId) ?? null;
+      const next = applyDistrictSelection(f, district);
+      flyTo([next.district, f.city].filter(Boolean).join(', '), 14);
+      return next;
+    });
+  }, [districts, flyTo]);
+
+  const setDistrictText = useCallback((district: string) => {
+    setForm(f => {
+      const next = applyDistrictSelection(f, null, district);
       flyTo([district, f.city].filter(Boolean).join(', '), 14);
-      return { ...f, district, ward: '' };
+      return next;
     });
   }, [flyTo]);
 
@@ -269,6 +289,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         ward: specForm.ward || null,
         neighborhood_slug: specForm.neighborhood_slug || null,
         area_id: specForm.area_id || null,
+        district_id: specForm.district_id || null,
         property_type_id: specForm.property_type_id || null,
         image_url: coverId,
         images: cleanImages.length > 0 ? cleanImages : null,
@@ -537,12 +558,12 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 </FormField>
                 <FormField label="Quận/Huyện">
                   {districts.length > 0 ? (
-                    <select value={form.district} onChange={e => setDistrict(e.target.value)} className={selectCls()}>
+                    <select value={selectedDistrictId ?? ''} onChange={e => setDistrict(e.target.value)} className={selectCls()}>
                       <option value="">-- Chọn quận/huyện --</option>
-                      {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   ) : (
-                    <input value={form.district} onChange={e => setDistrict(e.target.value)}
+                    <input value={form.district} onChange={e => setDistrictText(e.target.value)}
                       placeholder="VD: Dĩ An, Thuận An..." className={inputCls()} />
                   )}
                 </FormField>

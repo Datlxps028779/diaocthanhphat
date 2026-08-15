@@ -53,16 +53,17 @@ export async function adminGetUserListings(status?: string): Promise<UserListing
   const { data } = await q;
   return (data ?? []) as UserListing[];
 }
-export async function approveUserListing(id: string): Promise<void> {
-  const { data: listing, error: fetchErr } = await supabase.from('user_listings').select('*').eq('id', id).single();
-  if (fetchErr || !listing) throw new Error('Listing not found');
-  const { data: inserted, error: propErr } = await supabase.from('properties').insert({
+// Mapping thuần cho bước duyệt: giữ nguyên text location để tương thích URL/search,
+// đồng thời không đánh rơi district_id đã được chọn hoặc Make resolver gán sẵn.
+export function propertyInsertFromUserListing(listing: UserListing) {
+  return {
     slug: buildUniqueSlug(listing.title),
     title: listing.title, description: listing.description,
     price: listing.price, price_unit: listing.price_unit, price_label: listing.price_label,
     listing_type: listing.listing_type ?? 'mua_ban',
     area_sqm: listing.area_sqm, address: listing.address, city: listing.city, district: listing.district, ward: listing.ward,
-    area_id: listing.area_id, property_type_id: listing.property_type_id,
+    area_id: listing.area_id, district_id: listing.district_id, neighborhood_slug: listing.neighborhood_slug,
+    property_type_id: listing.property_type_id,
     image_url: listing.image_url, images: listing.images, legal_status: listing.legal_status,
     bedrooms: listing.bedrooms, bathrooms: listing.bathrooms, direction: listing.direction,
     contact_name: listing.contact_name, contact_phone: listing.contact_phone,
@@ -73,7 +74,13 @@ export async function approveUserListing(id: string): Promise<void> {
     meta_title: listing.meta_title, meta_description: listing.meta_description,
     focus_keywords: listing.focus_keywords, schema_markup: listing.schema_markup,
     faq: listing.faq,
-  }).select('id').single();
+  };
+}
+
+export async function approveUserListing(id: string): Promise<void> {
+  const { data: listing, error: fetchErr } = await supabase.from('user_listings').select('*').eq('id', id).single();
+  if (fetchErr || !listing) throw new Error('Listing not found');
+  const { data: inserted, error: propErr } = await supabase.from('properties').insert(propertyInsertFromUserListing(listing as UserListing)).select('id').single();
   if (propErr) throw propErr;
   const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());
   // Nếu cập nhật trạng thái tin thất bại (RLS/lỗi mạng) mà không rollback, property vừa

@@ -23,6 +23,7 @@ import { stripHtml, isHtmlContent } from '../../../lib/markdown';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 import { parseLegacyPropertyVideo, parseVrTourUrl } from '../../../lib/videoMedia';
 import { buildProductPath } from '../../../lib/productPath';
+import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../../../lib/locationSelection';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -482,6 +483,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     ward: property?.ward ?? '',
     neighborhood_slug: property?.neighborhood_slug ?? '',
     area_id: property?.area_id ?? '',
+    district_id: property?.district_id ?? '',
     property_type_id: property?.property_type_id ?? '',
     image_url: property?.image_url ?? '',
     images: property?.images ?? [] as string[],
@@ -592,11 +594,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   const handleAreaChange = useCallback((areaId: string) => {
     const area = areas.find(a => a.id === areaId);
-    setField('area_id', areaId);
-    setField('city', area?.name ?? '');
-    setField('district', '');
-    setField('ward', '');
-    setField('neighborhood_slug', '');
+    setForm(f => applyAreaSelection(f, areaId, area?.name ?? ''));
     setWards([]);
     setNeighborhoods([]);
     if (areaId) {
@@ -607,16 +605,21 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     }
   }, [areas, flyTo]);
 
-  const handleDistrictChange = useCallback((districtName: string) => {
-    setField('district', districtName);
-    setField('ward', '');
-    setField('neighborhood_slug', '');
+  const handleDistrictChange = useCallback((districtId: string) => {
+    const district = districts.find(x => x.id === districtId) ?? null;
+    setForm(f => applyDistrictSelection(f, district));
     setNeighborhoods([]);
-    const d = districts.find(x => x.name === districtName);
-    if (d) getWards(d.id).then(setWards).catch(() => setWards([]));
+    if (district) getWards(district.id).then(setWards).catch(() => setWards([]));
     else setWards([]);
-    flyTo([districtName, form.city].filter(Boolean).join(', '), 14);
+    flyTo([district?.name, form.city].filter(Boolean).join(', '), 14);
   }, [form.city, districts, flyTo]);
+
+  const handleDistrictTextChange = useCallback((districtName: string) => {
+    setForm(f => applyDistrictSelection(f, null, districtName));
+    setNeighborhoods([]);
+    setWards([]);
+    flyTo([districtName, form.city].filter(Boolean).join(', '), 14);
+  }, [form.city, flyTo]);
 
   // Chọn xã → zoom sát tới cấp phường/xã + nạp khu dân cư của xã đó.
   const handleWardChange = useCallback((wardName: string) => {
@@ -632,12 +635,20 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     if (property?.area_id) getDistricts(property.area_id).then(setDistricts).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Nạp wards khi sửa BĐS có sẵn district (districts vừa load xong → map tên ra id).
+  // Tin cũ chỉ có text district được nâng cấp trong state khi có đúng một match
+  // dưới area hiện tại; tránh gán nhầm nếu taxonomy đã đổi hoặc tên trùng nhau.
   useEffect(() => {
-    if (!property?.district || districts.length === 0) return;
-    const d = districts.find(x => x.name === property.district);
-    if (d) getWards(d.id).then(setWards).catch(() => {});
-  }, [districts, property?.district]);
+    if (form.district_id || !form.area_id || !form.district || districts.length === 0) return;
+    const matched = resolveUniqueDistrict(districts, form.area_id, form.district);
+    if (matched) setForm(f => f.district_id ? f : { ...f, district_id: matched.id, district: matched.name });
+  }, [districts, form.area_id, form.district, form.district_id]);
+
+  // Nạp wards theo ID đã lưu. Fallback unique-name phục vụ lượt render đầu của tin cũ.
+  useEffect(() => {
+    const districtId = form.district_id
+      || resolveUniqueDistrict(districts, form.area_id, form.district)?.id;
+    if (districtId) getWards(districtId).then(setWards).catch(() => {});
+  }, [districts, form.area_id, form.district, form.district_id]);
 
   // Nạp khu dân cư khi sửa BĐS có sẵn ward (wards vừa load xong → map tên ra id).
   useEffect(() => {
@@ -702,6 +713,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       ward: cs(specForm.ward),
       neighborhood_slug: cs(specForm.neighborhood_slug),
       area_id: cs(specForm.area_id),
+      district_id: cs(specForm.district_id),
       property_type_id: cs(specForm.property_type_id),
       image_url: cs(specForm.image_url),
       images: specForm.images.length > 0 ? specForm.images : null,
@@ -857,13 +869,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Quận/Huyện</label>
               {districts.length > 0 ? (
-                <select value={form.district} onChange={e => handleDistrictChange(e.target.value)}
+                <select value={form.district_id} onChange={e => handleDistrictChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                   <option value="">-- Chọn quận/huyện --</option>
-                  {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               ) : (
-                <input value={form.district} onChange={e => handleDistrictChange(e.target.value)}
+                <input value={form.district} onChange={e => handleDistrictTextChange(e.target.value)}
                   placeholder="Nhập quận/huyện..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               )}

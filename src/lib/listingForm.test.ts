@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { listingToFormState } from './listingForm';
-import type { UserListing } from './supabase';
+import { formToProperty, listingToFormState } from './listingForm';
+import type { Property, PropertyType, UserListing } from './supabase';
 
 // Row DB tối thiểu để dựng state form. Các test override phần cần kiểm.
 function makeListing(over: Partial<UserListing> = {}): UserListing {
@@ -10,7 +10,7 @@ function makeListing(over: Partial<UserListing> = {}): UserListing {
     price: 0, price_unit: 'tỷ', price_label: null,
     listing_type: 'mua_ban', price_per_month: null, loan_support: null,
     area_sqm: null, address: null, city: '', district: null, ward: null, neighborhood_slug: null,
-    area_id: null, property_type_id: null,
+    area_id: null, district_id: null, property_type_id: null,
     image_url: null, images: null, legal_status: null,
     bedrooms: null, bathrooms: null, direction: null,
     contact_name: null, contact_phone: null,
@@ -46,6 +46,7 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
     expect(f.district).toBe('');
     expect(f.ward).toBe('');
     expect(f.area_id).toBe('');
+    expect(f.district_id).toBe('');
     expect(f.property_type_id).toBe('');
     expect(f.legal_status).toBe('');
     expect(f.direction).toBe('');
@@ -77,6 +78,24 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
     expect(listingToFormState(makeListing()).schema_markup).toBe('');
     const f = listingToFormState(makeListing({ schema_markup: { '@type': 'Residence' } }));
     expect(JSON.parse(f.schema_markup)).toEqual({ '@type': 'Residence' });
+  });
+
+  it('giữ district_id đã chọn khi mở lại tin để sửa', () => {
+    const f = listingToFormState(makeListing({ district_id: 'district-di-an' }));
+    expect(f.district_id).toBe('district-di-an');
+  });
+
+  it('preview ưu tiên district_id hiện đang chọn, rồi mới giữ ID tin cũ', () => {
+    const existing = { district_id: 'old-district' } as Property;
+    const selected = formToProperty({
+      title: 'Bán nhà', city: 'Bình Dương', district_id: 'new-district', property_type_id: '',
+    }, existing, [] as PropertyType[], []);
+    expect(selected.district_id).toBe('new-district');
+
+    const unchanged = formToProperty({
+      title: 'Bán nhà', city: 'Bình Dương', district_id: '', property_type_id: '',
+    }, existing, [] as PropertyType[], []);
+    expect(unchanged.district_id).toBe('old-district');
   });
 
   it('giữ nguyên các trường chuỗi có sẵn (title, city, image_url, SEO)', () => {

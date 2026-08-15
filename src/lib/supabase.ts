@@ -288,7 +288,7 @@ export type UserListing = {
   loan_support: number | null;
   area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
   neighborhood_slug: string | null;
-  area_id: string | null; property_type_id: string | null;
+  area_id: string | null; district_id: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null; legal_status: string | null;
   bedrooms: number | null; bathrooms: number | null; direction: string | null;
   contact_name: string | null; contact_phone: string | null;
