@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock } from 'lucide-react';
-import type { UserListing } from '../../../lib/supabase';
-import { adminGetUserListings, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X } from 'lucide-react';
+import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
+import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
+import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
 
 // ─── User Listings Approval Tab ───────────────────────────────────────────────
 export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -16,6 +17,11 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkRejectModal, setBulkRejectModal] = useState(false);
+  const [historyListing, setHistoryListing] = useState<UserListing | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<UserListingLifecycleEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyRequest = useRef(0);
 
   const load = async () => { setLoading(true); const data = await adminGetUserListings(statusFilter); setListings(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
@@ -55,6 +61,33 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
       await adminSetExpiry(id, iso);
       await load(); onRefreshStats();
     } catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); }
+  };
+
+  const closeHistory = () => {
+    historyRequest.current += 1;
+    setHistoryListing(null);
+    setHistoryEvents([]);
+    setHistoryError(null);
+    setHistoryLoading(false);
+  };
+
+  const openHistory = async (listing: UserListing) => {
+    const request = historyRequest.current + 1;
+    historyRequest.current = request;
+    setHistoryListing(listing);
+    setHistoryEvents([]);
+    setHistoryError(null);
+    setHistoryLoading(true);
+    try {
+      const events = await adminGetUserListingLifecycle(listing.id);
+      if (historyRequest.current === request) setHistoryEvents(events);
+    } catch (e) {
+      if (historyRequest.current === request) {
+        setHistoryError((e as { message?: string })?.message ?? 'Không tải được lịch sử tin đăng.');
+      }
+    } finally {
+      if (historyRequest.current === request) setHistoryLoading(false);
+    }
   };
 
   // ─── Bulk helpers ─────────────────────────────────────────────────────────
@@ -194,46 +227,116 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                       </span>
                     </div>
                   </div>
-                  {listing.status === 'pending' && (
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button onClick={() => handleApprove(listing.id)} disabled={processingId === listing.id}
-                        className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
-                        <CheckCircle className="w-3.5 h-3.5" />Duyệt
-                      </button>
-                      <button onClick={() => { setRejectModal(listing.id); setRejectReason(''); }}
-                        className="flex items-center gap-1 border border-red-300 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                        <XCircle className="w-3.5 h-3.5" />Từ chối
-                      </button>
-                    </div>
-                  )}
-                  {listing.status === 'approved' && (
-                    <div className="flex flex-col gap-1 flex-shrink-0 items-end">
-                      <label className="text-[10px] text-gray-400 font-medium">Ngày hết hạn</label>
-                      <input type="date" disabled={processingId === listing.id}
-                        defaultValue={listing.expires_at ? listing.expires_at.slice(0, 10) : ''}
-                        onChange={e => handleSetExpiry(listing.id, e.target.value)}
-                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60" />
-                    </div>
-                  )}
-                  {(listing.status === 'rejected' || listing.status === 'expired') && (
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button onClick={() => handleRestore(listing.id)} disabled={processingId === listing.id}
-                        className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
-                        title="Duyệt lại tin này (khôi phục lên công khai với hạn mới)">
-                        <RotateCcw className="w-3.5 h-3.5" />Duyệt lại
-                      </button>
-                      <button onClick={() => setDeleteModal(listing.id)} disabled={processingId === listing.id}
-                        className="flex items-center gap-1 border border-gray-300 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
-                        title="Xóa vĩnh viễn tin này">
-                        <Trash2 className="w-3.5 h-3.5" />Xóa hẳn
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex flex-col gap-2 flex-shrink-0 items-stretch">
+                    {listing.status === 'pending' && (
+                      <>
+                        <button onClick={() => handleApprove(listing.id)} disabled={processingId === listing.id}
+                          className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
+                          <CheckCircle className="w-3.5 h-3.5" />Duyệt
+                        </button>
+                        <button onClick={() => { setRejectModal(listing.id); setRejectReason(''); }}
+                          className="flex items-center justify-center gap-1 border border-red-300 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                          <XCircle className="w-3.5 h-3.5" />Từ chối
+                        </button>
+                      </>
+                    )}
+                    {listing.status === 'approved' && (
+                      <div className="flex flex-col gap-1 items-end">
+                        <label className="text-[10px] text-gray-400 font-medium">Ngày hết hạn</label>
+                        <input type="date" disabled={processingId === listing.id}
+                          defaultValue={listing.expires_at ? listing.expires_at.slice(0, 10) : ''}
+                          onChange={e => handleSetExpiry(listing.id, e.target.value)}
+                          className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60" />
+                      </div>
+                    )}
+                    {(listing.status === 'rejected' || listing.status === 'expired') && (
+                      <>
+                        <button onClick={() => handleRestore(listing.id)} disabled={processingId === listing.id}
+                          className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
+                          title="Duyệt lại tin này (khôi phục lên công khai với hạn mới)">
+                          <RotateCcw className="w-3.5 h-3.5" />Duyệt lại
+                        </button>
+                        <button onClick={() => setDeleteModal(listing.id)} disabled={processingId === listing.id}
+                          className="flex items-center justify-center gap-1 border border-gray-300 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+                          title="Xóa vĩnh viễn tin này">
+                          <Trash2 className="w-3.5 h-3.5" />Xóa hẳn
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => openHistory(listing)}
+                      className="flex items-center justify-center gap-1 border border-gray-200 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                      aria-label={`Xem lịch sử ${listing.title}`}>
+                      <History className="w-3.5 h-3.5" />Lịch sử
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+      {historyListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="listing-history-title">
+          <div className="absolute inset-0 bg-black/50" onClick={closeHistory} />
+          <div className="relative bg-gray-50 rounded-xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="bg-white border-b border-gray-200 px-5 py-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 id="listing-history-title" className="font-bold text-gray-900">Lịch sử vòng đời</h3>
+                <p className="text-xs text-gray-500 mt-0.5 truncate">{historyListing.title}</p>
+              </div>
+              <button onClick={closeHistory} aria-label="Đóng lịch sử tin đăng" className="text-gray-400 hover:text-gray-700 flex-shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              {historyLoading ? (
+                <div className="space-y-3" aria-label="Đang tải lịch sử">
+                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl animate-pulse" />)}
+                </div>
+              ) : historyError ? (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                  <p className="font-semibold">Không tải được lịch sử</p>
+                  <p className="text-xs mt-1 break-words">{historyError}</p>
+                  <button onClick={() => openHistory(historyListing)} className="mt-3 text-xs font-semibold underline">Thử lại</button>
+                </div>
+              ) : historyEvents.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+                  <History className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-gray-700">Chưa có sự kiện được ghi nhận</p>
+                  <p className="text-xs text-gray-400 mt-1">Nhật ký chỉ bắt đầu từ khi migration P3B được cài đặt.</p>
+                </div>
+              ) : (
+                <ol className="space-y-3">
+                  {historyEvents.map(event => {
+                    const transition = listingLifecycleTransition(event);
+                    const expiry = listingLifecycleExpiryMetadata(event.metadata);
+                    return (
+                      <li key={event.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-900">{listingLifecycleEventLabel(event.event_type)}</p>
+                            {transition && <p className="text-xs text-gray-600 mt-0.5">{transition}</p>}
+                          </div>
+                          <time className="text-[10px] text-gray-400 flex-shrink-0" dateTime={event.occurred_at}>
+                            {new Date(event.occurred_at).toLocaleString('vi-VN')}
+                          </time>
+                        </div>
+                        {event.reason && <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 mt-2 break-words">Lý do: {event.reason}</p>}
+                        {expiry && (
+                          <p className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 mt-2">
+                            Hạn hiển thị: {formatLifecycleDate(expiry.oldExpiresAt)} → {formatLifecycleDate(expiry.newExpiresAt)}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-gray-400 mt-2">Thực hiện bởi: {listingLifecycleActorLabel(event.actor_role)}</p>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {rejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -291,4 +394,8 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
       )}
     </div>
   );
+}
+
+function formatLifecycleDate(value: string | null): string {
+  return value ? new Date(value).toLocaleString('vi-VN') : 'Không đặt';
 }

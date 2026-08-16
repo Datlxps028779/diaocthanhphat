@@ -303,6 +303,23 @@ export type UserListing = {
   areas?: Area | null; property_types?: PropertyType | null;
   profiles?: Pick<Profile, 'display_name' | 'phone'> | null;
 };
+export type UserListingLifecycleEventType =
+  | 'submitted' | 'approved' | 'rejected' | 'resubmitted'
+  | 'renewed' | 'expired' | 'expiry_changed' | 'deleted';
+export type UserListingLifecycleEvent = {
+  id: string;
+  listing_id: string | null;
+  listing_owner_id: string | null;
+  property_id: string | null;
+  event_type: UserListingLifecycleEventType;
+  from_status: UserListing['status'] | null;
+  to_status: UserListing['status'] | null;
+  reason: string | null;
+  actor_id: string | null;
+  actor_role: 'owner' | 'staff' | 'admin' | 'system';
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+};
 export type SiteSetting = {
   id: string; key: string; value: string | null; label: string;
   group_name: string; type: string; created_at: string; updated_at: string;

@@ -1,4 +1,4 @@
-import { supabase, type UserListing } from '../supabase';
+import { supabase, type UserListing, type UserListingLifecycleEvent } from '../supabase';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
 export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
@@ -51,6 +51,16 @@ export async function adminGetUserListings(status?: string): Promise<UserListing
   const { data } = await q;
   return (data ?? []) as UserListing[];
 }
+export async function adminGetUserListingLifecycle(id: string): Promise<UserListingLifecycleEvent[]> {
+  const { data, error } = await supabase
+    .from('user_listing_lifecycle_events')
+    .select('*')
+    .eq('listing_id', id)
+    .order('occurred_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as UserListingLifecycleEvent[];
+}
+
 // RPC return shape. The database locks the listing then inserts its public
 // property and updates lifecycle state in one transaction; the browser never
 // constructs an approval insert itself.
