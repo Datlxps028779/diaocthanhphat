@@ -1,6 +1,4 @@
 import { supabase, type UserListing } from '../supabase';
-import { buildUniqueSlug } from '../slug';
-import { resolveApprovalExpiresAt } from '../listingExpiry';
 
 // ─── User Listings ────────────────────────────────────────────────────────────
 export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
@@ -53,70 +51,97 @@ export async function adminGetUserListings(status?: string): Promise<UserListing
   const { data } = await q;
   return (data ?? []) as UserListing[];
 }
-// Mapping thuần cho bước duyệt: giữ nguyên text location để tương thích URL/search,
-// đồng thời không đánh rơi district_id đã được chọn hoặc Make resolver gán sẵn.
-export function propertyInsertFromUserListing(listing: UserListing) {
-  return {
-    slug: buildUniqueSlug(listing.title),
-    title: listing.title, description: listing.description,
-    price: listing.price, price_unit: listing.price_unit, price_label: listing.price_label,
-    listing_type: listing.listing_type ?? 'mua_ban',
-    area_sqm: listing.area_sqm, address: listing.address, city: listing.city, district: listing.district, ward: listing.ward,
-    area_id: listing.area_id, district_id: listing.district_id, neighborhood_slug: listing.neighborhood_slug,
-    property_type_id: listing.property_type_id,
-    image_url: listing.image_url, images: listing.images, legal_status: listing.legal_status,
-    bedrooms: listing.bedrooms, bathrooms: listing.bathrooms, direction: listing.direction,
-    contact_name: listing.contact_name, contact_phone: listing.contact_phone,
-    amenities: listing.amenities, is_active: true, is_featured: false, is_hot: false,
-    latitude: listing.latitude, longitude: listing.longitude,
-    vr_tour_url: listing.vr_tour_url, video_url: listing.video_url,
-    formatted_address: listing.formatted_address, contact_zalo: listing.contact_zalo,
-    meta_title: listing.meta_title, meta_description: listing.meta_description,
-    focus_keywords: listing.focus_keywords, schema_markup: listing.schema_markup,
-    faq: listing.faq,
-  };
+// RPC return shape. The database locks the listing then inserts its public
+// property and updates lifecycle state in one transaction; the browser never
+// constructs an approval insert itself.
+export interface ApprovedListingProperty {
+  property_id: string;
+  title: string;
+  description: string | null;
+  city: string;
+  district: string | null;
+  // Database constraint also permits historical can_mua/can_thue values.
+  listing_type: string;
+  price: number;
+  price_unit: string;
+  area_sqm: number | null;
 }
 
-export async function approveUserListing(id: string): Promise<void> {
-  const { data: listing, error: fetchErr } = await supabase.from('user_listings').select('*').eq('id', id).single();
-  if (fetchErr || !listing) throw new Error('Listing not found');
-  const { data: inserted, error: propErr } = await supabase.from('properties').insert(propertyInsertFromUserListing(listing as UserListing)).select('id').single();
-  if (propErr) throw propErr;
-  const expiresAt = resolveApprovalExpiresAt(listing.expires_at, new Date().toISOString());
-  // Nếu cập nhật trạng thái tin thất bại (RLS/lỗi mạng) mà không rollback, property vừa
-  // insert sẽ thành tin công khai mồ côi trong khi user_listings vẫn 'pending' → duyệt
-  // lại tạo bản trùng. Xoá property vừa tạo rồi throw để giữ dữ liệu nhất quán.
-  const { data: updated, error: updateErr } = await supabase
-    .from('user_listings')
-    .update({ status: 'approved', property_id: inserted?.id ?? null, expires_at: expiresAt })
-    .eq('id', id)
-    .select('id');
-  if (updateErr || !updated || updated.length === 0) {
-    if (inserted?.id) await supabase.from('properties').delete().eq('id', inserted.id);
-    throw updateErr ?? new Error('Không cập nhật được trạng thái tin sau khi duyệt — đã hoàn tác.');
-  }
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
 
-  // Fire-and-forget AI auto-tagging. Gửi session JWT (luồng admin duyệt tin) để
-  // Edge Function ai-autotag xác thực admin — anon key sẽ bị từ chối 401.
-  if (inserted?.id) {
+// Supabase RPC results are untyped at runtime. Validate the committed database
+// result before passing it to optional AI enrichment so a schema mismatch cannot
+// create a malformed Edge Function request after an otherwise valid approval.
+export function isApprovedListingProperty(value: unknown): value is ApprovedListingProperty {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.property_id === 'string' && row.property_id.length > 0
+    && typeof row.title === 'string'
+    && typeof row.city === 'string'
+    && (row.listing_type === 'mua_ban' || row.listing_type === 'cho_thue' || row.listing_type === 'can_mua' || row.listing_type === 'can_thue')
+    && typeof row.price === 'number'
+    && Number.isFinite(row.price)
+    && typeof row.price_unit === 'string'
+    && isNullableString(row.description)
+    && isNullableString(row.district)
+    && (row.area_sqm === null || (typeof row.area_sqm === 'number' && Number.isFinite(row.area_sqm)));
+}
+
+async function autoTagApprovedProperty(approved: ApprovedListingProperty): Promise<void> {
+  try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) return;
+
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
+    if (!token) return;
+
+    await fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
-        propertyId: inserted.id,
-        title: listing.title,
-        description: listing.description,
-        city: listing.city,
-        district: listing.district,
-        listingType: listing.listing_type,
-        price: listing.price,
-        priceUnit: listing.price_unit,
-        areaSqm: listing.area_sqm,
+        propertyId: approved.property_id,
+        title: approved.title,
+        description: approved.description,
+        city: approved.city,
+        district: approved.district,
+        listingType: approved.listing_type,
+        price: approved.price,
+        priceUnit: approved.price_unit,
+        areaSqm: approved.area_sqm,
       }),
-    }).catch(() => {});
+    });
+  } catch {
+    // AI is enrichment only. A failed request must never report a committed
+    // approval as failed or make an admin retry the lifecycle transition.
+  }
+}
+
+function hasApprovedPropertyId(value: unknown): value is { property_id: string } {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.property_id === 'string' && row.property_id.length > 0;
+}
+
+export async function approveUserListing(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .rpc('approve_user_listing', { p_listing_id: id })
+    .single();
+  if (error) throw error;
+
+  if (!hasApprovedPropertyId(data)) {
+    throw new Error('Duyệt tin không trả về property_id hợp lệ.');
+  }
+
+  // The RPC has committed at this point. A malformed optional enrichment payload
+  // must not make the Admin UI treat that successful lifecycle transition as a
+  // failure and retry it; skip autotagging instead.
+  if (isApprovedListingProperty(data)) {
+    void autoTagApprovedProperty(data);
+  } else {
+    console.warn('[api] Approval committed but AI autotag payload was invalid.');
   }
 }
 export async function rejectUserListing(id: string, reason: string): Promise<void> {
