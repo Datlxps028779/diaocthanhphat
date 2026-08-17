@@ -1,5 +1,14 @@
 # Documentation Changelog
 
+## 2026-08-16 — P3C listing expiry ownership hardening prepared
+
+- Measured production before implementation: one approved listing expires on 2026-09-15 and has a consistent active property link; 22 other active properties are independent Admin records.
+- Confirmed the hourly `expire-due-listings` cron runs as `postgres` and has 821 successful executions, while both internal lifecycle functions still allowed direct `PUBLIC`, `anon`, and `authenticated` execution with an incomplete search path.
+- Added an additive migration that preserves current expiry/unpublish behavior while fixing both `SECURITY DEFINER` search paths and revoking browser execution; the existing cron schedule is not changed.
+- Added read-only production checks for function ACLs, cron ownership/history, trigger attachment, expiry consistency, independent properties, and P3B audit consistency.
+- Migration `20260903020000_harden_listing_expiry_ownership.sql` is production verified: both functions have fixed `public, pg_temp` paths; `PUBLIC`, `anon`, and `authenticated` cannot execute them; the active `postgres` cron job and both lifecycle triggers remain intact.
+- Follow-up read-only checks found zero listing/property consistency errors, zero malformed lifecycle events, and no effect on the 22 active independent Admin properties.
+
 ## 2026-08-16 — P3B listing lifecycle audit prepared
 
 - Added an append-only `user_listing_lifecycle_events` table populated only by a database trigger on `user_listings` insert, lifecycle update, expiry change, and delete.
