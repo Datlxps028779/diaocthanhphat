@@ -1,6 +1,6 @@
 import { supabase, type SeoRouteOverride, type Area, type NewsArticle, type Property } from '../supabase';
 
-export const SEO_ROUTE_PATHS = ['/', '/danh-sach', '/mua-ban', '/cho-thue', '/khu-vuc', '/tin-tuc', '/ve-chung-toi', '/so-sanh', '/dinh-gia', '/du-an', '/dau-tu'] as const;
+export const SEO_ROUTE_PATHS = ['/', '/danh-sach', '/mua-ban', '/cho-thue', '/khu-vuc', '/khu-dan-cu', '/tin-tuc', '/kien-thuc', '/ve-chung-toi', '/so-sanh', '/dinh-gia', '/du-lieu-gia', '/du-an', '/dau-tu'] as const;
 
 export async function adminGetSeoRouteOverrides(): Promise<SeoRouteOverride[]> {
   const { data, error } = await supabase

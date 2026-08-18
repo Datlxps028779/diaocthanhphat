@@ -18,6 +18,7 @@ import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
+import { evaluateNewsEditorialQuality } from '../../../lib/newsEditorialQuality';
 
 // Fallback tĩnh khi bảng news_categories chưa nạp (dùng danh sách chuẩn 5 nhãn,
 // KHÔNG còn 'Quy hoạch' lệch). Danh mục thật đổ động từ DB qua prop categories.
@@ -238,6 +239,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   const internalLinkCount = countInternalLinks(form.content);
   const missingAltCount = countImagesWithoutAlt(form.content);
   const readinessDisplay = [...readiness.errors, ...readiness.warnings, ...readiness.passes].slice(0, 10);
+  const editorialQuality = evaluateNewsEditorialQuality(formToNewsArticle(form, article, nowRef.current));
 
   useEffect(() => {
     const temp = formToNewsArticle(form, article, nowRef.current);
@@ -269,6 +271,11 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
     if (!forceDraft && form.is_published && !readiness.canPublish) {
       setError(`Bài chưa đủ chuẩn để đăng công khai: ${readiness.errors[0]?.message ?? 'thiếu thông tin SEO/GEO bắt buộc.'}`);
+      return;
+    }
+    const isPublicationTransition = form.is_published && !article?.is_published;
+    if (!forceDraft && isPublicationTransition && !editorialQuality.canPublish) {
+      setError(`Bài chưa đủ nguồn đã kiểm tra để đăng công khai: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
       return;
     }
     if (schemaState.error) { setError(schemaState.error); return; }
@@ -607,6 +614,20 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             {readiness.errors.length > 0 && (
               <p className="mt-3 text-[11px] font-semibold text-red-600">{readiness.errors.length} lỗi bắt buộc phải sửa trước khi đăng công khai.</p>
             )}
+            <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${editorialQuality.canPublish ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
+              <div className="font-bold">Nguồn tham khảo: {editorialQuality.validCitationCount}/2 hợp lệ</div>
+              <p className="mt-0.5 leading-relaxed">
+                {editorialQuality.canPublish
+                  ? 'Đủ nguồn để biên tập viên đối chiếu trước khi đăng.'
+                  : editorialQuality.citationIssues[0]?.message}
+              </p>
+            </div>
+            {editorialQuality.faqIssues.length > 0 && (
+              <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                <div className="font-bold">FAQ cần bổ sung</div>
+                <p className="mt-0.5 leading-relaxed">{editorialQuality.faqIssues[0]?.message}</p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
@@ -658,7 +679,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'source-review'>('all');
   // Danh mục động từ DB (news_categories). Fallback danh sách chuẩn khi chưa nạp/lỗi.
   const [categories, setCategories] = useState<string[]>(CATEGORIES_FALLBACK);
   // Modal "Tạo bài bằng AI"
@@ -710,14 +731,24 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   });
   const publishedCount = articles.filter(a => a.is_published).length;
   const draftCount = articles.length - publishedCount;
+  const sourceReviewCount = articles.filter(a => a.is_published && !evaluateNewsEditorialQuality(a).canPublish).length;
   const filtered = articles.filter(a =>
-    statusFilter === 'all' ? true : statusFilter === 'published' ? a.is_published : !a.is_published,
+    statusFilter === 'all'
+      ? true
+      : statusFilter === 'published'
+        ? a.is_published
+        : statusFilter === 'draft'
+          ? !a.is_published
+          : a.is_published && !evaluateNewsEditorialQuality(a).canPublish,
   );
   const allIds = filtered.map(a => a.id);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
   const clearSelection = () => setSelected(new Set());
   const selectedIds = () => Array.from(selected);
+  const blockedSelectedPublication = () => articles
+    .filter(article => selected.has(article.id) && !article.is_published)
+    .find(article => !evaluateNewsEditorialQuality(article).canPublish);
   const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidateNewsContent>[1]) => {
     try {
       await revalidateNewsContent(action, targets);
@@ -783,14 +814,21 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
           <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
-          <button disabled={bulkBusy} onClick={() => runBulk(
-            () => bulkUpdateNews(selectedIds(), { is_published: true }),
-            'đăng',
-            articles.filter(article => selected.has(article.id)).map(article => ({
-              previous: newsRevalidationSnapshot(article),
-              current: newsRevalidationSnapshot({ ...article, is_published: true }),
-            })),
-          )}
+          <button disabled={bulkBusy} onClick={() => {
+            const blocked = blockedSelectedPublication();
+            if (blocked) {
+              alert(`Không thể đăng "${blocked.title}": ${evaluateNewsEditorialQuality(blocked).citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
+              return;
+            }
+            runBulk(
+              () => bulkUpdateNews(selectedIds(), { is_published: true }),
+              'đăng',
+              articles.filter(article => selected.has(article.id)).map(article => ({
+                previous: newsRevalidationSnapshot(article),
+                current: newsRevalidationSnapshot({ ...article, is_published: true }),
+              })),
+            );
+          }}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Đăng
           </button>
@@ -818,6 +856,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           { key: 'all', label: 'Tất cả', count: articles.length },
           { key: 'published', label: 'Đã đăng', count: publishedCount },
           { key: 'draft', label: 'Nháp', count: draftCount },
+          { key: 'source-review', label: 'Thiếu nguồn', count: sourceReviewCount },
         ] as const).map(f => (
           <button key={f.key} onClick={() => { setStatusFilter(f.key); clearSelection(); }}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium border transition-colors ${
@@ -870,6 +909,8 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                             {a.is_published ? 'Đã đăng' : 'Nháp'}
                           </span>
                           {(a.meta_title || a.meta_description || a.schema_markup) && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">SEO</span>}
+                          {!evaluateNewsEditorialQuality(a).canPublish && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-700">Thiếu nguồn</span>}
+                          {evaluateNewsEditorialQuality(a).faqIssues.length > 0 && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">FAQ cần rà soát</span>}
                         </div>
                       </div>
                     </div>
@@ -883,8 +924,14 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => setEditing(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={async () => {
+                        const nextPublished = !a.is_published;
+                        const editorialQuality = evaluateNewsEditorialQuality(a);
+                        if (nextPublished && !editorialQuality.canPublish) {
+                          alert(`Không thể đăng: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
+                          return;
+                        }
                         try {
-                          const saved = await updateNews(a.id, { is_published: !a.is_published });
+                          const saved = await updateNews(a.id, { is_published: nextPublished });
                           await warnRevalidation(saved.is_published ? 'publish' : 'unpublish', [{
                             previous: newsRevalidationSnapshot(a),
                             current: newsRevalidationSnapshot(saved),

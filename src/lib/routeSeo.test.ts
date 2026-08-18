@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRouteMetadata, buildRouteJsonLd, type RouteFallback } from './routeSeo';
+import { buildRouteMetadata, buildRouteJsonLd, safeRouteCanonicalPath, type RouteFallback } from './routeSeo';
 import type { SeoRouteOverride } from './supabase';
 
 function fallback(overrides: Partial<RouteFallback> = {}): RouteFallback {
@@ -58,13 +58,21 @@ describe('buildRouteMetadata', () => {
     expect((m.robots as { follow?: boolean })?.follow).toBe(false);
   });
 
-  it('canonical_path override thay cho path', () => {
-    const m = buildRouteMetadata({
-      path: '/mua-ban',
-      fallback: fallback(),
-      override: override({ canonical_path: '/mua-ban-chinh' }),
-    });
-    expect(m.alternates?.canonical).toContain('/mua-ban-chinh');
+  it('canonical override đồng bộ canonical, Open Graph và JSON-LD', () => {
+    const custom = override({ canonical_path: '/mua-ban-chinh' });
+    const metadata = buildRouteMetadata({ path: '/mua-ban', fallback: fallback(), override: custom });
+    const schemas = buildRouteJsonLd({ path: '/mua-ban', fallback: fallback(), override: custom });
+
+    expect(metadata.alternates?.canonical).toBe('/mua-ban-chinh');
+    expect(metadata.openGraph?.url).toBe('/mua-ban-chinh');
+    expect(schemas[0].url).toBe('/mua-ban-chinh');
+    expect(schemas[0].mainEntityOfPage).toBe('/mua-ban-chinh');
+  });
+
+  it('ignores malformed, external, query, and hash canonical overrides', () => {
+    for (const candidate of ['mua-ban-chinh', '//evil.example/path', '/mua-ban?utm_source=x', '/mua-ban#faq', 'https://evil.example/path']) {
+      expect(safeRouteCanonicalPath(candidate, '/mua-ban')).toBe('/mua-ban');
+    }
   });
 });
 
@@ -100,9 +108,7 @@ describe('buildRouteJsonLd', () => {
         } as never,
       }),
     });
-    // url là khóa locked → giữ giá trị base, không cho override ghi đè
     expect(schemas[0].url).toBe('/mua-ban');
-    // field bổ sung không phải locked → được merge vào
     expect(schemas[0].keywords).toBe('bổ sung');
   });
 

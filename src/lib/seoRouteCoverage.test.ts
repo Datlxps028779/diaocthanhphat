@@ -9,8 +9,8 @@ import { SEO_ROUTE_PATHS } from './api/schemaPro';
 const STATIC_ROUTES = SEO_ROUTE_PATHS.filter(p => p !== '/');
 
 describe('SEO route coverage', () => {
-  it('đủ 4 route mới trong allowlist', () => {
-    for (const p of ['/so-sanh', '/dinh-gia', '/du-an', '/dau-tu']) {
+  it('includes all public route-SEO pages in the admin allowlist', () => {
+    for (const p of ['/so-sanh', '/dinh-gia', '/du-an', '/dau-tu', '/khu-dan-cu', '/du-lieu-gia', '/kien-thuc']) {
       expect(SEO_ROUTE_PATHS).toContain(p);
     }
   });

@@ -17,6 +17,18 @@ export interface RouteFallback {
 
 const ROUTE_LOCKED_KEYS = ['@context', '@type', '@id', 'url', 'mainEntityOfPage'];
 
+// Route overrides must remain same-site path aliases. Query/hash canonical URLs split
+// signals and external URLs could make an admin typo point schema/OG off-site.
+export function safeRouteCanonicalPath(overridePath: string | null | undefined, fallbackPath: string): string {
+  const raw = overridePath?.trim();
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || /[?#]/.test(raw)) return canonicalPath(fallbackPath);
+  return canonicalPath(raw);
+}
+
+function resolvedRoutePath(path: string, override: SeoRouteOverride | null): string {
+  return safeRouteCanonicalPath(override?.canonical_path, path);
+}
+
 export function buildRouteMetadata({
   path,
   fallback,
@@ -26,14 +38,14 @@ export function buildRouteMetadata({
   fallback: RouteFallback;
   override: SeoRouteOverride | null;
 }): Metadata {
+  const canonical = resolvedRoutePath(path, override);
   const base = staticPageMetadata({
     title: override?.meta_title?.trim() || fallback.title,
     description: override?.meta_description?.trim() || fallback.description,
-    path,
+    path: canonical,
     ogImage: fallback.ogImage,
   });
   const keywords = override?.focus_keywords?.trim() || undefined;
-  const canonical = canonicalPath(override?.canonical_path?.trim() || path);
   const robots = {
     index: override?.robots_index ?? true,
     follow: override?.robots_follow ?? true,
@@ -55,6 +67,7 @@ export function buildRouteJsonLd({
   fallback: RouteFallback;
   override: SeoRouteOverride | null;
 }): Record<string, unknown>[] {
+  const canonical = resolvedRoutePath(path, override);
   const title = override?.meta_title?.trim() || fallback.title;
   const description = override?.meta_description?.trim() || fallback.description;
   const base = buildAutoSchema(
@@ -63,9 +76,9 @@ export function buildRouteJsonLd({
       title,
       description,
       focus_keywords: override?.focus_keywords || '',
-      path,
+      path: canonical,
     },
-    { basePath: path, routeType: fallback.routeType },
+    { basePath: canonical, routeType: fallback.routeType },
   );
   const merged = override?.schema_markup
     ? mergeSchema(base, override.schema_markup, 'route', ROUTE_LOCKED_KEYS).schema
