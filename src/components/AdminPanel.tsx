@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag, ShieldCheck
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -14,6 +14,7 @@ import { ChatOpsBell } from './admin/shared/ChatOpsBell';
 
 const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
+const PropertyVerificationTab = lazy(() => import('./admin/tabs/PropertyVerificationTab').then(m => ({ default: m.PropertyVerificationTab })));
 const LeadsTab = lazy(() => import('./admin/tabs/LeadsTab').then(m => ({ default: m.LeadsTab })));
 const ChatSessionsTab = lazy(() => import('./admin/tabs/ChatSessionsTab').then(m => ({ default: m.ChatSessionsTab })));
 const UserListingsApprovalTab = lazy(() => import('./admin/tabs/UserListingsApprovalTab').then(m => ({ default: m.UserListingsApprovalTab })));
@@ -95,6 +96,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
   const navItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'properties', label: 'Bất động sản', icon: <Building2 className="w-4 h-4" />, badge: stats.activeProperties },
+    { id: 'property-verification', label: 'Hồ sơ kiểm tra', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'leads', label: 'Khách hàng', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
     { id: 'chat-sessions', label: 'Phiên chat', icon: <MessagesSquare className="w-4 h-4" /> },
     { id: 'nurture', label: 'Nuôi dưỡng', icon: <Send className="w-4 h-4" /> },
@@ -197,6 +199,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           <Suspense fallback={<div className="p-8 text-center text-gray-400">Đang tải...</div>}>
           {tab === 'dashboard' && <DashboardTab stats={stats} setTab={setTab} />}
           {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} focusEditId={pendingEdit?.tab === 'properties' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
+          {tab === 'property-verification' && <PropertyVerificationTab />}
           {tab === 'leads' && <LeadsTab onRefreshStats={loadStats} />}
           {tab === 'chat-sessions' && <ChatSessionsTab />}
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}

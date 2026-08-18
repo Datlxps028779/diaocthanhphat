@@ -99,7 +99,14 @@ export function formToProperty(
     is_featured: Boolean(form.is_featured),
     is_hot: Boolean(form.is_hot),
     is_active: Boolean(form.is_active),
-    is_verified: Boolean(form.is_verified),
+    // The generic property form never grants verification. When it renders an
+    // existing property preview, retain the database-backed P7 projection so the
+    // preview matches the public detail page without inventing a trust signal.
+    is_verified: property?.is_verified ?? false,
+    verification_status: property?.verification_status ?? 'unverified',
+    verification_scope_codes: property?.verification_scope_codes ?? [],
+    verified_at: property?.verified_at ?? null,
+    verified_until: property?.verified_until ?? null,
     views: property?.views ?? 0,
     contact_name: str(form.contact_name),
     contact_phone: str(form.contact_phone),

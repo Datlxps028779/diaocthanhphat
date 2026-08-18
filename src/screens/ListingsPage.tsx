@@ -1031,9 +1031,7 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
         {p.listing_type === 'cho_thue' && (
           <span className="absolute bottom-8 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
         )}
-        {p.is_verified && (
-          <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge verified /></span>
-        )}
+        <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>
         <div className="absolute top-2 right-2 z-[2] flex items-center gap-1.5">
           <CompareButton property={p} variant="overlay" />
           <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
@@ -1089,7 +1087,7 @@ function ListCard({ property: p, onContact, onResultClick, isFavorited = false, 
       </div>
       <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
         <div>
-          {p.is_verified && <div className="mb-1"><VerifiedBadge verified /></div>}
+          <VerifiedBadge property={p} />
           <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
           <p className="text-red-600 font-black text-lg mb-1">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
           <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5 flex-wrap">

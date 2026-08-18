@@ -26,3 +26,4 @@ export * from './api/aiRag';
 export * from './api/adminDocs';
 export * from './api/imageMaintenance';
 export * from './api/contentRevalidation';
+export * from './api/propertyVerification';

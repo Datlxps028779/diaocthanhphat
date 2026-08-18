@@ -1,5 +1,6 @@
 import type { Property } from './supabase';
 import { buildPropertyGallery, FALLBACK_PROPERTY_IMAGE } from './propertyImages';
+import { normalizePublicVerificationSummary } from './propertyVerification';
 
 const MIN_PHOTOS_FOR_SIGNAL = 3;
 
@@ -10,15 +11,15 @@ export interface TrustSignal {
   icon: TrustIcon;
 }
 
-export function isVerified(p: Pick<Property, 'is_verified'>): boolean {
-  return p.is_verified === true;
+export function isVerified(p: Pick<Property, 'is_verified' | 'verification_status' | 'verification_scope_codes' | 'verified_at' | 'verified_until'>): boolean {
+  return normalizePublicVerificationSummary(p) !== null;
 }
 
 export function buildTrustSignals(p: Property): TrustSignal[] {
   const signals: TrustSignal[] = [];
 
   if (isVerified(p)) {
-    signals.push({ key: 'verified', label: 'Tin đã xác minh', icon: 'shield' });
+    signals.push({ key: 'verified', label: 'Hồ sơ đã được kiểm tra', icon: 'shield' });
   }
   if (p.legal_status && p.legal_status.trim()) {
     signals.push({ key: 'legal', label: `Pháp lý: ${p.legal_status}`, icon: 'file' });

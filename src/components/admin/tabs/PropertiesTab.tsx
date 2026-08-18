@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, ShieldCheck, Wand2, Code2 } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, Wand2, Code2 } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
+import { normalizePublicVerificationSummary } from '../../../lib/propertyVerification';
 import {
   adminGetPropertiesPage, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
   getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties,
@@ -141,7 +142,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
     } finally { setBulkBusy(false); }
   };
   const selectedIds = () => Array.from(selected);
-  const selectedPropertyTargets = (patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured' | 'is_verified'>>) =>
+  const selectedPropertyTargets = (patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>) =>
     properties.filter(property => selected.has(property.id)).map(property => ({
       previous: propertyRevalidationSnapshot(property),
       current: propertyRevalidationSnapshot({ ...property, ...patch }),
@@ -236,7 +237,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isFeatured)} onChange={event => updateFilters({ isFeatured: event.target.checked || undefined })} className="accent-red-600" />Nổi bật</label>
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isHot)} onChange={event => updateFilters({ isHot: event.target.checked || undefined })} className="accent-red-600" />HOT</label>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isVerified)} onChange={event => updateFilters({ isVerified: event.target.checked || undefined })} className="accent-red-600" />Đã xác minh</label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600"><input type="checkbox" checked={Boolean(filters.isVerified)} onChange={event => updateFilters({ isVerified: event.target.checked || undefined })} className="accent-red-600" />Hồ sơ đã kiểm tra</label>
           <select value={filters.sort ?? 'newest'} onChange={event => updateFilters({ sort: event.target.value as AdminPropertyFilters['sort'] })}
             className="ml-auto rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400">
             <option value="newest">Mới tạo nhất</option><option value="updated">Mới cập nhật</option><option value="views">Nhiều lượt xem</option><option value="price_asc">Giá tăng dần</option><option value="price_desc">Giá giảm dần</option>
@@ -280,14 +281,6 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           )}
             className="flex items-center gap-1 text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Star className="w-3.5 h-3.5" />Nổi bật
-          </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(
-            () => bulkUpdateProperties(selectedIds(), { is_verified: true }),
-            'xác minh',
-            selectedPropertyTargets({ is_verified: true }),
-          )}
-            className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
-            <ShieldCheck className="w-3.5 h-3.5" />Xác minh
           </button>
           <button disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}
             className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
@@ -333,7 +326,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                           <div className="flex gap-1 mt-0.5">
                             {p.is_featured && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Nổi bật</span>}
                             {p.is_hot && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded">HOT</span>}
-                            {p.is_verified && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Đã xác minh</span>}
+                            {normalizePublicVerificationSummary(p) && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Hồ sơ đã kiểm tra</span>}
                           </div>
                         </div>
                       </div>
@@ -493,7 +486,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     is_featured: property?.is_featured ?? false,
     is_hot: property?.is_hot ?? false,
     is_active: property?.is_active ?? true,
-    is_verified: property?.is_verified ?? false,
     contact_name: property?.contact_name ?? '',
     contact_phone: property?.contact_phone ?? '',
     contact_zalo: property?.contact_zalo ?? '',
@@ -723,7 +715,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       is_featured: specForm.is_featured,
       is_hot: specForm.is_hot,
       is_active: specForm.is_active,
-      is_verified: specForm.is_verified,
       contact_name: cs(specForm.contact_name),
       contact_phone: cs(specForm.contact_phone),
       contact_zalo: cs(specForm.contact_zalo),
@@ -1064,7 +1055,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
           {/* Toggles */}
           <div className="flex flex-wrap gap-4 pt-2 border-t border-gray-100">
-            {[{ key: 'is_active', label: 'Đang hiển thị' }, { key: 'is_featured', label: 'Nổi bật' }, { key: 'is_hot', label: 'HOT' }, { key: 'is_verified', label: 'Đã xác minh' }].map(({ key, label }) => (
+            {[{ key: 'is_active', label: 'Đang hiển thị' }, { key: 'is_featured', label: 'Nổi bật' }, { key: 'is_hot', label: 'HOT' }].map(({ key, label }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={!!form[key as keyof typeof form]}
                   onChange={e => setField(key, e.target.checked)} className="accent-red-500 w-4 h-4" />

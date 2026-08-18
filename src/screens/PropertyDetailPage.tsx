@@ -391,7 +391,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
             {/* Title & price */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              {property.is_verified && <div className="mb-2"><VerifiedBadge verified size="md" /></div>}
+              <div className="mb-2"><VerifiedBadge property={property} size="md" /></div>
               <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{property.title}</h1>
               <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
               <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2 flex-wrap">

@@ -20,6 +20,7 @@ import {
 } from '@/lib/areaSeo';
 import { buildFaqJsonLd } from '@/lib/propertyFaq';
 import type { Property } from '@/lib/supabase';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 export const revalidate = 3600;
 
@@ -82,7 +83,7 @@ function PropertyAreaCard({ property }: { property: Property }) {
           <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold text-white ${property.listing_type === 'cho_thue' ? 'bg-blue-600' : 'bg-red-600'}`}>
             {property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán'}
           </span>
-          {property.is_verified && <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white">Đã xác minh</span>}
+          <VerifiedBadge property={property} />
         </div>
       </div>
       <div className="space-y-2 p-4">

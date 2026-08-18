@@ -20,10 +20,22 @@ function property(overrides: Partial<Property> = {}): Property {
   };
 }
 
+const verified = {
+  is_verified: true,
+  verification_status: 'verified' as const,
+  verification_scope_codes: ['contact_confirmed'],
+  verified_at: '2026-08-01T00:00:00.000Z',
+  verified_until: '2099-01-01T00:00:00.000Z',
+};
+
 describe('isVerified', () => {
-  it('true chỉ khi is_verified=true', () => {
-    expect(isVerified(property({ is_verified: true }))).toBe(true);
+  it('fails closed for legacy boolean-only rows', () => {
+    expect(isVerified(property({ is_verified: true }))).toBe(false);
     expect(isVerified(property({ is_verified: false }))).toBe(false);
+  });
+
+  it('is true only for an eligible P7 verification summary', () => {
+    expect(isVerified(property(verified))).toBe(true);
   });
 });
 
@@ -32,9 +44,10 @@ describe('buildTrustSignals', () => {
     expect(buildTrustSignals(property())).toEqual([]);
   });
 
-  it('verified khi is_verified', () => {
-    const s = buildTrustSignals(property({ is_verified: true }));
+  it('adds verification only for evidence-backed P7 status', () => {
+    const s = buildTrustSignals(property(verified));
     expect(s.map(x => x.key)).toContain('verified');
+    expect(s.find(x => x.key === 'verified')?.label).toBe('Hồ sơ đã được kiểm tra');
   });
 
   it('pháp lý rõ khi legal_status có', () => {
@@ -60,11 +73,5 @@ describe('buildTrustSignals', () => {
   it('không tính photos khi ít ảnh', () => {
     const s = buildTrustSignals(property({ image_url: '/a.jpg', images: ['/a.jpg'] }));
     expect(s.map(x => x.key)).not.toContain('photos');
-  });
-
-  it('mỗi signal có label không rỗng', () => {
-    const s = buildTrustSignals(property({ is_verified: true, legal_status: 'Sổ hồng' }));
-    expect(s.length).toBeGreaterThan(0);
-    for (const sig of s) expect(sig.label.length).toBeGreaterThan(0);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adminPropertyFilterOperations,
   mapAdvisorMatchMetadata,
   normalizeAdminPropertyLimit,
   normalizeAdminPropertyPage,
@@ -25,7 +26,6 @@ describe('Admin property catalogue filter guards', () => {
   ])('normalizes page %s to %s', (value, expected) => {
     expect(normalizeAdminPropertyPage(value)).toBe(expected);
   });
-
   it.each([
     [undefined, 25],
     [20, 25],
@@ -34,6 +34,16 @@ describe('Admin property catalogue filter guards', () => {
     [100, 100],
   ])('allows only approved page limits: %s', (value, expected) => {
     expect(normalizeAdminPropertyLimit(value)).toBe(expected);
+  });
+
+  it('filters verified records by the active P7 projection, not the legacy boolean', () => {
+    expect(adminPropertyFilterOperations(
+      { isVerified: true },
+      '2026-08-17T00:00:00.000Z',
+    )).toEqual([
+      { method: 'eq', column: 'verification_status', value: 'verified' },
+      { method: 'gt', column: 'verified_until', value: '2026-08-17T00:00:00.000Z' },
+    ]);
   });
 });
 

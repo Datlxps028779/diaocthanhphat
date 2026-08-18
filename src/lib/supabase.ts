@@ -54,6 +54,12 @@ export type Property = {
   image_url: string | null; images: string[] | null;
   badge: string | null; badge_color: string | null; legal_status: string | null;
   is_featured: boolean; is_hot: boolean; is_active: boolean; is_verified: boolean; views: number;
+  // P7 source of truth. Legacy is_verified stays during compatibility migration but
+  // must never alone create a public verification claim.
+  verification_status?: 'unverified' | 'verified' | 'revoked';
+  verification_scope_codes?: string[];
+  verified_at?: string | null;
+  verified_until?: string | null;
   contact_name: string | null; contact_phone: string | null;
   bedrooms: number | null; bathrooms: number | null; floor_count: number | null; floor_number: number | null;
   direction: string | null; road_width: number | null; frontage: number | null;
@@ -69,6 +75,51 @@ export type Property = {
   areas?: Area | null; property_types?: PropertyType | null;
 };
 export type PriceStatScope = 'area' | 'ward' | 'neighborhood';
+export type PropertyVerificationStatus = 'draft' | 'submitted' | 'verified' | 'rejected' | 'revoked' | 'withdrawn' | 'superseded';
+export type PropertyVerificationEvidenceKind = 'contact_confirmation' | 'location_reference' | 'media_reference' | 'document_reference' | 'other';
+export type PropertyVerificationEventType = 'opened' | 'evidence_added' | 'submitted' | 'verified' | 'rejected' | 'revoked' | 'withdrawn' | 'superseded';
+export type PropertyVerificationCase = {
+  id: string;
+  property_id: string;
+  user_listing_id: string | null;
+  status: PropertyVerificationStatus;
+  scope_codes: string[];
+  public_reason_codes: string[];
+  submitted_by: string | null;
+  submitted_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  verified_until: string | null;
+  decision_note_internal: string | null;
+  created_at: string;
+  updated_at: string;
+  properties?: Pick<Property, 'id' | 'title' | 'is_active' | 'verification_status' | 'verified_until'> | null;
+};
+export type PropertyVerificationEvidence = {
+  id: string;
+  case_id: string;
+  kind: PropertyVerificationEvidenceKind;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  submitted_by: string | null;
+  created_at: string;
+};
+export type PropertyVerificationEvent = {
+  id: string;
+  case_id: string;
+  property_id: string;
+  event_type: PropertyVerificationEventType;
+  from_status: PropertyVerificationStatus | null;
+  to_status: PropertyVerificationStatus | null;
+  actor_id: string | null;
+  actor_role: 'admin' | 'system';
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+};
+
+
 export type PriceStat = {
   id: string;
   scope: PriceStatScope; scope_key: string;

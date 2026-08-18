@@ -822,9 +822,7 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
         {p.listing_type === 'cho_thue' && (
           <span className="absolute top-2 right-8 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">Cho thuê</span>
         )}
-        {p.is_verified && (
-          <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge verified /></span>
-        )}
+        <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>
         <button onClick={e => { e.stopPropagation(); onToggleFavorite?.(); }}
           className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
           <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">

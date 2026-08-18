@@ -20,6 +20,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
       expect(tabs).toContain('settings');
       expect(tabs).toContain('leads');
       expect(tabs).toContain('nurture');
+      expect(tabs).toContain('property-verification');
       expect(tabs.length).toBeGreaterThanOrEqual(19);
     });
 
@@ -29,7 +30,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
 
     it('staff KHÔNG thấy khu nhạy cảm', () => {
       const tabs = visibleTabs('staff');
-      for (const forbidden of ['users', 'settings', 'cms', 'backup', 'dashboard', 'properties', 'news', 'projects', 'nurture']) {
+      for (const forbidden of ['users', 'settings', 'cms', 'backup', 'dashboard', 'properties', 'property-verification', 'news', 'projects', 'nurture']) {
         expect(tabs).not.toContain(forbidden);
       }
     });

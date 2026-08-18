@@ -381,19 +381,43 @@ export function normalizeAdminPropertyLimit(value: number | undefined): number {
   return value && ADMIN_PROPERTY_PAGE_LIMITS.has(value) ? value : 25;
 }
 
+export interface AdminPropertyFilterOperation {
+  method: 'eq' | 'gt';
+  column: string;
+  value: unknown;
+}
+
+// `isVerified` is retained as the UI/API filter name for compatibility, but it now
+// means an evidence-backed P7 verification that is still within its validity window.
+export function adminPropertyFilterOperations(
+  filters: AdminPropertyFilters = {},
+  now = new Date().toISOString(),
+): AdminPropertyFilterOperation[] {
+  const operations: AdminPropertyFilterOperation[] = [];
+  if (filters.listingType && filters.listingType !== 'all') operations.push({ method: 'eq', column: 'listing_type', value: filters.listingType });
+  if (filters.areaId) operations.push({ method: 'eq', column: 'area_id', value: filters.areaId });
+  if (filters.typeId) operations.push({ method: 'eq', column: 'property_type_id', value: filters.typeId });
+  if (filters.status === 'active') operations.push({ method: 'eq', column: 'is_active', value: true });
+  if (filters.status === 'inactive') operations.push({ method: 'eq', column: 'is_active', value: false });
+  if (filters.isFeatured) operations.push({ method: 'eq', column: 'is_featured', value: true });
+  if (filters.isHot) operations.push({ method: 'eq', column: 'is_hot', value: true });
+  if (filters.isVerified) {
+    operations.push(
+      { method: 'eq', column: 'verification_status', value: 'verified' },
+      { method: 'gt', column: 'verified_until', value: now },
+    );
+  }
+  return operations;
+}
+
 export function buildAdminPropertyQuery(filters: AdminPropertyFilters = {}) {
   let q = supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' });
 
-  if (filters.listingType && filters.listingType !== 'all') q = q.eq('listing_type', filters.listingType);
-  if (filters.areaId) q = q.eq('area_id', filters.areaId);
-  if (filters.typeId) q = q.eq('property_type_id', filters.typeId);
-  if (filters.status === 'active') q = q.eq('is_active', true);
-  if (filters.status === 'inactive') q = q.eq('is_active', false);
-  if (filters.isFeatured) q = q.eq('is_featured', true);
-  if (filters.isHot) q = q.eq('is_hot', true);
-  if (filters.isVerified) q = q.eq('is_verified', true);
+  for (const operation of adminPropertyFilterOperations(filters)) {
+    q = q[operation.method](operation.column, operation.value);
+  }
 
   const keyword = sanitizeAdminPropertyKeyword(filters.keyword);
   if (keyword) {
@@ -478,7 +502,7 @@ export async function deleteProperty(id: string): Promise<void> {
 // hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field nhạy cảm.
 export async function bulkUpdateProperties(
   ids: string[],
-  patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured' | 'is_verified'>>,
+  patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>,
 ): Promise<number> {
   if (ids.length === 0) return 0;
   const { error, count } = await supabase
