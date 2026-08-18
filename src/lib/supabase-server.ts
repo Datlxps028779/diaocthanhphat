@@ -4,6 +4,7 @@ import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, Distric
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
+import { pickRelated } from './relatedNews';
 import type { LocationTaxonomy } from './neighborhoodLocation';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
@@ -363,6 +364,44 @@ export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArt
     return data as NewsArticle | null;
   } catch {
     return null;
+  }
+}
+
+const RELATED_NEWS_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,created_at,updated_at';
+
+// Bài liên quan cuối trang tin: ưu tiên related_ids do biên tập chọn, sau đó bù theo
+// category/keyword/độ mới bằng policy chung. Chỉ lấy bài public, không tự link bài đang đọc.
+export async function serverGetRelatedNews(article: NewsArticle, limit = 3): Promise<NewsListItem[]> {
+  try {
+    const sb = serverClient();
+    const manualIds = Array.isArray(article.related_ids) ? article.related_ids.filter(Boolean) : [];
+    const categoryQuery = sb
+      .from('news')
+      .select(RELATED_NEWS_SELECT)
+      .eq('is_published', true)
+      .eq('category', article.category)
+      .neq('id', article.id)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(100);
+    const manualQuery = manualIds.length > 0
+      ? sb
+        .from('news')
+        .select(RELATED_NEWS_SELECT)
+        .eq('is_published', true)
+        .neq('id', article.id)
+        .in('id', manualIds)
+      : Promise.resolve({ data: [] as unknown[] });
+    const [categoryResult, manualResult] = await Promise.all([categoryQuery, manualQuery]);
+    const pool = new Map<string, NewsArticle>();
+    for (const item of [...(categoryResult.data ?? []), ...(manualResult.data ?? [])]) {
+      const news = item as unknown as NewsArticle;
+      pool.set(news.id, news);
+    }
+
+    return pickRelated(article, manualIds, Array.from(pool.values()), limit, Date.now()) as NewsListItem[];
+  } catch {
+    return [];
   }
 }
 

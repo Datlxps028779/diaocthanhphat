@@ -67,4 +67,14 @@ describe('pickRelated', () => {
   it('input rỗng trả mảng rỗng', () => {
     expect(pickRelated(cur, [], [], 5, NOW)).toEqual([]);
   });
+
+  it('tie score được sắp xếp ổn định theo ngày tạo rồi id', () => {
+    const pool = [
+      article({ id: 'z', category: 'Đầu tư', created_at: '2026-07-17T00:00:00Z' }),
+      article({ id: 'a', category: 'Đầu tư', created_at: '2026-07-17T00:00:00Z' }),
+      article({ id: 'newer', category: 'Đầu tư', created_at: '2026-07-18T00:00:00Z' }),
+    ];
+
+    expect(pickRelated(cur, [], pool, 3, NOW).map(a => a.id)).toEqual(['newer', 'a', 'z']);
+  });
 });

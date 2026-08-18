@@ -46,7 +46,15 @@ export function pickRelated(
   if (out.length < limit) {
     const rest = pool
       .filter(a => !seen.has(a.id))
-      .sort((x, y) => relatedScore(current, y, now) - relatedScore(current, x, now));
+      .sort((x, y) => {
+        const scoreDelta = relatedScore(current, y, now) - relatedScore(current, x, now);
+        if (scoreDelta !== 0) return scoreDelta;
+
+        const createdDelta = new Date(y.created_at).getTime() - new Date(x.created_at).getTime();
+        if (createdDelta !== 0) return createdDelta;
+
+        return x.id.localeCompare(y.id);
+      });
     for (const a of rest) {
       if (out.length >= limit) break;
       out.push(a);

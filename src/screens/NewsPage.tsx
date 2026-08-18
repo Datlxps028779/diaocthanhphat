@@ -227,7 +227,7 @@ function ArticleDetail({
   onBack,
 }: {
   article: NewsArticle;
-  related: NewsArticle[];
+  related: Array<NewsArticle | NewsListItem>;
   onBack: () => void;
 }) {
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
@@ -281,7 +281,7 @@ function ArticleDetail({
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
-  const relatedHref = (item: NewsArticle) => articleHref(item);
+  const relatedHref = (item: NewsArticle | NewsListItem) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
   const imgUrl =
     (article as any).image_url ||
@@ -428,6 +428,55 @@ function ArticleDetail({
             </div>
           )}
 
+          {/* Bài liên quan cuối nội dung — link nội bộ thực, độc lập với nguồn tham khảo. */}
+          {relatedArticles.length > 0 && (
+            <section className="mt-10 border-t border-gray-200 pt-6" aria-labelledby="related-articles-heading">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Đọc tiếp</p>
+                  <h2 id="related-articles-heading" className="mt-1 text-xl font-bold text-gray-900">Bài viết liên quan</h2>
+                </div>
+                <Link href="/tin-tuc" className="text-sm font-semibold text-red-700 hover:text-red-800 hover:underline">
+                  Xem tất cả tin tức
+                </Link>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {relatedArticles.slice(0, 3).map((item) => {
+                  const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
+                  const itemCategory = (item as any).category ?? '';
+                  return (
+                    <Link
+                      key={item.id}
+                      href={relatedHref(item)}
+                      className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
+                    >
+                      <BlurFillImage
+                        src={itemImage}
+                        alt={buildNewsImageAlt(item)}
+                        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                        wrapperClassName="h-36"
+                      />
+                      <div className="p-4">
+                        {itemCategory && (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${categoryBadge(itemCategory)}`}>
+                            {itemCategory}
+                          </span>
+                        )}
+                        <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
+                          {item.title}
+                        </h3>
+                        {item.excerpt && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-500">{stripHtml(item.excerpt)}</p>}
+                        <p className="mt-3 flex items-center gap-1 text-xs text-gray-400">
+                          <Calendar className="h-3 w-3" /> {formatDate((item as any).published_at ?? item.created_at)}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* CTA Banner */}
           <div className="mt-10 bg-gradient-to-r from-red-700 to-red-500 rounded-2xl p-6 text-white text-center">
             <h3 className="text-lg font-bold mb-2">Bạn cần tư vấn về bất động sản?</h3>
@@ -477,7 +526,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialRelated = [], initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialRelated?: NewsListItem[]; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
   const [category, setCategory] = useState<NewsCollection>(initialCategory || 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -695,7 +744,9 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     const poolMap = new Map<string, NewsArticle>();
     for (const a of articles) poolMap.set(a.id, a as unknown as NewsArticle);
     for (const a of manualRelated) poolMap.set(a.id, a);
-    const related = pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
+    const related = initialArticle?.id === activeArticle.id && initialRelated.length > 0
+      ? initialRelated
+      : pickRelated(activeArticle, manualRelatedIds, Array.from(poolMap.values()), 5, Date.now());
     return (
       <ArticleDetail
         article={activeArticle}
