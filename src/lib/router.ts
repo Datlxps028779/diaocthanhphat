@@ -1,5 +1,6 @@
 import { categoryToSlug } from './newsCategories';
 import { buildAreaListingPath } from './areaPath';
+import type { ListingInitialFilters, PropertySort } from './api/properties';
 
 // Taxonomy tối thiểu để map areaId→slug (+ district tên→slug) khi sinh path SEO.
 // Truyền tùy chọn: có thì sinh path /cho-thue/binh-duong/di-an; không thì giữ query cũ.
@@ -45,7 +46,7 @@ export const LISTINGS_PER_PAGE = 16;
 // dạng Record<string, string | string[]>) → mảnh filter để seed initialFilters.
 // Là chiều nghịch của phần 'listings' trong pageToHref.
 type RawSearchParams = Record<string, string | string[] | undefined> | undefined;
-export function parseListingParams(sp: RawSearchParams): { areaId?: string; typeId?: string; typeSlug?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } {
+export function parseListingParams(sp: RawSearchParams): ListingInitialFilters {
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
   const num = (v: string | string[] | undefined) => {
     const s = first(v);
@@ -53,7 +54,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
     const n = Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
-  const out: { areaId?: string; typeId?: string; typeSlug?: string; district?: string; ward?: string; legal?: string; keyword?: string; sort?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; isFeatured?: boolean; isHot?: boolean; page?: number } = {};
+  const out: ListingInitialFilters = {};
   const area = first(sp?.area);
   const type = first(sp?.type);
   const typeSlug = first(sp?.loai);
@@ -61,6 +62,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   const ward = first(sp?.ward);
   const legal = first(sp?.legal);
   const keyword = first(sp?.q);
+  const allowedSorts: PropertySort[] = ['newest', 'price_asc', 'price_desc', 'views', 'relevance'];
   const sort = first(sp?.sort);
   const minPrice = num(sp?.minPrice);
   const maxPrice = num(sp?.maxPrice);
@@ -78,7 +80,7 @@ export function parseListingParams(sp: RawSearchParams): { areaId?: string; type
   if (ward) out.ward = ward;
   if (legal) out.legal = legal;
   if (keyword) out.keyword = keyword;
-  if (sort) out.sort = sort;
+  if (sort && allowedSorts.includes(sort as PropertySort)) out.sort = sort as PropertySort;
   if (minPrice != null) out.minPrice = minPrice;
   if (maxPrice != null) out.maxPrice = maxPrice;
   if (minArea != null) out.minArea = minArea;

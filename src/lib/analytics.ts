@@ -55,6 +55,7 @@ export const EVENTS = {
   CONTACT_OPEN: 'contact_open',
   SEARCH: 'search',
   LISTING_VIEW: 'listing_view',
+  LISTING_RESULT_CLICK: 'listing_result_click',
   AI_ADVISOR_OPEN: 'ai_advisor_open',
   AI_ADVISOR_SEND: 'ai_advisor_send',
   AI_ADVISOR_SUGGEST: 'ai_advisor_suggest_properties',

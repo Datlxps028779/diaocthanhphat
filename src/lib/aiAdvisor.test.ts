@@ -105,11 +105,15 @@ describe('advisor helpers', () => {
     expect(detectHandoffTriggers('Nhà Dĩ An dưới 3 tỷ')).toBe(false);
   });
 
-  it('summarizePropertyForAdvisor giữ lại điểm khớp từ SQL', () => {
-    const summary = summarizePropertyForAdvisor(property({}) as Property & { matchScore: number });
-    const scored = summarizePropertyForAdvisor({ ...property(), matchScore: 70 });
-    expect(summary.matchScore).toBeUndefined();
-    expect(scored.matchScore).toBe(70);
+  it('summarizePropertyForAdvisor chỉ hiện các lý do khớp có nguồn từ SQL', () => {
+    const summary = summarizePropertyForAdvisor(property());
+    const explained = summarizePropertyForAdvisor({
+      ...property(),
+      matchReasons: ['location', 'budget', 'legal'],
+    });
+    expect(summary.matchReasons).toEqual([]);
+    expect(explained.matchReasonCodes).toEqual(['location', 'budget', 'legal']);
+    expect(explained.matchReasons).toEqual(['Đúng khu vực', 'Trong ngân sách', 'Phù hợp pháp lý']);
   });
 
   it('detect sensitive requests + safe responses', () => {

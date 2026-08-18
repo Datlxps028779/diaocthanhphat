@@ -13,7 +13,7 @@ import { type Property } from '../lib/supabase';
 import { captureSignalFromProperty } from '../lib/captureSignal';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, autoSaveSearch } from '../lib/api';
 import { buildSearchName, hasSavedSearchCriteria, type SavedFilters } from '../lib/savedSearch';
-import { buildPropertyPath, type PropertySort } from '../lib/api/properties';
+import { buildPropertyPath, PropertySearchUnavailableError, type ListingInitialFilters, type PropertySort } from '../lib/api/properties';
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
@@ -30,16 +30,16 @@ import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
 import { buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
+import { listingInitialDataScopeMatches } from '../lib/listingInitialData';
+import { track, EVENTS } from '../lib/analytics';
+import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
 interface ListingsPageProps {
-  initialFilters?: Partial<{
-    listingType: string; areaId: string; typeId: string; typeSlug: string; district: string; ward: string; keyword: string;
-    minPrice: number; maxPrice: number; minArea: number; maxArea: number;
-    bedrooms: string; direction: string; legal: string;
-    isFeatured: boolean; isHot: boolean; sort: PropertySort; page: number;
-  }>;
-  // Dữ liệu SSR seed sẵn cho view mặc định → crawler thấy list ngay trong HTML gốc.
+  initialFilters?: ListingInitialFilters;
+  // Dữ liệu SSR seed sẵn cho view mà server thực sự đã truy vấn. Scope tách riêng
+  // để không dùng nhầm seed chưa lọc cho URL/filter khác.
   initialData?: { data: Property[]; total: number };
+  initialDataScope?: ListingInitialFilters;
   onNavigate: (p: Page) => void;
 }
 
@@ -73,7 +73,7 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 // re-render vô hạn khi dùng làm default cho useQuery bị disable.
 const EMPTY_PROPS: Property[] = [];
 
-export function ListingsPage({ initialFilters, initialData, onNavigate }: ListingsPageProps) {
+export function ListingsPage({ initialFilters, initialData, initialDataScope, onNavigate }: ListingsPageProps) {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [district, setDistrict] = useState(initialFilters?.district ?? '');
   const [ward, setWard] = useState(initialFilters?.ward ?? '');
@@ -89,10 +89,14 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       initialFilters?.minPrice, initialFilters?.maxPrice,
     ),
   );
-  const [areaIdx, setAreaIdx] = useState(0);
+  const [areaIdx, setAreaIdx] = useState(() =>
+    findRangeIndex(AREA_RANGES, initialFilters?.minArea, initialFilters?.maxArea),
+  );
   const [bedrooms, setBedrooms] = useState(initialFilters?.bedrooms ?? '');
   const [direction, setDirection] = useState(initialFilters?.direction ?? '');
   const [legal, setLegal] = useState(initialFilters?.legal ?? '');
+  const [isFeatured, setIsFeatured] = useState(initialFilters?.isFeatured ?? false);
+  const [isHot, setIsHot] = useState(initialFilters?.isHot ?? false);
   const [sort, setSort] = useState<PropertySort>((initialFilters?.sort as PropertySort) ?? 'newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
   const [page, setPage] = useState(initialFilters?.page ?? 1);
@@ -181,7 +185,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
   const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
   const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
-  const explicitFilters = {
+  const explicitFilters = useMemo(() => ({
     listingType: listingType || undefined,
     areaId: areaId || undefined,
     typeId: typeId || undefined,
@@ -194,26 +198,48 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     bedrooms: bedrooms || undefined,
     direction: direction || undefined,
     legal: legal || undefined,
-  };
-  const searchIntent = useMemo(() => parseSearchIntent(debouncedKeyword, { areas, districts, wards, propertyTypes: types }, explicitFilters), [debouncedKeyword, areas, districts, wards, types, listingType, areaId, typeId, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
+  }), [listingType, areaId, typeId, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
+  const searchIntent = useMemo(() => parseSearchIntent(debouncedKeyword, { areas, districts, wards, propertyTypes: types }, explicitFilters), [debouncedKeyword, areas, districts, wards, types, explicitFilters]);
   const effectiveSort: PropertySort = debouncedKeyword && sort === 'newest' ? 'relevance' : sort;
-  const filters = {
+  const filters = useMemo(() => ({
     ...explicitFilters,
     ...searchIntent.filters,
     keyword: searchIntent.residualKeyword.trim() || undefined,
-    isFeatured: initialFilters?.isFeatured, isHot: initialFilters?.isHot,
+    isFeatured: isFeatured || undefined, isHot: isHot || undefined,
     sort: effectiveSort, page, limit: PER_PAGE,
-  };
-  // Chỉ seed dữ liệu SSR khi filter còn nguyên mặc định (đúng cái server prefetch):
-  // trang 1, không keyword/khu vực/loại/quận, khoảng giá & diện tích mặc định, mới nhất.
-  const isDefaultView = page === 1 && !debouncedKeyword && !areaId && !typeId && !district && !ward
-    && priceIdx === 0 && areaIdx === 0 && !bedrooms && !direction && !legal && sort === 'newest';
+  }), [explicitFilters, searchIntent.filters, searchIntent.residualKeyword, isFeatured, isHot, effectiveSort, page]);
+  // Chỉ seed dữ liệu SSR khi state hiện tại khớp chính xác scope server đã truy vấn.
+  // Base route chỉ seed theo listingType; route khu vực seed thêm area/district. Các
+  // filter query phụ (loại/giá/phường/...) luôn phải fetch lại thay vì hiện sai tin.
+  const initialScopeMatches = listingInitialDataScopeMatches(initialDataScope, {
+    listingType: listingType || undefined,
+    areaId: areaId || undefined,
+    typeId: typeId || undefined,
+    district: district || undefined,
+    ward: ward || undefined,
+    keyword: debouncedKeyword || undefined,
+    minPrice: pr.min,
+    maxPrice: pr.max,
+    minArea: ar.min,
+    maxArea: ar.max,
+    bedrooms: bedrooms || undefined,
+    direction: direction || undefined,
+    legal: legal || undefined,
+    isFeatured,
+    isHot,
+    sort,
+    page,
+    typeSlug: initialFilters?.typeSlug,
+  });
   // Phân trang giữ URL chia sẻ được (SEO/crawler), nhưng người dùng có thể bấm "Tải
   // thêm" để nối tiếp trang sau vào cùng danh sách. useInfiniteQuery giữ từng trang
   // riêng nên đổi filter/sort là reset sạch, không lẫn dữ liệu cũ.
   const {
     data: infiniteResult,
     isFetching: fetchingListings,
+    isError: listingsError,
+    error: listingsQueryError,
+    refetch: retryListings,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -228,8 +254,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       loaded: allPages.reduce((sum, part) => sum + part.data.length, 0),
     }),
     placeholderData: keepPreviousData, // giữ grid khi đổi trang, không nháy
-    initialData: isDefaultView && initialData
-      ? { pages: [initialData], pageParams: [1] }
+    initialData: initialScopeMatches && initialData
+      ? { pages: [initialData], pageParams: [page] }
       : undefined,
   });
   const properties = useMemo(
@@ -317,19 +343,31 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
       direction: direction || undefined,
       legal: legal || undefined,
       sort: sort !== 'newest' ? (sort as string) : undefined,
-      isFeatured: initialFilters?.isFeatured || undefined,
-      isHot: initialFilters?.isHot || undefined,
+      isFeatured: isFeatured || undefined,
+      isHot: isHot || undefined,
       page: page > 1 ? page : undefined,
     }, { areas, districts, propertyTypes: types });
     const current = window.location.pathname + window.location.search;
     if (current !== href) window.history.replaceState(null, '', href);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, initialFilters?.isFeatured, initialFilters?.isHot]);
+  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, isFeatured, isHot]);
 
-  // Map view: chỉ fetch khi ở chế độ bản đồ
-  const { data: mapProperties = EMPTY_PROPS } = useQuery({
-    queryKey: qk.propertiesMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
-    queryFn: () => getAllPropertiesForMap({ areaId: areaId || undefined, typeId: typeId || undefined }),
+  // Map view dùng CHÍNH filter hiệu lực của list (kể cả semantic intent), chỉ bỏ
+  // paging/sort vì marker là một tập kết quả chứ không phải một trang xếp hạng.
+  const mapFilters = useMemo(() => ({
+    ...filters,
+    page: undefined,
+    limit: undefined,
+    sort: undefined,
+  }), [filters]);
+  const {
+    data: mapProperties = EMPTY_PROPS,
+    isLoading: mapLoading,
+    isError: mapError,
+    refetch: retryMap,
+  } = useQuery({
+    queryKey: qk.propertiesMap(mapFilters),
+    queryFn: () => getAllPropertiesForMap(mapFilters),
     enabled: viewMode === 'map',
   });
   // Leaflet keeps the first handler, so keep data filtering outside its closure.
@@ -337,21 +375,9 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     setMapBounds(bounds);
   }, []);
 
-  // Thu hẹp marker theo quận/xã đã chọn (query map chỉ lọc được khu vực/loại). Càng
-  // lọc cụ thể → càng ít marker → bản đồ tự fit sát hơn. So khớp tên không phân biệt hoa/thường.
-  const scopedMapProperties = useMemo(() => {
-    const d = district.trim().toLowerCase();
-    const w = ward.trim().toLowerCase();
-    if (!d && !w) return mapProperties;
-    return mapProperties.filter(p =>
-      (!d || (p.district ?? '').trim().toLowerCase() === d) &&
-      (!w || (p.ward ?? '').trim().toLowerCase() === w)
-    );
-  }, [mapProperties, district, ward]);
-
   const viewportProps = useMemo(
-    () => filterByBounds(scopedMapProperties, mapBounds),
-    [scopedMapProperties, mapBounds],
+    () => filterByBounds(mapProperties, mapBounds),
+    [mapProperties, mapBounds],
   );
 
   // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
@@ -368,7 +394,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   const resetFilters = () => {
     setKeyword(''); setAreaId(''); setTypeId(''); setDistrict(''); setWard('');
     setPriceIdx(0); setAreaIdx(0); setBedrooms('');
-    setDirection(''); setLegal(''); setPage(1);
+    setDirection(''); setLegal(''); setIsFeatured(false); setIsHot(false); setPage(1);
   };
 
   const totalPages = Math.ceil(total / PER_PAGE);
@@ -378,11 +404,23 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
   useEffect(() => {
     if (totalPages > 0 && page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
-  const hasActiveFilters = !!(keyword || areaId || typeId || district || ward || priceIdx || areaIdx || bedrooms || direction || legal);
+  const hasActiveFilters = !!(keyword || areaId || typeId || district || ward || priceIdx || areaIdx || bedrooms || direction || legal || isFeatured || isHot);
+  const activeFilterCount = [listingType, areaId, typeId, district, ward, priceIdx > 0, areaIdx > 0, bedrooms, direction, legal, isFeatured, isHot]
+    .filter(Boolean).length;
+  const trackResultClick = (position: number, source: 'grid' | 'list' | 'map') => {
+    track(EVENTS.LISTING_RESULT_CLICK, {
+      source,
+      sort: effectiveSort,
+      position,
+      hasKeyword: Boolean(searchIntent.residualKeyword.trim()),
+      activeFilterCount,
+      policyVersion: RANKING_POLICY_VERSION,
+    });
+  };
   const setFilter = (fn: () => void) => { fn(); setPage(1); };
 
-  const pageTitle = initialFilters?.isFeatured ? 'BĐS Nổi bật'
-    : initialFilters?.isHot ? 'BĐS HOT'
+  const pageTitle = isFeatured ? 'BĐS Nổi bật'
+    : isHot ? 'BĐS HOT'
     : listingType === 'mua_ban' ? 'Mua bán bất động sản'
     : listingType === 'cho_thue' ? 'Cho thuê bất động sản'
     : 'Bất động sản';
@@ -393,8 +431,8 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
     const typeName = typeId ? types.find(item => item.id === typeId)?.name : '';
     const areaName = areaId ? areas.find(item => item.id === areaId)?.name : '';
     const place = [ward, district, areaName].filter(Boolean).join(', ');
-    const base = initialFilters?.isFeatured ? 'Bất động sản nổi bật'
-      : initialFilters?.isHot ? 'Bất động sản HOT'
+    const base = isFeatured ? 'Bất động sản nổi bật'
+      : isHot ? 'Bất động sản HOT'
       : listingType === 'mua_ban' ? `${typeName || 'Nhà đất'} bán`
       : listingType === 'cho_thue' ? `${typeName || 'Nhà đất'} cho thuê`
       : typeName || 'Bất động sản';
@@ -712,34 +750,90 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                 {legal && <FilterChip label={legal} onRemove={() => setFilter(() => setLegal(''))} />}
                 {direction && <FilterChip label={`Hướng ${direction}`} onRemove={() => setFilter(() => setDirection(''))} />}
                 {bedrooms && <FilterChip label={`${bedrooms}+ phòng ngủ`} onRemove={() => setFilter(() => setBedrooms(''))} />}
+                {isFeatured && <FilterChip label="Nổi bật" onRemove={() => setFilter(() => setIsFeatured(false))} />}
+                {isHot && <FilterChip label="HOT" onRemove={() => setFilter(() => setIsHot(false))} />}
                 {keyword && <FilterChip label={`"${keyword}"`} onRemove={() => { setKeyword(''); setPage(1); }} />}
               </div>
             )}
 
             {viewMode === 'map' && (
-              <>
-                {/* Khung bản đồ chiều cao responsive — panel sản phẩm phủ góc phải (desktop) */}
-                <div className="relative h-[70vh] min-h-[420px] max-h-[680px]">
-                  <PropertyMap
-                    properties={scopedMapProperties}
-                    onNavigate={onNavigate}
-                    height="100%"
-                    onBoundsChange={handleBoundsChange}
-                    showCountBadge={false}
-                    fitToMarkers
-                  />
+              mapLoading ? (
+                <div
+                  className="h-[70vh] min-h-[420px] max-h-[680px] rounded-2xl border border-gray-100 bg-gray-100 animate-pulse"
+                  data-testid="property-map-loading"
+                  aria-label="Đang tải dữ liệu bản đồ"
+                />
+              ) : mapError ? (
+                <div
+                  className="rounded-2xl border border-red-100 bg-white px-6 py-10 text-center shadow-sm"
+                  data-testid="property-map-error"
+                  role="alert"
+                >
+                  <p className="font-bold text-gray-900">Không thể tải bản đồ bất động sản</p>
+                  <p className="mt-2 text-sm text-gray-500">Dữ liệu bản đồ đang tạm thời gián đoạn. Vui lòng thử lại.</p>
+                  <button
+                    type="button"
+                    onClick={() => void retryMap()}
+                    className="mt-4 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700"
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Khung bản đồ chiều cao responsive — panel sản phẩm phủ góc phải (desktop) */}
+                  <div className="relative h-[70vh] min-h-[420px] max-h-[680px]" data-testid="property-map-ready">
+                    <PropertyMap
+                      properties={mapProperties}
+                      onNavigate={onNavigate}
+                      height="100%"
+                      onBoundsChange={handleBoundsChange}
+                      showCountBadge={false}
+                      fitToMarkers
+                    />
 
-                  {/* Panel overlay góc phải — chỉ desktop, luôn hiển thị */}
-                  <div className="hidden lg:flex absolute top-3 right-3 bottom-3 w-72 z-[1000] flex-col rounded-2xl bg-white/95 backdrop-blur-sm shadow-xl border border-gray-100 overflow-hidden">
-                    <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
-                      <p className="text-xs font-bold text-gray-900">Tin trong khung nhìn</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">{viewportProps.length} tin đăng đang hiển thị</p>
+                    {/* Panel overlay góc phải — chỉ desktop, luôn hiển thị */}
+                    <div className="hidden lg:flex absolute top-3 right-3 bottom-3 w-72 z-[1000] flex-col rounded-2xl bg-white/95 backdrop-blur-sm shadow-xl border border-gray-100 overflow-hidden">
+                      <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
+                        <p className="text-xs font-bold text-gray-900">Tin trong khung nhìn</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{viewportProps.length} tin đăng đang hiển thị</p>
+                      </div>
+                      {viewportProps.length > 0 ? (
+                        <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+                          {viewportProps.map((p, index) => (
+                            <button key={p.id}
+                              onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
+                              className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
+                              <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                                <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
+                                <p className="text-red-600 text-xs font-black mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+                          <MapPin className="w-8 h-8 text-gray-200 mb-2" />
+                          <p className="text-xs text-gray-500 font-medium">Chưa có tin trong khu vực này</p>
+                          <p className="text-[11px] text-gray-400 mt-1">Thu nhỏ hoặc di chuyển bản đồ để xem thêm</p>
+                        </div>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Danh sách theo khung nhìn — mobile hiển thị dưới bản đồ */}
+                  <div className="lg:hidden mt-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">
+                      {viewportProps.length} tin đăng trong khung nhìn
+                    </p>
                     {viewportProps.length > 0 ? (
-                      <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-                        {viewportProps.map(p => (
+                      <div className="space-y-2">
+                        {viewportProps.map((p, index) => (
                           <button key={p.id}
-                            onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
+                            onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
                             className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                             <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                               <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
@@ -752,44 +846,14 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                         ))}
                       </div>
                     ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                        <MapPin className="w-8 h-8 text-gray-200 mb-2" />
+                      <div className="bg-white border border-gray-100 rounded-xl py-6 text-center">
                         <p className="text-xs text-gray-500 font-medium">Chưa có tin trong khu vực này</p>
                         <p className="text-[11px] text-gray-400 mt-1">Thu nhỏ hoặc di chuyển bản đồ để xem thêm</p>
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Danh sách theo khung nhìn — mobile hiển thị dưới bản đồ */}
-                <div className="lg:hidden mt-3">
-                  <p className="text-xs font-semibold text-gray-500 mb-2">
-                    {viewportProps.length} tin đăng trong khung nhìn
-                  </p>
-                  {viewportProps.length > 0 ? (
-                    <div className="space-y-2">
-                      {viewportProps.map(p => (
-                        <button key={p.id}
-                          onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                          className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
-                          <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                            <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
-                            <p className="text-red-600 text-xs font-black mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-white border border-gray-100 rounded-xl py-6 text-center">
-                      <p className="text-xs text-gray-500 font-medium">Chưa có tin trong khu vực này</p>
-                      <p className="text-[11px] text-gray-400 mt-1">Thu nhỏ hoặc di chuyển bản đồ để xem thêm</p>
-                    </div>
-                  )}
-                </div>
-              </>
+                </>
+              )
             )}
 
             {/* H2 mô tả tập kết quả — sr-only vì số lượng đã hiện ở thanh trên,
@@ -798,7 +862,23 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               <h2 className="sr-only">Danh sách {heading.toLocaleLowerCase('vi-VN')}</h2>
             )}
 
-            {viewMode === 'grid' && (
+            {viewMode !== 'map' && listingsError ? (
+              <div className="rounded-2xl border border-red-100 bg-white px-6 py-10 text-center shadow-sm" role="alert">
+                <p className="font-bold text-gray-900">Không thể tải danh sách bất động sản</p>
+                <p className="mt-2 text-sm text-gray-500">
+                  {listingsQueryError instanceof PropertySearchUnavailableError
+                    ? listingsQueryError.message
+                    : 'Dữ liệu đang tạm thời gián đoạn. Vui lòng thử lại.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void retryListings()}
+                  className="mt-4 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700"
+                >
+                  Thử lại
+                </button>
+              </div>
+            ) : viewMode === 'grid' && (
               loading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-72 animate-pulse border border-gray-100" />)}
@@ -807,8 +887,9 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
                 <EmptyState onReset={resetFilters} listingType={listingType} />
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {properties.map(p => (
+                  {properties.map((p, index) => (
                     <GridCard key={p.id} property={p}
+                      onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'grid')}
                       isFavorited={favoriteIds.has(p.id)}
                       onToggleFavorite={() => favMutation.mutate(p)}
                       onContact={() => setContactProp(p)} />
@@ -817,15 +898,16 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
               )
             )}
 
-            {viewMode === 'list' && (
+            {!listingsError && viewMode === 'list' && (
               loading ? (
                 <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-28 animate-pulse border border-gray-100" />)}</div>
               ) : properties.length === 0 ? (
                 <EmptyState onReset={resetFilters} listingType={listingType} />
               ) : (
                 <div className="space-y-3">
-                  {properties.map(p => (
+                  {properties.map((p, index) => (
                     <ListCard key={p.id} property={p}
+                      onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'list')}
                       isFavorited={favoriteIds.has(p.id)}
                       onToggleFavorite={() => favMutation.mutate(p)}
                       onContact={() => setContactProp(p)} />
@@ -836,7 +918,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
 
             {/* Tải thêm: nối trang kế vào danh sách. Nút luôn hiển thị (fallback khi
                 IntersectionObserver không chạy/JS chậm); sentinel chỉ tự bấm hộ. */}
-            {viewMode !== 'map' && hasNextPage && (
+            {!listingsError && viewMode !== 'map' && hasNextPage && (
               <div className="mt-8 flex flex-col items-center gap-2">
                 <div ref={loadMoreRef} aria-hidden className="h-px w-full" />
                 <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}
@@ -848,7 +930,7 @@ export function ListingsPage({ initialFilters, initialData, onNavigate }: Listin
             )}
 
             {/* Pagination */}
-            {viewMode !== 'map' && totalPages > 1 && (
+            {!listingsError && viewMode !== 'map' && totalPages > 1 && (
               <div className="flex items-center justify-center gap-1 mt-8">
                 <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
                   className="px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors bg-white">
@@ -924,14 +1006,14 @@ function EmptyState({ onReset, listingType }: { onReset: () => void; listingType
   );
 }
 
-function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
+function GridCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   const pricePerSqm = p.area_sqm && p.price
     ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
     : null;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
       <div className="relative overflow-hidden">
-        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
+        <Link href={buildPropertyPath(p)} onClick={onResultClick} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <BlurFillImage
           src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
           alt={buildPropertyImageAlt(p)}
@@ -966,7 +1048,7 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
         </div>
       </div>
       <div className="p-3.5 flex flex-col flex-1">
-        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
+        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
         <p className="text-red-600 font-black text-base">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
@@ -979,7 +1061,7 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
           <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
         </div>
         <div className="flex gap-2 mt-auto">
-          <Link href={buildPropertyPath(p)} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
+          <Link href={buildPropertyPath(p)} onClick={onResultClick} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
           <button onClick={onContact} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
             <Phone className="w-3 h-3" />Liên hệ
           </button>
@@ -989,11 +1071,11 @@ function GridCard({ property: p, onContact, isFavorited = false, onToggleFavorit
   );
 }
 
-function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
+function ListCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
       <div className="relative w-48 flex-shrink-0 overflow-hidden">
-        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
+        <Link href={buildPropertyPath(p)} onClick={onResultClick} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <BlurFillImage
           src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
           alt={buildPropertyImageAlt(p)}
@@ -1008,7 +1090,7 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
       <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
         <div>
           {p.is_verified && <div className="mb-1"><VerifiedBadge verified /></div>}
-          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
+          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
           <p className="text-red-600 font-black text-lg mb-1">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
           <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5 flex-wrap">
             {p.area_sqm && <span className="flex items-center gap-0.5"><Building2 className="w-3 h-3" />{p.area_sqm} m²</span>}
@@ -1034,7 +1116,7 @@ function ListCard({ property: p, onContact, isFavorited = false, onToggleFavorit
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>
-            <Link href={buildPropertyPath(p)} className="inline-flex items-center border border-red-400 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
+            <Link href={buildPropertyPath(p)} onClick={onResultClick} className="inline-flex items-center border border-red-400 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
             <button onClick={onContact} className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
               <Phone className="w-3 h-3" />Liên hệ
             </button>

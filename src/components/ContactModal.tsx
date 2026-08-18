@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Phone, MessageSquare, ChevronDown, ShieldCheck, Clock, Award } from 'lucide-react';
+import { X, Phone, MessageSquare, ChevronDown, ShieldCheck, Clock } from 'lucide-react';
 import { submitLead } from '../lib/api';
 import { useSetting } from '../lib/cms';
 import { track, EVENTS } from '../lib/analytics';
@@ -16,25 +16,43 @@ interface ContactModalProps {
   property: ContactTarget | null;
   onClose: () => void;
   onSubmitted?: () => void;   // gửi lead thành công → trang cha ghi tín hiệu "contact"
+  preview?: boolean;
 }
 
-export function ContactModal({ property, onClose, onSubmitted }: ContactModalProps) {
+export function ContactModal({ property, onClose, onSubmitted, preview = false }: ContactModalProps) {
   const [form, setForm] = useState({ full_name: '', phone: '', area_interest: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // Trust signals cạnh điểm chuyển đổi — giảm ma sát để lại SĐT. Số liệu lấy từ
-  // cài đặt admin (dùng chung khóa với section stats trang chủ), có default hợp lý.
-  const experience = useSetting('stat3_number', '7 năm');
+  // Thời gian phản hồi do Admin cấu hình; không suy diễn năng lực hay bảo đảm pháp lý.
   const responseTime = useSetting('lead_response_time', '30 phút');
 
   // Đo mở modal liên hệ — bước trung gian quan trọng của phễu thu lead.
   useEffect(() => {
-    if (property) track(EVENTS.CONTACT_OPEN, { listingId: property.id, source: 'contact_modal' });
-  }, [property]);
+    if (property && !preview) track(EVENTS.CONTACT_OPEN, { listingId: property.id, source: 'contact_modal' });
+  }, [property, preview]);
 
   if (!property) return null;
+
+  if (preview) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl p-6">
+          <button onClick={onClose} aria-label="Đóng" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="py-6 text-center">
+            <ShieldCheck className="mx-auto mb-3 h-10 w-10 text-amber-500" />
+            <h3 className="text-lg font-bold text-gray-900">Bản xem trước không nhận yêu cầu tư vấn</h3>
+            <p className="mt-2 text-sm text-gray-500">Khi tin được xuất bản, khách mới có thể gửi thông tin liên hệ từ biểu mẫu này.</p>
+            <button onClick={onClose} className="mt-5 w-full rounded-xl bg-gray-900 py-3 font-semibold text-white hover:bg-gray-800 transition-colors">Đóng</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,16 +112,13 @@ export function ContactModal({ property, onClose, onSubmitted }: ContactModalPro
               <p className="text-amber-600 font-bold text-xl mt-1">{property.price_label}</p>
             </div>
 
-            {/* Trust signals — giảm ma sát ngay tại điểm để lại SĐT */}
+            {/* Thông tin hỗ trợ có nguồn cấu hình, không phải bảo đảm pháp lý. */}
             <div className="flex items-center gap-3 mb-4 py-2.5 px-3 bg-gray-50 rounded-xl border border-gray-100">
               <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
-                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />Pháp lý minh bạch
+                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />Hỏi thêm thông tin trước khi quyết định
               </span>
               <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
-                <Award className="w-4 h-4 text-amber-500 flex-shrink-0" />{experience} kinh nghiệm
-              </span>
-              <span className="flex items-center gap-1.5 text-[11px] text-gray-600 font-medium">
-                <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />Phản hồi {responseTime}
+                <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />Mục tiêu phản hồi {responseTime}
               </span>
             </div>
 

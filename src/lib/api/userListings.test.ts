@@ -8,6 +8,11 @@ const approvalMigration = readFileSync(
   'utf8',
 );
 
+const identityPreservingApprovalMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260903030000_preserve_user_listing_property_identity.sql'),
+  'utf8',
+);
+
 describe('isApprovedListingProperty', () => {
   const approved = {
     property_id: 'property-1',
@@ -51,6 +56,59 @@ describe('approval RPC result handling', () => {
 
     expect('property_id' in committedButNotTaggable && typeof committedButNotTaggable.property_id === 'string').toBe(true);
     expect(isApprovedListingProperty(committedButNotTaggable)).toBe(false);
+  });
+});
+
+describe('identity-preserving user-listing reapproval migration', () => {
+  it('reactivates the inactive linked property instead of replacing its identity', () => {
+    expect(identityPreservingApprovalMigration).toMatch(
+      /UPDATE public\.properties\s+SET[\s\S]+is_active = true[\s\S]+WHERE id = v_listing\.property_id/s,
+    );
+    expect(identityPreservingApprovalMigration).toMatch(
+      /IF v_listing\.property_id IS NULL THEN[\s\S]+INSERT INTO public\.properties/s,
+    );
+    expect(identityPreservingApprovalMigration).toContain('v_property_id := v_listing.property_id;');
+  });
+
+  it('fails closed for active, dangling, or ambiguously shared property links', () => {
+    expect(identityPreservingApprovalMigration).toContain("IF v_prior_property_active THEN");
+    expect(identityPreservingApprovalMigration).toMatch(
+      /IF v_listing\.property_id IS NOT NULL AND NOT v_prior_property_found THEN[\s\S]+RAISE EXCEPTION/s,
+    );
+    expect(identityPreservingApprovalMigration).toMatch(
+      /FROM public\.user_listings other_listing[\s\S]+other_listing\.property_id = v_listing\.property_id[\s\S]+other_listing\.id <> v_listing\.id/s,
+    );
+  });
+
+  it('preserves durable identity and editorial state on the reactivation update', () => {
+    const update = identityPreservingApprovalMigration.match(
+      /UPDATE public\.properties\s+SET([\s\S]+?)\s+WHERE id = v_listing\.property_id;/,
+    )?.[1] ?? '';
+
+    expect(update).not.toMatch(/\bslug\s*=/);
+    expect(update).not.toMatch(/\bpublic_code\s*=/);
+    expect(update).not.toMatch(/\bcreated_at\s*=/);
+    expect(update).not.toMatch(/\bviews\s*=/);
+    expect(update).not.toMatch(/\bis_featured\s*=/);
+    expect(update).not.toMatch(/\bis_hot\s*=/);
+    expect(update).not.toMatch(/\bis_verified\s*=/);
+  });
+
+  it('keeps full source mapping, fixed search path, and existing RPC privileges', () => {
+    expect(identityPreservingApprovalMigration).toMatch(/area_id = v_listing\.area_id/);
+    expect(identityPreservingApprovalMigration).toMatch(/district_id = v_listing\.district_id/);
+    expect(identityPreservingApprovalMigration).toMatch(/neighborhood_slug = v_listing\.neighborhood_slug/);
+    expect(identityPreservingApprovalMigration).toMatch(/images = v_listing\.images/);
+    expect(identityPreservingApprovalMigration).toMatch(/schema_markup = v_listing\.schema_markup/);
+    expect(identityPreservingApprovalMigration).toMatch(/faq = v_listing\.faq/);
+    expect(identityPreservingApprovalMigration).toContain('SECURITY DEFINER');
+    expect(identityPreservingApprovalMigration).toContain('SET search_path = public, pg_temp');
+    expect(identityPreservingApprovalMigration).toContain(
+      'REVOKE ALL ON FUNCTION public.approve_user_listing(uuid) FROM PUBLIC, anon;',
+    );
+    expect(identityPreservingApprovalMigration).toContain(
+      'GRANT EXECUTE ON FUNCTION public.approve_user_listing(uuid) TO authenticated;',
+    );
   });
 });
 

@@ -41,6 +41,7 @@ import { getProductSuggestions } from '../lib/productSuggestions';
 import { buildSimilarFilters } from '../lib/similarFilters';
 import { RichVideo } from '../components/RichVideo';
 import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMedia';
+import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDetailActions';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -63,7 +64,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const sitePhone = useSetting('phone_hotline', '0901234567');
   const responseTime = useSetting('lead_response_time', '30 phút');
-  const agentExperience = useSetting('stat3_number', '7 năm');
 
   // initialData từ server (RSC prefetch) → crawler & first paint có ngay dữ liệu,
   // không nhấp nháy loading. SEO (title/meta/JSON-LD) do generateMetadata + page.tsx lo.
@@ -166,10 +166,13 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     },
   });
   const formLoading = submitMutation.isPending;
+  const formFeedback = leadActionFeedback(
+    submitMutation.isError ? 'error' : formSent ? 'success' : submitMutation.isPending ? 'pending' : 'idle',
+  );
 
   const handleContact = (e: React.FormEvent) => {
     e.preventDefault();
-    if (preview) return;
+    if (!canUseDetailInteraction(preview, 'contact')) return;
     if (!form.name || !isValidVnPhone(form.phone)) return;
     submitMutation.mutate();
   };
@@ -199,10 +202,30 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
   const handleCallback = (e: React.FormEvent) => {
     e.preventDefault();
-    if (preview) return;
+    if (!canUseDetailInteraction(preview, 'callback')) return;
     if (!callbackForm.name || !isValidVnPhone(callbackForm.phone)) return;
     callbackMutation.mutate();
   };
+
+  const openContact = () => {
+    setShowContact(true);
+  };
+
+  const openCallback = () => {
+    if (!canUseDetailInteraction(preview, 'callback')) return;
+    setCallbackSent(false);
+    setCallbackOpen(true);
+  };
+
+  const revealPhone = () => {
+    if (!canUseDetailInteraction(preview, 'phone_reveal')) return;
+    setPhoneRevealed(true);
+    track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' });
+  };
+
+  const callbackFeedback = leadActionFeedback(
+    callbackMutation.isError ? 'error' : callbackSent ? 'success' : callbackMutation.isPending ? 'pending' : 'idle',
+  );
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -271,7 +294,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   ].filter(Boolean) as { icon: React.ReactNode; label: string; value: string }[];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
 
       {preview && (
         <div className="bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 text-center flex items-center justify-center gap-2">
@@ -403,11 +426,11 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => setShowContact(true)}
+                  <button onClick={openContact}
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
                     <Phone className="w-4 h-4" />Yêu cầu tư vấn
                   </button>
-                  <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
+                  <button onClick={openCallback}
                     className="flex items-center gap-2 border border-amber-400 text-amber-700 font-bold px-5 py-2.5 rounded-xl hover:bg-amber-50 transition-colors text-sm">
                     <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
                   </button>
@@ -417,7 +440,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                       <Phone className="w-4 h-4" />{contactPhone}
                     </a>
                   ) : (
-                    <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
+                    <button onClick={revealPhone}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
                       <Phone className="w-4 h-4" />Bấm để hiện số
                     </button>
@@ -548,13 +571,17 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               );
             })()}
 
-            {/* Legal guarantee */}
+            {/* Thông tin hỗ trợ giao dịch — không thay cho hồ sơ pháp lý/đảm bảo độc lập. */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex gap-3">
               <Shield className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-emerald-800 text-sm mb-1.5">Cam kết pháp lý & An toàn giao dịch</h3>
+                <h3 className="font-bold text-emerald-800 text-sm mb-1.5">Hỗ trợ trước khi ra quyết định</h3>
                 <ul className="space-y-1">
-                  {['Kiểm tra pháp lý miễn phí trước khi đặt cọc', 'Hỗ trợ công chứng, sang tên nhanh chóng', 'Đảm bảo hoàn tiền nếu phát sinh tranh chấp pháp lý'].map(i => (
+                  {[
+                    property.legal_status ? `Thông tin pháp lý đang hiển thị: ${property.legal_status}` : 'Hỏi tư vấn viên về thông tin pháp lý trước khi giao dịch',
+                    'Đề nghị kiểm tra hồ sơ và điều khoản trực tiếp trước khi đặt cọc',
+                    'Có thể yêu cầu tư vấn về quy trình xem nhà và thủ tục',
+                  ].map(i => (
                     <li key={i} className="flex items-center gap-2 text-xs text-emerald-700">
                       <CheckCircle className="w-3 h-3 text-emerald-500 flex-shrink-0" />{i}
                     </li>
@@ -574,6 +601,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   <p className="font-bold text-gray-900">Đã ghi nhận yêu cầu!</p>
                   <p className="text-gray-500 text-sm mt-0.5">Nhân viên tư vấn sẽ liên hệ trong {responseTime}.</p>
                 </div>
+              ) : preview ? (
+                <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Bản xem trước không nhận thông tin liên hệ hoặc tạo yêu cầu tư vấn.</p>
               ) : (
                 <form onSubmit={handleContact} className="space-y-3">
                   <div className="grid sm:grid-cols-2 gap-3">
@@ -590,9 +619,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   <textarea value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
                     placeholder="Nội dung cần tư vấn..." rows={3}
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+                  {formFeedback && <p className="text-sm text-red-600" role="alert">{formFeedback}</p>}
                   <button type="submit" disabled={formLoading}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors">
-                    {formLoading ? 'Đang gửi...' : 'Gửi yêu cầu tư vấn'}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-60">
+                    {formLoading ? 'Đang gửi...' : submitMutation.isError ? 'Thử gửi lại yêu cầu tư vấn' : 'Gửi yêu cầu tư vấn'}
                   </button>
                 </form>
               )}
@@ -625,11 +655,11 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   {property.price_label ?? `${property.price} ${property.price_unit}`}
                 </p>
                 {pricePerSqm && <p className="text-gray-400 text-xs mb-4">≈ {pricePerSqm} triệu/m²</p>}
-                <button onClick={() => setShowContact(true)}
+                <button onClick={openContact}
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
                   Yêu cầu tư vấn ngay
                 </button>
-                <button onClick={() => { setCallbackSent(false); setCallbackOpen(true); }}
+                <button onClick={openCallback}
                   className="w-full border border-amber-400 text-amber-700 font-bold py-3 rounded-xl text-sm hover:bg-amber-50 transition-colors flex items-center justify-center gap-2 mb-2">
                   <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
                 </button>
@@ -639,7 +669,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     <Phone className="w-4 h-4" />{contactPhone}
                   </a>
                 ) : (
-                  <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
+                  <button onClick={revealPhone}
                     className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
                     <Phone className="w-4 h-4" />Bấm để hiện số
                   </button>
@@ -662,13 +692,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                       {property.contact_name ?? 'Nhân viên tư vấn'}
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                     </p>
-                    <p className="text-gray-500 text-xs">Chuyên viên BĐS · {agentExperience} kinh nghiệm</p>
+                    <p className="text-gray-500 text-xs">Tư vấn bất động sản</p>
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-[11px] text-gray-500">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-500" />Phản hồi {responseTime}</span>
-                  <span className="text-gray-300">·</span>
-                  <span className="flex items-center gap-1"><FileCheck className="w-3 h-3 text-emerald-500" />Pháp lý minh bạch</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-500" />Mục tiêu phản hồi {responseTime}</span>
+                  {property.legal_status && <>
+                    <span className="text-gray-300">·</span>
+                    <span className="flex items-center gap-1"><FileCheck className="w-3 h-3 text-emerald-500" />Có thông tin pháp lý</span>
+                  </>}
                 </div>
                 {phoneRevealed ? (
                   <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
@@ -771,7 +803,29 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
         {!preview && <RecentlyViewed excludeId={property.id} />}
       </div>
 
-      <ContactModal property={showContact ? property : null} onClose={() => setShowContact(false)} />
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden">
+        {preview ? (
+          <p className="text-center text-xs font-semibold text-amber-800">Bản xem trước — các thao tác liên hệ đang bị tắt.</p>
+        ) : (
+          <div className="mx-auto flex max-w-md gap-2">
+            <button onClick={openContact}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700">
+              <Phone className="h-4 w-4" />Tư vấn
+            </button>
+            <button onClick={openCallback}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-400 px-3 py-3 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-50">
+              <CalendarClock className="h-4 w-4" />Hẹn gọi lại
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ContactModal
+        property={showContact ? property : null}
+        onClose={() => setShowContact(false)}
+        onSubmitted={() => captureSignalFromProperty('contact', property)}
+        preview={preview}
+      />
 
       {callbackOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -815,9 +869,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 <textarea value={callbackForm.note} onChange={e => setCallbackForm(f => ({ ...f, note: e.target.value }))}
                   placeholder="Ghi chú thêm (ngân sách, nhu cầu, câu hỏi...)" rows={3}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+                {callbackFeedback && <p className="text-sm text-red-600" role="alert">{callbackFeedback}</p>}
                 <button type="submit" disabled={callbackMutation.isPending}
                   className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-60">
-                  {callbackMutation.isPending ? 'Đang gửi...' : 'Gửi yêu cầu gọi lại'}
+                  {callbackMutation.isPending ? 'Đang gửi...' : callbackMutation.isError ? 'Thử gửi lại yêu cầu gọi lại' : 'Gửi yêu cầu gọi lại'}
                 </button>
                 <p className="text-[11px] text-gray-400 text-center">Thông tin chỉ dùng để tư vấn BĐS này, không chia sẻ bên thứ ba.</p>
               </form>

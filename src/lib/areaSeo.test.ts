@@ -135,6 +135,16 @@ describe('buildAreaCollectionJsonLd', () => {
     expect(items[0].url).toBe('https://chonhaviet.com/bat-dong-san/nha-dat-1');
   });
 
+  it('nhận route context để JSON-LD khớp collection mua bán/cho thuê', () => {
+    const ld = buildAreaCollectionJsonLd(area, [property('1')], {
+      path: '/cho-thue/binh-duong',
+      name: 'Bất động sản cho thuê Bình Dương',
+    });
+    expect(ld.url).toBe('https://chonhaviet.com/cho-thue/binh-duong');
+    expect(ld['@id']).toBe('https://chonhaviet.com/cho-thue/binh-duong#collection');
+    expect(ld.name).toBe('Bất động sản cho thuê Bình Dương');
+  });
+
   it('ItemList dùng URL sản phẩm mới khi listing có public_code và area slug', () => {
     const p = property('1');
     p.public_code = 1001;

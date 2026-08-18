@@ -18,6 +18,11 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('legal')).toBe('Sổ chung');
   });
 
+  it('bỏ sort không thuộc contract thay vì đưa giá trị lạ vào query', () => {
+    expect(parseListingParams({ sort: 'drop_table' }).sort).toBeUndefined();
+    expect(parseListingParams({ sort: 'price_desc' }).sort).toBe('price_desc');
+  });
+
   it('kết hợp filter với path cho thuê', () => {
     const href = pageToHref({ name: 'listings', listingType: 'cho_thue', typeId: 't1', district: 'Dĩ An' });
     const [path, qs] = href.split('?');

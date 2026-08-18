@@ -77,6 +77,7 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
       expect(EVENTS.CONTACT_OPEN).toBe('contact_open');
       expect(EVENTS.AI_ADVISOR_OPEN).toBe('ai_advisor_open');
       expect(EVENTS.AI_ADVISOR_SEND).toBe('ai_advisor_send');
+      expect(EVENTS.LISTING_RESULT_CLICK).toBe('listing_result_click');
       expect(EVENTS.AI_ADVISOR_SUGGEST).toBe('ai_advisor_suggest_properties');
       expect(EVENTS.AI_ADVISOR_PROPERTY_CLICK).toBe('ai_advisor_property_click');
       Object.values(EVENTS).forEach(v => expect(v.length).toBeGreaterThan(0));

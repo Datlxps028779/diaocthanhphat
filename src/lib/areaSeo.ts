@@ -135,13 +135,17 @@ export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaS
   };
 }
 
-export function buildAreaCollectionJsonLd(area: Area, listings: Array<Pick<Property, 'id' | 'title' | 'slug'> & Partial<Pick<Property, 'public_code' | 'listing_type' | 'district' | 'areas'>>>): Record<string, unknown> {
-  const areaUrl = absoluteUrl(`/khu-vuc/${area.slug}`);
+export function buildAreaCollectionJsonLd(
+  area: Area,
+  listings: Array<Pick<Property, 'id' | 'title' | 'slug'> & Partial<Pick<Property, 'public_code' | 'listing_type' | 'district' | 'areas'>>>,
+  context?: { path: string; name: string },
+): Record<string, unknown> {
+  const areaUrl = absoluteUrl(context?.path ?? `/khu-vuc/${area.slug}`);
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     '@id': `${areaUrl}#collection`,
-    name: `Bất động sản ${area.name}`,
+    name: context?.name ?? `Bất động sản ${area.name}`,
     url: areaUrl,
     mainEntity: {
       '@type': 'ItemList',

@@ -14,6 +14,7 @@ import { getSiteSettings } from '../lib/api/siteSettings';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
+import { countAdvisorIntentCriteria, RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 
 // Lời mặc định = fallback khi admin chưa cấu hình / mạng lỗi (site_settings group 'ai_chat').
 const DEFAULT_EXAMPLES = [
@@ -277,14 +278,19 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
         const cards = res.data.map(summarizePropertyForAdvisor);
         setResults(cards);
         setShowGeneralLeadForm(true);
-        track(EVENTS.AI_ADVISOR_SUGGEST, { count: cards.length });
+        track(EVENTS.AI_ADVISOR_SUGGEST, {
+          count: cards.length,
+          criteriaCount: countAdvisorIntentCriteria({ ...turn.filters, keyword: turn.residualKeyword }),
+          policyVersion: RANKING_POLICY_VERSION,
+          resultSource: 'advisor_rpc',
+        });
         // Vốn tự có: gợi ý vay phần còn lại (không bịa lãi suất/hạn mức), mời tư vấn viên.
         const loanHint = intent.selfCapital
           ? ` Với ${intent.selfCapital.amount}${intent.selfCapital.unit === 'trieu' ? ' triệu' : ' tỷ'} vốn tự có, anh/chị có thể tham khảo cả những căn giá cao hơn và vay phần còn lại — tư vấn viên sẽ giúp tính phương án vay phù hợp.`
           : '';
         const resultReply = (cards.length
-          ? `Em tìm được ${cards.length} tin phù hợp nhất, đã xếp theo điểm khớp nhu cầu. Anh/chị có thể xem chi tiết hoặc để lại thông tin để tư vấn viên hỗ trợ.`
-          : 'Hiện chưa có tin thật sự khớp theo điểm nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.') + loanHint;
+          ? `Em tìm được ${cards.length} tin phù hợp nhất theo các tiêu chí nhu cầu đã nêu. Anh/chị có thể xem chi tiết hoặc để lại thông tin để tư vấn viên hỗ trợ.`
+          : 'Hiện chưa có tin thật sự phù hợp với các tiêu chí nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.') + loanHint;
         setMessages(prev => [...prev, { role: 'assistant', text: resultReply }]);
         await persistOngoingMessage('assistant', resultReply);
       } catch {
@@ -317,7 +323,12 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       setResults(cards);
       // Luôn cho phép để lại liên hệ sau khi gợi ý, kể cả khi đã có tin.
       setShowGeneralLeadForm(true);
-      track(EVENTS.AI_ADVISOR_SUGGEST, { count: cards.length });
+      track(EVENTS.AI_ADVISOR_SUGGEST, {
+        count: cards.length,
+        criteriaCount: countAdvisorIntentCriteria({ ...turn.filters, keyword: turn.residualKeyword }),
+        policyVersion: RANKING_POLICY_VERSION,
+        resultSource: 'catalogue_fallback',
+      });
       const resultReply = cards.length ? `Em tìm được ${cards.length} tin phù hợp nhất. Anh/chị có thể xem chi tiết, lọc toàn bộ kết quả hoặc gửi thông tin để tư vấn viên hỗ trợ.` : 'Hiện chưa có tin thật sự khớp. Anh/chị có thể nới khoảng giá/khu vực, bấm lọc toàn bộ kết quả hoặc để lại thông tin để tư vấn viên tìm giúp.';
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -358,7 +369,13 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   };
 
   const openProperty = (p: AdvisorPropertySummary) => {
-    track(EVENTS.AI_ADVISOR_PROPERTY_CLICK, { propertyId: p.id });
+    const position = results.findIndex(item => item.id === p.id) + 1;
+    track(EVENTS.AI_ADVISOR_PROPERTY_CLICK, {
+      position,
+      reasonCount: p.matchReasons.length,
+      policyVersion: RANKING_POLICY_VERSION,
+      resultSource: p.matchReasons.length ? 'advisor_rpc' : 'catalogue_fallback',
+    });
     onNavigate?.({ name: 'property', id: p.id, slug: p.slug ?? undefined });
     setOpen(false);
   };
@@ -444,9 +461,9 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   };
 
   return (
-    <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6' : 'top-1/2 -translate-y-1/2'}`}>
+    <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6 transform-none' : 'top-1/2 -translate-y-1/2'}`}>
       {open && (
-        <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 right-4 sm:left-auto sm:right-0 sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in flex flex-col min-h-0">
+        <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
             <div>
               <div className="flex items-center gap-2 font-black text-sm"><TakoMascot className="w-5 h-5" />Trợ lý BĐS</div>
@@ -527,7 +544,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
                         <p className="text-red-600 font-black text-sm mt-0.5">{p.priceText}</p>
                         <p className="text-[11px] text-gray-500 truncate">{p.location}</p>
                         <div className="flex gap-1 mt-1 text-[10px] text-gray-500 flex-wrap">
-                          {p.matchScore != null && <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">Điểm khớp {p.matchScore}</span>}
+                          {p.matchReasons.map(reason => <span key={reason} className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">{reason}</span>)}
                           {p.area && <span className="bg-gray-50 px-1.5 py-0.5 rounded">{p.area}</span>}
                           {p.legal && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">{p.legal}</span>}
                         </div>

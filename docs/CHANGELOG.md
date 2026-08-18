@@ -1,5 +1,17 @@
 # Documentation Changelog
 
+## 2026-08-17 — P3D/P4 production evidence, P5 production verification, and P6 detail safety
+
+- Measured production read-only before implementation: one approved user listing still has its valid active property; there are no rejected/expired reapproval candidates, dangling links, or current lifecycle inconsistencies. The catalogue has 23 active and two inactive sale properties, with no active rentals.
+- Added an additive P3D approval migration: first approval still inserts atomically, while a valid inactive linked property is updated/reactivated in place so its ID, slug, public code, view history, editorial flags, and downstream foreign keys remain intact. Active, missing, or shared links fail closed.
+- Added a read-only P3D dry-run covering lifecycle/link integrity, ambiguous references, duplicate fingerprints, downstream references, RPC ACL/config, and trigger attachment. The user installed the P3D migration in production; follow-up read-only verification found one approved/active linked listing, no dangling/shared links or publication inconsistencies, and anonymous RPC execution denied. There is currently no rejected/expired candidate, so production data was not mutated solely to exercise reactivation.
+- Completed the typed P4 URL/filter contract, rental monthly-price semantics, deterministic paging, exact SSR seed scoping, live-inventory SSR cache bypass, list/map filter parity, explicit list/map error-and-retry states, area-route count scope, and route-correct collection JSON-LD.
+- Production API measurement confirmed the ranked RPC returned stable repeated ordering for a real keyword, no overlap between its first two ten-row pages, and no inactive IDs. The user also confirmed running `supabase/manual_property_search_audit.sql`; its detailed catalog and `EXPLAIN (ANALYZE, BUFFERS)` result sets were not supplied, so no plan timing/index claim is inferred from that execution.
+- Installed P5 ranking migration `20260903040000_explainable_organic_ranking.sql`: public read-only RPC verification found 20 stable organic keyword results, zero inactive rows and zero first/second-page overlap. Advisor returned ten active rows from 20 candidates with real `area`, `budget`, `keyword`, `loan` and `near_budget` reasons. The supplied representative Advisor plan was a Function Scan returning ten rows in about 16 ms; no underlying-index claim is inferred from that result alone. There is no active rental row for a live monthly-price receipt.
+- P6 detail safety adds a mobile sticky consultation/callback bar, visible retry states for inline/callback submission failure, preview-safe contact/callback/phone interaction including the reusable modal, and explicit POI loading/empty/unavailable/retry UI.
+- Removed unsupported unconditional legal/refund, agent-experience and legal-transparency wording from public detail/contact conversion UI. Detail shows only actual legal field values where present and recommends independent document/term review; `is_verified` remains a boolean until P7 provides evidence/review history.
+- Added privacy-safe ranking telemetry for result source, policy version, result position, criteria/reason counts and filter count; raw query text, property identifiers and contact details are not sent by the new outcome events.
+
 ## 2026-08-16 — P3C listing expiry ownership hardening prepared
 
 - Measured production before implementation: one approved listing expires on 2026-09-15 and has a consistent active property link; 22 other active properties are independent Admin records.

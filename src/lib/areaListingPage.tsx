@@ -43,9 +43,10 @@ export async function loadAreaListing(listingSlug: string, rest: string[] | unde
   const resolved = resolveAreaPath(parts.areaSlug, parts.districtSlug, { areas: [area], districts });
   if (!resolved) return null;
 
+  const scope = { listingType: parts.listingType, district: resolved.district?.name };
   const [listings, stats, priceStats, wardPriceStats] = await Promise.all([
-    serverGetAreaListings(area.id, 12),
-    serverGetAreaStats(area.id),
+    serverGetAreaListings(area.id, 12, scope),
+    serverGetAreaStats(area.id, scope),
     serverGetPriceStats('area', area.slug),
     serverGetAreaWardPriceStats(area.id),
   ]);
@@ -113,7 +114,12 @@ function AreaStaticHeader({ data }: { data: AreaListingData }) {
   const { area, district, stats, detail, summary, evaluation, priceStats, wardPriceStats, parts } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
   const label = LISTING_LABEL[parts.listingType];
-  const priceAnswer = district ? null : buildPriceAnswer(area.name, priceStats, parts.listingType);
+  const routePriceStats = priceStats.filter(stat => stat.listing_type === parts.listingType);
+  const routeWardPriceStats = wardPriceStats.map(ward => ({
+    ...ward,
+    stats: ward.stats.filter(stat => stat.listing_type === parts.listingType),
+  }));
+  const priceAnswer = district ? null : buildPriceAnswer(area.name, routePriceStats, parts.listingType);
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-6">
@@ -140,8 +146,8 @@ function AreaStaticHeader({ data }: { data: AreaListingData }) {
         ) : null}
       </div>
 
-      {!district && <div className="mt-5"><PriceStatsBlock entityName={scopeName} priceStats={priceStats} showAnswer={false} /></div>}
-      {!district && <div className="mt-5"><WardPriceBreakdown areaName={area.name} wards={wardPriceStats} /></div>}
+      {!district && <div className="mt-5"><PriceStatsBlock entityName={scopeName} priceStats={routePriceStats} showAnswer={false} /></div>}
+      {!district && <div className="mt-5"><WardPriceBreakdown areaName={area.name} wards={routeWardPriceStats} /></div>}
 
       {(detail?.infrastructure?.length || detail?.investmentTypes?.length) ? (
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -194,13 +200,19 @@ export async function renderAreaListingPage(
   // district lấy từ PATH nên loại khỏi query (path thắng), tránh ghi đè khu vực.
   const { areaId: _qArea, district: _qDistrict, ...extraFilters } = parseListingParams(searchParams);
 
-  const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats: district ? [] : priceStats, detail, summary });
+  const routePriceStats = priceStats.filter(stat => stat.listing_type === parts.listingType);
+  const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats: district ? [] : routePriceStats, detail, summary });
   const breadcrumb = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: `Bất động sản ${LISTING_LABEL[parts.listingType]}`, path: `/${listingSlug}` },
     { name: scopeName, path },
   ]);
-  const collection = listings.length > 0 ? buildAreaCollectionJsonLd(area, listings) : null;
+  const collection = listings.length > 0
+    ? buildAreaCollectionJsonLd(area, listings, {
+        path,
+        name: `Bất động sản ${LISTING_LABEL[parts.listingType]} ${scopeName}`,
+      })
+    : null;
   const faqLd = faq.length > 0 ? buildFaqJsonLd(faq) : null;
 
   return (
@@ -209,7 +221,8 @@ export async function renderAreaListingPage(
       <AreaListingClient
         listingType={parts.listingType}
         filters={{ ...extraFilters, areaId: area.id, district: district?.name }}
-        initialData={{ data: listings, total: listings.length }}
+        initialData={{ data: listings, total: stats.activeCount }}
+        initialDataScope={{ listingType: parts.listingType, areaId: area.id, district: district?.name }}
         header={<AreaStaticHeader data={data} />}
       />
     </>

@@ -13,17 +13,23 @@ import { PostListingPage } from '@/screens/PostListingPage';
 import { AccountHubPage } from '@/screens/AccountHubPage';
 import { StaticPageScreen } from '@/screens/StaticPageScreen';
 import type { ReactNode } from 'react';
+import type { ListingInitialFilters } from '@/lib/api/properties';
 import type { Property, NewsPageResult, ManagedPage, PageBlock } from '@/lib/supabase';
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
-  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number };
+  filters?: ListingInitialFilters;
   initialData?: { data: Property[]; total: number };
 }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
-      <ListingsPage initialFilters={{ listingType, ...filters }} initialData={initialData} onNavigate={navigate} />
+      <ListingsPage
+        initialFilters={{ listingType, ...filters }}
+        initialData={initialData}
+        initialDataScope={{ listingType }}
+        onNavigate={navigate}
+      />
     </SiteChrome>
   );
 }
@@ -31,17 +37,23 @@ export function ListingsClient({ listingType, filters, initialData }: {
 // Trang khu vực theo listing-type (/cho-thue/binh-duong/di-an): khối nội dung tĩnh
 // (server-render, truyền qua children) hiển thị TRÊN danh sách tin. Một SiteChrome
 // duy nhất bọc cả hai — tránh lồng chrome khi tái dùng ListingsPage.
-export function AreaListingClient({ listingType, filters, initialData, header }: {
+export function AreaListingClient({ listingType, filters, initialData, initialDataScope, header }: {
   listingType: 'mua_ban' | 'cho_thue';
-  filters?: { typeId?: string; district?: string; ward?: string; legal?: string; areaId?: string; keyword?: string; minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number; bedrooms?: string; direction?: string; page?: number };
+  filters?: ListingInitialFilters;
   initialData?: { data: Property[]; total: number };
+  initialDataScope?: ListingInitialFilters;
   header?: ReactNode;
 }) {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
       {header}
-      <ListingsPage initialFilters={{ listingType, ...filters }} initialData={initialData} onNavigate={navigate} />
+      <ListingsPage
+        initialFilters={{ listingType, ...filters }}
+        initialData={initialData}
+        initialDataScope={initialDataScope}
+        onNavigate={navigate}
+      />
     </SiteChrome>
   );
 }

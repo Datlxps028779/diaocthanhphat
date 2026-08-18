@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { unstable_cache } from 'next/cache';
+import { unstable_cache, unstable_noStore as noStore } from 'next/cache';
 import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow } from './supabase';
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
@@ -101,7 +101,11 @@ export async function serverGetRecentProperties(limit = 8): Promise<Property[]> 
 }
 
 // Listing lượt-xem-đầu (không filter) để crawler thấy danh sách; filter/sort chạy client.
+// Đây là tồn kho sống: không để Next Data Cache giữ response PostgREST cũ giữa các
+// lần build/deploy. Ba route gọi helper này vì thế được render động để số lượng và
+// trang đầu phản ánh DB tại request hiện tại.
 export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', limit = LISTINGS_PER_PAGE): Promise<{ data: Property[]; total: number }> {
+  noStore();
   try {
     const sb = serverClient();
     let q = sb
@@ -139,31 +143,43 @@ export async function serverGetAreaBySlug(slug: string): Promise<Area | null> {
   }
 }
 
-export async function serverGetAreaListings(areaId: string, limit = 12): Promise<Property[]> {
+export interface ServerAreaListingScope {
+  listingType?: 'mua_ban' | 'cho_thue';
+  district?: string;
+}
+
+export async function serverGetAreaListings(areaId: string, limit = 12, scope: ServerAreaListingScope = {}): Promise<Property[]> {
   try {
     const sb = serverClient();
-    const { data } = await sb
+    let q = sb
       .from('properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .eq('area_id', areaId)
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(limit);
+    if (scope.listingType) q = q.eq('listing_type', scope.listingType);
+    if (scope.district) q = q.eq('district', scope.district);
+    const { data } = await q;
     return (data ?? []) as Property[];
   } catch {
     return [];
   }
 }
 
-export async function serverGetAreaStats(areaId: string): Promise<{ districts: string[]; propertyTypes: string[]; activeCount: number }> {
+export async function serverGetAreaStats(areaId: string, scope: ServerAreaListingScope = {}): Promise<{ districts: string[]; propertyTypes: string[]; activeCount: number }> {
   try {
     const sb = serverClient();
-    const { data, count } = await sb
+    let q = sb
       .from('properties')
       .select('district, property_type_id', { count: 'exact' })
       .eq('is_active', true)
       .eq('area_id', areaId)
       .limit(500);
+    if (scope.listingType) q = q.eq('listing_type', scope.listingType);
+    if (scope.district) q = q.eq('district', scope.district);
+    const { data, count } = await q;
     const rows = (data ?? []) as Array<{ district: string | null; property_type_id: string | null }>;
     return {
       districts: Array.from(new Set(rows.map(r => r.district).filter((v): v is string => !!v))),

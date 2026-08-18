@@ -1,6 +1,7 @@
 import { supabase, type ListingType, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
+import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -13,39 +14,77 @@ export interface PropertyFilters {
   page?: number; limit?: number;
 }
 
+// Filter nhận từ URL/RSC trước khi ListingsPage bổ sung paging. `typeSlug` chỉ dùng
+// để map taxonomy bất đồng bộ sang typeId, còn các field khác giữ nguyên contract
+// parser ↔ client wrapper ↔ màn danh sách.
+export type ListingInitialFilters = Omit<PropertyFilters, 'loan' | 'limit'> & {
+  typeSlug?: string;
+};
+
+export class PropertySearchUnavailableError extends Error {
+  constructor() {
+    super('Tìm kiếm nâng cao đang tạm thời không khả dụng. Vui lòng thử lại.');
+    this.name = 'PropertySearchUnavailableError';
+  }
+}
+
 // ─── Properties (public) ──────────────────────────────────────────────────────
 // Dựng query đã áp đủ filter + sort (chưa phân trang). Tách hàm để retry dùng
 // builder mới hoàn toàn — builder PostgREST đã await không dùng lại được.
-function buildPropertyQuery(filters?: PropertyFilters) {
-  let q = supabase
-    .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' })
-    .eq('is_active', true);
+export interface PublicPropertyFilterOperation {
+  method: 'eq' | 'gte' | 'lte' | 'or';
+  column?: string;
+  value: unknown;
+}
 
-  if (filters?.listingType && filters.listingType !== 'all') q = q.eq('listing_type', filters.listingType);
-  if (filters?.areaId) q = q.eq('area_id', filters.areaId);
-  if (filters?.typeId) q = q.eq('property_type_id', filters.typeId);
-  if (filters?.city) q = q.eq('city', filters.city);
-  if (filters?.district) q = q.eq('district', filters.district);
-  if (filters?.ward) q = q.eq('ward', filters.ward);
+export function publicPropertyFilterOperations(filters?: PropertyFilters): PublicPropertyFilterOperation[] {
+  const operations: PublicPropertyFilterOperation[] = [];
+  if (filters?.listingType && filters.listingType !== 'all') operations.push({ method: 'eq', column: 'listing_type', value: filters.listingType });
+  if (filters?.areaId) operations.push({ method: 'eq', column: 'area_id', value: filters.areaId });
+  if (filters?.typeId) operations.push({ method: 'eq', column: 'property_type_id', value: filters.typeId });
+  if (filters?.city) operations.push({ method: 'eq', column: 'city', value: filters.city });
+  if (filters?.district) operations.push({ method: 'eq', column: 'district', value: filters.district });
+  if (filters?.ward) operations.push({ method: 'eq', column: 'ward', value: filters.ward });
   if (filters?.keyword) {
     // Sanitize: loại ký tự cấu trúc của PostgREST filter (, ( ) \) để keyword không
     // phá cú pháp .or() và chèn điều kiện lạ (vd lộ tin is_active=false).
-    const kw = filters.keyword.replace(/[,()\\%]/g, ' ').trim();
-    if (kw) q = q.or(`title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`);
+    const kw = filters.keyword.replace(/[,()\\%]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (kw) operations.push({
+      method: 'or',
+      value: `title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`,
+    });
   }
   const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
-  if (filters?.minPrice !== undefined) q = q.gte(priceColumn, filters.minPrice);
-  if (filters?.maxPrice !== undefined) q = q.lte(priceColumn, filters.maxPrice);
-  if (filters?.minArea !== undefined) q = q.gte('area_sqm', filters.minArea);
-  if (filters?.maxArea !== undefined) q = q.lte('area_sqm', filters.maxArea);
-  if (filters?.bedrooms && filters.bedrooms !== 'all') q = q.gte('bedrooms', parseInt(filters.bedrooms));
-  if (filters?.direction) q = q.eq('direction', filters.direction);
-  if (filters?.legal) q = q.eq('legal_status', filters.legal);
-  if (filters?.isFeatured) q = q.eq('is_featured', true);
-  if (filters?.isHot) q = q.eq('is_hot', true);
+  if (filters?.minPrice !== undefined) operations.push({ method: 'gte', column: priceColumn, value: filters.minPrice });
+  if (filters?.maxPrice !== undefined) operations.push({ method: 'lte', column: priceColumn, value: filters.maxPrice });
+  if (filters?.minArea !== undefined) operations.push({ method: 'gte', column: 'area_sqm', value: filters.minArea });
+  if (filters?.maxArea !== undefined) operations.push({ method: 'lte', column: 'area_sqm', value: filters.maxArea });
+  if (filters?.bedrooms && filters.bedrooms !== 'all') operations.push({ method: 'gte', column: 'bedrooms', value: parseInt(filters.bedrooms) });
+  if (filters?.direction) operations.push({ method: 'eq', column: 'direction', value: filters.direction });
+  if (filters?.legal) operations.push({ method: 'eq', column: 'legal_status', value: filters.legal });
+  if (filters?.isFeatured) operations.push({ method: 'eq', column: 'is_featured', value: true });
+  if (filters?.isHot) operations.push({ method: 'eq', column: 'is_hot', value: true });
+  return operations;
+}
 
-  // Luôn kèm id làm tie-breaker: cột sort trùng giá trị thì thứ tự vẫn xác định,
+function applyPublicPropertyFilters(query: any, filters?: PropertyFilters): any {
+  for (const operation of publicPropertyFilterOperations(filters)) {
+    if (operation.method === 'or') query = query.or(operation.value as string);
+    else query = query[operation.method](operation.column, operation.value);
+  }
+  return query;
+}
+
+function buildPropertyQuery(filters?: PropertyFilters) {
+  let q = applyPublicPropertyFilters(
+    supabase
+      .from('properties')
+      .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' })
+      .eq('is_active', true),
+    filters,
+  );
+
+  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
   // nếu không đổi trang có thể lặp hoặc bỏ sót tin.
   if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
   else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
@@ -57,8 +96,7 @@ function buildPropertyQuery(filters?: PropertyFilters) {
 
 export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
   if (filters?.keyword || filters?.sort === 'relevance') {
-    const ranked = await getRankedPropertyMatches(filters);
-    if (ranked) return ranked;
+    return getRankedPropertyMatches(filters);
   }
 
   const limit = filters?.limit ?? 20;
@@ -79,7 +117,7 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
 
 interface RankedMatch { id: string; rank: number; total_count: number }
 
-async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number } | null> {
+async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number }> {
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
   const bedrooms = filters.bedrooms && filters.bedrooms !== 'all' ? Number(filters.bedrooms) : undefined;
@@ -104,7 +142,7 @@ async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ dat
     f_limit: limit,
     f_offset: (page - 1) * limit,
   });
-  if (error) return null;
+  if (error) throw new PropertySearchUnavailableError();
   const rows = (matches ?? []) as RankedMatch[];
   if (rows.length === 0) return { data: [], total: 0 };
   const ids = rows.map(r => r.id);
@@ -113,13 +151,31 @@ async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ dat
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
     .eq('is_active', true)
     .in('id', ids);
-  if (detailError) return null;
+  if (detailError) throw new PropertySearchUnavailableError();
   const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
   return { data: ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p)), total: rows[0]?.total_count ?? rows.length };
 }
 
-interface AdvisorMatch { id: string; score: number; total_count: number }
-export type AdvisorMatchedProperty = Property & { matchScore: number };
+interface AdvisorMatch {
+  id: string;
+  score: number;
+  intent_score?: number;
+  match_reasons?: unknown;
+  total_count: number;
+}
+export type AdvisorMatchedProperty = Property & {
+  matchScore: number;
+  matchIntentScore: number;
+  matchReasons: AdvisorMatchReasonCode[];
+};
+
+export function mapAdvisorMatchMetadata(row: AdvisorMatch): Pick<AdvisorMatchedProperty, 'matchScore' | 'matchIntentScore' | 'matchReasons'> {
+  return {
+    matchScore: Number.isFinite(row.score) ? row.score : 0,
+    matchIntentScore: Number.isFinite(row.intent_score) ? row.intent_score! : Number.isFinite(row.score) ? row.score : 0,
+    matchReasons: normalizeAdvisorMatchReasons(row.match_reasons),
+  };
+}
 
 export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ data: AdvisorMatchedProperty[]; total: number }> {
   const targetArea = filters.maxArea ?? filters.minArea ?? null;
@@ -140,7 +196,7 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
   const rows = (matches ?? []) as AdvisorMatch[];
   if (rows.length === 0) return { data: [], total: 0 };
   const ids = rows.map(r => r.id);
-  const scores = new Map(rows.map(r => [r.id, r.score]));
+  const metadata = new Map(rows.map(r => [r.id, mapAdvisorMatchMetadata(r)]));
   const { data, error: detailError } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
@@ -152,20 +208,26 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
     data: ids
       .map(id => byId.get(id))
       .filter((p): p is Property => Boolean(p))
-      .map(p => ({ ...p, matchScore: scores.get(p.id) ?? 0 })),
+      .map(p => ({
+        ...p,
+        ...(metadata.get(p.id) ?? { matchScore: 0, matchIntentScore: 0, matchReasons: [] }),
+      })),
     total: rows[0]?.total_count ?? rows.length,
   };
 }
 
-export async function getAllPropertiesForMap(filters?: { areaId?: string; typeId?: string }): Promise<Property[]> {
-  let q = supabase
-    .from('properties')
-    .select('id, title, price, price_label, price_unit, city, district, ward, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id')
-    .eq('is_active', true)
-    .not('latitude', 'is', null);
-  if (filters?.areaId) q = q.eq('area_id', filters.areaId);
-  if (filters?.typeId) q = q.eq('property_type_id', filters.typeId);
-  const { data } = await q.limit(200);
+export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise<Property[]> {
+  const q = applyPublicPropertyFilters(
+    supabase
+      .from('properties')
+      .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, area_sqm, bedrooms, direction, legal_status, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, listing_type')
+      .eq('is_active', true)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null),
+    filters,
+  );
+  const { data, error } = await q.limit(1000);
+  if (error) throw error;
   return (data ?? []) as Property[];
 }
 

@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { MapPin, GraduationCap, ShoppingCart, Stethoscope, Landmark, Trees, Loader2 } from 'lucide-react';
+import { MapPin, GraduationCap, ShoppingCart, Stethoscope, Landmark, Trees, Loader2, RefreshCw } from 'lucide-react';
 import { fetchNearbyPoi } from '../lib/api/poi';
 import { POI_CATEGORIES, categoryLabel, type NearbyPoi as Poi, type PoiCategoryKey } from '../lib/poi';
+import { deriveNearbyPoiViewState, type NearbyPoiRequestState } from '../lib/nearbyPoiState';
 
 const CATEGORY_ICON: Record<PoiCategoryKey, typeof MapPin> = {
   school: GraduationCap,
@@ -17,17 +18,23 @@ function distanceLabel(m: number): string {
 }
 
 export function NearbyPoi({ lat, lng }: { lat: number; lng: number }) {
-  const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [requestState, setRequestState] = useState<NearbyPoiRequestState>('idle');
   const [pois, setPois] = useState<Poi[]>([]);
+  const viewState = deriveNearbyPoiViewState(requestState, pois);
 
   const load = async () => {
-    setState('loading');
+    setRequestState('loading');
     const result = await fetchNearbyPoi(lat, lng);
-    setPois(result);
-    setState('done');
+    if (!result.ok) {
+      setPois([]);
+      setRequestState('error');
+      return;
+    }
+    setPois(result.pois);
+    setRequestState('done');
   };
 
-  if (state === 'idle') {
+  if (viewState === 'idle') {
     return (
       <button
         onClick={load}
@@ -38,15 +45,32 @@ export function NearbyPoi({ lat, lng }: { lat: number; lng: number }) {
     );
   }
 
-  if (state === 'loading') {
+  if (viewState === 'loading') {
     return (
-      <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+      <div className="mt-3 flex items-center gap-2 text-sm text-gray-500" role="status">
         <Loader2 className="w-4 h-4 animate-spin" />Đang tìm tiện ích xung quanh…
       </div>
     );
   }
 
-  if (pois.length === 0) return null;
+  if (viewState === 'error') {
+    return (
+      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="alert">
+        <p>Chưa tải được tiện ích xung quanh. Dữ liệu bản đồ có thể đang tạm thời không khả dụng.</p>
+        <button onClick={load} className="mt-2 inline-flex items-center gap-1.5 font-semibold text-amber-900 hover:underline">
+          <RefreshCw className="w-3.5 h-3.5" />Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  if (viewState === 'empty') {
+    return (
+      <p className="mt-3 text-sm text-gray-500">
+        Chưa tìm thấy tiện ích công khai phù hợp trong phạm vi hiển thị.
+      </p>
+    );
+  }
 
   return (
     <div className="mt-4 pt-4 border-t border-gray-100">

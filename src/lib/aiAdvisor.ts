@@ -3,6 +3,7 @@ import { buildPropertyPath, type PropertyFilters } from './api/properties';
 import { parseSearchIntent, normalizeVietnamese, type AiSearchMatch, type SearchTaxonomy } from './aiSearch';
 import type { submitLead } from './api/leads';
 import { isValidVnPhone } from './phone';
+import { advisorMatchReasonLabels, type AdvisorMatchReasonCode } from './rankingPolicy';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
 export interface AdvisorCitation { title: string; source_url: string | null }
@@ -17,7 +18,8 @@ export interface AdvisorPropertySummary {
   legal: string | null;
   area: string | null;
   path: string;
-  matchScore?: number;
+  matchReasonCodes: AdvisorMatchReasonCode[];
+  matchReasons: string[];
 }
 export interface AdvisorLeadDraft { full_name: string; phone: string; message?: string }
 export interface AdvisorTurnResult {
@@ -285,7 +287,8 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
   };
 }
 
-export function summarizePropertyForAdvisor(p: Property & { matchScore?: number }): AdvisorPropertySummary {
+export function summarizePropertyForAdvisor(p: Property & { matchReasons?: AdvisorMatchReasonCode[] }): AdvisorPropertySummary {
+  const matchReasonCodes = p.matchReasons ?? [];
   return {
     id: p.id,
     slug: p.slug,
@@ -296,7 +299,8 @@ export function summarizePropertyForAdvisor(p: Property & { matchScore?: number 
     legal: p.legal_status,
     area: p.area_sqm ? `${p.area_sqm} m²` : null,
     path: buildPropertyPath(p),
-    ...(p.matchScore != null ? { matchScore: p.matchScore } : {}),
+    matchReasonCodes,
+    matchReasons: advisorMatchReasonLabels(matchReasonCodes),
   };
 }
 
