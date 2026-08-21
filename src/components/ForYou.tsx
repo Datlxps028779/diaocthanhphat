@@ -1,23 +1,30 @@
 'use client';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import Link from 'next/link';
-import { MapPin, Sparkles } from 'lucide-react';
 import { getAllProperties } from '../lib/api';
-import { buildPropertyPath } from '../lib/api/properties';
-import { SafeImage } from './SafeImage';
-import { FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { useTasteProfile } from '../lib/hooks/useTasteProfile';
 import { rankRecommendations, hasEnoughSignal, topKey, diversify } from '../lib/taste';
 import { getRecentlyViewed } from '../lib/recentlyViewed';
 import { buildProfileDigest } from '../lib/recoDigest';
 import { fetchAiRanking, type RecoCandidate } from '../lib/api/aiReco';
+import { PropertyDiscoveryRail } from './discovery/PropertyDiscoveryRail';
+import type { DiscoverySurface } from '../lib/discoveryJourney';
 
 // "Gợi ý dành cho bạn" — tự học từ hành vi (tìm kiếm + xem), không cần khách thao tác.
 // Hợp nhất tín hiệu thiết bị (localStorage) + tài khoản (khi đăng nhập) qua
 // useTasteProfile. Ẩn hoàn toàn khi chưa đủ tín hiệu (khách mới).
-export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excludeId?: string; title?: string }) {
+export function ForYou({
+  excludeId,
+  title = 'Gợi ý dành cho bạn',
+  surface = 'property_detail',
+  source = 'for_you',
+}: {
+  excludeId?: string;
+  title?: string;
+  surface?: DiscoverySurface;
+  source?: string;
+}) {
   const { profile, ready } = useTasteProfile();
 
   const enough = ready && hasEnoughSignal(profile);
@@ -77,25 +84,16 @@ export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excl
     retry: false,
   });
 
-  // Hợp nhất: nếu AI cho kết quả → sắp theo thứ tự AI (chỉ trong shortlist) + gắn lý do;
-  // các tin AI không nhắc tới xếp sau (giữ thứ tự deterministic). Chưa có AI → giữ nguyên.
+  // Hợp nhất: nếu AI cho kết quả → sắp theo thứ tự AI (chỉ trong shortlist).
+  // Chưa có AI → giữ nguyên thứ tự deterministic.
   const recs = useMemo(() => {
     // Đa dạng hóa top-4: không để 1 khu vực chiếm >2 chỗ (tránh 4 tin y hệt), vẫn đủ 4 tin.
-    const pick = (list: { p: (typeof shortlist)[number]; aiReason: string }[]) =>
-      diversify(list, x => x.p.area_id, { maxPerKey: 2, limit: 4 });
-    if (!aiRanked?.length) return pick(shortlist.map(p => ({ p, aiReason: '' })));
+    const pick = (list: typeof shortlist) => diversify(list, x => x.area_id, { maxPerKey: 2, limit: 4 });
+    if (!aiRanked?.length) return pick(shortlist);
     const byId = new Map(shortlist.map(p => [p.id, p]));
-    const reasonById = new Map(aiRanked.map(r => [r.id, r.reason]));
-    const ordered: { p: (typeof shortlist)[number]; aiReason: string }[] = [];
-    const used = new Set<string>();
-    for (const r of aiRanked) {
-      const p = byId.get(r.id);
-      if (p) { ordered.push({ p, aiReason: r.reason }); used.add(r.id); }
-    }
-    for (const p of shortlist) {
-      if (!used.has(p.id)) ordered.push({ p, aiReason: reasonById.get(p.id) ?? '' });
-    }
-    return pick(ordered);
+    const ordered = aiRanked.map(r => byId.get(r.id)).filter((p): p is (typeof shortlist)[number] => !!p);
+    const used = new Set(ordered.map(p => p.id));
+    return pick([...ordered, ...shortlist.filter(p => !used.has(p.id))]);
   }, [aiRanked, shortlist]);
 
   if (!enough || recs.length === 0) return null;
@@ -108,41 +106,13 @@ export function ForYou({ excludeId, title = 'Gợi ý dành cho bạn' }: { excl
   const reason = [typeName, areaName].filter(Boolean).join(' · ');
 
   return (
-    <section className="mt-8">
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="w-5 h-5 text-red-500" />
-        <h2 className="font-black text-gray-900 text-xl">{title}</h2>
-        {reason && <span className="text-xs text-gray-400 font-medium">vì bạn quan tâm {reason}</span>}
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        {recs.map(({ p, aiReason }) => (
-          <Link key={p.id} href={buildPropertyPath(p)}
-            className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-              <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE}
-                alt={p.title} fill sizes="(max-width: 768px) 50vw, 25vw"
-                className="object-cover group-hover:scale-105 transition-transform duration-500" />
-              {p.listing_type === 'cho_thue' && (
-                <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
-              )}
-            </div>
-            <div className="p-3 flex flex-col flex-1">
-              <h3 className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 group-hover:text-red-600 transition-colors mb-1">{p.title}</h3>
-              <p className="text-red-600 font-black text-sm">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
-              <div className="flex items-center gap-1 text-gray-400 text-xs mt-1">
-                <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
-                <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
-              </div>
-              {aiReason && (
-                <p className="mt-1.5 flex items-start gap-1 text-[11px] text-red-500/90 font-medium leading-snug">
-                  <Sparkles className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                  <span className="line-clamp-2">{aiReason}</span>
-                </p>
-              )}
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
+    <PropertyDiscoveryRail
+      title={title}
+      subtitle={reason ? `Dựa trên mối quan tâm của bạn: ${reason}` : undefined}
+      properties={recs}
+      surface={surface}
+      module="for_you"
+      source={source}
+    />
   );
 }

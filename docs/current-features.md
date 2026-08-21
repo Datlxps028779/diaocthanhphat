@@ -6,6 +6,8 @@
 - Search supports location, catalogue, price, area, room, direction, legal, featured/hot and deterministic sort/pagination filters.
 - Relevance search and advisor-style matching call database RPCs.
 - The public detail page includes gallery/lightbox, safe video/VR, map, nearby POI, price-per-area calculation, FAQ, share, favorites, lead/contact/callback, loan calculator, comparable/related inventory, recently viewed and recommendation modules.
+- Public discovery follows a data-aware journey: homepage category/search entry points, local-only “Tiếp tục xem” for returning visitors, configured featured/area content only when it has real items, personalized recommendations only after enough behavior signals, URL-persistent listing filters, and distinct detail rails for related inventory, filter exploration, recommendations and recent views. Empty discovery rails hide unless CMS explicitly configures an empty state.
+- Discovery telemetry measures module exposure/click and saved-search notice lifecycle with a scalar allowlist; it excludes raw queries, listing titles, addresses, contact information and viewer-count social proof.
 - Preview mode uses supplied form data and suppresses the main read/view/taste/favorite/related effects ([PropertyDetailPage.tsx](../src/screens/PropertyDetailPage.tsx#L45-L79)). Future detail work still needs a full audit of all child-component side effects before declaring preview isolation complete.
 
 ## Listing marketplace foundation

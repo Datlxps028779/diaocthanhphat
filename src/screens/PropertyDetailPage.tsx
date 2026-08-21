@@ -17,7 +17,7 @@ import type { Property } from '../lib/supabase';
 import { captureSignalFromProperty } from '../lib/captureSignal';
 import { qk } from '../lib/queryKeys';
 import Link from 'next/link';
-import { type Page, pageToHref, scrollTop } from '../lib/router';
+import { type Page, pageToHref } from '../lib/router';
 import { useAreas, useDistricts, useNeighborhoods, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
@@ -42,6 +42,8 @@ import { buildSimilarFilters } from '../lib/similarFilters';
 import { RichVideo } from '../components/RichVideo';
 import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMedia';
 import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDetailActions';
+import { mergeDiscoveryFilters } from '../lib/discoveryJourney';
+import { buildPropertyDetailContinuationTargets } from '../lib/propertyDetailContinuation';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -86,7 +88,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const { data: areas = [] } = useAreas();
   const { data: districts = [] } = useDistricts();
   const { data: propertyTypes = [] } = usePropertyTypes();
-  const listingTaxonomy = { areas, districts };
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
   // để giữ đúng thứ tự hooks.
@@ -279,6 +280,23 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([property.address, property.district, property.city].filter(Boolean).join(', '))}`;
 
   const productSuggestions = getProductSuggestions(property);
+  const exploreFilters = mergeDiscoveryFilters(
+    similarFilters.map(filter => ({ label: filter.label, page: filter.page })),
+    productSuggestions.map(suggestion => ({
+      label: suggestion.label,
+      page: { name: 'listings' as const, ...suggestion.filters },
+    })),
+  );
+  const continuationTargets = buildPropertyDetailContinuationTargets({
+    property,
+    taxonomy: hrefTaxonomy,
+    pageToHref,
+    neighborhood,
+    relatedCount: related.length,
+  });
+  const allRelatedInSameDistrict = Boolean(property.area_id && property.district?.trim()) && related.length > 0 && related.every(item => (
+    item.area_id === property.area_id && item.district?.trim() === property.district?.trim()
+  ));
 
   const attrs = [
     property.area_sqm && { icon: <Maximize2 className="w-4 h-4 text-red-500" />, label: 'Diện tích', value: `${property.area_sqm} m²` },
@@ -628,21 +646,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               )}
             </div>
 
-            {/* Lọc nhanh sang danh sách theo từng chiều tương đồng với tin đang xem */}
-            {similarFilters.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h2 className="font-bold text-gray-900 text-base">Khám phá thêm lựa chọn phù hợp</h2>
-                <p className="text-gray-500 text-xs mt-0.5 mb-3">Lọc nhanh các bất động sản cùng nhu cầu.</p>
-                <div className="flex flex-wrap gap-2">
-                  {similarFilters.map(f => (
-                    <Link key={f.kind} href={pageToHref(f.page, hrefTaxonomy)}
-                      className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600">
-                      {f.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Sticky sidebar */}
@@ -718,29 +721,23 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               {/* Loan calculator */}
               <LoanCalculator propertyPrice={property.price} priceUnit={property.price_unit} />
 
-              {/* Related mini */}
-              {related.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                  <h3 className="font-bold text-gray-900 text-sm mb-3">BĐS tương tự</h3>
-                  <div className="space-y-2.5">
-                    {related.slice(0, 4).map(r => (
-                      <button key={r.id} onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}
-                        className="flex gap-3 w-full text-left hover:bg-gray-50 rounded-lg p-1.5 transition-colors group">
-                        <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                          <SafeImage src={r.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(r)} fill sizes="64px" className="object-cover" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
-                          <p className="text-red-600 text-xs font-bold mt-0.5">{r.price_label}</p>
-                        </div>
-                      </button>
+              {/* Sidebar giữ vai trò điều hướng; danh sách BĐS tương tự đầy đủ nằm ở
+                  block phía dưới để tránh lặp cùng một dataset trên desktop. */}
+              {continuationTargets.length > 0 && (
+                <nav className="bg-white rounded-xl shadow-sm border border-gray-100 p-4" aria-label="Khám phá bất động sản liên quan">
+                  <h3 className="font-bold text-gray-900 text-sm mb-3">Khám phá tiếp</h3>
+                  <div className="space-y-2 text-sm">
+                    {continuationTargets.map(target => target.href.startsWith('#') ? (
+                      <a key={target.key} href={target.href} className="block rounded-lg bg-gray-50 px-3 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-red-50 hover:text-red-700">
+                        {target.label}
+                      </a>
+                    ) : (
+                      <Link key={target.key} href={target.href} className={`block rounded-lg px-3 py-2.5 font-semibold transition-colors ${target.key === 'neighborhood' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-gray-50 text-gray-700 hover:bg-red-50 hover:text-red-700'}`}>
+                        {target.label}
+                      </Link>
                     ))}
                   </div>
-                  <Link href={pageToHref({ name: 'listings' })}
-                    className="mt-3 block w-full text-center text-red-600 text-xs font-semibold hover:underline">
-                    Xem thêm BĐS tương tự →
-                  </Link>
-                </div>
+                </nav>
               )}
             </div>
           </aside>
@@ -748,23 +745,29 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
         {/* Related full grid — SEO Internal Linking */}
         {related.length > 0 && (
-          <div className="mt-8">
+          <div id="related-properties" className="mt-8">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-black text-gray-900 text-xl">
-                  Bất động sản tương tự{property.district ? ` tại ${property.district}` : property.city ? ` tại ${property.city}` : ''}
+                  {allRelatedInSameDistrict
+                    ? `Bất động sản tương tự tại ${property.district}`
+                    : `Bất động sản có cùng tiêu chí${property.city ? ` tại ${property.city}` : ''}`}
                 </h2>
-                <p className="text-gray-500 text-sm mt-0.5">Khám phá thêm lựa chọn phù hợp trong cùng khu vực</p>
+                <p className="text-gray-500 text-sm mt-0.5">
+                  {allRelatedInSameDistrict
+                    ? 'Khám phá thêm lựa chọn phù hợp trong cùng khu vực'
+                    : 'Các lựa chọn có chung khu vực hoặc loại bất động sản với tin bạn đang xem'}
+                </p>
               </div>
-              <Link href={pageToHref({ name: 'listings', areaId: property.area_id ?? undefined })}
+              <Link href={pageToHref({ name: 'listings', listingType: property.listing_type, areaId: property.area_id ?? undefined }, hrefTaxonomy)}
                 className="text-red-600 text-sm font-semibold flex items-center gap-1 hover:underline">
                 Xem tất cả <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {related.map(r => (
-                <div key={r.id} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 cursor-pointer group transition-all"
-                  onClick={() => { onNavigate({ name: 'property', id: r.id, slug: r.slug ?? undefined }); scrollTop(); }}>
+                <Link key={r.id} href={buildPropertyPath(r)}
+                  className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 transition-all">
                   <div className="relative aspect-[4/3] bg-gray-100">
                     <SafeImage src={r.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(r)} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
@@ -772,8 +775,9 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
                     <p className="text-red-600 text-sm font-black mt-1">{r.price_label}</p>
                     <p className="text-gray-400 text-xs flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5" />{r.city}</p>
+                    {r.relatedReason && <p className="mt-1 line-clamp-1 text-[11px] font-medium text-red-500">{r.relatedReason}</p>}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -781,15 +785,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
         <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mt-8 border-t border-gray-200 pt-6" />
 
-        {productSuggestions.length > 0 && (
-          <section className="mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-bold text-gray-900">Khám phá thêm lựa chọn phù hợp</h2>
-            <p className="mt-1 text-sm text-gray-500">Lọc nhanh các bất động sản cùng nhu cầu.</p>
+        {exploreFilters.length > 0 && (
+          <section className="mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm" aria-labelledby="explore-filters-heading">
+            <h2 id="explore-filters-heading" className="text-base font-bold text-gray-900">Mở rộng tiêu chí tìm kiếm</h2>
+            <p className="mt-1 text-sm text-gray-500">Khám phá thêm các lựa chọn cùng khu vực, tầm giá hoặc nhu cầu.</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {productSuggestions.map(({ label, filters }) => (
+              {exploreFilters.map(({ label, page }) => (
                 <Link
-                  key={`${label}-${filters.listingType}-${filters.areaId ?? ''}-${filters.minPrice ?? ''}-${filters.maxPrice ?? ''}`}
-                  href={pageToHref({ name: 'listings', ...filters }, listingTaxonomy)}
+                  key={label}
+                  href={pageToHref(page, hrefTaxonomy)}
                   className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
                 >
                   {label}
@@ -799,8 +803,16 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
           </section>
         )}
 
-        {!preview && <ForYou excludeId={property.id} />}
-        {!preview && <RecentlyViewed excludeId={property.id} />}
+        {!preview && <ForYou excludeId={property.id} surface="property_detail" source="property_detail_for_you" />}
+        {!preview && (
+          <RecentlyViewed
+            excludeId={property.id}
+            title="Đã xem gần đây"
+            subtitle="Quay lại những bất động sản bạn đã mở trên thiết bị này."
+            surface="property_detail"
+            source="property_detail_recently_viewed"
+          />
+        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden">

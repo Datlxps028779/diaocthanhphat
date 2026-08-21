@@ -24,6 +24,7 @@ export function relatedScore(current: NewsArticle, cand: NewsArticle, now: numbe
   return score;
 }
 
+
 export function pickRelated(
   current: NewsArticle,
   manualIds: string[],
@@ -36,31 +37,77 @@ export function pickRelated(
   const seen = new Set<string>([current.id]);
 
   for (const id of manualIds) {
-    const a = byId.get(id);
-    if (a && !seen.has(id)) {
-      out.push(a);
+    const article = byId.get(id);
+    if (article && !seen.has(id)) {
+      out.push(article);
       seen.add(id);
     }
   }
 
   if (out.length < limit) {
     const rest = pool
-      .filter(a => !seen.has(a.id))
-      .sort((x, y) => {
-        const scoreDelta = relatedScore(current, y, now) - relatedScore(current, x, now);
+      .filter(article => !seen.has(article.id))
+      .sort((left, right) => {
+        const scoreDelta = relatedScore(current, right, now) - relatedScore(current, left, now);
         if (scoreDelta !== 0) return scoreDelta;
 
-        const createdDelta = new Date(y.created_at).getTime() - new Date(x.created_at).getTime();
+        const createdDelta = new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
         if (createdDelta !== 0) return createdDelta;
 
-        return x.id.localeCompare(y.id);
+        return left.id.localeCompare(right.id);
       });
-    for (const a of rest) {
+    for (const article of rest) {
       if (out.length >= limit) break;
-      out.push(a);
-      seen.add(a.id);
+      out.push(article);
+      seen.add(article.id);
     }
   }
 
   return out.slice(0, limit);
+}
+
+export type ArticleDiscoveryItem = Pick<NewsArticle, 'id'>;
+
+export type ArticleDiscoveryPools<T extends ArticleDiscoveryItem> = {
+  sidebarRelated: T[];
+  sidebarPopular: T[];
+  continuation: T[];
+};
+
+function takeDistinct<T extends ArticleDiscoveryItem>(
+  items: T[],
+  excluded: ReadonlySet<string>,
+  limit: number,
+): T[] {
+  const seen = new Set(excluded);
+  const out: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// Chia pool bài thật thành các vai trò UX riêng: nhóm liên quan có chủ đích ở sidebar,
+// bài được đọc nhiều, và phần đọc tiếp ở cuối bài. Một bài không xuất hiện ở hai khối
+// discovery cùng lúc; tránh cảm giác lặp nội dung dù các truy vấn có giao nhau.
+export function buildArticleDiscoveryPools<T extends ArticleDiscoveryItem>(
+  currentId: string,
+  related: T[],
+  popular: T[],
+  latest: T[],
+): ArticleDiscoveryPools<T> {
+  const current = new Set([currentId]);
+  const sidebarRelated = takeDistinct(related, current, 3);
+  const sidebarPopular = takeDistinct(popular, new Set([...current, ...sidebarRelated.map(item => item.id)]), 3);
+  const sidebarIds = new Set([...current, ...sidebarRelated.map(item => item.id), ...sidebarPopular.map(item => item.id)]);
+  const continuation = takeDistinct(
+    [...related.slice(sidebarRelated.length), ...latest, ...popular],
+    sidebarIds,
+    6,
+  );
+
+  return { sidebarRelated, sidebarPopular, continuation };
 }

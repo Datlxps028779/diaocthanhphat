@@ -62,4 +62,8 @@ export const EVENTS = {
   AI_ADVISOR_PROPERTY_CLICK: 'ai_advisor_property_click',
   PHONE_REVEAL: 'phone_reveal',
   ZALO_CLICK: 'zalo_click',
+  DISCOVERY_MODULE_VIEW: 'discovery_module_view',
+  DISCOVERY_MODULE_CLICK: 'discovery_module_click',
+  SAVED_SEARCH_NOTICE_SHOWN: 'saved_search_notice_shown',
+  SAVED_SEARCH_NOTICE_DISMISSED: 'saved_search_notice_dismissed',
 } as const;

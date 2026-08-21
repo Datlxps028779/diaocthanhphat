@@ -32,8 +32,10 @@ import type { MapBounds } from '../components/PropertyMap';
 import { buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { listingInitialDataScopeMatches } from '../lib/listingInitialData';
 import { track, EVENTS } from '../lib/analytics';
+import { buildDiscoveryEventProps } from '../lib/discoveryJourney';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
+import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
   // Dữ liệu SSR seed sẵn cho view mà server thực sự đã truy vấn. Scope tách riêng
@@ -103,6 +105,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
+  const savedSearchNoticeTracked = useRef(false);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -176,7 +179,13 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
       queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
       if (saved) {
         setSavedSearchPrompt(true);
-        setTimeout(() => setSavedSearchPrompt(false), 8000);
+        if (!savedSearchNoticeTracked.current) {
+          savedSearchNoticeTracked.current = true;
+          track(EVENTS.SAVED_SEARCH_NOTICE_SHOWN, {
+            hasFilters: true,
+            listingType: listingType || 'all',
+          });
+        }
       }
     },
     onError: (e) => console.warn('[ListingsPage] Auto-save search failed:', e),
@@ -626,8 +635,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
                   className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 {keyword && <button onClick={() => { setKeyword(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="w-3.5 h-3.5" /></button>}
               </div>
-              <button onClick={() => setMobileFilter(true)}
-                className="lg:hidden flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => setMobileFilter(true)}
+                aria-label="Mở bộ lọc nâng cao"
+                aria-expanded={mobileFilter}
+                aria-controls="mobile-listing-filters"
+                className="lg:hidden flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"
+              >
                 <Filter className="w-4 h-4" />
                 {hasActiveFilters && <span className="w-2 h-2 bg-red-500 rounded-full" />}
               </button>
@@ -723,7 +738,16 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
                   <p className="font-bold text-emerald-800">Đã tự lưu nhu cầu tìm kiếm</p>
                   <p className="text-emerald-700 text-xs mt-0.5">Vào Tài khoản → Tìm kiếm đã lưu để bật cảnh báo khi có tin mới phù hợp.</p>
                 </div>
-                <button onClick={() => setSavedSearchPrompt(false)} className="text-emerald-600 hover:text-emerald-800">
+                <button onClick={() => {
+                  setSavedSearchPrompt(false);
+                  track(EVENTS.SAVED_SEARCH_NOTICE_DISMISSED, buildDiscoveryEventProps({
+                    surface: 'listings',
+                    module: 'saved_search_notice',
+                    hasFilters: true,
+                    listingType: listingType || undefined,
+                    source: 'dismiss_button',
+                  }));
+                }} className="text-emerald-600 hover:text-emerald-800" aria-label="Ẩn thông báo tìm kiếm đã lưu">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -952,21 +976,48 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
               </div>
             )}
 
-            {viewMode !== 'map' && <ForYou />}
+            {viewMode !== 'map' && properties.length > 0 && (
+              <section className="mt-10 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="continue-discovery-heading">
+                <DiscoverySectionHeader
+                  headingId="continue-discovery-heading"
+                  eyebrow="Khám phá tiếp"
+                  title="Mở rộng lựa chọn của bạn"
+                  subtitle={hasActiveFilters ? 'Giữ nguyên bộ lọc hiện tại và xem thêm gợi ý phù hợp.' : 'Bắt đầu từ một khu vực hoặc nhu cầu để tìm đúng tin đăng hơn.'}
+                  href={pageToHref({ name: 'regions' })}
+                  linkLabel="Xem khu vực"
+                />
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {areas.slice(0, 6).map(area => (
+                    <Link
+                      key={area.id}
+                      href={pageToHref({ name: 'listings', areaId: area.id, listingType: listingType || undefined })}
+                      className="flex min-w-[9.5rem] shrink-0 flex-col rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 transition-colors hover:border-red-200 hover:bg-red-50"
+                    >
+                      <span className="text-sm font-bold text-gray-900">{area.name}</span>
+                      <span className="mt-1 text-xs text-gray-500">Tin đang hoạt động</span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {viewMode !== 'map' && (
+              <ForYou surface="listings" source="listings_after_results" />
+            )}
           </div>
         </div>
       </div>
 
       {/* Mobile filter drawer */}
       {mobileFilter && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div id="mobile-listing-filters" role="dialog" aria-modal="true" aria-label="Bộ lọc nâng cao" className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFilter(false)} />
           <div className="absolute right-0 top-0 bottom-0 w-80 bg-white overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-red-500" />Bộ lọc nâng cao
               </h3>
-              <button onClick={() => setMobileFilter(false)}><X className="w-5 h-5 text-gray-500" /></button>
+              <button type="button" onClick={() => setMobileFilter(false)} aria-label="Đóng bộ lọc nâng cao" className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4"><FilterPanel /></div>
             <div className="p-4 border-t border-gray-100 sticky bottom-0 bg-white">

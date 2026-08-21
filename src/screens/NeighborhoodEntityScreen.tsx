@@ -6,6 +6,7 @@ import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickOverallStat, formatPricePerSqm, buildPriceAnswer } from '../lib/priceStatsFormat';
 import { PriceStatsBlock } from '../components/PriceStatsBlock';
 import { buildProductPath } from '../lib/productPath';
+import { districtDisplaySlug } from '../lib/areaPath';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -14,7 +15,16 @@ import { buildProductPath } from '../lib/productPath';
 export type NeighborhoodFaq = { question: string; answer: string };
 
 // Vị trí hành chính đã resolve ở server (RSC) — screen chỉ hiển thị, không tự tra taxonomy.
-export type NeighborhoodPlace = { areaName?: string; areaSlug?: string; locationLabel?: string };
+export type NeighborhoodPlace = {
+  areaId?: string;
+  areaName?: string;
+  areaSlug?: string;
+  districtName?: string;
+  districtSlug?: string;
+  wardName?: string;
+  wardSlug?: string;
+  locationLabel?: string;
+};
 
 type Props = {
   neighborhood: Neighborhood;
@@ -107,6 +117,12 @@ export function NeighborhoodEntityScreen(props: Props) {
                 <Link href={`/khu-vuc/${place.areaSlug}`} className="hover:text-white">{place.areaName}</Link>
               </>
             )}
+            {place?.districtName && place.districtSlug && place.areaSlug && (
+              <>
+                <span className="mx-2">/</span>
+                <Link href={`/mua-ban/${place.areaSlug}/${districtDisplaySlug(place.areaSlug, place.districtSlug)}`} className="hover:text-white">{place.districtName}</Link>
+              </>
+            )}
             <span className="mx-2">/</span>
             <span className="text-white">{n.name}</span>
           </nav>
@@ -148,9 +164,48 @@ export function NeighborhoodEntityScreen(props: Props) {
           {/* Dữ liệu giá — component dùng chung; tự ẩn khi không đủ mẫu. Answer đã ở hero. */}
           <PriceStatsBlock entityName={n.name} priceStats={priceStats} showAnswer={false} />
 
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-red-600">Khám phá tiếp</p>
+            <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900">Theo vị trí và nhu cầu</h2>
+                <p className="mt-1 text-sm text-gray-500">Mở rộng từ khu dân cư này tới khu vực hành chính hoặc nhóm tin đang có dữ liệu.</p>
+              </div>
+              <Link href={place?.areaSlug ? `/khu-vuc/${place.areaSlug}` : '/khu-dan-cu'} className="text-sm font-bold text-red-600 hover:underline">
+                {place?.areaSlug ? 'Xem khu vực' : 'Tất cả khu dân cư'}
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {place?.districtName && place.areaSlug && (
+                <Link href={`/mua-ban/${place.areaSlug}/${place.districtSlug ? districtDisplaySlug(place.areaSlug, place.districtSlug) : ''}`} className="rounded-xl border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-red-200 hover:bg-red-50">
+                  <p className="text-sm font-bold text-gray-900">Tin tại {place.districtName}</p>
+                  <p className="mt-1 text-xs text-gray-500">Mở danh sách theo quận, huyện</p>
+                </Link>
+              )}
+              {sale.length > 0 && (
+                <a href="#neighborhood-sale-listings" className="rounded-xl border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-red-200 hover:bg-red-50">
+                  <p className="text-sm font-bold text-gray-900">Bất động sản đang bán</p>
+                  <p className="mt-1 text-xs text-gray-500">{sale.length} lựa chọn tại khu dân cư</p>
+                </a>
+              )}
+              {rent.length > 0 && (
+                <a href="#neighborhood-rent-listings" className="rounded-xl border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-red-200 hover:bg-red-50">
+                  <p className="text-sm font-bold text-gray-900">Bất động sản cho thuê</p>
+                  <p className="mt-1 text-xs text-gray-500">{rent.length} lựa chọn tại khu dân cư</p>
+                </a>
+              )}
+              {relatedNews.length > 0 && (
+                <a href="#neighborhood-related-news" className="rounded-xl border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-red-200 hover:bg-red-50">
+                  <p className="text-sm font-bold text-gray-900">Nội dung khu vực</p>
+                  <p className="mt-1 text-xs text-gray-500">Đọc các bài viết có liên quan</p>
+                </a>
+              )}
+            </div>
+          </div>
+
           {/* Nhà đang bán */}
           {sale.length > 0 && (
-            <div>
+            <div id="neighborhood-sale-listings">
               <h2 className="mb-4 text-2xl font-black text-gray-900">Nhà đang bán tại {n.name}</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {sale.map(p => <PropertyCard key={p.id} property={p} />)}
@@ -160,7 +215,7 @@ export function NeighborhoodEntityScreen(props: Props) {
 
           {/* Nhà cho thuê */}
           {rent.length > 0 && (
-            <div>
+            <div id="neighborhood-rent-listings">
               <h2 className="mb-4 text-2xl font-black text-gray-900">Nhà cho thuê tại {n.name}</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {rent.map(p => <PropertyCard key={p.id} property={p} />)}
@@ -185,7 +240,7 @@ export function NeighborhoodEntityScreen(props: Props) {
 
           {/* Bài viết liên quan (topic cluster) — bài vệ tinh trỏ về entity pillar. */}
           {relatedNews.length > 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
+            <div id="neighborhood-related-news" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
               <h2 className="text-2xl font-black text-gray-900">Bài viết về {n.name}</h2>
               <div className="mt-4 divide-y divide-gray-100">
                 {relatedNews.map(a => (

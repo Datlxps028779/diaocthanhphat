@@ -180,13 +180,20 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           )}
         </div>
 
-        <button className="xl:hidden p-1.5 text-gray-600" onClick={() => setMobileOpen(!mobileOpen)}>
+        <button
+          type="button"
+          className="xl:hidden flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-navigation"
+        >
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 
       {mobileOpen && (
-        <div className="xl:hidden bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
+        <nav id="mobile-navigation" aria-label="Điều hướng di động" className="xl:hidden max-h-[calc(100vh-52px)] overflow-y-auto bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
           {navItems.map(item => item.children ? (
             <div key={item.key}>
               <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
@@ -233,7 +240,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               </>
             )}
           </div>
-        </div>
+        </nav>
       )}
 
       {userMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />}

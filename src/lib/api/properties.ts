@@ -2,6 +2,7 @@ import { supabase, type ListingType, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
+import { rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -324,22 +325,22 @@ export async function incrementPropertyView(id: string): Promise<void> {
   }
 }
 
-export async function getRelatedProperties(property: Property, limit = 6): Promise<Property[]> {
-  // Chỉ ghép điều kiện với cột non-null: PostgREST cần is.null chứ không phải
-  // eq.null, và tin cùng area/type mới thực sự "tương tự". Nếu cả hai đều null,
-  // bỏ .or() và trả tin mới nhất cùng trạng thái active.
-  const ors: string[] = [];
-  if (property.area_id) ors.push(`area_id.eq.${property.area_id}`);
-  if (property.property_type_id) ors.push(`property_type_id.eq.${property.property_type_id}`);
-
-  let q = supabase
+// Candidate pool chỉ giữ tin active cùng hình thức giao dịch. Sau đó xếp deterministic
+// ở client theo quận/loại/giá/diện tích để không bị `.or()` làm rơi mất ứng viên tốt hơn
+// trước khi policy có cơ hội so sánh. Bounded limit bảo vệ payload khi kho lớn hơn hiện tại.
+export async function getRelatedProperties(property: Property, limit = 6): Promise<RelatedProperty[]> {
+  const candidateLimit = Math.max(60, Math.min(120, limit * 20));
+  const { data } = await supabase
     .from('properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
-    .eq('is_active', true).neq('id', property.id);
-  if (ors.length) q = q.or(ors.join(','));
+    .eq('is_active', true)
+    .eq('listing_type', property.listing_type)
+    .neq('id', property.id)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(candidateLimit);
 
-  const { data } = await q.order('created_at', { ascending: false }).limit(limit);
-  return (data ?? []) as Property[];
+  return rankRelatedProperties(property, (data ?? []) as Property[], limit);
 }
 
 // ─── Properties (admin) ───────────────────────────────────────────────────────

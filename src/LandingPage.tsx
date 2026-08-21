@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +18,8 @@ import { captureSignalFromProperty } from './lib/captureSignal';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
 import { parseSearchIntent } from './lib/aiSearch';
+import { hasEnoughSignal } from './lib/taste';
+import { useTasteProfile } from './lib/hooks/useTasteProfile';
 import { FAQ_ITEMS } from './lib/faq';
 import { track, EVENTS } from './lib/analytics';
 import { qk } from './lib/queryKeys';
@@ -29,10 +31,12 @@ import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
 import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
+import { RecentlyViewed } from './components/RecentlyViewed';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
+import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
@@ -79,6 +83,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const [activeNewsTab, setActiveNewsTab] = useState<string>('Tin tức');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
+  const { profile: tasteProfile, ready: tasteProfileReady } = useTasteProfile();
 
   // Taxonomy + dữ liệu trang chủ qua React Query (cache/dedup)
   const { data: areas = [] } = useAreas();
@@ -220,10 +225,22 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </div>
         </section>
       );
+      case 'recently_viewed': return (
+        <section key="recently_viewed" className="bg-white py-2">
+          <div className="max-w-7xl mx-auto px-4">
+            <RecentlyViewed
+              title="Tiếp tục xem"
+              subtitle="Những bất động sản bạn đã mở trên thiết bị này."
+              surface="home"
+              source="home_continue_browsing"
+            />
+          </div>
+        </section>
+      );
       case 'for_you': return (
         <section key="for_you" className="pt-4 pb-2 bg-white">
           <div className="max-w-7xl mx-auto px-4">
-            <ForYou />
+            <ForYou surface="home" source="home_for_you" />
           </div>
         </section>
       );
@@ -237,11 +254,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </section>
         );
 
-        if (sections.length === 0) return (
-          <section key="featured_sections_empty" className="bg-gray-50 py-10">
-            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
-          </section>
-        );
+        if (sections.length === 0) {
+          if (config.emptyBehavior !== 'empty_state') return null;
+          return (
+            <section key="featured_sections_empty" className="bg-gray-50 py-10">
+              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            </section>
+          );
+        }
 
         return (
           <React.Fragment key="featured_sections">
@@ -306,11 +326,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           } : null;
         }).filter((card): card is NonNullable<typeof card> => card !== null);
 
-        if (regionCards.length === 0) return (
-          <section key="region_banners_empty" className="bg-white py-10">
-            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
-          </section>
-        );
+        if (regionCards.length === 0) {
+          if (config.emptyBehavior !== 'empty_state') return null;
+          return (
+            <section key="region_banners_empty" className="bg-white py-10">
+              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            </section>
+          );
+        }
 
         return (
           <section key="region_banners" className="bg-white py-12">
@@ -367,11 +390,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       );
       case 'testimonials': {
         const config = sectionConfig('testimonials');
-        if (testimonials.length === 0) return (
-          <section key="testimonials_empty" className="py-10 bg-gray-50">
-            <div className="max-w-6xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
-          </section>
-        );
+        if (testimonials.length === 0) {
+          if (config.emptyBehavior !== 'empty_state') return null;
+          return (
+            <section key="testimonials_empty" className="py-10 bg-gray-50">
+              <div className="max-w-6xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            </section>
+          );
+        }
 
         return (
           <section key="testimonials" className="py-10 bg-gray-50">
@@ -404,11 +430,14 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       }
       case 'news': {
         const config = sectionConfig('news');
-        if (news.length === 0) return (
-          <section key="news_empty" className="py-10 bg-white">
-            <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
-          </section>
-        );
+        if (news.length === 0) {
+          if (config.emptyBehavior !== 'empty_state') return null;
+          return (
+            <section key="news_empty" className="py-10 bg-white">
+              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            </section>
+          );
+        }
 
         // Nhãn động theo order_index (fallback tĩnh khi DB chưa nạp). Nếu tab đang chọn
         // đã bị xoá khỏi DB thì coi như 'Tin tức' để không lọc ra danh sách rỗng.
@@ -607,8 +636,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER = ['categories', 'for_you', 'featured_sections', 'region_banners', 'why_us', 'testimonials', 'news', 'faq', 'cta', 'social_proof'];
-  const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id);
+  const DEFAULT_SECTION_ORDER: HomeDiscoverySection[] = ['categories', 'recently_viewed', 'featured_sections', 'region_banners', 'for_you', 'news', 'why_us', 'testimonials', 'faq', 'cta', 'social_proof'];
+  const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id as HomeDiscoverySection);
   // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
   // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
   // nếu admin đã thêm/ẩn row faq thì tôn trọng đúng cấu hình CMS.
@@ -616,13 +645,43 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     const at = cmsOrder.indexOf('cta');
     if (at >= 0) cmsOrder.splice(at, 0, 'faq'); else cmsOrder.push('faq');
   }
-  // "Gợi ý dành cho bạn" cũng chưa có trong CMS. Auto-chèn ngay sau 'categories'
-  // (đầu trang, dưới Danh mục nhanh) khi CMS chưa cấu hình row 'for_you'.
-  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'for_you')) {
+  // “Tiếp tục xem” cũng là rail client-only. Auto-chèn ngay sau category khi CMS
+  // chưa có row riêng; không có local history thì component tự ẩn hoàn toàn.
+  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'recently_viewed')) {
     const at = cmsOrder.indexOf('categories');
-    if (at >= 0) cmsOrder.splice(at + 1, 0, 'for_you'); else cmsOrder.unshift('for_you');
+    if (at >= 0) cmsOrder.splice(at + 1, 0, 'recently_viewed'); else cmsOrder.unshift('recently_viewed');
   }
-  const orderedIds = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
+  // “Gợi ý dành cho bạn” chỉ xuất hiện khi đủ tín hiệu; đặt sau các điểm vào dữ liệu
+  // thật để khách mới vẫn có hành trình khám phá rõ ràng mà không có rail trống.
+  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'for_you')) {
+    const regionAt = cmsOrder.indexOf('region_banners');
+    const featuredAt = cmsOrder.indexOf('featured_sections');
+    const at = regionAt >= 0 ? regionAt : featuredAt;
+    if (at >= 0) cmsOrder.splice(at + 1, 0, 'for_you'); else cmsOrder.push('for_you');
+  }
+  const [hasRecentlyViewed, setHasRecentlyViewed] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('dtp_recently_viewed');
+      setHasRecentlyViewed(!!raw && JSON.parse(raw).length > 0);
+    } catch {
+      setHasRecentlyViewed(false);
+    }
+  }, []);
+  const hasEnoughTasteSignal = tasteProfileReady && hasEnoughSignal(tasteProfile);
+  const availability: HomeDiscoveryAvailability = {
+    featured_sections: featuredSections.length > 0 || sectionQueries.some(query => query.isLoading),
+    region_banners: areas.length > 0,
+    news: news.length > 0,
+    testimonials: testimonials.length > 0,
+  };
+  const configuredOrder = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
+  const orderedIds = getHomeDiscoveryOrder({
+    configuredOrder,
+    availability,
+    hasRecentlyViewed,
+    hasEnoughTasteSignal,
+  });
 
   return (
     <div className="min-h-screen bg-white">

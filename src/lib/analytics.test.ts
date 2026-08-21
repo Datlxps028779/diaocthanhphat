@@ -80,6 +80,10 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
       expect(EVENTS.LISTING_RESULT_CLICK).toBe('listing_result_click');
       expect(EVENTS.AI_ADVISOR_SUGGEST).toBe('ai_advisor_suggest_properties');
       expect(EVENTS.AI_ADVISOR_PROPERTY_CLICK).toBe('ai_advisor_property_click');
+      expect(EVENTS.DISCOVERY_MODULE_VIEW).toBe('discovery_module_view');
+      expect(EVENTS.DISCOVERY_MODULE_CLICK).toBe('discovery_module_click');
+      expect(EVENTS.SAVED_SEARCH_NOTICE_SHOWN).toBe('saved_search_notice_shown');
+      expect(EVENTS.SAVED_SEARCH_NOTICE_DISMISSED).toBe('saved_search_notice_dismissed');
       Object.values(EVENTS).forEach(v => expect(v.length).toBeGreaterThan(0));
     });
   });

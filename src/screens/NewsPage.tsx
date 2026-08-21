@@ -14,7 +14,7 @@ import { Breadcrumb } from '../components/Layout';
 import { useSetting } from '../lib/cms';
 import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
-import { pickRelated } from '../lib/relatedNews';
+import { pickRelated, buildArticleDiscoveryPools } from '../lib/relatedNews';
 import { buildNewsImageAlt } from '../lib/propertyImages';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
@@ -224,10 +224,14 @@ function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; 
 function ArticleDetail({
   article,
   related,
+  mostViewed,
+  latest,
   onBack,
 }: {
   article: NewsArticle;
   related: Array<NewsArticle | NewsListItem>;
+  mostViewed: NewsListItem[];
+  latest: NewsListItem[];
   onBack: () => void;
 }) {
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
@@ -281,6 +285,8 @@ function ArticleDetail({
   );
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
+  const discovery = buildArticleDiscoveryPools(article.id, relatedArticles, mostViewed, latest);
+  const { sidebarRelated, sidebarPopular, continuation } = discovery;
   const relatedHref = (item: NewsArticle | NewsListItem) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
   const imgUrl =
@@ -406,7 +412,7 @@ function ArticleDetail({
 
           {/* Nguồn tham khảo — khớp 1:1 với schema citation ở page.tsx (tránh cloaking) */}
           {citations.length > 0 && (
-            <div className="mt-10 pt-6 border-t border-gray-200">
+            <div id="article-sources" className="mt-10 pt-6 border-t border-gray-200">
               <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
               <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
                 {citations.map((c, i) => (
@@ -428,20 +434,21 @@ function ArticleDetail({
             </div>
           )}
 
-          {/* Bài liên quan cuối nội dung — link nội bộ thực, độc lập với nguồn tham khảo. */}
-          {relatedArticles.length > 0 && (
+          {/* Nội dung đọc tiếp — ưu tiên bài có liên quan rồi bù bằng bài mới, tách khỏi sidebar. */}
+          {continuation.length > 0 && (
             <section className="mt-10 border-t border-gray-200 pt-6" aria-labelledby="related-articles-heading">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Đọc tiếp</p>
-                  <h2 id="related-articles-heading" className="mt-1 text-xl font-bold text-gray-900">Bài viết liên quan</h2>
+                  <h2 id="related-articles-heading" className="mt-1 text-xl font-bold text-gray-900">Bài viết khác dành cho bạn</h2>
+                  <p className="mt-1 text-sm text-gray-500">Khám phá thêm các nội dung vừa xuất bản và cùng chủ đề.</p>
                 </div>
                 <Link href="/tin-tuc" className="text-sm font-semibold text-red-700 hover:text-red-800 hover:underline">
                   Xem tất cả tin tức
                 </Link>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {relatedArticles.slice(0, 3).map((item) => {
+                {continuation.map((item) => {
                   const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
                   const itemCategory = (item as any).category ?? '';
                   return (
@@ -491,33 +498,73 @@ function ArticleDetail({
           <DetailShareButtons title={article.title} canonicalPathname={articleHref(article)} className="mt-5" />
         </article>
 
-        {/* Sidebar */}
+        {/* Sidebar: điều hướng bài + các khối tin thật để tiếp tục hành trình đọc. */}
         <aside className="hidden lg:block w-72 shrink-0">
-          <div className="bg-white rounded-2xl shadow p-5 sticky top-24">
-            <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Bài viết liên quan</h4>
-            <div className="space-y-4">
-              {relatedArticles.map((r) => {
-                const rImg = (r as any).image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=200';
-                return (
-                  <Link
-                    key={r.id}
-                    href={relatedHref(r)}
-                    className="flex gap-3 text-left w-full hover:opacity-80 transition-opacity group"
-                  >
-                    <img src={rImg} alt={buildNewsImageAlt(r)} onError={useFallbackNewsImage} className="w-16 h-16 rounded-lg object-cover shrink-0" />
-                    <div>
-                      <p className="text-sm text-gray-700 font-medium line-clamp-2 leading-snug group-hover:text-red-600 transition-colors">{r.title}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {formatDate((r as any).published_at ?? (r as any).created_at ?? '')}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              })}
-              {related.length === 0 && (
-                <p className="text-gray-400 text-sm">Chưa có bài viết liên quan.</p>
-              )}
-            </div>
+          <div className="space-y-5 sticky top-24">
+            <section className="bg-white rounded-2xl shadow p-5">
+              <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Trong bài viết này</h4>
+              <div className="space-y-3 text-sm">
+                {tocHeadings.length >= TOC_MIN_HEADINGS ? (
+                  tocHeadings.slice(0, 6).map(heading => (
+                    <a
+                      key={heading.id}
+                      href={`#${heading.id}`}
+                      className="block border-l-2 border-gray-200 pl-3 leading-snug text-gray-600 transition-colors hover:border-red-500 hover:text-red-600"
+                    >
+                      {heading.text}
+                    </a>
+                  ))
+                ) : (
+                  <>
+                    {citations.length > 0 && <a href="#article-sources" className="block border-l-2 border-gray-200 pl-3 text-gray-600 transition-colors hover:border-red-500 hover:text-red-600">Nguồn tham khảo</a>}
+                    {continuation.length > 0 && <a href="#related-articles-heading" className="block border-l-2 border-gray-200 pl-3 text-gray-600 transition-colors hover:border-red-500 hover:text-red-600">Đọc tiếp</a>}
+                    <Link href="/tin-tuc" className="block border-l-2 border-gray-200 pl-3 text-gray-600 transition-colors hover:border-red-500 hover:text-red-600">Tất cả tin tức</Link>
+                  </>
+                )}
+              </div>
+            </section>
+
+            {sidebarRelated.length > 0 && (
+              <section className="bg-white rounded-2xl shadow p-5">
+                <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Bài viết liên quan</h4>
+                <div className="space-y-4">
+                  {sidebarRelated.map(item => (
+                    <Link key={item.id} href={relatedHref(item)} className="group flex gap-3">
+                      <BlurFillImage src={item.image_url || NEWS_FALLBACK_IMAGE} alt={buildNewsImageAlt(item)} sizes="72px" wrapperClassName="h-16 w-16 shrink-0 rounded-lg" />
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{item.title}</p>
+                        <p className="mt-1 text-xs text-gray-400">{formatDate(item.created_at)}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {sidebarPopular.length > 0 && (
+              <section className="bg-white rounded-2xl shadow p-5">
+                <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Đọc nhiều</h4>
+                <div className="space-y-3">
+                  {sidebarPopular.map((item, index) => (
+                    <Link key={item.id} href={relatedHref(item)} className="group flex gap-3">
+                      <span className="w-5 shrink-0 pt-0.5 text-center text-lg font-black leading-none text-gray-300">{index + 1}</span>
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{item.title}</p>
+                        <p className="mt-1 text-xs text-gray-400">{item.views.toLocaleString('vi-VN')} lượt xem</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section className="bg-white rounded-2xl shadow p-5">
+              <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Khám phá thêm</h4>
+              <div className="space-y-3 text-sm">
+                {cat && <Link href={pageToHref({ name: 'news', category: cat })} className="block font-semibold text-red-700 hover:text-red-800 hover:underline">Thêm bài trong mục {cat}</Link>}
+                <Link href="/tin-tuc" className="block text-gray-600 hover:text-red-600">Tất cả tin tức</Link>
+              </div>
+            </section>
           </div>
         </aside>
       </div>
@@ -526,7 +573,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialRelated = [], initialPage, initialMostViewed, initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialRelated?: NewsListItem[]; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialRelated = [], initialPage, initialMostViewed, initialLatest = [], initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialRelated?: NewsListItem[]; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialLatest?: NewsListItem[]; initialCategory?: string }) {
   const [category, setCategory] = useState<NewsCollection>(initialCategory || 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -751,6 +798,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
       <ArticleDetail
         article={activeArticle}
         related={related}
+        mostViewed={initialMostViewed ?? mostViewedRaw}
+        latest={initialLatest.length > 0 ? initialLatest : articles}
         onBack={handleBack}
       />
     );

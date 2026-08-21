@@ -4,11 +4,13 @@ import { notFound } from 'next/navigation';
 import { SiteChrome } from '@/components/SiteChrome';
 import { buildBreadcrumbJsonLd } from '@/lib/seo';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
-import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats, serverGetPriceStats, serverGetAreaWardPriceStats } from '@/lib/supabase-server';
+import { serverGetAreaBySlug, serverGetAreaListings, serverGetAreaStats, serverGetPriceStats, serverGetAreaWardPriceStats, serverGetDistrictsByArea } from '@/lib/supabase-server';
 import { PriceStatsBlock } from '@/components/PriceStatsBlock';
 import { WardPriceBreakdown } from '@/components/WardPriceBreakdown';
 import { buildPriceAnswer } from '@/lib/priceStatsFormat';
 import { buildProductPath } from '@/lib/productPath';
+import { districtDisplaySlug } from '@/lib/areaPath';
+import { DiscoverySectionHeader } from '@/components/discovery/DiscoverySectionHeader';
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
@@ -31,11 +33,12 @@ const DEFAULT_AREA_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo
 async function loadArea(slug: string) {
   const area = await serverGetAreaBySlug(slug);
   if (!area) return null;
-  const [listings, stats, priceStats, wardPriceStats] = await Promise.all([
+  const [listings, stats, priceStats, wardPriceStats, districts] = await Promise.all([
     serverGetAreaListings(area.id, 12),
     serverGetAreaStats(area.id),
     serverGetPriceStats('area', area.slug),
     serverGetAreaWardPriceStats(area.id),
+    serverGetDistrictsByArea(area.id),
   ]);
   const detail = getAreaDetails(area.slug);
   const summary = areaSummaryFromData(area, detail);
@@ -46,7 +49,7 @@ async function loadArea(slug: string) {
     propertyTypes: stats.propertyTypes,
     hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
   });
-  return { area, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats };
+  return { area, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats, districts };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -103,7 +106,7 @@ function PropertyAreaCard({ property }: { property: Property }) {
 export default async function AreaPage({ params }: Props) {
   const data = await loadArea(params.slug);
   if (!data) notFound();
-  const { area, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats } = data;
+  const { area, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats, districts } = data;
   const priceAnswer = buildPriceAnswer(area.name, priceStats, 'mua_ban') ?? buildPriceAnswer(area.name, priceStats, 'cho_thue');
   const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats, detail, summary });
   const faqLd = buildFaqJsonLd(faq);
@@ -152,8 +155,8 @@ export default async function AreaPage({ params }: Props) {
                   {priceAnswer && <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm font-semibold leading-7 text-white ring-1 ring-white/20">{priceAnswer}</p>}
                   <p className="mt-4 text-sm font-medium leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] md:text-base">{summary}</p>
                   <div className="mt-6 flex flex-wrap gap-3">
-                    <Link href={`/mua-ban?area=${area.id}`} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-950/30 hover:bg-red-700">Xem tin mua bán</Link>
-                    <Link href={`/cho-thue?area=${area.id}`} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50">Xem tin cho thuê</Link>
+                    <Link href={`/mua-ban/${area.slug}`} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-950/30 hover:bg-red-700">Xem tin mua bán</Link>
+                    <Link href={`/cho-thue/${area.slug}`} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50">Xem tin cho thuê</Link>
                     <Link href="/khu-vuc" className="rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20">Tất cả khu vực</Link>
                   </div>
                 </div>
@@ -243,8 +246,8 @@ export default async function AreaPage({ params }: Props) {
                   </div>
                 </div>
                 <div className="mt-4 space-y-2">
-                  <Link href={`/mua-ban?area=${area.id}`} className="block rounded-xl bg-red-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-red-700">Xem mua bán</Link>
-                  <Link href={`/cho-thue?area=${area.id}`} className="block rounded-xl border border-red-200 px-4 py-2.5 text-center text-sm font-bold text-red-600 hover:bg-red-50">Xem cho thuê</Link>
+                  <Link href={`/mua-ban/${area.slug}`} className="block rounded-xl bg-red-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-red-700">Xem mua bán</Link>
+                  <Link href={`/cho-thue/${area.slug}`} className="block rounded-xl border border-red-200 px-4 py-2.5 text-center text-sm font-bold text-red-600 hover:bg-red-50">Xem cho thuê</Link>
                 </div>
               </div>
             </aside>
@@ -257,7 +260,7 @@ export default async function AreaPage({ params }: Props) {
                 <h2 className="mt-1 text-2xl font-black text-gray-900">Bất động sản tại {area.name}</h2>
                 <p className="mt-1 text-sm text-gray-500">Danh sách được cập nhật tự động từ các tin đang hiển thị.</p>
               </div>
-              <Link href={`/danh-sach?area=${area.id}`} className="text-sm font-bold text-red-600 hover:underline">Xem tất cả tin phù hợp</Link>
+              <Link href={`/danh-sach?area=${encodeURIComponent(area.id)}`} className="text-sm font-bold text-red-600 hover:underline">Xem tất cả tin phù hợp</Link>
             </div>
 
             {listings.length > 0 ? (
@@ -272,6 +275,26 @@ export default async function AreaPage({ params }: Props) {
               </div>
             )}
           </section>
+
+          {districts.length > 0 && (
+            <section className="mx-auto max-w-7xl px-4 pb-12">
+              <DiscoverySectionHeader
+                eyebrow="Khám phá sâu hơn"
+                title={`Các quận, huyện thuộc ${area.name}`}
+                subtitle="Đi tiếp tới từng khu vực con để xem tin đăng và dữ liệu phù hợp."
+                href={`/danh-sach?area=${encodeURIComponent(area.id)}`}
+                linkLabel="Xem danh sách"
+              />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {districts.map(district => (
+                  <Link key={district.id} href={`/mua-ban/${area.slug}/${districtDisplaySlug(area.slug, district.slug)}`} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-red-200 hover:shadow-md">
+                    <p className="font-bold text-gray-900">{district.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">Xem tin đăng tại {district.name}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {faq.length > 0 && (
             <section className="mx-auto max-w-7xl px-4 pb-12">

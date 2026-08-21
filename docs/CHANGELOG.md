@@ -1,5 +1,13 @@
 # Documentation Changelog
 
+## 2026-08-17 — Discovery-first browsing and retention UX
+
+- Reorganized public discovery around real user intent rather than adding new conversion CTA work: homepage now offers a local-only “Tiếp tục xem” rail for returning visitors, configured property/area/news sections collapse when no real content is available, and personalized recommendations remain progressive and hidden until sufficient behavior signals exist.
+- Standardized discovery rails across homepage, listings and detail with safe-image cards, real property paths, mobile scroll-snap, and distinct purposes: related inventory → broaden filters → recommendations → recently viewed. Detail no longer presents two separate filter-exploration blocks with overlapping purpose.
+- Saved-search feedback now remains a truthful retained state rather than an auto-dismissing toast: it appears only after a real saved record returns and has an accessible manual dismissal. It does not enable notifications or make notification promises.
+- Added privacy-safe discovery module events for view/click and saved-search notice shown/dismissed. Event payloads permit only surface/module/position/count/filter-presence/listing type/source; no raw search, title, address, PII, or viewer-count social proof is recorded.
+- No migration, production SQL, Make.com, AI Search/RAG, AI recommendation contract, chatbot, lead/form flow, or CTA redesign was included in this UI batch.
+
 ## 2026-08-17 — P3D/P4 production evidence, P5 production verification, and P6 detail safety
 
 - Measured production read-only before implementation: one approved user listing still has its valid active property; there are no rejected/expired reapproval candidates, dangling links, or current lifecycle inconsistencies. The catalogue has 23 active and two inactive sale properties, with no active rentals.

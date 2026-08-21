@@ -44,8 +44,13 @@ async function loadNeighborhood(slug: string) {
   ]);
   const loc = resolveNeighborhoodLocation(neighborhood, taxonomy);
   const place: NeighborhoodPlace = {
+    areaId: loc.area?.id,
     areaName: loc.area?.name,
     areaSlug: loc.area?.slug,
+    districtName: loc.district?.name,
+    districtSlug: loc.district?.slug,
+    wardName: loc.ward?.name,
+    wardSlug: loc.ward?.slug,
     locationLabel: formatLocationLabel(loc) || undefined,
   };
   const summary = neighborhoodSummary(neighborhood);

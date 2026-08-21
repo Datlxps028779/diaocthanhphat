@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { serverGetNewsByIdOrSlug, serverGetRelatedNews, serverGetSiteSettings } from '@/lib/supabase-server';
+import { serverGetNewsByIdOrSlug, serverGetRelatedNews, serverGetSiteSettings, serverGetMostViewedNews, serverGetNews } from '@/lib/supabase-server';
 import { buildNewsMetadata, buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
 import { buildFaqJsonLd } from '@/lib/propertyFaq';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
@@ -20,9 +20,11 @@ export default async function NewsArticlePage({ params }: Params) {
   const article = await serverGetNewsByIdOrSlug(decodeURIComponent(params.slug));
   if (!article) notFound();
 
-  const [settings, related] = await Promise.all([
+  const [settings, related, mostViewed, latest] = await Promise.all([
     serverGetSiteSettings(),
-    serverGetRelatedNews(article),
+    serverGetRelatedNews(article, 8),
+    serverGetMostViewedNews(12),
+    serverGetNews(16),
   ]);
   // JSON-LD chỉ để SEO — dữ liệu jsonb (faq/citations) lỡ sai kiểu KHÔNG được làm sập
   // trang bài viết. Bọc try/catch: hỏng schema thì bỏ qua, trang vẫn render.
@@ -44,7 +46,7 @@ export default async function NewsArticlePage({ params }: Params) {
   return (
     <>
       <JsonLdScripts schemas={schemas} />
-      <NewsDetailClient article={article} related={related} />
+      <NewsDetailClient article={article} related={related} mostViewed={mostViewed} latest={latest} />
     </>
   );
 }
