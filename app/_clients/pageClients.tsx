@@ -52,6 +52,7 @@ export function AreaListingClient({ listingType, filters, initialData, initialDa
         initialFilters={{ listingType, ...filters }}
         initialData={initialData}
         initialDataScope={initialDataScope}
+        hasEditorialHeader={Boolean(header)}
         onNavigate={navigate}
       />
     </SiteChrome>

@@ -35,6 +35,7 @@ import { track, EVENTS } from '../lib/analytics';
 import { buildDiscoveryEventProps } from '../lib/discoveryJourney';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
+import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
@@ -42,6 +43,7 @@ interface ListingsPageProps {
   // để không dùng nhầm seed chưa lọc cho URL/filter khác.
   initialData?: { data: Property[]; total: number };
   initialDataScope?: ListingInitialFilters;
+  hasEditorialHeader?: boolean;
   onNavigate: (p: Page) => void;
 }
 
@@ -75,7 +77,7 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 // re-render vô hạn khi dùng làm default cho useQuery bị disable.
 const EMPTY_PROPS: Property[] = [];
 
-export function ListingsPage({ initialFilters, initialData, initialDataScope, onNavigate }: ListingsPageProps) {
+export function ListingsPage({ initialFilters, initialData, initialDataScope, hasEditorialHeader = false, onNavigate }: ListingsPageProps) {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [district, setDistrict] = useState(initialFilters?.district ?? '');
   const [ward, setWard] = useState(initialFilters?.ward ?? '');
@@ -149,7 +151,9 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
 
   // Phường/xã theo quận/huyện đã chọn. district lưu dạng TÊN nên map ra id để fetch.
   const selectedDistrictId = districts.find(d => d.name === district)?.id;
-  const { data: wards = [] } = useWards(selectedDistrictId || undefined);
+  const { data: wards = [] } = useWards(selectedDistrictId, { fetchAll: false });
+  const selectedArea = areas.find(area => area.id === areaId);
+  const selectedType = types.find(type => type.id === typeId);
   // Reset ward khi user đổi quận/huyện — cùng lý do như district ở trên.
   const prevDistrict = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -406,6 +410,19 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
     setDirection(''); setLegal(''); setIsFeatured(false); setIsHot(false); setPage(1);
   };
 
+  const clearSearchAndFilters = () => {
+    resetFilters();
+    if (listingType) setListingType('');
+  };
+
+  const resultSummary = buildListingResultLabel({
+    propertyTypeName: selectedType?.name,
+    listingType,
+    areaName: selectedArea?.name,
+    district,
+    ward,
+  });
+
   const totalPages = Math.ceil(total / PER_PAGE);
 
   // Link cũ ?page=N trỏ quá số trang hiện có (tin đã bị gỡ bớt) → đưa về trang cuối
@@ -595,7 +612,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
             { label: pageTitle },
           ]} />
 
-          <h1 className="mt-1 mb-3 text-lg font-black text-gray-900 md:text-2xl">{heading}</h1>
+          {!hasEditorialHeader && <h1 className="mt-1 mb-3 text-lg font-black text-gray-900 md:text-2xl">{heading}</h1>}
 
           {/* Listing type tabs */}
           <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1 scrollbar-hide">
@@ -623,8 +640,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
 
           <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-gray-500 text-xs">
-              Tìm thấy <strong className="text-gray-800">{total.toLocaleString('vi-VN')}</strong> bất động sản
-              {areaId && areas.find(a => a.id === areaId) && ` tại ${areas.find(a => a.id === areaId)!.name}`}
+              Tìm thấy <strong className="text-gray-800">{total.toLocaleString('vi-VN')}</strong> {resultSummary}
+              {total > properties.length && properties.length > 0 && ` · Đang hiển thị ${properties.length}`}
             </p>
             <div className="flex items-center gap-2 flex-1 max-w-md">
               <div className="relative flex-1">
@@ -761,8 +778,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
                     <Sparkles className="w-3 h-3" />AI đã hiểu: {searchIntent.matched.map(m => m.label).join(' · ')}
                   </span>
                 )}
-                {areaId && areas.find(a => a.id === areaId) && (
-                  <FilterChip label={`📍 ${areas.find(a => a.id === areaId)!.name}`} onRemove={() => setFilter(() => setAreaId(''))} />
+                {areaId && selectedArea && (
+                  <FilterChip label={`📍 ${selectedArea.name}`} onRemove={() => setFilter(() => setAreaId(''))} />
                 )}
                 {district && <FilterChip label={district} onRemove={() => setFilter(() => setDistrict(''))} />}
                 {ward && <FilterChip label={ward} onRemove={() => setFilter(() => setWard(''))} />}
@@ -908,7 +925,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-72 animate-pulse border border-gray-100" />)}
                 </div>
               ) : properties.length === 0 ? (
-                <EmptyState onReset={resetFilters} listingType={listingType} />
+                <EmptyState
+                  onReset={clearSearchAndFilters}
+                  listingType={listingType}
+                  hasKeyword={Boolean(debouncedKeyword.trim())}
+                  resultSummary={resultSummary}
+                />
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {properties.map((p, index) => (
@@ -926,7 +948,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, on
               loading ? (
                 <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-28 animate-pulse border border-gray-100" />)}</div>
               ) : properties.length === 0 ? (
-                <EmptyState onReset={resetFilters} listingType={listingType} />
+                <EmptyState
+                  onReset={clearSearchAndFilters}
+                  listingType={listingType}
+                  hasKeyword={Boolean(debouncedKeyword.trim())}
+                  resultSummary={resultSummary}
+                />
               ) : (
                 <div className="space-y-3">
                   {properties.map((p, index) => (
@@ -1043,16 +1070,24 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   );
 }
 
-function EmptyState({ onReset, listingType }: { onReset: () => void; listingType: string }) {
+function EmptyState({
+  onReset,
+  listingType,
+  hasKeyword,
+  resultSummary,
+}: {
+  onReset: () => void;
+  listingType: ListingTypeKey;
+  hasKeyword: boolean;
+  resultSummary: string;
+}) {
+  const resetLabel = hasKeyword ? 'Xóa từ khóa và bộ lọc' : 'Xóa tất cả bộ lọc';
   return (
     <div className="text-center py-20 bg-white rounded-xl border border-gray-100">
       <Building2 className="w-14 h-14 text-gray-200 mx-auto mb-3" />
-      <p className="text-gray-600 font-semibold">Không tìm thấy bất động sản phù hợp</p>
-      <p className="text-gray-400 text-sm mt-1">
-        {listingType === 'cho_thue' ? 'Thử thay đổi bộ lọc hoặc tìm BĐS cho thuê khác'
-          : 'Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm'}
-      </p>
-      <button onClick={onReset} className="mt-4 text-red-600 text-sm hover:underline font-medium">Xóa bộ lọc</button>
+      <p className="text-gray-600 font-semibold">Chưa tìm thấy {resultSummary} phù hợp</p>
+      <p className="text-gray-400 text-sm mt-1">{listingEmptyStateGuidance(listingType)}</p>
+      <button onClick={onReset} className="mt-4 text-red-600 text-sm hover:underline font-medium">{resetLabel}</button>
     </div>
   );
 }

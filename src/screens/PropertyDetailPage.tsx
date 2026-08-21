@@ -297,6 +297,19 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const allRelatedInSameDistrict = Boolean(property.area_id && property.district?.trim()) && related.length > 0 && related.every(item => (
     item.area_id === property.area_id && item.district?.trim() === property.district?.trim()
   ));
+  const detailListingHref = pageToHref({
+    name: 'listings',
+    listingType: property.listing_type,
+    areaId: property.area_id ?? undefined,
+    district: property.district ?? undefined,
+  }, hrefTaxonomy);
+  const relatedListingHref = pageToHref({
+    name: 'listings',
+    listingType: property.listing_type,
+    areaId: property.area_id ?? undefined,
+    district: allRelatedInSameDistrict ? property.district ?? undefined : undefined,
+    typeId: property.property_type_id ?? undefined,
+  }, hrefTaxonomy);
 
   const attrs = [
     property.area_sqm && { icon: <Maximize2 className="w-4 h-4 text-red-500" />, label: 'Diện tích', value: `${property.area_sqm} m²` },
@@ -326,7 +339,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
         <div className="max-w-7xl mx-auto px-4 py-3">
           <Breadcrumb items={[
             { label: 'Trang chủ', onClick: () => onNavigate({ name: 'home' }) },
-            { label: 'Danh sách', onClick: () => onNavigate({ name: 'listings' }) },
+            { label: 'Danh sách', href: detailListingHref },
             { label: property.title },
           ]} />
         </div>
@@ -759,7 +772,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     : 'Các lựa chọn có chung khu vực hoặc loại bất động sản với tin bạn đang xem'}
                 </p>
               </div>
-              <Link href={pageToHref({ name: 'listings', listingType: property.listing_type, areaId: property.area_id ?? undefined }, hrefTaxonomy)}
+              <Link href={relatedListingHref}
                 className="text-red-600 text-sm font-semibold flex items-center gap-1 hover:underline">
                 Xem tất cả <ChevronRight className="w-3.5 h-3.5" />
               </Link>

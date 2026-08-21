@@ -30,10 +30,12 @@ export function useDistricts(areaId?: string) {
   });
 }
 
-export function useWards(districtId?: string) {
+export function useWards(districtId?: string, options?: { fetchAll?: boolean }) {
+  const enabled = Boolean(districtId) || options?.fetchAll !== false;
   return useQuery({
     queryKey: ['wards', districtId ?? 'all'],
     queryFn: () => getWards(districtId),
+    enabled,
     staleTime: TAXONOMY_STALE,
   });
 }
