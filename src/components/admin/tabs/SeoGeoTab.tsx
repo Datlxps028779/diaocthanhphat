@@ -618,7 +618,7 @@ function SearchVisibilityCard({
       </div>
 
       {error ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">{error} Chạy migration Search Visibility trước, rồi bấm đồng bộ. Không có Google API nào được gọi ở bước này.</div>
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">{error} Kiểm tra schema nguồn URL hoặc quyền owner-MFA. Không có Google API nào được gọi ở bước này.</div>
       ) : loading ? (
         <p className="mt-4 text-sm text-gray-400">Đang tải audit URL…</p>
       ) : audit ? (

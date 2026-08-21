@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, type SearchVisibilitySources } from './searchVisibility';
+import { SEARCH_VISIBILITY_SOURCE_SELECTS } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -92,6 +93,29 @@ describe('buildSearchVisibilityCandidates', () => {
     expect(candidates.find(item => item.sourceKey === 'area:area-2')).toMatchObject({ eligible: false, reasonCode: 'QUALITY_GATE_FAILED' });
     expect(candidates.find(item => item.sourceKey === 'neighborhood:nb-1')).toMatchObject({ eligible: true, canonicalPath: '/khu-dan-cu/viet-sing' });
     expect(candidates.find(item => item.sourceKey === 'neighborhood:nb-2')).toMatchObject({ eligible: false, reasonCode: 'QUALITY_GATE_FAILED' });
+  });
+
+  it('falls back to created_at for areas and neighborhoods without updated_at', () => {
+    const createdAt = '2026-08-20T00:00:00.000Z';
+    const properties = Array.from({ length: 5 }, (_, index) => ({
+      id: `p-${index}`, slug: `nha-${index}`, public_code: index + 1, listing_type: 'mua_ban', district: 'Thuận An',
+      is_active: true, updated_at: null, areas: { slug: 'binh-duong' }, neighborhood_slug: 'viet-sing',
+    }));
+    const candidates = buildSearchVisibilityCandidates(sources({
+      properties,
+      areas: [{ id: 'area-1', name: 'Bình Dương', slug: 'binh-duong', description: 'Mô tả khu vực thật.', created_at: createdAt }],
+      neighborhoods: [{ id: 'nb-1', name: 'Việt Sing', slug: 'viet-sing', description: 'Mô tả khu dân cư thật.', created_at: createdAt }],
+    }));
+
+    expect(candidates.find(item => item.sourceKey === 'area:area-1')?.contentUpdatedAt).toBe(createdAt);
+    expect(candidates.find(item => item.sourceKey === 'neighborhood:nb-1')?.contentUpdatedAt).toBe(createdAt);
+  });
+
+  it('queries only the production-supported area and neighborhood source columns', () => {
+    expect(SEARCH_VISIBILITY_SOURCE_SELECTS.areas).toBe('id,name,slug,description,created_at');
+    expect(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods).toBe('id,name,slug,description,created_at');
+    expect(SEARCH_VISIBILITY_SOURCE_SELECTS.areas).not.toContain('updated_at');
+    expect(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods).not.toContain('updated_at');
   });
 
   it('tổng hợp eligibility theo reason/entity mà không gán nhãn Google indexed', () => {

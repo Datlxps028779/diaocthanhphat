@@ -22,9 +22,20 @@ type VisibilityQueryBuilder = {
   };
 };
 
-type VisibilityDatabase = {
+export type VisibilityDatabase = {
   from: (table: string) => VisibilityQueryBuilder;
 };
+
+export const SEARCH_VISIBILITY_SOURCE_SELECTS = {
+  properties: 'id,slug,public_code,listing_type,district,property_type_id,is_active,updated_at,neighborhood_slug,areas(slug)',
+  // areas/neighborhoods only expose created_at in production. Do not add updated_at
+  // unless the production schema has explicitly been extended and verified.
+  areas: 'id,name,slug,description,created_at',
+  neighborhoods: 'id,name,slug,description,created_at',
+  news: 'id,slug,is_published,updated_at',
+  newsCategories: 'id,slug,updated_at',
+  managedPages: 'id,slug,is_active,is_system,updated_at',
+} as const;
 
 function sourceVersion(candidate: SearchVisibilityCandidate): string {
   return createHash('sha256')
@@ -58,12 +69,12 @@ function toRow(candidate: SearchVisibilityCandidate): Record<string, unknown> {
 
 async function readSources(client: VisibilityDatabase): Promise<SearchVisibilitySources> {
   const [properties, areas, neighborhoods, news, newsCategories, managedPages] = await Promise.all([
-    client.from('properties').select('id,slug,public_code,listing_type,district,property_type_id,is_active,updated_at,neighborhood_slug,areas(slug)'),
-    client.from('areas').select('id,name,slug,description,created_at,updated_at'),
-    client.from('neighborhoods').select('id,name,slug,description,created_at,updated_at'),
-    client.from('news').select('id,slug,is_published,updated_at'),
-    client.from('news_categories').select('id,slug,updated_at'),
-    client.from('managed_pages').select('id,slug,is_active,is_system,updated_at'),
+    client.from('properties').select(SEARCH_VISIBILITY_SOURCE_SELECTS.properties),
+    client.from('areas').select(SEARCH_VISIBILITY_SOURCE_SELECTS.areas),
+    client.from('neighborhoods').select(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods),
+    client.from('news').select(SEARCH_VISIBILITY_SOURCE_SELECTS.news),
+    client.from('news_categories').select(SEARCH_VISIBILITY_SOURCE_SELECTS.newsCategories),
+    client.from('managed_pages').select(SEARCH_VISIBILITY_SOURCE_SELECTS.managedPages),
   ]);
   const results = [properties, areas, neighborhoods, news, newsCategories, managedPages];
   const error = results.find(result => result.error)?.error;
