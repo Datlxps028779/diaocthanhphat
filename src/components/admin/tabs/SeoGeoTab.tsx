@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, Shie
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, SEO_ROUTE_PATHS, updateArea, upsertSiteSetting } from '../../../lib/api';
+import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, getSearchVisibilityAudit, SEO_ROUTE_PATHS, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
@@ -11,6 +11,7 @@ import { areaSummaryFromData, buildAreaCollectionJsonLd, evaluateAreaSeo, getAre
 import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
+import type { SearchVisibilityAuditResponse } from '../../../lib/api/searchVisibility';
 
 function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
   if (!schemaType) return 'WebPage';
@@ -155,6 +156,10 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [areaListings, setAreaListings] = useState<Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[]>([]);
   const [areaIndexable, setAreaIndexable] = useState<boolean | null>(null);
   const [areaGateReasons, setAreaGateReasons] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<SearchVisibilityAuditResponse | null>(null);
+  const [visibilityLoading, setVisibilityLoading] = useState(false);
+  const [visibilitySyncing, setVisibilitySyncing] = useState(false);
+  const [visibilityError, setVisibilityError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -175,6 +180,34 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   };
 
   useEffect(() => { load().catch(e => { console.error(e); setLoading(false); }); }, []);
+
+  const loadVisibility = async () => {
+    setVisibilityLoading(true);
+    setVisibilityError('');
+    try {
+      setVisibility(await getSearchVisibilityAudit());
+    } catch (cause) {
+      setVisibility(null);
+      setVisibilityError((cause as Error).message || 'Chưa tải được audit URL.');
+    } finally {
+      setVisibilityLoading(false);
+    }
+  };
+
+  const syncVisibility = async () => {
+    setVisibilitySyncing(true);
+    setVisibilityError('');
+    try {
+      await syncSearchVisibilityAudit();
+      await loadVisibility();
+    } catch (cause) {
+      setVisibilityError((cause as Error).message || 'Không đồng bộ được audit URL.');
+    } finally {
+      setVisibilitySyncing(false);
+    }
+  };
+
+  useEffect(() => { void loadVisibility(); }, []);
 
   useEffect(() => {
     const row = routes.find(r => r.path === activePath);
@@ -500,6 +533,15 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
             </div>
           </div>
 
+          <SearchVisibilityCard
+            audit={visibility}
+            loading={visibilityLoading}
+            syncing={visibilitySyncing}
+            error={visibilityError}
+            onRefresh={() => void loadVisibility()}
+            onSync={() => void syncVisibility()}
+          />
+
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <h3 className="mb-3 text-base font-black text-gray-900">Preview Organization JSON-LD</h3>
             <pre className="max-h-[420px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{organizationPreview}</pre>
@@ -536,6 +578,83 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       )}
     </div>
   );
+}
+
+function SearchVisibilityCard({
+  audit,
+  loading,
+  syncing,
+  error,
+  onRefresh,
+  onSync,
+}: {
+  audit: SearchVisibilityAuditResponse | null;
+  loading: boolean;
+  syncing: boolean;
+  error: string;
+  onRefresh: () => void;
+  onSync: () => void;
+}) {
+  const excluded = audit?.urls.filter(row => !row.eligible).slice(0, 4) ?? [];
+  const lastRun = audit?.runs[0];
+
+  return (
+    <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-black text-gray-900"><Search className="h-4 w-4 text-indigo-600" />Search Visibility</h3>
+          <p className="mt-1 text-xs leading-5 text-gray-500">Kiểm tra URL canonical đủ điều kiện theo sitemap/quality gate. Đây không phải công cụ ép Google index URL.</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onRefresh} disabled={loading || syncing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Làm mới
+          </button>
+          <button type="button" onClick={onSync} disabled={loading || syncing}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
+            <ShieldCheck className="h-3.5 w-3.5" />{syncing ? 'Đang kiểm tra…' : 'Đồng bộ điều kiện URL'}
+          </button>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">{error} Chạy migration Search Visibility trước, rồi bấm đồng bộ. Không có Google API nào được gọi ở bước này.</div>
+      ) : loading ? (
+        <p className="mt-4 text-sm text-gray-400">Đang tải audit URL…</p>
+      ) : audit ? (
+        <>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <Metric label="URL đã đánh giá" value={audit.summary.total} tone="gray" />
+            <Metric label="Đủ điều kiện" value={audit.summary.eligible} tone="green" />
+            <Metric label="Chủ đích loại trừ" value={audit.summary.excluded} tone="amber" />
+          </div>
+          <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+            Google evidence: <strong>{audit.summary.googleEvidenceCount}</strong> URL. Chưa cấu hình Search Console/API nên số này thường là 0; không suy diễn thành “chưa index” hoặc “đã index”.
+          </div>
+          {excluded.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-xs font-bold text-gray-700">Ưu tiên xử lý từ dữ liệu nguồn</p>
+              {excluded.map(row => (
+                <div key={row.source_key} className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
+                  <span className="font-bold text-gray-800">{row.source_key}</span> · {row.reason_code}{row.reason_detail ? `: ${row.reason_detail}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {lastRun && <p className="mt-3 text-[11px] text-gray-400">Lần audit gần nhất: {new Date(lastRun.started_at).toLocaleString('vi-VN')} · {lastRun.status} · {lastRun.succeeded_count}/{lastRun.requested_count} URL.</p>}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: number; tone: 'gray' | 'green' | 'amber' }) {
+  const colors = {
+    gray: 'bg-gray-50 text-gray-800',
+    green: 'bg-emerald-50 text-emerald-800',
+    amber: 'bg-amber-50 text-amber-800',
+  };
+  return <div className={`rounded-xl px-2 py-3 ${colors[tone]}`}><p className="text-lg font-black">{value}</p><p className="text-[10px] font-semibold leading-4">{label}</p></div>;
 }
 
 function AuditCard({ label, count, hint, onClick }: { label: string; count: number; hint: string; onClick?: () => void }) {
