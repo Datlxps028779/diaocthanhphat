@@ -427,7 +427,9 @@ export async function serverGetNews(limit = 20, category?: string): Promise<News
     let q = sb
       .from('news').select('*')
       .eq('is_published', true)
-      .order('created_at', { ascending: false }).limit(limit);
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
     if (category && category !== 'Tất cả') q = q.eq('category', category);
     const { data } = await q;
     return (data ?? []) as NewsArticle[];

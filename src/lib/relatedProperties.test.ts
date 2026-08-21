@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRelatedPropertyReason, rankRelatedProperties } from './relatedProperties';
+import { buildRelatedPropertyReason, mergeRelatedPropertyCandidates, rankRelatedProperties } from './relatedProperties';
 
 function property(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,5 +81,24 @@ describe('rankRelatedProperties', () => {
     ]);
 
     expect(ranked.map(item => item.id)).toEqual(['newer', 'a', 'z']);
+  });
+
+  it('keeps an older local candidate when relevance query groups overlap', () => {
+    const localOlder = property({ id: 'local-older', created_at: '2025-01-01T00:00:00.000Z' });
+    const sameAreaNewer = property({ id: 'same-area-newer', district: 'Dầu Tiếng', created_at: '2026-08-02T00:00:00.000Z' });
+    const sameTypeElsewhere = property({ id: 'same-type-elsewhere', area_id: 'area-2', district: 'Chơn Thành', created_at: '2026-08-03T00:00:00.000Z' });
+
+    const merged = mergeRelatedPropertyCandidates(
+      [localOlder],
+      [sameAreaNewer, localOlder],
+      [sameTypeElsewhere, localOlder],
+    );
+
+    expect(merged.map(item => item.id)).toEqual(['local-older', 'same-area-newer', 'same-type-elsewhere']);
+    expect(rankRelatedProperties(property(), merged).map(item => item.id)).toEqual([
+      'local-older',
+      'same-area-newer',
+      'same-type-elsewhere',
+    ]);
   });
 });

@@ -2,7 +2,7 @@ import { supabase, type ListingType, type Property } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
-import { rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
+import { mergeRelatedPropertyCandidates, rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -325,14 +325,15 @@ export async function incrementPropertyView(id: string): Promise<void> {
   }
 }
 
-// Candidate pool chỉ giữ tin active cùng hình thức giao dịch. Sau đó xếp deterministic
-// ở client theo quận/loại/giá/diện tích để không bị `.or()` làm rơi mất ứng viên tốt hơn
-// trước khi policy có cơ hội so sánh. Bounded limit bảo vệ payload khi kho lớn hơn hiện tại.
+// Lấy các tầng liên quan riêng trước khi xếp hạng, để cửa sổ "mới nhất toàn kho"
+// không làm rơi tin cũ hơn nhưng cùng quận/loại. Mỗi query vẫn bị chặn payload;
+// rankRelatedProperties là nguồn chân lý cuối cùng cho thứ tự hiển thị.
 export async function getRelatedProperties(property: Property, limit = 6): Promise<RelatedProperty[]> {
-  const candidateLimit = Math.max(60, Math.min(120, limit * 20));
-  const { data } = await supabase
+  const candidateLimit = Math.max(24, Math.min(60, limit * 8));
+  const select = '*, areas(id,name,slug), property_types(id,name,slug)';
+  const baseQuery = () => supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(select)
     .eq('is_active', true)
     .eq('listing_type', property.listing_type)
     .neq('id', property.id)
@@ -340,7 +341,26 @@ export async function getRelatedProperties(property: Property, limit = 6): Promi
     .order('id', { ascending: false })
     .limit(candidateLimit);
 
-  return rankRelatedProperties(property, (data ?? []) as Property[], limit);
+  const localQuery = property.area_id && property.district?.trim()
+    ? baseQuery().eq('area_id', property.area_id).eq('district', property.district.trim())
+    : null;
+  const sameAreaQuery = property.area_id
+    ? baseQuery().eq('area_id', property.area_id)
+    : null;
+  const sameTypeQuery = property.property_type_id
+    ? baseQuery().eq('property_type_id', property.property_type_id)
+    : null;
+
+  const results = await Promise.all([
+    localQuery,
+    sameAreaQuery,
+    sameTypeQuery,
+  ].filter(Boolean) as PromiseLike<{ data: Property[] | null }>[]);
+
+  const candidates = mergeRelatedPropertyCandidates(
+    ...results.map(result => (result.data ?? []) as Property[]),
+  );
+  return rankRelatedProperties(property, candidates, limit);
 }
 
 // ─── Properties (admin) ───────────────────────────────────────────────────────

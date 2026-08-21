@@ -72,6 +72,7 @@ export type ArticleDiscoveryPools<T extends ArticleDiscoveryItem> = {
   sidebarRelated: T[];
   sidebarPopular: T[];
   continuation: T[];
+  mobileContinuation: T[];
 };
 
 function takeDistinct<T extends ArticleDiscoveryItem>(
@@ -90,9 +91,9 @@ function takeDistinct<T extends ArticleDiscoveryItem>(
   return out;
 }
 
-// Chia pool bài thật thành các vai trò UX riêng: nhóm liên quan có chủ đích ở sidebar,
-// bài được đọc nhiều, và phần đọc tiếp ở cuối bài. Một bài không xuất hiện ở hai khối
-// discovery cùng lúc; tránh cảm giác lặp nội dung dù các truy vấn có giao nhau.
+// Chia pool bài thật thành các vai trò UX riêng: desktop giữ bài liên quan/đọc nhiều
+// ở sidebar để tránh lặp card. Mobile không có sidebar, nên gom các bài đã giữ lại vào
+// continuation riêng để không làm mất đường đọc tiếp quan trọng.
 export function buildArticleDiscoveryPools<T extends ArticleDiscoveryItem>(
   currentId: string,
   related: T[],
@@ -108,6 +109,11 @@ export function buildArticleDiscoveryPools<T extends ArticleDiscoveryItem>(
     sidebarIds,
     6,
   );
+  const mobileContinuation = takeDistinct(
+    [...sidebarRelated, ...sidebarPopular, ...continuation],
+    current,
+    6,
+  );
 
-  return { sidebarRelated, sidebarPopular, continuation };
+  return { sidebarRelated, sidebarPopular, continuation, mobileContinuation };
 }

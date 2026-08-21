@@ -286,7 +286,7 @@ function ArticleDetail({
   const markdownBlocks = contentIsHtml ? null : renderMarkdownContent(rawContent);
   const relatedArticles = related.slice(0, 5);
   const discovery = buildArticleDiscoveryPools(article.id, relatedArticles, mostViewed, latest);
-  const { sidebarRelated, sidebarPopular, continuation } = discovery;
+  const { sidebarRelated, sidebarPopular, continuation, mobileContinuation } = discovery;
   const relatedHref = (item: NewsArticle | NewsListItem) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
   const imgUrl =
@@ -434,8 +434,9 @@ function ArticleDetail({
             </div>
           )}
 
-          {/* Nội dung đọc tiếp — ưu tiên bài có liên quan rồi bù bằng bài mới, tách khỏi sidebar. */}
-          {continuation.length > 0 && (
+          {/* Nội dung đọc tiếp: desktop tránh lặp sidebar, mobile nhận lại toàn bộ bài
+              liên quan/đọc nhiều vì sidebar bị ẩn dưới lg. */}
+          {(continuation.length > 0 || mobileContinuation.length > 0) && (
             <section className="mt-10 border-t border-gray-200 pt-6" aria-labelledby="related-articles-heading">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
@@ -447,8 +448,8 @@ function ArticleDetail({
                   Xem tất cả tin tức
                 </Link>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {continuation.map((item) => {
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 lg:hidden">
+                {mobileContinuation.map((item) => {
                   const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
                   const itemCategory = (item as any).category ?? '';
                   return (
@@ -460,7 +461,7 @@ function ArticleDetail({
                       <BlurFillImage
                         src={itemImage}
                         alt={buildNewsImageAlt(item)}
-                        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                        sizes="(max-width: 640px) 100vw, 50vw"
                         wrapperClassName="h-36"
                       />
                       <div className="p-4">
@@ -481,6 +482,42 @@ function ArticleDetail({
                   );
                 })}
               </div>
+              {continuation.length > 0 && (
+                <div className="hidden gap-4 sm:grid-cols-2 xl:grid-cols-3 lg:grid">
+                  {continuation.map((item) => {
+                    const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
+                    const itemCategory = (item as any).category ?? '';
+                    return (
+                      <Link
+                        key={item.id}
+                        href={relatedHref(item)}
+                        className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
+                      >
+                        <BlurFillImage
+                          src={itemImage}
+                          alt={buildNewsImageAlt(item)}
+                          sizes="(max-width: 1280px) 50vw, 25vw"
+                          wrapperClassName="h-36"
+                        />
+                        <div className="p-4">
+                          {itemCategory && (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${categoryBadge(itemCategory)}`}>
+                              {itemCategory}
+                            </span>
+                          )}
+                          <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
+                            {item.title}
+                          </h3>
+                          {item.excerpt && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-500">{stripHtml(item.excerpt)}</p>}
+                          <p className="mt-3 flex items-center gap-1 text-xs text-gray-400">
+                            <Calendar className="h-3 w-3" /> {formatDate((item as any).published_at ?? item.created_at)}
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           )}
 

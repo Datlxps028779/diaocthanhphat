@@ -53,6 +53,17 @@ describe('discoveryJourney', () => {
     expect(order).toContain('region_banners');
   });
 
+  it('preserves the configured CMS sequence while filtering unavailable sections', () => {
+    const order = getHomeDiscoveryOrder({
+      configuredOrder: ['news', 'for_you', 'categories', 'recently_viewed', 'featured_sections', 'news'],
+      availability: { news: true, featured_sections: false },
+      hasRecentlyViewed: true,
+      hasEnoughTasteSignal: true,
+    });
+
+    expect(order).toEqual(['news', 'for_you', 'categories', 'recently_viewed']);
+  });
+
   it('only permits an empty discovery section when its configuration explicitly asks for one', () => {
     expect(shouldRenderDiscoverySection({ itemCount: 0 })).toBe(false);
     expect(shouldRenderDiscoverySection({ itemCount: 0, isLoading: true })).toBe(true);

@@ -136,6 +136,15 @@ export function rankRelatedProperties<T extends RelatedPropertySource>(
     }));
 }
 
+export function mergeRelatedPropertyCandidates<T extends { id: string }>(...groups: T[][]): T[] {
+  const seen = new Set<string>();
+  return groups.flat().filter(candidate => {
+    if (seen.has(candidate.id)) return false;
+    seen.add(candidate.id);
+    return true;
+  });
+}
+
 export function isRelatedListingType(value: string | null | undefined): value is ListingType {
   return value === 'mua_ban' || value === 'cho_thue';
 }

@@ -44,45 +44,17 @@ const DISCOVERY_EVENT_KEYS = new Set<keyof DiscoveryEventProps>([
   'source',
 ]);
 
-const HOMEPAGE_RETURNING_ORDER: HomeDiscoverySection[] = [
-  'categories',
-  'recently_viewed',
-  'featured_sections',
-  'region_banners',
-  'for_you',
-  'news',
-  'why_us',
-  'testimonials',
-  'faq',
-  'cta',
-  'social_proof',
-];
-
-const HOMEPAGE_NEW_VISITOR_ORDER: HomeDiscoverySection[] = [
-  'categories',
-  'featured_sections',
-  'region_banners',
-  'news',
-  'why_us',
-  'testimonials',
-  'faq',
-  'cta',
-  'social_proof',
-];
-
 export function getHomeDiscoveryOrder(input: {
   configuredOrder: HomeDiscoverySection[];
   availability: HomeDiscoveryAvailability;
   hasRecentlyViewed: boolean;
   hasEnoughTasteSignal: boolean;
 }): HomeDiscoverySection[] {
-  const configured = new Set(input.configuredOrder);
-  const preferred = input.hasRecentlyViewed || input.hasEnoughTasteSignal
-    ? HOMEPAGE_RETURNING_ORDER
-    : HOMEPAGE_NEW_VISITOR_ORDER;
+  const seen = new Set<HomeDiscoverySection>();
 
-  return preferred.filter(section => {
-    if (!configured.has(section)) return false;
+  return input.configuredOrder.filter(section => {
+    if (seen.has(section)) return false;
+    seen.add(section);
     if (section === 'recently_viewed') return input.hasRecentlyViewed;
     if (section === 'for_you') return input.hasEnoughTasteSignal;
     return input.availability[section] !== false;

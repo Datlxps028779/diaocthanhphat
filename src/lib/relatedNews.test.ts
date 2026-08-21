@@ -92,6 +92,26 @@ describe('buildArticleDiscoveryPools', () => {
     expect(pools.sidebarRelated.map(item => item.id)).toEqual(['related-1', 'related-2', 'related-3']);
     expect(pools.sidebarPopular.map(item => item.id)).toEqual(['popular-1', 'popular-2', 'popular-3']);
     expect(pools.continuation.map(item => item.id)).toEqual(['related-4', 'latest-1', 'latest-2', 'latest-3']);
+    expect(pools.mobileContinuation.map(item => item.id)).toEqual([
+      'related-1', 'related-2', 'related-3', 'popular-1', 'popular-2', 'popular-3',
+    ]);
     expect(new Set([...pools.sidebarRelated, ...pools.sidebarPopular, ...pools.continuation].map(item => item.id)).size).toBe(10);
+  });
+
+  it('keeps sidebar-only related and popular articles in the mobile continuation', async () => {
+    const { buildArticleDiscoveryPools } = await import('./relatedNews');
+    const pools = buildArticleDiscoveryPools(
+      'current',
+      [{ id: 'related-1' }, { id: 'related-2' }],
+      [{ id: 'popular-1' }, { id: 'popular-2' }],
+      [{ id: 'latest-1' }, { id: 'latest-2' }],
+    );
+
+    expect(pools.mobileContinuation.map(item => item.id)).toEqual([
+      'related-1', 'related-2', 'popular-1', 'popular-2', 'latest-1', 'latest-2',
+    ]);
+    expect(pools.mobileContinuation).toHaveLength(6);
+    expect(new Set(pools.mobileContinuation.map(item => item.id)).size).toBe(pools.mobileContinuation.length);
+    expect(pools.mobileContinuation.map(item => item.id)).not.toContain('current');
   });
 });
