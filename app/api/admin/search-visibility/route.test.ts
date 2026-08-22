@@ -5,8 +5,14 @@ const callerClientMock = vi.hoisted(() => vi.fn());
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 const syncMock = vi.hoisted(() => vi.fn());
 
+const searchVisibilityErrorMock = vi.hoisted(() => class SearchVisibilitySyncError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+});
+
 vi.mock('@/lib/server/requireAdmin', () => ({ callerClient: callerClientMock, requireOwner: requireOwnerMock }));
-vi.mock('@/lib/server/searchVisibilityService', () => ({ syncSearchVisibilityAudit: syncMock }));
+vi.mock('@/lib/server/searchVisibilityService', () => ({ syncSearchVisibilityAudit: syncMock, SearchVisibilitySyncError: searchVisibilityErrorMock }));
 
 import { GET, POST } from './route';
 
@@ -61,6 +67,7 @@ describe('/api/admin/search-visibility', () => {
     expect(JSON.stringify(json)).not.toContain('indexed');
   });
 
+
   it('POST chỉ chạy local eligibility sync và yêu cầu owner MFA', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
     syncMock.mockResolvedValue({ runId: 'run-1', summary: { total: 4, eligible: 3, excluded: 1, byReason: {}, byEntity: {} } });
@@ -71,5 +78,16 @@ describe('/api/admin/search-visibility', () => {
     expect(response.status).toBe(200);
     expect(syncMock).toHaveBeenCalledWith('u1');
     expect(json).toMatchObject({ ok: true, runId: 'run-1' });
+  });
+
+  it('trả mã lỗi canonical policy rõ ràng khi audit bị chặn trước khi lưu', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
+    syncMock.mockRejectedValue(new searchVisibilityErrorMock('CANONICAL_POLICY', 'URL canonical không khớp domain https://chonhaviet.com.'));
+
+    const response = await POST(request('POST'));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toEqual({ error: 'URL canonical không khớp domain https://chonhaviet.com.', code: 'CANONICAL_POLICY' });
   });
 });

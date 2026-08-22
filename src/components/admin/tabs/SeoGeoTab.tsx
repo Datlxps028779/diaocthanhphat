@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, Shie
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, getSearchVisibilityAudit, SEO_ROUTE_PATHS, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
+import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, getSearchVisibilityAudit, SEO_ROUTE_PATHS, SearchVisibilityApiError, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
@@ -159,7 +159,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [visibility, setVisibility] = useState<SearchVisibilityAuditResponse | null>(null);
   const [visibilityLoading, setVisibilityLoading] = useState(false);
   const [visibilitySyncing, setVisibilitySyncing] = useState(false);
-  const [visibilityError, setVisibilityError] = useState('');
+  const [visibilityError, setVisibilityError] = useState<{ message: string; code: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -183,12 +183,13 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
 
   const loadVisibility = async () => {
     setVisibilityLoading(true);
-    setVisibilityError('');
+    setVisibilityError(null);
     try {
       setVisibility(await getSearchVisibilityAudit());
     } catch (cause) {
       setVisibility(null);
-      setVisibilityError((cause as Error).message || 'Chưa tải được audit URL.');
+      const error = cause as Error;
+      setVisibilityError({ message: error.message || 'Chưa tải được audit URL.', code: 'LOAD' });
     } finally {
       setVisibilityLoading(false);
     }
@@ -196,12 +197,16 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
 
   const syncVisibility = async () => {
     setVisibilitySyncing(true);
-    setVisibilityError('');
+    setVisibilityError(null);
     try {
       await syncSearchVisibilityAudit();
       await loadVisibility();
     } catch (cause) {
-      setVisibilityError((cause as Error).message || 'Không đồng bộ được audit URL.');
+      const error = cause as Error;
+      setVisibilityError({
+        message: error.message || 'Không đồng bộ được audit URL.',
+        code: error instanceof SearchVisibilityApiError ? error.code : 'UNKNOWN',
+      });
     } finally {
       setVisibilitySyncing(false);
     }
@@ -591,12 +596,19 @@ function SearchVisibilityCard({
   audit: SearchVisibilityAuditResponse | null;
   loading: boolean;
   syncing: boolean;
-  error: string;
+  error: { message: string; code: string } | null;
   onRefresh: () => void;
   onSync: () => void;
 }) {
   const excluded = audit?.urls.filter(row => !row.eligible).slice(0, 4) ?? [];
   const lastRun = audit?.runs[0];
+  const errorHint = error?.code === 'CANONICAL_POLICY'
+    ? 'Đã chặn trước khi ghi dữ liệu vì URL không đúng canonical domain. Không cần chạy lại migration.'
+    : error?.code === 'SOURCE_READ'
+      ? 'Kiểm tra schema nguồn URL của production; không cần gọi Google hay chạy lại migration audit.'
+      : error?.code === 'AUDIT_WRITE'
+        ? 'Kiểm tra dữ liệu canonical/slug trong registry; không cần gọi Google.'
+        : 'Kiểm tra quyền owner-MFA hoặc cấu hình server. Không có Google API nào được gọi ở bước này.';
 
   return (
     <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
@@ -618,7 +630,7 @@ function SearchVisibilityCard({
       </div>
 
       {error ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">{error} Kiểm tra schema nguồn URL hoặc quyền owner-MFA. Không có Google API nào được gọi ở bước này.</div>
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><strong>{error.message}</strong><br />{errorHint}</div>
       ) : loading ? (
         <p className="mt-4 text-sm text-gray-400">Đang tải audit URL…</p>
       ) : audit ? (

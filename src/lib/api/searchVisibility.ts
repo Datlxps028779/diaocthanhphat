@@ -1,5 +1,14 @@
 import { supabase } from '../supabase';
 
+export type SearchVisibilityErrorCode = 'CANONICAL_POLICY' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'UNKNOWN';
+
+export class SearchVisibilityApiError extends Error {
+  constructor(readonly code: SearchVisibilityErrorCode, message: string) {
+    super(message);
+    this.name = 'SearchVisibilityApiError';
+  }
+}
+
 export interface SearchVisibilityUrlAudit {
   source_key: string;
   entity_type: string;
@@ -56,7 +65,12 @@ async function authHeader(): Promise<HeadersInit> {
 
 async function readResponse(response: Response): Promise<SearchVisibilityAuditResponse> {
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error ?? 'Không tải được audit URL.');
+  if (!response.ok) {
+    throw new SearchVisibilityApiError(
+      (json.code as SearchVisibilityErrorCode | undefined) ?? 'UNKNOWN',
+      json.error ?? 'Không tải được audit URL.',
+    );
+  }
   return json as SearchVisibilityAuditResponse;
 }
 
@@ -69,6 +83,11 @@ export async function getSearchVisibilityAudit(): Promise<SearchVisibilityAuditR
 export async function syncSearchVisibilityAudit(): Promise<{ runId: string; summary: SearchVisibilityAuditSummary }> {
   const response = await fetch('/api/admin/search-visibility', { method: 'POST', headers: await authHeader() });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error ?? 'Không đồng bộ được audit URL.');
+  if (!response.ok) {
+    throw new SearchVisibilityApiError(
+      (json.code as SearchVisibilityErrorCode | undefined) ?? 'UNKNOWN',
+      json.error ?? 'Không đồng bộ được audit URL.',
+    );
+  }
   return json as { runId: string; summary: SearchVisibilityAuditSummary };
 }

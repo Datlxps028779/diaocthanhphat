@@ -3,7 +3,8 @@ import { evaluateAreaSeo, getAreaDetails } from '../areaSeo';
 import { evaluateNeighborhoodSeo } from '../neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '../newsCategories';
 import { buildProductPath } from '../productPath';
-import { absoluteUrl } from '../siteUrl';
+
+export const SEARCH_VISIBILITY_CANONICAL_ORIGIN = 'https://chonhaviet.com';
 
 export type SearchVisibilityEntityType =
   | 'static'
@@ -108,10 +109,16 @@ function validSlug(value: string | null | undefined): value is string {
   return Boolean(value?.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.trim()));
 }
 
+function canonicalAuditUrl(path: string | null): string | null {
+  if (!path) return null;
+  if (!/^\/[A-Za-z0-9/_-]*$/.test(path) || path.includes('//')) return null;
+  return `${SEARCH_VISIBILITY_CANONICAL_ORIGIN}${path}`;
+}
+
 function candidate(input: Omit<SearchVisibilityCandidate, 'canonicalUrl'>): SearchVisibilityCandidate {
   return {
     ...input,
-    canonicalUrl: input.canonicalPath ? absoluteUrl(input.canonicalPath) : null,
+    canonicalUrl: canonicalAuditUrl(input.canonicalPath),
   };
 }
 

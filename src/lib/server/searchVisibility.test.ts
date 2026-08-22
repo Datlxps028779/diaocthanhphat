@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildSearchVisibilityCandidates, summarizeSearchVisibility, type SearchVisibilitySources } from './searchVisibility';
-import { SEARCH_VISIBILITY_SOURCE_SELECTS } from './searchVisibilityService';
+import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
+import { SEARCH_VISIBILITY_SOURCE_SELECTS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -116,6 +116,33 @@ describe('buildSearchVisibilityCandidates', () => {
     expect(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods).toBe('id,name,slug,description,created_at');
     expect(SEARCH_VISIBILITY_SOURCE_SELECTS.areas).not.toContain('updated_at');
     expect(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods).not.toContain('updated_at');
+  });
+
+  it('pins every audit URL to the approved canonical origin', () => {
+    const candidates = buildSearchVisibilityCandidates(sources({
+      properties: [{ id: 'p-1', slug: 'nha-dep', public_code: 1, listing_type: 'mua_ban', district: null, is_active: true, updated_at: null, areas: { slug: 'binh-duong' } }],
+      news: [{ id: 'news-1', slug: 'bai-viet', is_published: true, updated_at: null }],
+      managedPages: [{ id: 'page-1', slug: 'chinh-sach', is_active: true, is_system: false, updated_at: null }],
+    }));
+
+    for (const candidate of candidates.filter(item => item.canonicalPath)) {
+      expect(candidate.canonicalUrl).toBe(`${SEARCH_VISIBILITY_CANONICAL_ORIGIN}${candidate.canonicalPath}`);
+    }
+  });
+
+  it('blocks malformed canonical candidates before an audit upsert', () => {
+    const malformed: SearchVisibilityCandidate = {
+      sourceKey: 'news:bad', entityType: 'news', entityId: 'bad', eligible: true, reasonCode: 'ELIGIBLE', reasonDetail: null,
+      canonicalPath: '/tin-tuc/bad?preview=1', canonicalUrl: 'https://preview.vercel.app/tin-tuc/bad?preview=1', contentUpdatedAt: null,
+    };
+
+    try {
+      validateSearchVisibilityCandidates([malformed]);
+      expect.unreachable('expected canonical validation to reject malformed URL');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SearchVisibilitySyncError);
+      expect((error as SearchVisibilitySyncError).code).toBe('CANONICAL_POLICY');
+    }
   });
 
   it('tổng hợp eligibility theo reason/entity mà không gán nhãn Google indexed', () => {

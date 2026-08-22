@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
-import { syncSearchVisibilityAudit } from '@/lib/server/searchVisibilityService';
+import { syncSearchVisibilityAudit, SearchVisibilitySyncError } from '@/lib/server/searchVisibilityService';
 
 export const runtime = 'nodejs';
 
@@ -91,6 +91,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     console.error('[search-visibility] đồng bộ audit thất bại:', error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Không đồng bộ được audit URL.' }, { status: 503 });
+    if (error instanceof SearchVisibilitySyncError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 503 });
+    }
+    return NextResponse.json({ error: 'Không đồng bộ được audit URL. Kiểm tra cấu hình server rồi thử lại.', code: 'UNKNOWN' }, { status: 503 });
   }
 }
