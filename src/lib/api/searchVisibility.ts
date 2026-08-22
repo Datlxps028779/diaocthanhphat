@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 
-export type SearchVisibilityErrorCode = 'CANONICAL_POLICY' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'UNKNOWN';
+export type SearchVisibilityErrorCode = 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'UNKNOWN';
 
 export class SearchVisibilityApiError extends Error {
   constructor(readonly code: SearchVisibilityErrorCode, message: string) {

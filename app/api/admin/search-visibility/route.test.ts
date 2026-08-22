@@ -90,4 +90,15 @@ describe('/api/admin/search-visibility', () => {
     expect(response.status).toBe(503);
     expect(json).toEqual({ error: 'URL canonical không khớp domain https://chonhaviet.com.', code: 'CANONICAL_POLICY' });
   });
+
+  it('trả mã lỗi canonical constraint để hướng dẫn chạy migration sửa production', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
+    syncMock.mockRejectedValue(new searchVisibilityErrorMock('CANONICAL_CONSTRAINT', 'Constraint canonical trong production chưa khớp chính sách.'));
+
+    const response = await POST(request('POST'));
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toEqual({ error: 'Constraint canonical trong production chưa khớp chính sách.', code: 'CANONICAL_CONSTRAINT' });
+  });
 });

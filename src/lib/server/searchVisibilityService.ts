@@ -14,7 +14,7 @@ type PersistenceError = { message: string; code?: string; details?: string | nul
 
 export class SearchVisibilitySyncError extends Error {
   constructor(
-    readonly code: 'CANONICAL_POLICY' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG',
+    readonly code: 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG',
     message: string,
   ) {
     super(message);
@@ -100,10 +100,10 @@ export function validateSearchVisibilityCandidates(candidates: SearchVisibilityC
   );
 }
 
-function auditWriteError(error: PersistenceError): SearchVisibilitySyncError {
+export function classifySearchVisibilityPersistenceError(error: PersistenceError): SearchVisibilitySyncError {
   const text = [error.message, error.details, error.hint].filter(Boolean).join(' ');
   if (text.includes('search_visibility_url_absolute_canonical')) {
-    return new SearchVisibilitySyncError('CANONICAL_POLICY', 'URL canonical không khớp domain https://chonhaviet.com. Đồng bộ đã bị chặn trước khi hoàn tất audit.');
+    return new SearchVisibilitySyncError('CANONICAL_CONSTRAINT', 'Constraint canonical trong production chưa khớp chính sách https://chonhaviet.com. Cần chạy migration sửa constraint trước khi đồng bộ lại.');
   }
   if (text.includes('search_visibility_urls_canonical_url_unique')) {
     return new SearchVisibilitySyncError('AUDIT_WRITE', 'Có hai nguồn đang tạo cùng một URL canonical; cần kiểm tra dữ liệu slug trước khi lưu audit.');
@@ -157,7 +157,7 @@ export async function syncSearchVisibilityAudit(actorId: string): Promise<Search
     validateSearchVisibilityCandidates(candidates);
     const summary = summarizeSearchVisibility(candidates);
     const upsert = await client.from('search_visibility_urls').upsert(candidates.map(toRow), { onConflict: 'source_key' });
-    if (upsert.error) throw auditWriteError(upsert.error);
+    if (upsert.error) throw classifySearchVisibilityPersistenceError(upsert.error);
     const finish = await client.from('search_visibility_runs').update({
       status: 'succeeded',
       requested_count: candidates.length,

@@ -602,9 +602,11 @@ function SearchVisibilityCard({
 }) {
   const excluded = audit?.urls.filter(row => !row.eligible).slice(0, 4) ?? [];
   const lastRun = audit?.runs[0];
-  const errorHint = error?.code === 'CANONICAL_POLICY'
-    ? 'Đã chặn trước khi ghi dữ liệu vì URL không đúng canonical domain. Không cần chạy lại migration.'
-    : error?.code === 'SOURCE_READ'
+  const errorHint = error?.code === 'CANONICAL_CONSTRAINT'
+    ? 'Constraint production đang sai regex. Hãy chạy migration sửa constraint, sau đó đồng bộ lại.'
+    : error?.code === 'CANONICAL_POLICY'
+      ? 'Đã chặn trước khi ghi dữ liệu vì URL không đúng canonical domain. Không cần chạy lại migration.'
+      : error?.code === 'SOURCE_READ'
       ? 'Kiểm tra schema nguồn URL của production; không cần gọi Google hay chạy lại migration audit.'
       : error?.code === 'AUDIT_WRITE'
         ? 'Kiểm tra dữ liệu canonical/slug trong registry; không cần gọi Google.'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
-import { SEARCH_VISIBILITY_SOURCE_SELECTS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
+import { classifySearchVisibilityPersistenceError, SEARCH_VISIBILITY_SOURCE_SELECTS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -143,6 +143,12 @@ describe('buildSearchVisibilityCandidates', () => {
       expect(error).toBeInstanceOf(SearchVisibilitySyncError);
       expect((error as SearchVisibilitySyncError).code).toBe('CANONICAL_POLICY');
     }
+  });
+
+  it('phân loại constraint production để hướng dẫn repair migration', () => {
+    const error = classifySearchVisibilityPersistenceError({ message: 'new row violates check constraint "search_visibility_url_absolute_canonical"' });
+    expect(error).toMatchObject({ code: 'CANONICAL_CONSTRAINT' });
+    expect(error.message).toContain('migration sửa constraint');
   });
 
   it('tổng hợp eligibility theo reason/entity mà không gán nhãn Google indexed', () => {
