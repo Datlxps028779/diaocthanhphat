@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
 import {
+  diagnoseSearchVisibilityAccess,
   inspectSearchVisibilityBatch,
   submitSearchVisibilitySitemap,
   syncSearchVisibilityAudit,
@@ -89,13 +90,13 @@ export async function GET(req: NextRequest) {
   });
 }
 
-type SearchVisibilityAction = 'sync' | 'submit_sitemap' | 'inspect_batch';
+type SearchVisibilityAction = 'sync' | 'diagnose_access' | 'submit_sitemap' | 'inspect_batch';
 
 function actionFromRequest(body: unknown): SearchVisibilityAction | null {
   if (!body || typeof body !== 'object') return 'sync';
   const action = (body as { action?: unknown }).action;
   if (action === undefined) return 'sync';
-  return action === 'sync' || action === 'submit_sitemap' || action === 'inspect_batch' ? action : null;
+  return action === 'sync' || action === 'diagnose_access' || action === 'submit_sitemap' || action === 'inspect_batch' ? action : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -109,9 +110,11 @@ export async function POST(req: NextRequest) {
   try {
     const result = action === 'sync'
       ? await syncSearchVisibilityAudit(auth.userId)
-      : action === 'submit_sitemap'
-        ? await submitSearchVisibilitySitemap(auth.userId)
-        : await inspectSearchVisibilityBatch(auth.userId);
+      : action === 'diagnose_access'
+        ? await diagnoseSearchVisibilityAccess()
+        : action === 'submit_sitemap'
+          ? await submitSearchVisibilitySitemap(auth.userId)
+          : await inspectSearchVisibilityBatch(auth.userId);
     return NextResponse.json({ ok: true, action, ...result });
   } catch (error) {
     console.error(`[search-visibility] ${action} thất bại:`, error instanceof Error ? error.message : error);

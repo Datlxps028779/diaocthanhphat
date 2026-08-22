@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { adminClient } from './requireAdmin';
 import {
+  diagnoseSearchConsoleAccess,
   getSearchConsoleConfig,
   inspectSearchConsoleUrl,
   submitSearchConsoleSitemap,
@@ -138,6 +139,16 @@ export interface SearchVisibilityGoogleRunResult {
   processedCount: number;
   succeededCount: number;
   failedCount: number;
+}
+
+export async function diagnoseSearchVisibilityAccess() {
+  const config = getSearchConsoleConfig();
+  if (!config) throw new SearchVisibilitySyncError('GOOGLE_NOT_CONFIGURED', 'Chưa cấu hình Search Console trên server. Owner cần thiết lập service account và secrets tại môi trường deploy.');
+  try {
+    return await diagnoseSearchConsoleAccess(config);
+  } catch (error) {
+    throw searchConsoleSyncError(error);
+  }
 }
 
 export const SEARCH_VISIBILITY_INSPECTION_BATCH_SIZE = 5;

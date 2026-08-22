@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const callerClientMock = vi.hoisted(() => vi.fn());
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 const syncMock = vi.hoisted(() => vi.fn());
+const diagnoseAccessMock = vi.hoisted(() => vi.fn());
 const submitSitemapMock = vi.hoisted(() => vi.fn());
 const inspectBatchMock = vi.hoisted(() => vi.fn());
 const configStateMock = vi.hoisted(() => vi.fn());
@@ -17,6 +18,7 @@ const searchVisibilityErrorMock = vi.hoisted(() => class SearchVisibilitySyncErr
 vi.mock('@/lib/server/requireAdmin', () => ({ callerClient: callerClientMock, requireOwner: requireOwnerMock }));
 vi.mock('@/lib/server/searchVisibilityService', () => ({
   syncSearchVisibilityAudit: syncMock,
+  diagnoseSearchVisibilityAccess: diagnoseAccessMock,
   submitSearchVisibilitySitemap: submitSitemapMock,
   inspectSearchVisibilityBatch: inspectBatchMock,
   SearchVisibilitySyncError: searchVisibilityErrorMock,
@@ -48,6 +50,7 @@ beforeEach(() => {
   callerClientMock.mockReset();
   requireOwnerMock.mockReset();
   syncMock.mockReset();
+  diagnoseAccessMock.mockReset();
   submitSitemapMock.mockReset();
   inspectBatchMock.mockReset();
   configStateMock.mockReset();
@@ -92,6 +95,29 @@ describe('/api/admin/search-visibility', () => {
     expect(response.status).toBe(200);
     expect(syncMock).toHaveBeenCalledWith('u1');
     expect(json).toMatchObject({ ok: true, runId: 'run-1' });
+  });
+
+  it('chỉ chạy chẩn đoán quyền read-only khi owner gọi action rõ ràng', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
+    diagnoseAccessMock.mockResolvedValue({
+      serviceAccountEmail: 'search-console@chonhaviet.iam.gserviceaccount.com',
+      canonicalProperty: { found: false, permissionLevel: null, sufficient: false },
+      domainProperty: { found: true, permissionLevel: 'siteOwner' },
+      alternateProperties: [], status: 'CANONICAL_PROPERTY_MISSING', message: 'missing',
+    });
+
+    const response = await POST(new NextRequest('http://localhost/api/admin/search-visibility', {
+      method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'diagnose_access', siteUrl: 'https://attacker.test/' }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(diagnoseAccessMock).toHaveBeenCalledWith();
+    expect(submitSitemapMock).not.toHaveBeenCalled();
+    expect(inspectBatchMock).not.toHaveBeenCalled();
+    expect(json).toMatchObject({ ok: true, action: 'diagnose_access', status: 'CANONICAL_PROPERTY_MISSING' });
+    expect(JSON.stringify(json)).not.toContain('attacker.test');
   });
 
   it('chỉ chạy sitemap submission khi owner gọi action rõ ràng', async () => {

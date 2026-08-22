@@ -79,7 +79,16 @@ export async function getSearchVisibilityAudit(): Promise<SearchVisibilityAuditR
   return readResponse(await fetch('/api/admin/search-visibility', { headers: await authHeader() }));
 }
 
-export type SearchVisibilityAction = 'sync' | 'submit_sitemap' | 'inspect_batch';
+export type SearchVisibilityAction = 'sync' | 'diagnose_access' | 'submit_sitemap' | 'inspect_batch';
+
+export interface SearchConsoleAccessDiagnosis {
+  serviceAccountEmail: string;
+  canonicalProperty: { found: boolean; permissionLevel: string | null; sufficient: boolean };
+  domainProperty: { found: boolean; permissionLevel: string | null };
+  alternateProperties: Array<{ siteUrl: string; permissionLevel: string | null }>;
+  status: 'ACCESS_CONFIRMED' | 'CANONICAL_PROPERTY_MISSING' | 'CANONICAL_PERMISSION_INSUFFICIENT';
+  message: string;
+}
 
 export interface SearchVisibilityActionResult {
   runId: string;
@@ -90,7 +99,7 @@ export interface SearchVisibilityActionResult {
   summary?: SearchVisibilityAuditSummary;
 }
 
-async function runSearchVisibilityAction(action: SearchVisibilityAction): Promise<SearchVisibilityActionResult> {
+async function runSearchVisibilityAction<T extends SearchVisibilityActionResult | SearchConsoleAccessDiagnosis>(action: SearchVisibilityAction): Promise<T> {
   const response = await fetch('/api/admin/search-visibility', {
     method: 'POST',
     headers: await authHeader(),
@@ -103,12 +112,17 @@ async function runSearchVisibilityAction(action: SearchVisibilityAction): Promis
       json.error ?? 'Không hoàn tất được thao tác Search Visibility.',
     );
   }
-  return json as SearchVisibilityActionResult;
+  return json as T;
 }
 
 // Chỉ đồng bộ dữ liệu đủ điều kiện từ DB/canonical policy vào audit riêng.
 export async function syncSearchVisibilityAudit(): Promise<SearchVisibilityActionResult> {
   return runSearchVisibilityAction('sync');
+}
+
+// Diagnostic chỉ đọc property matching của service account hiện cấu hình; không gửi sitemap.
+export async function diagnoseSearchConsoleAccess(): Promise<SearchConsoleAccessDiagnosis> {
+  return runSearchVisibilityAction<SearchConsoleAccessDiagnosis>('diagnose_access');
 }
 
 // Search Console chỉ chạy sau thao tác owner rõ ràng; API trả xác nhận nhận sitemap,

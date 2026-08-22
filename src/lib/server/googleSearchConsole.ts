@@ -2,7 +2,8 @@ import { createSign } from 'crypto';
 
 export const GOOGLE_SEARCH_CONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters';
 export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-export const GOOGLE_SITEMAP_ENDPOINT = 'https://www.googleapis.com/webmasters/v3/sites';
+export const GOOGLE_SITES_ENDPOINT = 'https://www.googleapis.com/webmasters/v3/sites';
+export const GOOGLE_SITEMAP_ENDPOINT = GOOGLE_SITES_ENDPOINT;
 export const GOOGLE_INSPECTION_ENDPOINT = 'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect';
 export const SEARCH_CONSOLE_CANONICAL_ORIGIN = 'https://chonhaviet.com';
 
@@ -17,6 +18,24 @@ type GoogleTokenResponse = {
 
 type GoogleApiError = {
   error?: { message?: string; status?: string } | string;
+};
+
+type GoogleSiteEntry = {
+  siteUrl?: string;
+  permissionLevel?: string;
+};
+
+type GoogleSitesResponse = {
+  siteEntry?: GoogleSiteEntry[];
+};
+
+export type SearchConsoleAccessDiagnosis = {
+  serviceAccountEmail: string;
+  canonicalProperty: { found: boolean; permissionLevel: string | null; sufficient: boolean };
+  domainProperty: { found: boolean; permissionLevel: string | null };
+  alternateProperties: Array<{ siteUrl: string; permissionLevel: string | null }>;
+  status: 'ACCESS_CONFIRMED' | 'CANONICAL_PROPERTY_MISSING' | 'CANONICAL_PERMISSION_INSUFFICIENT';
+  message: string;
 };
 
 export type SearchConsoleConfig = {
@@ -166,6 +185,61 @@ async function authorizedRequest(url: string, init: RequestInit, config: SearchC
 export async function submitSearchConsoleSitemap(config: SearchConsoleConfig, fetchImpl: FetchLike = fetch): Promise<void> {
   const endpoint = `${GOOGLE_SITEMAP_ENDPOINT}/${encodeURIComponent(config.siteUrl)}/sitemaps/${encodeURIComponent(config.sitemapUrl)}`;
   await authorizedRequest(endpoint, { method: 'PUT' }, config, fetchImpl);
+}
+
+function permissionLevel(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function hasSufficientSitePermission(value: string | null): boolean {
+  return value === 'siteFullUser' || value === 'siteOwner';
+}
+
+function diagnosisMessage(status: SearchConsoleAccessDiagnosis['status']): string {
+  if (status === 'ACCESS_CONFIRMED') {
+    return 'Service account có quyền đầy đủ trên URL-prefix property https://chonhaviet.com/. Có thể thử gửi sitemap lại một lần.';
+  }
+  if (status === 'CANONICAL_PERMISSION_INSUFFICIENT') {
+    return 'Service account nhìn thấy URL-prefix property https://chonhaviet.com/ nhưng quyền hiện tại chưa đủ. Verified owner cần nâng quyền lên Full user hoặc Owner tại đúng property này.';
+  }
+  return 'Service account không nhìn thấy URL-prefix property https://chonhaviet.com/. Verified owner cần thêm đúng email service account vào Settings → Users and permissions của property này với quyền Full user.';
+}
+
+export function diagnoseSearchConsoleAccessEntries(config: SearchConsoleConfig, entries: GoogleSiteEntry[]): SearchConsoleAccessDiagnosis {
+  const canonical = entries.find(entry => entry.siteUrl === config.siteUrl);
+  const canonicalPermission = permissionLevel(canonical?.permissionLevel);
+  const domain = entries.find(entry => entry.siteUrl === 'sc-domain:chonhaviet.com');
+  const alternateProperties = entries
+    .filter(entry => entry.siteUrl === 'http://chonhaviet.com/' || entry.siteUrl === 'http://www.chonhaviet.com/' || entry.siteUrl === 'https://www.chonhaviet.com/')
+    .map(entry => ({ siteUrl: entry.siteUrl!, permissionLevel: permissionLevel(entry.permissionLevel) }));
+  const status = !canonical
+    ? 'CANONICAL_PROPERTY_MISSING'
+    : hasSufficientSitePermission(canonicalPermission)
+      ? 'ACCESS_CONFIRMED'
+      : 'CANONICAL_PERMISSION_INSUFFICIENT';
+
+  return {
+    serviceAccountEmail: config.clientEmail,
+    canonicalProperty: { found: !!canonical, permissionLevel: canonicalPermission, sufficient: hasSufficientSitePermission(canonicalPermission) },
+    domainProperty: { found: !!domain, permissionLevel: permissionLevel(domain?.permissionLevel) },
+    alternateProperties,
+    status,
+    message: diagnosisMessage(status),
+  };
+}
+
+// Read-only diagnostic: lists only matching chonhaviet properties visible to the configured
+// service account. It never sends a sitemap or inspects a URL.
+export async function diagnoseSearchConsoleAccess(config: SearchConsoleConfig, fetchImpl: FetchLike = fetch): Promise<SearchConsoleAccessDiagnosis> {
+  const response = await authorizedRequest(GOOGLE_SITES_ENDPOINT, { method: 'GET' }, config, fetchImpl);
+  const payload = await response.json().catch(() => null);
+  if (!payload || typeof payload !== 'object') {
+    throw new SearchConsoleError('GOOGLE_RESPONSE', 'Google Search Console trả về danh sách property không hợp lệ.');
+  }
+  const entries = Array.isArray((payload as GoogleSitesResponse).siteEntry)
+    ? (payload as GoogleSitesResponse).siteEntry!
+    : [];
+  return diagnoseSearchConsoleAccessEntries(config, entries);
 }
 
 function stringOrNull(value: unknown): string | null {
