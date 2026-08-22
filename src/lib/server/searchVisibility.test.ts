@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
-import { classifySearchVisibilityPersistenceError, SEARCH_VISIBILITY_SOURCE_SELECTS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
+import { classifySearchVisibilityPersistenceError, isFutureTimestamp, isWithinSitemapCooldown, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -159,5 +159,21 @@ describe('buildSearchVisibilityCandidates', () => {
     expect(report.eligible).toBeGreaterThan(0);
     expect(report.byReason.UNPUBLISHED_NEWS).toBe(1);
     expect(report.byEntity.news).toEqual({ eligible: 0, excluded: 1 });
+  });
+
+  it('chỉ áp dụng sitemap cooldown cho successful run cùng fingerprint còn hiệu lực', () => {
+    const now = Date.parse('2026-08-20T12:00:00.000Z');
+    const fingerprint = 'same-sitemap';
+    expect(isWithinSitemapCooldown({ status: 'succeeded', request_fingerprint: fingerprint, finished_at: new Date(now - 60_000).toISOString() }, fingerprint, now)).toBe(true);
+    expect(isWithinSitemapCooldown({ status: 'failed', request_fingerprint: fingerprint, finished_at: new Date(now - 60_000).toISOString() }, fingerprint, now)).toBe(false);
+    expect(isWithinSitemapCooldown({ status: 'succeeded', request_fingerprint: 'changed', finished_at: new Date(now - 60_000).toISOString() }, fingerprint, now)).toBe(false);
+    expect(isWithinSitemapCooldown({ status: 'succeeded', request_fingerprint: fingerprint, finished_at: new Date(now - SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS - 1).toISOString() }, fingerprint, now)).toBe(false);
+  });
+
+  it('không chọn lại URL Inspection đang trong thời gian retry defer', () => {
+    const now = Date.parse('2026-08-20T12:00:00.000Z');
+    expect(isFutureTimestamp(new Date(now + 60_000).toISOString(), now)).toBe(true);
+    expect(isFutureTimestamp(new Date(now - 60_000).toISOString(), now)).toBe(false);
+    expect(isFutureTimestamp(null, now)).toBe(false);
   });
 });

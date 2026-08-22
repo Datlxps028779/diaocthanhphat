@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 
-export type SearchVisibilityErrorCode = 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'UNKNOWN';
+export type SearchVisibilityErrorCode = 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'GOOGLE_NOT_CONFIGURED' | 'GOOGLE_CONFIG_INVALID' | 'GOOGLE_AUTH' | 'GOOGLE_REQUEST' | 'GOOGLE_RESPONSE' | 'GOOGLE_DEFERRED' | 'UNKNOWN';
 
 export class SearchVisibilityApiError extends Error {
   constructor(readonly code: SearchVisibilityErrorCode, message: string) {
@@ -50,6 +50,7 @@ export interface SearchVisibilityRun {
 }
 
 export interface SearchVisibilityAuditResponse {
+  searchConsole: { configurationState: 'not_configured' | 'configured' | 'invalid' };
   summary: SearchVisibilityAuditSummary;
   urls: SearchVisibilityUrlAudit[];
   runs: SearchVisibilityRun[];
@@ -78,16 +79,45 @@ export async function getSearchVisibilityAudit(): Promise<SearchVisibilityAuditR
   return readResponse(await fetch('/api/admin/search-visibility', { headers: await authHeader() }));
 }
 
-// Chỉ đồng bộ dữ liệu đủ điều kiện từ DB/canonical policy vào audit riêng. Không gọi
-// Google, không gửi sitemap và không có hành vi yêu cầu Google index URL.
-export async function syncSearchVisibilityAudit(): Promise<{ runId: string; summary: SearchVisibilityAuditSummary }> {
-  const response = await fetch('/api/admin/search-visibility', { method: 'POST', headers: await authHeader() });
+export type SearchVisibilityAction = 'sync' | 'submit_sitemap' | 'inspect_batch';
+
+export interface SearchVisibilityActionResult {
+  runId: string;
+  requestedCount?: number;
+  processedCount?: number;
+  succeededCount?: number;
+  failedCount?: number;
+  summary?: SearchVisibilityAuditSummary;
+}
+
+async function runSearchVisibilityAction(action: SearchVisibilityAction): Promise<SearchVisibilityActionResult> {
+  const response = await fetch('/api/admin/search-visibility', {
+    method: 'POST',
+    headers: await authHeader(),
+    body: JSON.stringify({ action }),
+  });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new SearchVisibilityApiError(
       (json.code as SearchVisibilityErrorCode | undefined) ?? 'UNKNOWN',
-      json.error ?? 'Không đồng bộ được audit URL.',
+      json.error ?? 'Không hoàn tất được thao tác Search Visibility.',
     );
   }
-  return json as { runId: string; summary: SearchVisibilityAuditSummary };
+  return json as SearchVisibilityActionResult;
+}
+
+// Chỉ đồng bộ dữ liệu đủ điều kiện từ DB/canonical policy vào audit riêng.
+export async function syncSearchVisibilityAudit(): Promise<SearchVisibilityActionResult> {
+  return runSearchVisibilityAction('sync');
+}
+
+// Search Console chỉ chạy sau thao tác owner rõ ràng; API trả xác nhận nhận sitemap,
+// không phải lời hứa Google sẽ crawl hoặc index từng URL.
+export async function submitSearchVisibilitySitemap(): Promise<SearchVisibilityActionResult> {
+  return runSearchVisibilityAction('submit_sitemap');
+}
+
+// Google URL Inspection là batch tối đa năm URL eligible, không phải live URL test.
+export async function inspectSearchVisibilityBatch(): Promise<SearchVisibilityActionResult> {
+  return runSearchVisibilityAction('inspect_batch');
 }

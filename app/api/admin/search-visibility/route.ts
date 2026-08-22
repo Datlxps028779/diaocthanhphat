@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
-import { syncSearchVisibilityAudit, SearchVisibilitySyncError } from '@/lib/server/searchVisibilityService';
+import {
+  inspectSearchVisibilityBatch,
+  submitSearchVisibilitySitemap,
+  syncSearchVisibilityAudit,
+  SearchVisibilitySyncError,
+} from '@/lib/server/searchVisibilityService';
+import { getSearchConsoleConfigurationState } from '@/lib/server/googleSearchConsole';
 
 export const runtime = 'nodejs';
 
@@ -67,6 +73,9 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
+    searchConsole: {
+      configurationState: getSearchConsoleConfigurationState(),
+    },
     summary: {
       total: rows.length,
       eligible: rows.filter(row => row.eligible).length,
@@ -80,20 +89,35 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// This action only evaluates existing source records and writes the private audit
-// registry. It never calls Google, submits a sitemap, or requests URL indexing.
+type SearchVisibilityAction = 'sync' | 'submit_sitemap' | 'inspect_batch';
+
+function actionFromRequest(body: unknown): SearchVisibilityAction | null {
+  if (!body || typeof body !== 'object') return 'sync';
+  const action = (body as { action?: unknown }).action;
+  if (action === undefined) return 'sync';
+  return action === 'sync' || action === 'submit_sitemap' || action === 'inspect_batch' ? action : null;
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireOwner(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
+  const body = await req.json().catch(() => ({}));
+  const action = actionFromRequest(body);
+  if (!action) return NextResponse.json({ error: 'Thao tác Search Visibility không hợp lệ.', code: 'UNKNOWN' }, { status: 400 });
+
   try {
-    const result = await syncSearchVisibilityAudit(auth.userId);
-    return NextResponse.json({ ok: true, ...result });
+    const result = action === 'sync'
+      ? await syncSearchVisibilityAudit(auth.userId)
+      : action === 'submit_sitemap'
+        ? await submitSearchVisibilitySitemap(auth.userId)
+        : await inspectSearchVisibilityBatch(auth.userId);
+    return NextResponse.json({ ok: true, action, ...result });
   } catch (error) {
-    console.error('[search-visibility] đồng bộ audit thất bại:', error);
+    console.error(`[search-visibility] ${action} thất bại:`, error instanceof Error ? error.message : error);
     if (error instanceof SearchVisibilitySyncError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 503 });
     }
-    return NextResponse.json({ error: 'Không đồng bộ được audit URL. Kiểm tra cấu hình server rồi thử lại.', code: 'UNKNOWN' }, { status: 503 });
+    return NextResponse.json({ error: 'Không hoàn tất được thao tác Search Visibility. Kiểm tra cấu hình server rồi thử lại.', code: 'UNKNOWN' }, { status: 503 });
   }
 }

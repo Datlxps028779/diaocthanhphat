@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 const callerClientMock = vi.hoisted(() => vi.fn());
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 const syncMock = vi.hoisted(() => vi.fn());
+const submitSitemapMock = vi.hoisted(() => vi.fn());
+const inspectBatchMock = vi.hoisted(() => vi.fn());
+const configStateMock = vi.hoisted(() => vi.fn());
 
 const searchVisibilityErrorMock = vi.hoisted(() => class SearchVisibilitySyncError extends Error {
   constructor(readonly code: string, message: string) {
@@ -12,7 +15,13 @@ const searchVisibilityErrorMock = vi.hoisted(() => class SearchVisibilitySyncErr
 });
 
 vi.mock('@/lib/server/requireAdmin', () => ({ callerClient: callerClientMock, requireOwner: requireOwnerMock }));
-vi.mock('@/lib/server/searchVisibilityService', () => ({ syncSearchVisibilityAudit: syncMock, SearchVisibilitySyncError: searchVisibilityErrorMock }));
+vi.mock('@/lib/server/searchVisibilityService', () => ({
+  syncSearchVisibilityAudit: syncMock,
+  submitSearchVisibilitySitemap: submitSitemapMock,
+  inspectSearchVisibilityBatch: inspectBatchMock,
+  SearchVisibilitySyncError: searchVisibilityErrorMock,
+}));
+vi.mock('@/lib/server/googleSearchConsole', () => ({ getSearchConsoleConfigurationState: configStateMock }));
 
 import { GET, POST } from './route';
 
@@ -39,6 +48,10 @@ beforeEach(() => {
   callerClientMock.mockReset();
   requireOwnerMock.mockReset();
   syncMock.mockReset();
+  submitSitemapMock.mockReset();
+  inspectBatchMock.mockReset();
+  configStateMock.mockReset();
+  configStateMock.mockReturnValue('not_configured');
 });
 
 describe('/api/admin/search-visibility', () => {
@@ -63,6 +76,7 @@ describe('/api/admin/search-visibility', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
+    expect(json.searchConsole).toEqual({ configurationState: 'not_configured' });
     expect(json.summary).toMatchObject({ total: 1, eligible: 1, excluded: 0, googleEvidenceCount: 0 });
     expect(JSON.stringify(json)).not.toContain('indexed');
   });
@@ -78,6 +92,31 @@ describe('/api/admin/search-visibility', () => {
     expect(response.status).toBe(200);
     expect(syncMock).toHaveBeenCalledWith('u1');
     expect(json).toMatchObject({ ok: true, runId: 'run-1' });
+  });
+
+  it('chỉ chạy sitemap submission khi owner gọi action rõ ràng', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
+    submitSitemapMock.mockResolvedValue({ runId: 'sitemap-1', requestedCount: 1, processedCount: 1, succeededCount: 1, failedCount: 0 });
+
+    const response = await POST(new NextRequest('http://localhost/api/admin/search-visibility', {
+      method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit_sitemap' }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(submitSitemapMock).toHaveBeenCalledWith('u1');
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it('không chấp nhận URL tùy ý từ browser cho URL Inspection', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'u1' });
+
+    const response = await POST(new NextRequest('http://localhost/api/admin/search-visibility', {
+      method: 'POST', headers: { authorization: 'Bearer owner-token', 'content-type': 'application/json' }, body: JSON.stringify({ action: 'inspect_batch', urls: ['https://attacker.test'] }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(inspectBatchMock).toHaveBeenCalledWith('u1');
+    expect(inspectBatchMock.mock.calls[0]).toHaveLength(1);
   });
 
   it('trả mã lỗi canonical policy rõ ràng khi audit bị chặn trước khi lưu', async () => {

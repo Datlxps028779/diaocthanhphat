@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, Shie
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, getSearchVisibilityAudit, SEO_ROUTE_PATHS, SearchVisibilityApiError, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
+import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, getAreas, getSearchVisibilityAudit, inspectSearchVisibilityBatch, SEO_ROUTE_PATHS, SearchVisibilityApiError, submitSearchVisibilitySitemap, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
 import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
 import { buildSiteEntitySchema } from '../../../lib/api';
@@ -159,6 +159,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [visibility, setVisibility] = useState<SearchVisibilityAuditResponse | null>(null);
   const [visibilityLoading, setVisibilityLoading] = useState(false);
   const [visibilitySyncing, setVisibilitySyncing] = useState(false);
+  const [visibilityGoogleAction, setVisibilityGoogleAction] = useState<'sitemap' | 'inspection' | null>(null);
   const [visibilityError, setVisibilityError] = useState<{ message: string; code: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -209,6 +210,24 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       });
     } finally {
       setVisibilitySyncing(false);
+    }
+  };
+
+  const runGoogleVisibilityAction = async (action: 'sitemap' | 'inspection') => {
+    setVisibilityGoogleAction(action);
+    setVisibilityError(null);
+    try {
+      if (action === 'sitemap') await submitSearchVisibilitySitemap();
+      else await inspectSearchVisibilityBatch();
+      await loadVisibility();
+    } catch (cause) {
+      const error = cause as Error;
+      setVisibilityError({
+        message: error.message || 'Không hoàn tất được thao tác Search Console.',
+        code: error instanceof SearchVisibilityApiError ? error.code : 'UNKNOWN',
+      });
+    } finally {
+      setVisibilityGoogleAction(null);
     }
   };
 
@@ -542,9 +561,12 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
             audit={visibility}
             loading={visibilityLoading}
             syncing={visibilitySyncing}
+            googleAction={visibilityGoogleAction}
             error={visibilityError}
             onRefresh={() => void loadVisibility()}
             onSync={() => void syncVisibility()}
+            onSubmitSitemap={() => void runGoogleVisibilityAction('sitemap')}
+            onInspectBatch={() => void runGoogleVisibilityAction('inspection')}
           />
 
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -589,16 +611,22 @@ function SearchVisibilityCard({
   audit,
   loading,
   syncing,
+  googleAction,
   error,
   onRefresh,
   onSync,
+  onSubmitSitemap,
+  onInspectBatch,
 }: {
   audit: SearchVisibilityAuditResponse | null;
   loading: boolean;
   syncing: boolean;
+  googleAction: 'sitemap' | 'inspection' | null;
   error: { message: string; code: string } | null;
   onRefresh: () => void;
   onSync: () => void;
+  onSubmitSitemap: () => void;
+  onInspectBatch: () => void;
 }) {
   const excluded = audit?.urls.filter(row => !row.eligible).slice(0, 4) ?? [];
   const lastRun = audit?.runs[0];
@@ -610,7 +638,15 @@ function SearchVisibilityCard({
       ? 'Kiểm tra schema nguồn URL của production; không cần gọi Google hay chạy lại migration audit.'
       : error?.code === 'AUDIT_WRITE'
         ? 'Kiểm tra dữ liệu canonical/slug trong registry; không cần gọi Google.'
-        : 'Kiểm tra quyền owner-MFA hoặc cấu hình server. Không có Google API nào được gọi ở bước này.';
+        : error?.code === 'GOOGLE_NOT_CONFIGURED'
+          ? 'Chưa có Google API nào được gọi. Owner cần cấu hình secrets server-side và cấp service account quyền trên Search Console.'
+          : error?.code === 'GOOGLE_AUTH'
+            ? 'Google từ chối xác thực/quyền truy cập. Kiểm tra service account đã được thêm vào đúng Search Console property.'
+            : error?.code === 'GOOGLE_DEFERRED'
+              ? 'Đây là cooldown có chủ đích: sitemap vừa được gửi cùng fingerprint nên hệ thống không gọi lại Google.'
+              : error?.code?.startsWith('GOOGLE_')
+              ? 'Google trả về lỗi cấu hình hoặc phản hồi. Không có secret nào được hiển thị trong hệ thống.'
+              : 'Kiểm tra quyền owner-MFA hoặc cấu hình server. Không có Google API nào được gọi ở bước này.';
 
   return (
     <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
@@ -643,8 +679,20 @@ function SearchVisibilityCard({
             <Metric label="Chủ đích loại trừ" value={audit.summary.excluded} tone="amber" />
           </div>
           <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
-            Google evidence: <strong>{audit.summary.googleEvidenceCount}</strong> URL. Chưa cấu hình Search Console/API nên số này thường là 0; không suy diễn thành “chưa index” hoặc “đã index”.
+            <strong>Search Console: {audit.searchConsole.configurationState === 'configured' ? 'đã cấu hình server' : audit.searchConsole.configurationState === 'invalid' ? 'cấu hình server chưa hợp lệ' : 'chưa cấu hình server'}.</strong>{' '}
+            Google evidence: <strong>{audit.summary.googleEvidenceCount}</strong> URL. Sitemap được Google nhận không đảm bảo crawl/index; URL Inspection phản ánh phiên bản Google đã biết, không phải live test.
           </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <button type="button" onClick={onSubmitSitemap} disabled={loading || syncing || !!googleAction || audit.searchConsole.configurationState !== 'configured'}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">
+              <Globe2 className="h-3.5 w-3.5" />{googleAction === 'sitemap' ? 'Đang gửi sitemap…' : 'Gửi sitemap lên Search Console'}
+            </button>
+            <button type="button" onClick={onInspectBatch} disabled={loading || syncing || !!googleAction || audit.searchConsole.configurationState !== 'configured'}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">
+              <Search className="h-3.5 w-3.5" />{googleAction === 'inspection' ? 'Đang kiểm tra…' : 'Kiểm tra tối đa 5 URL'}
+            </button>
+          </div>
+          {audit.searchConsole.configurationState !== 'configured' && <p className="mt-2 text-[11px] leading-4 text-gray-500">Hai thao tác Google đang khóa: chỉ owner cấu hình secrets server-side, cấp quyền Search Console rồi tải lại trang. Không nhập secret tại đây.</p>}
           {excluded.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <p className="text-xs font-bold text-gray-700">Ưu tiên xử lý từ dữ liệu nguồn</p>

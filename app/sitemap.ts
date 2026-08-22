@@ -2,12 +2,13 @@ import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
-import { getSiteUrl } from '@/lib/siteUrl';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
 import { buildProductPath } from '@/lib/productPath';
 
-const SITE_URL = getSiteUrl();
+// This is the sitemap submitted to Search Console, so it must never emit a preview
+// or deployment origin even when generated during a preview build.
+const SITE_URL = 'https://chonhaviet.com';
 const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
