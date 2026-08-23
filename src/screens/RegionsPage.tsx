@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
+import { Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
 import { type Area } from '../lib/supabase';
 import { getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { useAreas } from '../lib/hooks/useTaxonomy';
@@ -10,7 +10,7 @@ import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { ForYou } from '../components/ForYou';
-import { AREA_DETAILS } from '../lib/areaSeo';
+import { useSetting } from '../lib/cms';
 
 function SkeletonCard() {
   return (
@@ -26,85 +26,25 @@ function SkeletonCard() {
 }
 
 function AreaCard({ area, isSelected, onClick }: { area: Area; isSelected: boolean; onClick: () => void }) {
-  const detail = AREA_DETAILS[area.slug] ?? AREA_DETAILS['binh-duong'];
   return (
     <div className={`relative overflow-hidden rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 text-left group ${isSelected ? 'ring-4 ring-red-500 scale-[1.01]' : ''}`}>
       <button onClick={onClick} className="block w-full text-left">
-        <div className="h-52 bg-cover bg-center" style={{ backgroundImage: `url('${detail.heroImage}')` }}>
+        <div className="h-52 bg-gray-800 bg-cover bg-center" style={area.image_url ? { backgroundImage: `url('${area.image_url}')` } : undefined}>
           <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent" />
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-lg font-bold leading-tight">{area.name}</h3>
-            </div>
-            <span className="flex items-center gap-1 text-green-400 text-sm font-semibold bg-black/30 px-2 py-1 rounded-full">
-              <TrendingUp className="w-3.5 h-3.5" /> +{detail.growthPct}%
-            </span>
-          </div>
-          <div className="flex gap-3 mt-2 text-xs text-gray-300">
-            <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {detail.priceRange}</span>
-          </div>
-          {isSelected && (
-            <div className="mt-2 text-xs text-red-300 font-semibold flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5" /> Đang xem chi tiết
-            </div>
-          )}
+          <h3 className="text-lg font-bold leading-tight">{area.name}</h3>
+          {area.description && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-200">{area.description}</p>}
+          {isSelected && <div className="mt-2 text-xs text-red-300 font-semibold flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Đang xem chi tiết</div>}
         </div>
       </button>
-      <Link href={`/khu-vuc/${area.slug}`} className="absolute right-4 bottom-4 z-10 text-[11px] font-bold text-white/90 hover:text-white underline underline-offset-2">
-        Trang khu vực
-      </Link>
+      <Link href={`/khu-vuc/${area.slug}`} className="absolute right-4 bottom-4 z-10 text-[11px] font-bold text-white/90 hover:text-white underline underline-offset-2">Trang khu vực</Link>
     </div>
   );
 }
 
 function ComparisonTable({ areas }: { areas: Area[] }) {
-  return (
-    <div className="bg-white rounded-2xl shadow overflow-x-auto mt-10">
-      <div className="p-5 border-b border-gray-100">
-        <h3 className="text-lg font-bold text-gray-800">So sánh các khu vực</h3>
-      </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50">
-            <th className="text-left px-5 py-3 font-semibold text-gray-600">Khu vực</th>
-            <th className="text-left px-5 py-3 font-semibold text-gray-600">Giá đất</th>
-            <th className="text-left px-5 py-3 font-semibold text-gray-600">Tăng trưởng</th>
-            <th className="text-left px-5 py-3 font-semibold text-gray-600">Mức rủi ro</th>
-            <th className="text-left px-5 py-3 font-semibold text-gray-600">Điểm nổi bật</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {areas.map((area) => {
-            const d = AREA_DETAILS[area.slug] ?? AREA_DETAILS['binh-duong'];
-            const riskColor = d.riskLevel === 'Thấp' ? 'bg-green-100 text-green-700' : d.riskLevel === 'Cao' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
-            return (
-              <tr key={area.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-5 py-4 font-medium text-gray-800">{area.name}</td>
-                <td className="px-5 py-4 text-gray-600">{d.priceRange}</td>
-                <td className="px-5 py-4">
-                  <span className="flex items-center gap-1 text-green-600 font-semibold">
-                    <TrendingUp className="w-3.5 h-3.5" /> +{d.growthPct}%/năm
-                  </span>
-                </td>
-                <td className="px-5 py-4">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${riskColor}`}>{d.riskLevel}</span>
-                </td>
-                <td className="px-5 py-4">
-                  <div className="flex flex-wrap gap-1">
-                    {d.highlights.map((h) => (
-                      <span key={h} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{h}</span>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <div className="bg-white rounded-2xl shadow overflow-x-auto mt-10"><div className="p-5 border-b border-gray-100"><h3 className="text-lg font-bold text-gray-800">Khu vực đang có dữ liệu</h3><p className="mt-1 text-xs text-gray-500">Thông tin mô tả do quản trị viên cập nhật từ dữ liệu nguồn.</p></div><table className="w-full text-sm"><thead><tr className="bg-gray-50"><th className="text-left px-5 py-3 font-semibold text-gray-600">Khu vực</th><th className="text-left px-5 py-3 font-semibold text-gray-600">Mô tả</th></tr></thead><tbody className="divide-y divide-gray-100">{areas.map(area => <tr key={area.id} className="hover:bg-gray-50 transition-colors"><td className="px-5 py-4 font-medium text-gray-800">{area.name}</td><td className="px-5 py-4 text-gray-600">{area.description || 'Đang cập nhật dữ liệu khu vực.'}</td></tr>)}</tbody></table></div>;
 }
 
 export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: string; onNavigate: (p: Page) => void }) {
@@ -115,7 +55,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
     queryFn: () => getPageBlocks('regions'),
     select: pageBlocksToMap,
   });
-  const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
+  const g = (section: string, key: string) => cms[section]?.[key]?.trim() || '';
 
   const { data: areas = [], isLoading: areasLoading } = useAreas();
   const loading = areasLoading;
@@ -145,29 +85,28 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
     if (current !== next) window.history.replaceState(null, '', next);
   }, [selectedArea]);
 
-  const detail = selectedArea ? AREA_DETAILS[selectedArea.slug] ?? AREA_DETAILS['binh-duong'] : null;
+  const phone = useSetting('phone_hotline', '');
+  const detail = selectedArea;
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-56 md:h-72 flex items-center"
-        style={{ backgroundImage: `url('${g('hero','image','https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?auto=compress&w=1200')}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        style={g('hero', 'image') ? { backgroundImage: `url('${g('hero', 'image')}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
         <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-700/60" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 w-full">
           <Breadcrumb items={[
             { label: 'Trang chủ', onClick: () => { onNavigate({ name: 'home' }); scrollTop(); } },
             { label: 'Khu vực' },
           ]} />
-          <h1 className="text-3xl md:text-4xl font-bold text-white mt-3 mb-2">{g('hero','title','KHU VỰC HOẠT ĐỘNG')}</h1>
-          <p className="text-gray-200 text-base max-w-2xl">
-            {g('hero','subtitle','Chuyên sâu tại 4 tỉnh thành trọng điểm phía Nam — nơi hội tụ cơ hội đầu tư hấp dẫn nhất')}
-          </p>
+          {g('hero', 'title') && <h1 className="text-3xl md:text-4xl font-bold text-white mt-3 mb-2">{g('hero', 'title')}</h1>}
+          {g('hero', 'subtitle') && <p className="text-gray-200 text-base max-w-2xl">{g('hero', 'subtitle')}</p>}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Area grid */}
-        <h2 className="text-xl font-bold text-gray-800 mb-5">{g('main','select_label','Chọn khu vực bạn quan tâm')}</h2>
+        {g('main', 'select_label') && <h2 className="text-xl font-bold text-gray-800 mb-5">{g('main', 'select_label')}</h2>}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -190,97 +129,14 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
 
         {/* Detail panel */}
         {selectedArea && detail && (
-          <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
-            <div className="relative h-48 md:h-64"
-              style={{ backgroundImage: `url('${detail.heroImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-              <div className="absolute inset-0 bg-gradient-to-r from-gray-900/70 to-transparent" />
-              <div className="relative z-10 h-full flex items-end p-6 md:p-8">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="flex items-center gap-1 text-green-400 text-sm font-semibold bg-black/40 px-3 py-1 rounded-full">
-                      <TrendingUp className="w-3.5 h-3.5" /> Tăng trưởng +{detail.growthPct}%/năm
-                    </span>
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${detail.riskLevel === 'Thấp' ? 'bg-green-500/80' : 'bg-amber-500/80'} text-white`}>
-                      Rủi ro: {detail.riskLevel}
-                    </span>
-                  </div>
-                  <h2 className="text-3xl font-bold text-white">{selectedArea.name}</h2>
-                  <p className="text-gray-200 text-sm mt-1 max-w-lg">{detail.description}</p>
-                </div>
-              </div>
+          <div className="mt-8 overflow-hidden rounded-2xl bg-white shadow-lg">
+            <div className="relative flex min-h-48 items-end bg-gray-900 bg-cover bg-center p-6 md:min-h-64 md:p-8" style={detail.image_url ? { backgroundImage: `url('${detail.image_url}')` } : undefined}>
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-900/85 to-gray-900/35" />
+              <div className="relative z-10 max-w-2xl"><h2 className="text-3xl font-bold text-white">{detail.name}</h2>{detail.description && <p className="mt-2 text-sm leading-relaxed text-gray-200">{detail.description}</p>}</div>
             </div>
-
-            <div className="p-6 md:p-8 grid md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div>
-                  <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Building2 className="w-4 h-4 text-red-500" /> Hạ tầng nổi bật</h4>
-                  <ul className="space-y-2">
-                    {detail.infrastructure.map(item => (
-                      <li key={item} className="flex items-start gap-2 text-gray-600 text-sm">
-                        <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />{item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Home className="w-4 h-4 text-red-500" /> Loại hình đầu tư</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {detail.investmentTypes.map(t => (
-                      <span key={t} className="px-3 py-1.5 bg-red-50 text-red-700 text-sm rounded-lg font-medium border border-red-100">{t}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                <div className="grid grid-cols-3 gap-4">
-                  {[
-                    { label: 'Giá đất', value: detail.priceRange, icon: <Building2 className="w-4 h-4 text-red-500" /> },
-                    { label: 'Tăng trưởng', value: `+${detail.growthPct}%`, icon: <TrendingUp className="w-4 h-4 text-green-500" /> },
-                    { label: 'Rủi ro', value: detail.riskLevel, icon: <CheckCircle className="w-4 h-4 text-amber-500" /> },
-                  ].map(s => (
-                    <div key={s.label} className="bg-gray-50 rounded-xl p-3 text-center">
-                      <div className="flex justify-center mb-1">{s.icon}</div>
-                      <div className="text-sm font-bold text-gray-800">{s.value}</div>
-                      <div className="text-xs text-gray-500">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button onClick={() => { onNavigate({ name: 'listings', areaId: selectedArea.id }); scrollTop(); }}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors">
-                    <Building2 className="w-4 h-4" /> Xem BĐS khu vực này
-                  </button>
-                  <a href="tel:0901234567"
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-600 text-red-600 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors">
-                    <Phone className="w-4 h-4" /> Gọi tư vấn
-                  </a>
-                </div>
-                {areaProperties.length > 0 && (
-                  <div>
-                    <h4 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
-                      <Home className="w-4 h-4 text-red-500" /> BĐS mới nhất tại {selectedArea.name}
-                    </h4>
-                    <div className="space-y-2">
-                      {areaProperties.slice(0, 4).map(p => (
-                        <button key={p.id} onClick={() => { onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                          className="flex gap-3 w-full text-left bg-gray-50 rounded-xl p-2.5 hover:bg-red-50 hover:border-red-200 border border-transparent transition-all group">
-                          <img src={p.image_url ?? ''} alt={p.title} loading="lazy"
-                            className="w-16 h-12 object-cover rounded-lg flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-gray-800 text-xs line-clamp-2 group-hover:text-red-700">{p.title}</p>
-                            <p className="text-red-600 text-xs font-bold mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => { onNavigate({ name: 'listings', areaId: selectedArea.id }); scrollTop(); }}
-                      className="mt-3 w-full text-sm text-red-600 font-semibold flex items-center justify-center gap-1 hover:underline">
-                      Xem tất cả <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+            <div className="grid gap-8 p-6 md:grid-cols-2 md:p-8">
+              <div><h4 className="mb-3 flex items-center gap-2 font-bold text-gray-800"><Building2 className="h-4 w-4 text-red-500" />Bất động sản tại {selectedArea.name}</h4><p className="text-sm leading-relaxed text-gray-600">Các tin đăng bên cạnh được lấy trực tiếp từ dữ liệu đang hoạt động trong hệ thống.</p></div>
+              <div className="space-y-5"><div className="flex flex-col gap-3 sm:flex-row"><button onClick={() => { onNavigate({ name: 'listings', areaId: selectedArea.id }); scrollTop(); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"><Building2 className="h-4 w-4" />Xem BĐS khu vực này</button>{phone && <a href={`tel:${phone.replace(/\s/g, '')}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-red-600 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"><Phone className="h-4 w-4" />Gọi tư vấn</a>}</div>{areaProperties.length > 0 && <div><h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-800"><Home className="h-4 w-4 text-red-500" />BĐS mới nhất tại {selectedArea.name}</h4><div className="space-y-2">{areaProperties.slice(0, 4).map(property => <button key={property.id} onClick={() => { onNavigate({ name: 'property', id: property.id, slug: property.slug ?? undefined }); scrollTop(); }} className="group flex w-full gap-3 rounded-xl border border-transparent bg-gray-50 p-2.5 text-left transition-all hover:border-red-200 hover:bg-red-50"><img src={property.image_url ?? ''} alt={property.title} loading="lazy" className="h-12 w-16 shrink-0 rounded-lg object-cover" /><div className="min-w-0"><p className="line-clamp-2 text-xs font-semibold text-gray-800 group-hover:text-red-700">{property.title}</p><p className="mt-0.5 text-xs font-bold text-red-600">{property.price_label ?? `${property.price} ${property.price_unit}`}</p></div></button>)}</div></div>}</div>
             </div>
           </div>
         )}
@@ -292,20 +148,20 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
       </div>
 
       {/* CTA */}
-      <div className="bg-gradient-to-r from-red-700 to-red-500 py-14 px-4 text-center text-white mt-10">
-        <h2 className="text-2xl md:text-3xl font-bold mb-3">{g('cta','title','Chưa biết nên đầu tư ở đâu?')}</h2>
-        <p className="text-red-100 mb-6 max-w-xl mx-auto">{g('cta','subtitle','Chuyên gia của chúng tôi sẽ phân tích và đề xuất khu vực phù hợp nhất với ngân sách và mục tiêu của bạn.')}</p>
+      {(g('cta', 'title') || g('cta', 'subtitle') || phone) && <div className="bg-gradient-to-r from-red-700 to-red-500 py-14 px-4 text-center text-white mt-10">
+        {g('cta', 'title') && <h2 className="text-2xl md:text-3xl font-bold mb-3">{g('cta', 'title')}</h2>}
+        {g('cta', 'subtitle') && <p className="text-red-100 mb-6 max-w-xl mx-auto">{g('cta', 'subtitle')}</p>}
         <div className="flex flex-wrap gap-3 justify-center">
-          <a href="tel:0901234567"
+          {phone && g('cta', 'btn_consult') && <a href={`tel:${phone.replace(/\s/g, '')}`}
             className="inline-flex items-center gap-2 px-6 py-3 bg-white text-red-600 rounded-xl font-semibold hover:bg-red-50 transition-colors">
-            <Phone className="w-4 h-4" /> {g('cta','btn_consult','Tư vấn miễn phí')}
-          </a>
-          <button onClick={() => { onNavigate({ name: 'invest' }); scrollTop(); }}
+            <Phone className="w-4 h-4" /> {g('cta', 'btn_consult')}
+          </a>}
+          {g('cta', 'btn_invest') && <button onClick={() => { onNavigate({ name: 'invest' }); scrollTop(); }}
             className="inline-flex items-center gap-2 px-6 py-3 bg-red-800/50 text-white rounded-xl font-semibold hover:bg-red-800/70 transition-colors border border-white/30">
-            {g('cta','btn_invest','Xem cơ hội đầu tư')} <ArrowRight className="w-4 h-4" />
-          </button>
+            {g('cta', 'btn_invest')} <ArrowRight className="w-4 h-4" />
+          </button>}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

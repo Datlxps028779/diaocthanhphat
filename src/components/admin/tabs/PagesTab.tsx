@@ -1,10 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle, Save, ArrowDown, FileText } from 'lucide-react';
 import type { ManagedPage, PageBlock } from '../../../lib/supabase';
 import { adminGetAllManagedPages, adminCreateManagedPage, adminUpdateManagedPage, adminDeleteManagedPage, adminGetPageBlocks, adminSavePageBlock, adminDeletePageBlock } from '../../../lib/api';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { ImageUrlInput } from '../../ImageUpload';
+import {
+  collectionItemIsComplete,
+  getCollectionDefinition,
+  getCollectionDefinitions,
+  parseContentCollection,
+  serializeContentCollection,
+  type CollectionDefinition,
+  type ContentCollectionItem,
+} from '../../../lib/pageContentSchema';
 
 // ─── Pages Tab ────────────────────────────────────────────────────────────────
 
@@ -30,6 +39,92 @@ const SECTION_LABELS: Record<string, Record<string, string>> = {
 
 function publicPathForPage(slug: string): string {
   return PAGE_PUBLIC_PATH[slug] ?? `/trang/${slug}`;
+}
+
+function CollectionBlockEditor({ block, definition, onSave, onDelete }: {
+  block: PageBlock;
+  definition: CollectionDefinition;
+  onSave: (value: string) => Promise<void>;
+  onDelete: () => void;
+}) {
+  const [items, setItems] = useState<ContentCollectionItem[]>(() => parseContentCollection(block.value, definition));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const sourceValue = serializeContentCollection(parseContentCollection(block.value, definition), definition);
+  const draftValue = serializeContentCollection(items, definition);
+  const dirty = draftValue !== sourceValue;
+
+  useEffect(() => {
+    setItems(parseContentCollection(block.value, definition));
+  }, [block.value, definition]);
+
+  const updateItem = (index: number, key: string, value: string) => {
+    setItems(current => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const field = definition.fields.find(candidate => candidate.key === key);
+      return { ...item, [key]: field?.kind === 'list' ? value.split('\n').map(entry => entry.trim()).filter(Boolean) : value };
+    }));
+  };
+
+  const save = async () => {
+    if (items.some(item => !collectionItemIsComplete(item, definition))) {
+      setError('Hãy điền các trường bắt buộc trước khi lưu.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(draftValue);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không lưu được nội dung.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-bold text-gray-900">{definition.label}</h4>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">{definition.description}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {dirty && <button type="button" onClick={save} disabled={saving} className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${saved ? 'bg-emerald-100 text-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-60`}>
+            {saving ? 'Đang lưu...' : saved ? 'Đã lưu' : 'Lưu'}
+          </button>}
+          <button type="button" onClick={onDelete} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500" title="Xóa khối nội dung"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={index} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-bold text-gray-700">{definition.itemLabel} {index + 1}</p>
+              <div className="flex gap-1">
+                <button type="button" disabled={index === 0} onClick={() => setItems(current => current.map((entry, entryIndex) => entryIndex === index ? current[index - 1] : entryIndex === index - 1 ? current[index] : entry))} className="rounded px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-white disabled:opacity-30">Lên</button>
+                <button type="button" disabled={index === items.length - 1} onClick={() => setItems(current => current.map((entry, entryIndex) => entryIndex === index ? current[index + 1] : entryIndex === index + 1 ? current[index] : entry))} className="rounded px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-white disabled:opacity-30">Xuống</button>
+                <button type="button" onClick={() => setItems(current => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50">Xóa</button>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {definition.fields.map(field => {
+                const rawValue = item[field.key];
+                const value = Array.isArray(rawValue) ? rawValue.join('\n') : String(rawValue ?? '');
+                const common = { value, onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => updateItem(index, field.key, event.target.value), placeholder: field.placeholder ?? '', className: 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400' };
+                return <label key={field.key} className={field.kind === 'textarea' || field.kind === 'list' ? 'sm:col-span-2' : ''}><span className="mb-1 block text-xs font-semibold text-gray-600">{field.label}{field.required ? ' *' : ''}</span>{field.kind === 'textarea' || field.kind === 'list' ? <textarea {...common} rows={field.kind === 'list' ? 4 : 3} /> : field.kind === 'image' ? <ImageUrlInput value={value} onChange={nextValue => updateItem(index, field.key, nextValue)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="pages" isAdmin /> : <input {...common} type="text" />}</label>;
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={() => setItems(current => [...current, {}])} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"><Plus className="h-3.5 w-3.5" />Thêm {definition.itemLabel.toLowerCase()}</button>
+      {error && <p className="mt-2 text-xs font-medium text-red-600">{error}</p>}
+    </section>
+  );
 }
 
 function PageBlockEditor({ block, onSave, onDelete }: {
@@ -182,6 +277,9 @@ function PageContentEditor({ page, onBack }: { page: ManagedPage; onBack: () => 
   }
 
   const sectionLabels = SECTION_LABELS[page.slug] ?? {};
+  const collectionDefinitions = getCollectionDefinitions(page.slug);
+  const configuredBlocks = new Set(blocks.map(block => `${block.section}/${block.key}`));
+  const missingCollections = collectionDefinitions.filter(definition => !configuredBlocks.has(`${definition.section}/${definition.key}`));
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>;
 
@@ -207,25 +305,40 @@ function PageContentEditor({ page, onBack }: { page: ManagedPage; onBack: () => 
             <div className="w-1 h-5 bg-red-600 rounded-full" />
             <h3 className="font-bold text-gray-700 text-sm">{sectionLabels[section] ?? section}</h3>
           </div>
-          {sectionBlocks.map(block => (
-            <PageBlockEditor
-              key={block.id}
-              block={block}
-              onSave={async (val) => {
-                await adminSavePageBlock({ page_slug: page.slug, section: block.section, key: block.key, label: block.label, type: block.type, value: val, order_index: block.order_index });
-                setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, value: val } : b));
-              }}
-              onDelete={async () => {
-                if (!confirm(`Xóa trường "${block.label}"?`)) return;
-                await adminDeletePageBlock(block.id);
-                setBlocks(prev => prev.filter(b => b.id !== block.id));
-              }}
-            />
-          ))}
+          {sectionBlocks.map(block => {
+            const definition = getCollectionDefinition(page.slug, block.section, block.key);
+            const saveBlock = async (value: string) => {
+              await adminSavePageBlock({ page_slug: page.slug, section: block.section, key: block.key, label: block.label, type: block.type, value, order_index: block.order_index });
+              setBlocks(prev => prev.map(candidate => candidate.id === block.id ? { ...candidate, value } : candidate));
+            };
+            const deleteBlock = async () => {
+              if (!confirm(`Xóa trường "${block.label}"?`)) return;
+              await adminDeletePageBlock(block.id);
+              setBlocks(prev => prev.filter(candidate => candidate.id !== block.id));
+            };
+            return definition ? <CollectionBlockEditor key={block.id} block={block} definition={definition} onSave={saveBlock} onDelete={deleteBlock} /> : <PageBlockEditor key={block.id} block={block} onSave={saveBlock} onDelete={deleteBlock} />;
+          })}
         </div>
       ))}
 
-      <AddBlockForm pageSlug={page.slug} onAdded={load} />
+      {missingCollections.length > 0 && (
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="text-sm font-bold text-blue-900">Thêm nhóm nội dung có sẵn</h3>
+          <p className="mt-1 text-xs leading-relaxed text-blue-800">Chọn mẫu để quản lý bằng biểu mẫu rõ ràng; không cần tạo section/key hoặc dùng cú pháp kỹ thuật.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {missingCollections.map(definition => <button key={`${definition.section}/${definition.key}`} type="button" onClick={async () => {
+              await adminSavePageBlock({ page_slug: page.slug, section: definition.section, key: definition.key, label: definition.label, type: 'collection', value: serializeContentCollection([], definition), order_index: 999 });
+              load();
+            }} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition-colors hover:border-blue-400 hover:bg-blue-100">+ {definition.label}</button>)}
+          </div>
+        </section>
+      )}
+
+      <details className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-gray-700">Nội dung nâng cao (dành cho trường đặc biệt)</summary>
+        <p className="mt-2 text-xs leading-relaxed text-gray-500">Các nhóm nội dung thông thường đã có biểu mẫu riêng bên trên. Chỉ dùng phần này khi cần thêm field ngoài mẫu.</p>
+        <div className="mt-3"><AddBlockForm pageSlug={page.slug} onAdded={load} /></div>
+      </details>
     </div>
   );
 }

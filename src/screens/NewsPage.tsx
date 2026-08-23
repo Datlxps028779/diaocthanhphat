@@ -21,6 +21,7 @@ import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
 import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
 import { extractHeadings, injectHeadingIds, TOC_MIN_HEADINGS } from '../lib/tableOfContents';
 import { ArticleToc } from '../components/ArticleToc';
+import { ReadableContent } from '../components/ReadableContent';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { RichVideo } from '../components/RichVideo';
 import { splitRichContentVideos } from '../lib/videoMedia';
@@ -371,15 +372,9 @@ function ArticleDetail({
           {tocHeadings.length >= TOC_MIN_HEADINGS && <ArticleToc headings={tocHeadings} />}
 
           {/* Content */}
-          {contentIsHtml ? (
-            <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed">
-              {renderSafeHtml()}
-            </div>
-          ) : (
-            <div className="prose prose-gray max-w-none text-gray-700 leading-relaxed space-y-4">
-              {markdownBlocks}
-            </div>
-          )}
+          <ReadableContent>
+            {contentIsHtml ? renderSafeHtml() : markdownBlocks}
+          </ReadableContent>
           {/* Tags */}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-8 pt-6 border-t border-gray-200">

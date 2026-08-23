@@ -28,8 +28,6 @@ export const revalidate = 3600;
 
 type Props = { params: { slug: string } };
 
-const DEFAULT_AREA_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo-1642125.jpeg?auto=compress&w=1400';
-
 async function loadArea(slug: string) {
   const area = await serverGetAreaBySlug(slug);
   if (!area) return null;
@@ -78,7 +76,7 @@ function PropertyAreaCard({ property }: { property: Property }) {
     <Link href={propertyHref(property)} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl">
       <div className="relative h-44 overflow-hidden bg-gray-100">
         <img
-          src={property.image_url || DEFAULT_AREA_HERO}
+          src={property.image_url || '/placeholder-property.svg'}
           alt={property.title}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -116,7 +114,7 @@ export default async function AreaPage({ params }: Props) {
     { name: area.name, path: `/khu-vuc/${area.slug}` },
   ]);
   const collection = listings.length > 0 ? buildAreaCollectionJsonLd(area, listings) : null;
-  const heroImage = area.image_url || detail?.heroImage || DEFAULT_AREA_HERO;
+  const heroImage = area.image_url || detail?.heroImage || '';
   const marketChips = detail ? [
     { label: 'Biên giá', value: detail.priceRange },
     { label: 'Tăng trưởng', value: `+${detail.growthPct}%` },
@@ -131,7 +129,7 @@ export default async function AreaPage({ params }: Props) {
         <main className="bg-gray-50">
           <section
             className="overflow-hidden bg-gray-950 bg-cover bg-center text-white"
-            style={{ backgroundImage: `linear-gradient(115deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.86) 42%, rgba(69,10,10,0.82) 100%), url(${heroImage})` }}
+            style={heroImage ? { backgroundImage: `linear-gradient(115deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.86) 42%, rgba(69,10,10,0.82) 100%), url(${heroImage})` } : undefined}
           >
             <div className="mx-auto max-w-7xl px-4 py-12 md:py-16">
               <nav className="mb-6 text-xs text-white/70">

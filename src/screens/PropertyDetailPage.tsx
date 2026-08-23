@@ -40,6 +40,7 @@ import { DetailShareButtons } from '../components/DetailShareButtons';
 import { getProductSuggestions } from '../lib/productSuggestions';
 import { buildSimilarFilters } from '../lib/similarFilters';
 import { RichVideo } from '../components/RichVideo';
+import { ReadableContent } from '../components/ReadableContent';
 import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMedia';
 import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDetailActions';
 import { mergeDiscoveryFilters } from '../lib/discoveryJourney';
@@ -499,19 +500,19 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {property.description && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Mô tả chi tiết</h2>
-                {isHtmlContent(property.description) ? (
-                  <div className="prose prose-gray max-w-none text-sm text-gray-600 leading-relaxed">
-                    {splitRichContentVideos(sanitizeArticleHtml(property.description)).map((segment, index) =>
+                <ReadableContent className="max-w-none">
+                  {isHtmlContent(property.description) ? (
+                    splitRichContentVideos(sanitizeArticleHtml(property.description)).map((segment, index) =>
                       segment.type === 'video' ? (
                         <RichVideo key={`video-${index}`} video={segment.video} />
                       ) : segment.html.trim() ? (
                         <div key={`html-${index}`} dangerouslySetInnerHTML={{ __html: segment.html }} />
                       ) : null,
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{property.description}</p>
-                )}
+                    )
+                  ) : (
+                    <p className="whitespace-pre-line">{property.description}</p>
+                  )}
+                </ReadableContent>
               </div>
             )}
 

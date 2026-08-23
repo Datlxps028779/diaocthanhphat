@@ -12,6 +12,7 @@ import { qk } from '../lib/queryKeys';
 import { useSetting } from '../lib/cms';
 import { isValidVnPhone } from '../lib/phone';
 import { track, EVENTS } from '../lib/analytics';
+import { getCollectionDefinition, parseContentCollection } from '../lib/pageContentSchema';
 
 interface AboutPageProps { onNavigate: (p: Page) => void; }
 
@@ -19,9 +20,9 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const [form, setForm] = useState({ full_name: '', phone: '', message: '' });
   const [sent, setSent] = useState(false);
   const [leadError, setLeadError] = useState('');
-  const sitePhone = useSetting('phone_hotline', '0901 234 567');
-  const siteEmail = useSetting('email', 'info@bdsbinhduong.vn');
-  const siteAddress = useSetting('address', '123 Đường số 1, P. Hiệp Thành, TP. Thủ Dầu Một, Bình Dương');
+  const sitePhone = useSetting('phone_hotline', '');
+  const siteEmail = useSetting('email', '');
+  const siteAddress = useSetting('address', '');
 
   const { data: cms = {} } = useQuery({
     queryKey: qk.pageBlocks('about'),
@@ -29,7 +30,8 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
     select: pageBlocksToMap,
   });
 
-  const g = (section: string, key: string, def: string) => cms[section]?.[key] || def;
+  const g = (section: string, key: string) => cms[section]?.[key]?.trim() || '';
+  const collection = (section: string, key: string) => parseContentCollection(cms[section]?.[key], getCollectionDefinition('about', section, key));
 
   const submitMutation = useMutation({
     mutationFn: (payload: typeof form) => submitLead({ ...payload, area_interest: 'Liên hệ chung', source: 'about_page' }),
@@ -54,38 +56,27 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
     submitMutation.mutate(form);
   };
 
-  const stats = [
-    { value: g('stats','stat1_value','7+'), label: g('stats','stat1_label','Năm kinh nghiệm'), icon: <Award className="w-6 h-6" /> },
-    { value: g('stats','stat2_value','500+'), label: g('stats','stat2_label','Dự án thành công'), icon: <Building2 className="w-6 h-6" /> },
-    { value: g('stats','stat3_value','1.200+'), label: g('stats','stat3_label','Khách hàng tin tưởng'), icon: <Users className="w-6 h-6" /> },
-    { value: g('stats','stat4_value','98%'), label: g('stats','stat4_label','Tỷ lệ hài lòng'), icon: <Star className="w-6 h-6" /> },
-  ];
-
-  const values = [
-    { icon: <Shield className="w-5 h-5 text-amber-500" />, title: g('values','v1_title','Uy tín'), desc: g('values','v1_desc','Cam kết trung thực, minh bạch trong mọi giao dịch.') },
-    { icon: <Heart className="w-5 h-5 text-red-500" />, title: g('values','v2_title','Tận tâm'), desc: g('values','v2_desc','Luôn đặt lợi ích khách hàng lên hàng đầu.') },
-    { icon: <Target className="w-5 h-5 text-blue-500" />, title: g('values','v3_title','Chuyên nghiệp'), desc: g('values','v3_desc','Đội ngũ được đào tạo bài bản, kinh nghiệm thực chiến.') },
-    { icon: <TrendingUp className="w-5 h-5 text-emerald-500" />, title: g('values','v4_title','Hiệu quả'), desc: g('values','v4_desc','Kết quả nhanh chóng, tối ưu nhất cho từng khách hàng.') },
-  ];
-
-  const teamRaw = g('team','members','Nguyễn Văn Minh|Giám đốc điều hành|12 năm kinh nghiệm|https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg\nTrần Thị Hoa|Giám đốc kinh doanh|9 năm kinh nghiệm|https://images.pexels.com/photos/3769021/pexels-photo-3769021.jpeg\nLê Quốc Hùng|Trưởng phòng pháp lý|8 năm kinh nghiệm|https://images.pexels.com/photos/1516680/pexels-photo-1516680.jpeg\nPhạm Thị Lan|Trưởng phòng tư vấn|7 năm kinh nghiệm|https://images.pexels.com/photos/3756679/pexels-photo-3756679.jpeg');
-  const team = teamRaw.split('\n').filter(Boolean).map(line => {
-    const [name, role, exp, image] = line.split('|');
-    return { name, role, exp, image };
-  });
-
-  const timelineRaw = g('timeline','items','2018|Thành lập công ty|Nhà Đất Kết Nối ra đời với đội ngũ 10 người tại Bình Dương.\n2019|Mở rộng khu vực|Mở rộng hoạt động sang Đồng Nai và TP. Hồ Chí Minh.\n2020|500 giao dịch|Đạt mốc 500 giao dịch thành công đầu tiên dù bối cảnh dịch bệnh.\n2022|Nền tảng số|Ra mắt website và hệ thống quản lý BĐS trực tuyến.\n2024|Mở rộng Bình Phước|Phủ sóng thêm thị trường Bình Phước – mảnh đất nhiều tiềm năng.\n2025|1.200+ khách hàng|Đạt mốc 1.200 khách hàng hài lòng, 500+ dự án thành công.');
-  const milestones = timelineRaw.split('\n').filter(Boolean).map(line => {
-    const [year, title, desc] = line.split('|');
-    return { year, title, desc };
-  });
-
-  const awardsRaw = g('awards','items','Top 10 Sàn giao dịch BĐS uy tín 2024\nChứng nhận Môi giới chuyên nghiệp\nThành viên Hội Môi giới BĐS Việt Nam');
-  const awards = awardsRaw.split('\n').filter(Boolean);
-
-  const missionItems = g('mission','items','Cung cấp thông tin BĐS chính xác, cập nhật\nĐồng hành toàn bộ quy trình giao dịch\nBảo vệ quyền lợi tối đa cho khách hàng').split('\n').filter(Boolean);
-
-  const heroImage = g('hero','image','https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg');
+  const iconFor = (name: string, className: string) => {
+    const Icon = ({ Award, Building2, Users, Star, Shield, Heart, Target, TrendingUp }[name] ?? CheckCircle);
+    return <Icon className={className} />;
+  };
+  const stats = collection('stats', 'items').map(item => ({ value: String(item.value ?? ''), label: String(item.label ?? ''), icon: iconFor(String(item.icon ?? ''), 'w-6 h-6') }));
+  const values = collection('values', 'items').map(item => ({ icon: iconFor(String(item.icon ?? ''), 'w-5 h-5 text-amber-500'), title: String(item.title ?? ''), desc: String(item.description ?? '') }));
+  const team = collection('team', 'items').map(item => ({ name: String(item.name ?? ''), role: String(item.role ?? ''), exp: String(item.experience ?? ''), image: String(item.image ?? '') }));
+  const milestones = collection('timeline', 'items').map(item => ({ year: String(item.year ?? ''), title: String(item.title ?? ''), desc: String(item.description ?? '') }));
+  const awards = g('awards', 'items').split('\n').map(item => item.trim()).filter(Boolean);
+  const missionItems = g('mission', 'items').split('\n').map(item => item.trim()).filter(Boolean);
+  const heroImage = g('hero', 'image');
+  const heroTitle = g('hero', 'title');
+  const heroSubtitle = g('hero', 'subtitle');
+  const missionTitle = g('mission', 'title');
+  const missionContent = g('mission', 'content');
+  const visionTitle = g('vision', 'title');
+  const visionContent = g('vision', 'content');
+  const valuesTitle = g('values', 'title');
+  const timelineTitle = g('timeline', 'title');
+  const teamTitle = g('team', 'title');
+  const awardsTitle = g('awards', 'title');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -98,8 +89,8 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
               { label: 'Trang chủ', onClick: () => onNavigate({ name: 'home' }) },
               { label: 'Về chúng tôi' },
             ]} />
-            <h1 className="text-white text-4xl font-black mb-2">{g('hero','title','VỀ CHÚNG TÔI')}</h1>
-            <p className="text-gray-300 text-base max-w-xl">{g('hero','subtitle','7 năm đồng hành cùng hàng nghìn gia đình và nhà đầu tư tìm kiếm tổ ấm, cơ hội tại thị trường phía Nam.')}</p>
+            {heroTitle && <h1 className="text-white text-4xl font-black mb-2">{heroTitle}</h1>}
+            {heroSubtitle && <p className="text-gray-300 text-base max-w-xl">{heroSubtitle}</p>}
           </div>
         </div>
       </div>
@@ -125,8 +116,8 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
             <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
               <Target className="w-6 h-6 text-amber-600" />
             </div>
-            <h2 className="font-black text-gray-900 text-xl mb-3">{g('mission','title','SỨ MỆNH CỦA CHÚNG TÔI')}</h2>
-            <p className="text-gray-600 text-sm leading-relaxed">{g('mission','content','Nhà Đất Kết Nối ra đời với sứ mệnh kết nối người mua và người bán một cách nhanh chóng, minh bạch và hiệu quả nhất.')}</p>
+            {missionTitle && <h2 className="font-black text-gray-900 text-xl mb-3">{missionTitle}</h2>}
+            {missionContent && <p className="text-gray-600 text-sm leading-relaxed">{missionContent}</p>}
             <ul className="mt-4 space-y-2">
               {missionItems.map(item => (
                 <li key={item} className="flex items-center gap-2 text-xs text-gray-600">
@@ -139,14 +130,14 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
             <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mb-4">
               <TrendingUp className="w-6 h-6 text-amber-400" />
             </div>
-            <h2 className="font-black text-xl mb-3">{g('vision','title','TẦM NHÌN 2030')}</h2>
-            <p className="text-gray-300 text-sm leading-relaxed">{g('vision','content','Trở thành nền tảng môi giới bất động sản số 1 khu vực Đông Nam Bộ, phủ sóng toàn bộ 10 tỉnh thành và phục vụ hơn 10.000 khách hàng thành công.')}</p>
+            {visionTitle && <h2 className="font-black text-xl mb-3">{visionTitle}</h2>}
+            {visionContent && <p className="text-gray-300 text-sm leading-relaxed">{visionContent}</p>}
           </div>
         </div>
 
         {/* Core values */}
-        <div>
-          <h2 className="inline-block font-black text-gray-900 text-xl mb-5">{g('values','title','GIÁ TRỊ CỐT LÕI')}</h2>
+        {values.length > 0 && <div>
+          {valuesTitle && <h2 className="inline-block font-black text-gray-900 text-xl mb-5">{valuesTitle}</h2>}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {values.map(v => (
               <div key={v.title} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center hover:shadow-md transition-shadow">
@@ -156,11 +147,11 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Timeline */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="inline-block font-black text-gray-900 text-xl mb-6">{g('timeline','title','HÀNH TRÌNH PHÁT TRIỂN')}</h2>
+        {milestones.length > 0 && <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          {timelineTitle && <h2 className="inline-block font-black text-gray-900 text-xl mb-6">{timelineTitle}</h2>}
           <div className="relative">
             <div className="absolute left-16 top-0 bottom-0 w-0.5 bg-amber-200" />
             <div className="space-y-6">
@@ -180,17 +171,17 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
               ))}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Team */}
-        <div>
-          <h2 className="inline-block font-black text-gray-900 text-xl mb-5">{g('team','title','ĐỘI NGŨ LÃNH ĐẠO')}</h2>
+        {team.length > 0 && <div>
+          {teamTitle && <h2 className="inline-block font-black text-gray-900 text-xl mb-5">{teamTitle}</h2>}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {team.map(member => (
               <div key={member.name} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden text-center hover:shadow-md transition-shadow group">
-                <div className="overflow-hidden h-48">
+                {member.image && <div className="overflow-hidden h-48">
                   <img src={member.image} alt={member.name} className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500" />
-                </div>
+                </div>}
                 <div className="p-4">
                   <h3 className="font-bold text-gray-900 text-sm">{member.name}</h3>
                   <p className="text-amber-600 text-xs font-semibold mt-0.5">{member.role}</p>
@@ -199,7 +190,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Contact form */}
         <div className="grid lg:grid-cols-2 gap-6">
@@ -247,7 +238,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
             ))}
             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
               <h4 className="font-semibold text-amber-800 text-sm mb-2 flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-500" />{g('awards','title','Giải thưởng & Chứng nhận')}
+                <Award className="w-4 h-4 text-amber-500" />{awardsTitle}
               </h4>
               <ul className="space-y-1.5">
                 {awards.map(item => (

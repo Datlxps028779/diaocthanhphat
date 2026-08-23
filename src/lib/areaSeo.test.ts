@@ -109,8 +109,8 @@ describe('areaSummaryFromData', () => {
     expect(areaSummaryFromData({ ...area, description: null }, { description: 'Curated summary' })).toBe('Curated summary');
   });
 
-  it('fallback trung tính, không bịa số liệu', () => {
-    expect(areaSummaryFromData({ ...area, description: null }, null)).toContain('Bình Dương');
+  it('trả chuỗi rỗng khi không có mô tả đã kiểm duyệt', () => {
+    expect(areaSummaryFromData({ ...area, description: null }, null)).toBe('');
   });
 });
 
