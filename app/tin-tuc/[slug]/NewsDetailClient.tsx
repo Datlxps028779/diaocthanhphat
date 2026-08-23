@@ -3,6 +3,7 @@ import { NewsPage } from '@/screens/NewsPage';
 import { SiteChrome } from '@/components/SiteChrome';
 import { useNavigate } from '@/lib/useNavigate';
 import type { NewsArticle, NewsListItem } from '@/lib/supabase';
+import type { RankedNewsProperty } from '@/lib/newsPropertyDiscovery';
 
 // NewsPage mở chế độ chi tiết khi có articleId. Server resolve slug và truyền luôn
 // snapshot để phần nội dung có trong HTML đầu, khớp metadata/JSON-LD.
@@ -11,11 +12,15 @@ export function NewsDetailClient({
   related,
   mostViewed,
   latest,
+  contextualProperties,
+  contextualLocationLabel,
 }: {
   article: NewsArticle;
   related: NewsListItem[];
   mostViewed: NewsListItem[];
   latest: NewsListItem[];
+  contextualProperties: RankedNewsProperty[];
+  contextualLocationLabel: string | null;
 }) {
   const navigate = useNavigate();
   return (
@@ -27,6 +32,8 @@ export function NewsDetailClient({
         initialRelated={related}
         initialMostViewed={mostViewed}
         initialLatest={latest}
+        contextualProperties={contextualProperties}
+        contextualLocationLabel={contextualLocationLabel}
       />
     </SiteChrome>
   );

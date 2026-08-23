@@ -1,6 +1,18 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
-import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink } from 'lucide-react';
-import type { NewsArticle } from '../../../lib/supabase';
+import { Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, Save, X, Sparkles, Wand2, Code2, FileText, Upload, ExternalLink, MapPin } from 'lucide-react';
+import type { Area, District, Ward, Neighborhood, NewsArticle } from '../../../lib/supabase';
+import { getAreas, getDistricts, getWards, getNeighborhoods } from '../../../lib/api';
+import {
+  EMPTY_NEWS_LOCATION,
+  filterNewsNeighborhoods,
+  locationLabel,
+  resolveNewsLocation,
+  selectNewsArea,
+  selectNewsDistrict,
+  selectNewsNeighborhood,
+  selectNewsWard,
+  type NewsLocationFields,
+} from '../../../lib/newsLocationSelection';
 import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews, getNewsCategories,
   newsRevalidationSnapshot, revalidateNewsContent,
@@ -37,6 +49,10 @@ type NewsFormState = SeoFieldsValue & {
   geo_area: string;
   geo_entity: string;
   geo_notes: string;
+  area_id: string;
+  district_id: string;
+  ward_id: string;
+  neighborhood_id: string;
   faq: FaqItem[];
   citations: { title: string; url: string }[];
 };
@@ -78,6 +94,10 @@ function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now
     geo_area: form.geo_area.trim() || null,
     geo_entity: form.geo_entity.trim() || null,
     geo_notes: form.geo_notes.trim() || null,
+    area_id: form.area_id || null,
+    district_id: form.district_id || null,
+    ward_id: form.ward_id || null,
+    neighborhood_id: form.neighborhood_id || null,
     faq: (() => {
       const valid = form.faq
         .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
@@ -114,9 +134,129 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     geo_area: article?.geo_area ?? '',
     geo_entity: article?.geo_entity ?? '',
     geo_notes: article?.geo_notes ?? '',
+    area_id: article?.area_id ?? '',
+    district_id: article?.district_id ?? '',
+    ward_id: article?.ward_id ?? '',
+    neighborhood_id: article?.neighborhood_id ?? '',
     faq: article?.faq ?? [],
     citations: article?.citations ?? [],
   };
+}
+
+function NewsLocationPicker({
+  value,
+  onChange,
+}: {
+  value: NewsLocationFields;
+  onChange: (next: NewsLocationFields) => void;
+}) {
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getAreas(), getDistricts(), getNeighborhoods()])
+      .then(([nextAreas, nextDistricts, nextNeighborhoods]) => {
+        setAreas(nextAreas);
+        setDistricts(nextDistricts);
+        setNeighborhoods(nextNeighborhoods);
+      })
+      .finally(() => setLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (!value.district_id) {
+      setWards([]);
+      return;
+    }
+    getWards(value.district_id).then(setWards).catch(() => setWards([]));
+  }, [value.district_id]);
+
+  const taxonomy = useMemo(() => ({ areas, districts, wards, neighborhoods }), [areas, districts, wards, neighborhoods]);
+  const resolved = useMemo(() => resolveNewsLocation(value, taxonomy), [value, taxonomy]);
+  const availableDistricts = value.area_id ? districts.filter(district => district.area_id === value.area_id) : [];
+  const availableWards = value.district_id ? wards.filter(ward => ward.district_id === value.district_id) : [];
+  const availableNeighborhoods = filterNewsNeighborhoods(value, taxonomy);
+  const label = locationLabel(resolved);
+
+  return (
+    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+      <div className="mb-3 flex items-start gap-2">
+        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Liên kết nội dung với khu vực & tồn kho</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-emerald-800/80">Tùy chọn. Chỉ chọn địa lý có ngữ cảnh thật trong bài; dữ liệu này dùng để gợi ý tin đang hoạt động đúng khu vực, không lấy từ keywords hay phần GEO tự do.</p>
+        </div>
+      </div>
+
+      {!loaded ? (
+        <p className="text-xs text-emerald-700">Đang tải taxonomy vị trí...</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Tỉnh/Thành phố</label>
+              <select
+                value={value.area_id}
+                onChange={event => onChange(selectNewsArea(event.target.value))}
+                className="w-full rounded-lg border border-emerald-100 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">Không gắn vị trí</option>
+                {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Quận/Huyện</label>
+              <select
+                value={value.district_id}
+                disabled={!value.area_id}
+                onChange={event => onChange(selectNewsDistrict(value, event.target.value))}
+                className="w-full rounded-lg border border-emerald-100 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">Toàn tỉnh/thành</option>
+                {availableDistricts.map(district => <option key={district.id} value={district.id}>{district.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Phường/Xã</label>
+              <select
+                value={value.ward_id}
+                disabled={!value.district_id}
+                onChange={event => onChange(selectNewsWard(value, event.target.value))}
+                className="w-full rounded-lg border border-emerald-100 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">Toàn quận/huyện</option>
+                {availableWards.map(ward => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Khu dân cư</label>
+              <select
+                value={value.neighborhood_id}
+                disabled={!value.area_id}
+                onChange={event => onChange(selectNewsNeighborhood(value, event.target.value, taxonomy))}
+                className="w-full rounded-lg border border-emerald-100 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">Không chọn khu dân cư</option>
+                {availableNeighborhoods.map(neighborhood => <option key={neighborhood.id} value={neighborhood.id}>{neighborhood.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {label ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs text-emerald-800">
+              <span>Bài này có thể gợi ý tin active tại <strong>{label}</strong>.</span>
+              <button type="button" onClick={() => onChange(EMPTY_NEWS_LOCATION)} className="font-semibold text-emerald-700 hover:text-red-600">Gỡ liên kết</button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-emerald-800/70">Bài không gắn vị trí sẽ không hiển thị gợi ý BĐS; các liên kết bài viết hiện có vẫn hoạt động bình thường.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NewsForm({ article, allArticles, categories, onSave, onCancel }: { article: NewsArticle | null; allArticles: NewsArticle[]; categories: string[]; onSave: (payload: Partial<NewsArticle>) => Promise<void>; onCancel: () => void }) {
@@ -300,6 +440,10 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         geo_area: form.geo_area.trim() || null,
         geo_entity: form.geo_entity.trim() || null,
         geo_notes: form.geo_notes.trim() || null,
+        area_id: form.area_id || null,
+        district_id: form.district_id || null,
+        ward_id: form.ward_id || null,
+        neighborhood_id: form.neighborhood_id || null,
         faq: (() => {
           const valid = form.faq
             .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
@@ -401,6 +545,16 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
               </div>
             </div>
           </div>
+
+          <NewsLocationPicker
+            value={{
+              area_id: form.area_id,
+              district_id: form.district_id,
+              ward_id: form.ward_id,
+              neighborhood_id: form.neighborhood_id,
+            }}
+            onChange={location => setForm(formState => ({ ...formState, ...location }))}
+          />
 
           <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
             <div className="mb-3 flex items-start justify-between gap-3">

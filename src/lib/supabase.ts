@@ -291,6 +291,10 @@ export type NewsArticle = {
   geo_area: string | null;
   geo_entity: string | null;
   geo_notes: string | null;
+  area_id?: string | null;
+  district_id?: string | null;
+  ward_id?: string | null;
+  neighborhood_id?: string | null;
   faq: { question: string; answer: string }[] | null;
   citations: { title: string; url: string }[] | null;
   created_at: string; updated_at: string;

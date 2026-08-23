@@ -9,6 +9,11 @@ import { SafeImage } from '../SafeImage';
 import { track, EVENTS } from '../../lib/analytics';
 import { buildDiscoveryEventProps, type DiscoveryModule, type DiscoverySurface } from '../../lib/discoveryJourney';
 import { DiscoverySectionHeader } from './DiscoverySectionHeader';
+
+// Một article render cả desktop/mobile variant trong HTML để tránh layout shift. Khóa
+// theo tập tin hiển thị để đổi breakpoint không bắn thêm module-view cho cùng dữ liệu.
+const viewedDiscoveryKeys = new Set<string>();
+
 type PropertyDiscoveryItem = {
   id: string;
   slug: string | null;
@@ -31,6 +36,9 @@ export function PropertyDiscoveryRail({
   source,
   itemNote,
   empty = null,
+  layout,
+  headingId,
+  viewKey,
 }: {
   title: string;
   subtitle?: string;
@@ -40,6 +48,9 @@ export function PropertyDiscoveryRail({
   source: string;
   itemNote?: (property: PropertyDiscoveryItem) => string | undefined;
   empty?: React.ReactNode;
+  layout?: 'rail' | 'sidebar';
+  headingId?: string;
+  viewKey?: string;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const viewed = useRef(false);
@@ -50,6 +61,11 @@ export function PropertyDiscoveryRail({
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting) || viewed.current) return;
       viewed.current = true;
+      if (viewKey && viewedDiscoveryKeys.has(viewKey)) {
+        observer.disconnect();
+        return;
+      }
+      if (viewKey) viewedDiscoveryKeys.add(viewKey);
       track(EVENTS.DISCOVERY_MODULE_VIEW, buildDiscoveryEventProps({
         surface,
         module,
@@ -60,14 +76,18 @@ export function PropertyDiscoveryRail({
     }, { threshold: 0.25 });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [module, properties.length, source, surface]);
+  }, [module, properties.length, source, surface, viewKey]);
 
   if (properties.length === 0) return empty;
+  const sidebar = layout === 'sidebar';
+  const resolvedHeadingId = headingId ?? `${module}-heading`;
 
   return (
-    <section ref={sectionRef} className="mt-8" aria-labelledby={`${module}-heading`}>
-      <DiscoverySectionHeader title={title} subtitle={subtitle} headingId={`${module}-heading`} />
-      <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 xl:grid-cols-4">
+    <section ref={sectionRef} className={sidebar ? 'mt-0' : 'mt-8'} aria-labelledby={resolvedHeadingId}>
+      <DiscoverySectionHeader title={title} subtitle={subtitle} headingId={resolvedHeadingId} />
+      <div className={sidebar
+        ? 'space-y-3'
+        : '-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 xl:grid-cols-4'}>
         {properties.map((property, index) => (
           <Link
             key={property.id}
@@ -82,22 +102,24 @@ export function PropertyDiscoveryRail({
                 ? property.listing_type
                 : undefined,
             }))}
-            className="group flex w-64 shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:shadow-lg sm:w-auto"
+            className={sidebar
+              ? 'group flex gap-3 overflow-hidden rounded-xl border border-gray-100 bg-white p-2 shadow-sm transition-all duration-300 hover:shadow-lg'
+              : 'group flex w-64 shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:shadow-lg sm:w-auto'}
           >
-            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+            <div className={sidebar ? 'relative h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100' : 'relative aspect-[4/3] overflow-hidden bg-gray-100'}>
               <SafeImage
                 src={property.image_url}
                 fallbackSrc={FALLBACK_PROPERTY_IMAGE}
                 alt={property.title}
                 fill
-                sizes="(max-width: 640px) 256px, (max-width: 768px) 50vw, 25vw"
+                sizes={sidebar ? '96px' : '(max-width: 640px) 256px, (max-width: 768px) 50vw, 25vw'}
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
               {property.listing_type === 'cho_thue' && (
-                <span className="absolute left-2 top-2 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Cho thuê</span>
+                <span className="absolute left-1.5 top-1.5 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Cho thuê</span>
               )}
             </div>
-            <div className="flex flex-1 flex-col p-3">
+            <div className="flex min-w-0 flex-1 flex-col justify-center p-1">
               <h3 className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-gray-900 transition-colors group-hover:text-red-600">{property.title}</h3>
               <p className="text-sm font-black text-red-600">{property.price_label ?? `${property.price} ${property.price_unit}`}</p>
               <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">

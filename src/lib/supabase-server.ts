@@ -1,11 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache';
-import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow } from './supabase';
+import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow } from './supabase';
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
 import { pickRelated } from './relatedNews';
 import type { LocationTaxonomy } from './neighborhoodLocation';
+import { rankNewsProperties, type RankedNewsProperty } from './newsPropertyDiscovery';
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
 // Tạo MỚI mỗi lần gọi, KHÔNG singleton và KHÔNG persist session — tránh chia sẻ
@@ -98,6 +99,74 @@ export async function serverGetRecentProperties(limit = 8): Promise<Property[]> 
     return (data ?? []) as Property[];
   } catch {
     return [];
+  }
+}
+
+export type ServerNewsPropertyDiscovery = {
+  properties: RankedNewsProperty[];
+  locationLabel: string | null;
+};
+
+// Tin BĐS bên dưới bài viết chỉ dùng foreign key taxonomy đã được trigger DB
+// kiểm tra. Không suy đoán từ geo_area/geo_entity hoặc từ keyword/nội dung bài.
+export async function serverGetNewsContextualProperties(
+  article: Pick<NewsArticle, 'area_id' | 'district_id' | 'ward_id' | 'neighborhood_id'>,
+  limit = 4,
+): Promise<ServerNewsPropertyDiscovery> {
+  const areaId = article.area_id ?? '';
+  if (!areaId || limit <= 0) return { properties: [], locationLabel: null };
+
+  try {
+    const sb = serverClient();
+    const [areaResult, districtResult, wardResult, neighborhoodResult] = await Promise.all([
+      sb.from('areas').select('id,name').eq('id', areaId).maybeSingle(),
+      article.district_id
+        ? sb.from('districts').select('id,name').eq('id', article.district_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      article.ward_id
+        ? sb.from('wards').select('id,name').eq('id', article.ward_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      article.neighborhood_id
+        ? sb.from('neighborhoods').select('id,name,slug').eq('id', article.neighborhood_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const area = areaResult.data as Pick<Area, 'id' | 'name'> | null;
+    const district = districtResult.data as Pick<District, 'id' | 'name'> | null;
+    const ward = wardResult.data as Pick<Ward, 'id' | 'name'> | null;
+    const neighborhood = neighborhoodResult.data as Pick<Neighborhood, 'id' | 'name' | 'slug'> | null;
+    const recent = () => sb.from('properties')
+      .select(PROPERTY_SELECT)
+      .eq('is_active', true)
+      .eq('area_id', areaId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
+    const [neighborhoodResultProperties, wardResultProperties, districtResultProperties, areaResultProperties] = await Promise.all([
+      neighborhood?.slug ? recent().eq('neighborhood_slug', neighborhood.slug) : Promise.resolve({ data: [] as unknown[] }),
+      ward?.name && article.district_id
+        ? recent().eq('district_id', article.district_id).ilike('ward', ward.name)
+        : Promise.resolve({ data: [] as unknown[] }),
+      article.district_id ? recent().eq('district_id', article.district_id) : Promise.resolve({ data: [] as unknown[] }),
+      recent(),
+    ]);
+    const candidates = [
+      ...(neighborhoodResultProperties.data ?? []),
+      ...(wardResultProperties.data ?? []),
+      ...(districtResultProperties.data ?? []),
+      ...(areaResultProperties.data ?? []),
+    ] as Property[];
+    const properties = rankNewsProperties(
+      candidates,
+      { areaId, districtId: article.district_id, wardName: ward?.name, neighborhoodSlug: neighborhood?.slug },
+      limit,
+    );
+    return {
+      properties,
+      locationLabel: neighborhood?.name ?? district?.name ?? area?.name ?? null,
+    };
+  } catch {
+    return { properties: [], locationLabel: null };
   }
 }
 
@@ -357,6 +426,9 @@ export async function serverGetMenuItems(): Promise<MenuItem[]> {
 
 // News: URL /tin-tuc/{slug} tra theo slug; fallback id nếu là UUID.
 export async function serverGetNewsByIdOrSlug(idOrSlug: string): Promise<NewsArticle | null> {
+  // News location is assigned in Admin and must take effect on the next public
+  // request; do not let the RSC data cache keep an old location/recommendation.
+  noStore();
   try {
     const sb = serverClient();
     const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';

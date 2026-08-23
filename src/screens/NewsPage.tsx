@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useQuery, useQueries, useMutation, useInfiniteQuery } from '@tanstack/react-query';
 import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle, LayoutGrid, List } from 'lucide-react';
 import { type NewsArticle, type NewsListItem, type NewsPageResult } from '../lib/supabase';
+import type { RankedNewsProperty } from '../lib/newsPropertyDiscovery';
+import { newsPropertyReasonLabel } from '../lib/newsPropertyDiscovery';
+import { PropertyDiscoveryRail } from '../components/discovery/PropertyDiscoveryRail';
 import { getNews, getNewsById, getNewsByIds, getNewsPage, getMostViewedNews, getNewsCategories, NEWS_PER_PAGE, subscribe, getPageBlocks, pageBlocksToMap, incrementNewsView } from '../lib/api';
 import { buildNewsSections } from '../lib/newsLayout';
 import { qk } from '../lib/queryKeys';
@@ -221,6 +224,44 @@ function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; 
   );
 }
 
+function NewsContextualProperties({
+  articleId,
+  properties,
+  locationLabel,
+  visibleOn,
+}: {
+  articleId: string;
+  properties: RankedNewsProperty[];
+  locationLabel: string | null;
+  visibleOn: 'mobile' | 'desktop';
+}) {
+  if (!properties.length || !locationLabel) return null;
+
+  const desktopClass = visibleOn === 'desktop' ? 'hidden lg:block' : 'lg:hidden';
+  const layout = visibleOn === 'desktop' ? 'sidebar' : 'rail';
+
+  const notes = new Map(
+    properties.map(({ property, reason }) => [property.id, newsPropertyReasonLabel(reason)]),
+  );
+
+  return (
+    <div className={desktopClass}>
+      <PropertyDiscoveryRail
+        title={`Tin đăng tại ${locationLabel}`}
+        subtitle="Các tin đang hoạt động được liên kết theo taxonomy địa lý của bài viết."
+        properties={properties.map(({ property }) => property)}
+        surface="news"
+        module="related_properties"
+        source="news_contextual_properties"
+        itemNote={property => notes.get(property.id)}
+        layout={layout}
+        headingId={`related-properties-${visibleOn}-heading`}
+        viewKey={`news-contextual:${articleId}:${properties.map(({ property }) => property.id).join(',')}`}
+      />
+    </div>
+  );
+}
+
 /* ────────────────── Article Detail ────────────────── */
 function ArticleDetail({
   article,
@@ -228,12 +269,16 @@ function ArticleDetail({
   mostViewed,
   latest,
   onBack,
+  contextualProperties,
+  contextualLocationLabel,
 }: {
   article: NewsArticle;
   related: Array<NewsArticle | NewsListItem>;
   mostViewed: NewsListItem[];
   latest: NewsListItem[];
   onBack: () => void;
+  contextualProperties: RankedNewsProperty[];
+  contextualLocationLabel: string | null;
 }) {
   const rawContent: string = (article as any).content ?? article.excerpt ?? '';
   const contentIsHtml = isHtmlContent(rawContent);
@@ -421,13 +466,21 @@ function ArticleDetail({
                       {c.title || c.url}
                     </a>
                     {c.title && (
-                      <span className="mt-0.5 block text-xs text-gray-500">{c.url}</span>
+                      <span className="mt-0.5 block break-all text-xs text-gray-500">{c.url}</span>
                     )}
                   </li>
                 ))}
               </ul>
             </div>
           )}
+
+          {/* Chỉ mount một rail theo breakpoint để không tạo 2 observer/analytics cho cùng tập tin. */}
+          <NewsContextualProperties
+            articleId={article.id}
+            properties={contextualProperties}
+            locationLabel={contextualLocationLabel}
+            visibleOn="mobile"
+          />
 
           {/* Nội dung đọc tiếp: desktop tránh lặp sidebar, mobile nhận lại toàn bộ bài
               liên quan/đọc nhiều vì sidebar bị ẩn dưới lg. */}
@@ -573,6 +626,13 @@ function ArticleDetail({
               </section>
             )}
 
+            <NewsContextualProperties
+              articleId={article.id}
+              properties={contextualProperties}
+              locationLabel={contextualLocationLabel}
+              visibleOn="desktop"
+            />
+
             {sidebarPopular.length > 0 && (
               <section className="bg-white rounded-2xl shadow p-5">
                 <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase tracking-wide">Đọc nhiều</h4>
@@ -605,7 +665,7 @@ function ArticleDetail({
 }
 
 /* ────────────────── NewsPage ────────────────── */
-export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialRelated = [], initialPage, initialMostViewed, initialLatest = [], initialCategory }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialRelated?: NewsListItem[]; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialLatest?: NewsListItem[]; initialCategory?: string }) {
+export function NewsPage({ onNavigate, articleId: initialArticleId, initialArticle, initialRelated = [], initialPage, initialMostViewed, initialLatest = [], initialCategory, contextualProperties = [], contextualLocationLabel = null }: { onNavigate: (p: Page) => void; articleId?: string; initialArticle?: NewsArticle; initialRelated?: NewsListItem[]; initialPage?: NewsPageResult; initialMostViewed?: NewsListItem[]; initialLatest?: NewsListItem[]; initialCategory?: string; contextualProperties?: RankedNewsProperty[]; contextualLocationLabel?: string | null }) {
   const [category, setCategory] = useState<NewsCollection>(initialCategory || 'Tất cả');
   const [articleId, setArticleId] = useState<string | undefined>(initialArticleId);
   const [newsletterEmail, setNewsletterEmail] = useState('');
@@ -833,6 +893,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
         mostViewed={initialMostViewed ?? mostViewedRaw}
         latest={initialLatest.length > 0 ? initialLatest : articles}
         onBack={handleBack}
+        contextualProperties={contextualProperties}
+        contextualLocationLabel={contextualLocationLabel}
       />
     );
   }
