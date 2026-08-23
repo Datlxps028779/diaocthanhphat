@@ -372,7 +372,7 @@ function ArticleDetail({
           {tocHeadings.length >= TOC_MIN_HEADINGS && <ArticleToc headings={tocHeadings} />}
 
           {/* Content */}
-          <ReadableContent>
+          <ReadableContent className="!max-w-none">
             {contentIsHtml ? renderSafeHtml() : markdownBlocks}
           </ReadableContent>
           {/* Tags */}
