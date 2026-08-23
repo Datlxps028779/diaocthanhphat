@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
-import { classifySearchVisibilityPersistenceError, isFutureTimestamp, isWithinSitemapCooldown, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
+import { classifySearchVisibilityPersistenceError, GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX, isFutureTimestamp, isRecoverableSitemapAuditFailure, isWithinSitemapCooldown, markEligibleUrlsSitemapSubmitted, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -159,6 +159,47 @@ describe('buildSearchVisibilityCandidates', () => {
     expect(report.eligible).toBeGreaterThan(0);
     expect(report.byReason.UNPUBLISHED_NEWS).toBe(1);
     expect(report.byEntity.news).toEqual({ eligible: 0, excluded: 1 });
+  });
+
+  it('marks existing eligible audit rows with UPDATE rather than partial UPSERT after Google accepts a sitemap', async () => {
+    const eq = vi.fn(async () => ({ error: null }));
+    const update = vi.fn(() => ({ eq }));
+    const upsert = vi.fn();
+    const client = { from: vi.fn(() => ({ update, upsert })) };
+    const timestamp = '2026-08-22T10:00:00.000Z';
+
+    await markEligibleUrlsSitemapSubmitted(client, 'fingerprint-1', timestamp);
+
+    expect(client.from).toHaveBeenCalledWith('search_visibility_urls');
+    expect(update).toHaveBeenCalledWith({
+      sitemap_status: 'submitted',
+      last_sitemap_submission_at: timestamp,
+      sitemap_submission_fingerprint: 'fingerprint-1',
+      sitemap_error: null,
+      updated_at: timestamp,
+    });
+    expect(eq).toHaveBeenCalledWith('eligible', true);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns AUDIT_WRITE only after Google acceptance when the scoped audit update fails', async () => {
+    const client = { from: vi.fn(() => ({ update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: { message: 'denied' } })) })) })) };
+
+    await expect(markEligibleUrlsSitemapSubmitted(client, 'fingerprint-1')).rejects.toMatchObject({
+      code: 'AUDIT_WRITE', message: GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX,
+    });
+  });
+
+  it('recognizes only the known post-acceptance audit failure as safely recoverable without a second Google call', () => {
+    expect(isRecoverableSitemapAuditFailure({
+      status: 'failed', request_fingerprint: 'same', error_summary: `${GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX} something`,
+    }, 'same')).toBe(true);
+    expect(isRecoverableSitemapAuditFailure({
+      status: 'failed', request_fingerprint: 'same', error_summary: 'Google from chối quyền.',
+    }, 'same')).toBe(false);
+    expect(isRecoverableSitemapAuditFailure({
+      status: 'succeeded', request_fingerprint: 'same', error_summary: GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX,
+    }, 'same')).toBe(false);
   });
 
   it('chỉ áp dụng sitemap cooldown cho successful run cùng fingerprint còn hiệu lực', () => {

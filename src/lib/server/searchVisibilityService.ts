@@ -153,6 +153,34 @@ export async function diagnoseSearchVisibilityAccess() {
 
 export const SEARCH_VISIBILITY_INSPECTION_BATCH_SIZE = 5;
 export const SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+export const GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX = 'Google đã nhận sitemap nhưng không lưu được trạng thái audit nội bộ.';
+
+export async function markEligibleUrlsSitemapSubmitted(
+  client: VisibilityDatabase,
+  requestFingerprint: string,
+  timestamp = new Date().toISOString(),
+): Promise<void> {
+  // Do not upsert a partial row here. PostgreSQL checks required columns before
+  // ON CONFLICT resolution, so an upsert containing only sitemap fields can fail
+  // even for an existing source_key. Eligibility sync owns registry row creation.
+  const update = await client.from('search_visibility_urls').update({
+    sitemap_status: 'submitted',
+    last_sitemap_submission_at: timestamp,
+    sitemap_submission_fingerprint: requestFingerprint,
+    sitemap_error: null,
+    updated_at: timestamp,
+  }).eq('eligible', true);
+  if (update.error) {
+    throw new SearchVisibilitySyncError('AUDIT_WRITE', GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX);
+  }
+}
+
+export function isRecoverableSitemapAuditFailure(row: Record<string, unknown>, requestFingerprint: string): boolean {
+  return row.status === 'failed'
+    && row.request_fingerprint === requestFingerprint
+    && typeof row.error_summary === 'string'
+    && row.error_summary.startsWith(GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX);
+}
 
 function searchConsoleSyncError(error: unknown): SearchVisibilitySyncError {
   if (error instanceof SearchVisibilitySyncError) return error;
@@ -213,7 +241,7 @@ export async function submitSearchVisibilitySitemap(actorId: string): Promise<Se
 
   const requestFingerprint = fingerprint(`${config.siteUrl}|${config.sitemapUrl}`);
   const latestRuns = await client.from('search_visibility_runs')
-    .select('status,request_fingerprint,finished_at')
+    .select('id,status,request_fingerprint,finished_at,error_summary')
     .eq('run_type', 'sitemap_submit')
     .order('started_at', { ascending: false })
     .limit(12);
@@ -223,26 +251,23 @@ export async function submitSearchVisibilitySitemap(actorId: string): Promise<Se
     const nextAt = new Date(Date.parse(prior.finished_at as string) + SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS).toISOString();
     throw new SearchVisibilitySyncError('GOOGLE_DEFERRED', `Sitemap canonical đã gửi gần đây; có thể gửi lại sau ${new Date(nextAt).toLocaleString('vi-VN')}. Không gọi lại Google để tránh thao tác dư thừa.`);
   }
+  const recoverable = (latestRuns.data ?? []).find((row: Record<string, unknown>) => isRecoverableSitemapAuditFailure(row, requestFingerprint));
+  if (recoverable && typeof recoverable.id === 'string') {
+    const timestamp = new Date().toISOString();
+    await markEligibleUrlsSitemapSubmitted(client, requestFingerprint, timestamp);
+    const reconcile = await client.from('search_visibility_runs').update({
+      status: 'succeeded', processed_count: 1, succeeded_count: 1, failed_count: 0,
+      error_summary: null, finished_at: timestamp,
+      metadata: { siteUrl: config.siteUrl, sitemapUrl: config.sitemapUrl, submission: 'accepted_by_api_reconciled_without_repeat_google_call' },
+    }).eq('id', recoverable.id);
+    if (reconcile.error) throw new SearchVisibilitySyncError('RUN_FINALIZE', 'Đã khôi phục trạng thái sitemap nội bộ nhưng không hoàn tất được audit run.');
+    return { runId: recoverable.id, requestedCount: 1, processedCount: 1, succeededCount: 1, failedCount: 0 };
+  }
   const runId = await createGoogleRun(client, actorId, 'sitemap_submit', 1, requestFingerprint);
   try {
     await submitSearchConsoleSitemap(config);
     const timestamp = new Date().toISOString();
-    const existing = await client.from('search_visibility_urls')
-      .select('source_key,eligible,canonical_url')
-      .eq('eligible', true)
-      .order('source_key', { ascending: true })
-      .limit(500);
-    if (existing.error) throw new SearchVisibilitySyncError('SOURCE_READ', 'Google đã nhận sitemap nhưng không đọc được registry để lưu trạng thái audit.');
-    const rows = (existing.data ?? []).filter((row: Record<string, unknown>) => eligibleCanonicalUrl(row));
-    const update = rows.length ? await client.from('search_visibility_urls').upsert(rows.map((row: Record<string, unknown>) => ({
-      ...row,
-      sitemap_status: 'submitted',
-      last_sitemap_submission_at: timestamp,
-      sitemap_submission_fingerprint: requestFingerprint,
-      sitemap_error: null,
-      updated_at: timestamp,
-    })), { onConflict: 'source_key' }) : { error: null };
-    if (update.error) throw new SearchVisibilitySyncError('AUDIT_WRITE', 'Google đã nhận sitemap nhưng không lưu được trạng thái audit nội bộ.');
+    await markEligibleUrlsSitemapSubmitted(client, requestFingerprint, timestamp);
     await finishGoogleRun(client, runId, {
       status: 'succeeded', processed_count: 1, succeeded_count: 1,
       metadata: { siteUrl: config.siteUrl, sitemapUrl: config.sitemapUrl, submission: 'accepted_by_api_not_indexing_guarantee' },
