@@ -13,6 +13,7 @@ import { useSetting } from '../lib/cms';
 import { isValidVnPhone } from '../lib/phone';
 import { track, EVENTS } from '../lib/analytics';
 import { getCollectionDefinition, parseContentCollection } from '../lib/pageContentSchema';
+import { verifiedAwards } from '../lib/verifiedAwards';
 
 interface AboutPageProps { onNavigate: (p: Page) => void; }
 
@@ -64,7 +65,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const values = collection('values', 'items').map(item => ({ icon: iconFor(String(item.icon ?? ''), 'w-5 h-5 text-amber-500'), title: String(item.title ?? ''), desc: String(item.description ?? '') }));
   const team = collection('team', 'items').map(item => ({ name: String(item.name ?? ''), role: String(item.role ?? ''), exp: String(item.experience ?? ''), image: String(item.image ?? '') }));
   const milestones = collection('timeline', 'items').map(item => ({ year: String(item.year ?? ''), title: String(item.title ?? ''), desc: String(item.description ?? '') }));
-  const awards = g('awards', 'items').split('\n').map(item => item.trim()).filter(Boolean);
+  const awards = verifiedAwards(collection('awards', 'items'));
   const missionItems = g('mission', 'items').split('\n').map(item => item.trim()).filter(Boolean);
   const heroImage = g('hero', 'image');
   const heroTitle = g('hero', 'title');
@@ -236,18 +237,28 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
                 </div>
               </div>
             ))}
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-              <h4 className="font-semibold text-amber-800 text-sm mb-2 flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-500" />{awardsTitle}
-              </h4>
-              <ul className="space-y-1.5">
-                {awards.map(item => (
-                  <li key={item} className="flex items-center gap-2 text-xs text-amber-700">
-                    <CheckCircle className="w-3.5 h-3.5 text-amber-500" />{item}
-                  </li>
+            {awards.length > 0 && <section className="rounded-xl border border-amber-100 bg-amber-50 p-4" aria-labelledby="awards-heading">
+              {awardsTitle && <h4 id="awards-heading" className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
+                <Award className="h-4 w-4 text-amber-500" />{awardsTitle}
+              </h4>}
+              <div className="space-y-3">
+                {awards.map(award => (
+                  <article key={`${award.title}-${award.sourceUrl}`} className="rounded-lg border border-amber-100 bg-white p-3">
+                    <div className="flex gap-3">
+                      {award.image && <img src={award.image} alt={`Chứng nhận: ${award.title}`} className="h-12 w-12 shrink-0 rounded-lg border border-amber-100 object-cover" />}
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-sm font-bold leading-5 text-gray-900">{award.title}</h5>
+                        {(award.issuer || award.year) && <p className="mt-0.5 text-xs text-gray-500">{[award.issuer, award.year].filter(Boolean).join(' · ')}</p>}
+                        {award.description && <p className="mt-1.5 text-xs leading-relaxed text-gray-600">{award.description}</p>}
+                        <a href={award.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-900">
+                          <CheckCircle className="h-3.5 w-3.5 shrink-0" />Xem nguồn xác minh
+                        </a>
+                      </div>
+                    </div>
+                  </article>
                 ))}
-              </ul>
-            </div>
+              </div>
+            </section>}
           </div>
         </div>
       </div>

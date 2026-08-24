@@ -42,9 +42,16 @@ const collectionDefinitions: CollectionDefinition[] = [
   },
   {
     pageSlug: 'about', section: 'awards', key: 'items', label: 'Giải thưởng và chứng nhận',
-    description: 'Chỉ nhập giải thưởng hoặc chứng nhận có thể kiểm tra nguồn.',
-    itemLabel: 'Giải thưởng',
-    fields: [{ key: 'text', label: 'Tên giải thưởng / chứng nhận', kind: 'text', required: true }],
+    description: 'Chỉ công bố mục có URL nguồn xác minh. Ảnh chứng nhận là tùy chọn; không dùng ảnh hoặc thông tin không thể kiểm tra.',
+    itemLabel: 'Giải thưởng / chứng nhận',
+    fields: [
+      { key: 'title', label: 'Tên giải thưởng / chứng nhận', kind: 'text', required: true },
+      { key: 'issuer', label: 'Đơn vị cấp / xác nhận', kind: 'text' },
+      { key: 'year', label: 'Năm / thời điểm', kind: 'text', placeholder: 'Ví dụ: 2024' },
+      { key: 'description', label: 'Diễn giải ngắn', kind: 'textarea' },
+      { key: 'image', label: 'Ảnh chứng nhận / logo', kind: 'image' },
+      { key: 'source_url', label: 'URL nguồn xác minh', kind: 'text', required: true, placeholder: 'https://...' },
+    ],
   },
   {
     pageSlug: 'about', section: 'values', key: 'items', label: 'Giá trị cốt lõi',
@@ -143,7 +150,11 @@ export function getCollectionDefinition(pageSlug: string, section: string, key: 
   ));
 }
 
-function normalizeItem(value: unknown, definition?: CollectionDefinition): ContentCollectionItem | null {
+function permitsIncompleteDrafts(definition?: CollectionDefinition): boolean {
+  return definition?.pageSlug === 'about' && definition.section === 'awards' && definition.key === 'items';
+}
+
+function normalizeItem(value: unknown, definition?: CollectionDefinition, allowIncomplete = false): ContentCollectionItem | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   const item: ContentCollectionItem = {};
@@ -151,7 +162,12 @@ function normalizeItem(value: unknown, definition?: CollectionDefinition): Conte
     if (typeof fieldValue === 'string') item[key] = fieldValue.trim();
     else if (Array.isArray(fieldValue) && fieldValue.every(entry => typeof entry === 'string')) item[key] = fieldValue.map(entry => entry.trim()).filter(Boolean);
   }
-  if (definition?.fields.some(field => field.required && !String(item[field.key] ?? '').trim())) return null;
+  if (permitsIncompleteDrafts(definition) && !String(item.title ?? '').trim() && String(item.text ?? '').trim()) {
+    item.title = String(item.text).trim();
+    item.source_url = String(item.source_url ?? '').trim();
+    delete item.text;
+  }
+  if (!allowIncomplete && definition?.fields.some(field => field.required && !String(item[field.key] ?? '').trim())) return null;
   return Object.keys(item).length ? item : null;
 }
 
@@ -166,6 +182,10 @@ function parseLegacyCollection(value: string, definition: CollectionDefinition):
   }).filter((item): item is ContentCollectionItem => item !== null);
 }
 
+function parseLegacyAwards(value: string): ContentCollectionItem[] {
+  return value.split(/(?:\r?\n|\\r?\\n|\\n)/).map(line => line.trim()).filter(Boolean).map(title => ({ title, source_url: '' }));
+}
+
 export function parseContentCollection(value: string | null | undefined, definition?: CollectionDefinition): ContentCollectionItem[] {
   if (!value?.trim()) return [];
   try {
@@ -175,14 +195,17 @@ export function parseContentCollection(value: string | null | undefined, definit
         ? (parsed as ContentCollection).items
         : []
     );
-    return rawItems.map(item => normalizeItem(item, definition)).filter((item): item is ContentCollectionItem => item !== null);
+    return rawItems.map(item => normalizeItem(item, definition, permitsIncompleteDrafts(definition))).filter((item): item is ContentCollectionItem => item !== null);
   } catch {
+    if (definition?.pageSlug === 'about' && definition.section === 'awards' && definition.key === 'items') {
+      return parseLegacyAwards(value);
+    }
     return definition ? parseLegacyCollection(value, definition) : [];
   }
 }
 
 export function serializeContentCollection(items: ContentCollectionItem[], definition?: CollectionDefinition): string {
-  const validItems = items.map(item => normalizeItem(item, definition)).filter((item): item is ContentCollectionItem => item !== null);
+  const validItems = items.map(item => normalizeItem(item, definition, permitsIncompleteDrafts(definition))).filter((item): item is ContentCollectionItem => item !== null);
   return JSON.stringify({ version: 1, items: validItems } satisfies ContentCollection);
 }
 
