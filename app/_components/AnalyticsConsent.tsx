@@ -134,37 +134,30 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
           aria-label="Thông báo chính sách Cookie"
           className="fixed bottom-6 left-3 z-[200] w-[calc(100%-1.5rem)] max-w-sm sm:left-6 sm:w-full"
         >
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-2xl">
             <div className="p-5">
-              <div className="mb-3 flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-50 text-orange-600">
-                  <Cookie className="h-5 w-5" aria-hidden="true" />
-                </div>
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+                <Cookie className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
                 <h2 className="text-base font-bold text-gray-900">Chính sách Cookie</h2>
+                <p className="mt-1 text-sm leading-6 text-gray-600">
+                  Chúng tôi sử dụng cookies để cải thiện trải nghiệm sử dụng dịch vụ. Bạn có thể xem chi tiết trong{' '}
+                  <Link href="/trang/chinh-sach-bao-mat" className="font-medium text-orange-600 underline underline-offset-2 hover:text-orange-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+                    Chính sách cookie
+                  </Link>
+                  .
+                </p>
               </div>
-              <p className="mb-4 text-[13px] leading-relaxed text-gray-600">
-                Chúng tôi sử dụng cookies để cải thiện trải nghiệm sử dụng dịch vụ. Bạn có thể xem chi tiết trong{' '}
-                <Link href="/trang/chinh-sach-bao-mat" className="font-medium text-orange-500 underline underline-offset-2 hover:text-orange-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
-                  Chính sách cookie
-                </Link>
-                .
-              </p>
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => chooseConsent('granted')}
-                  className="min-h-11 w-full rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-orange-600 hover:to-amber-600 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2"
-                >
-                  Tôi đồng ý
-                </button>
-                <button
-                  type="button"
-                  onClick={() => chooseConsent('denied')}
-                  className="min-h-9 w-full text-xs font-medium text-gray-500 underline underline-offset-2 transition hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2"
-                >
-                  Từ chối cookie phân tích
-                </button>
-              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => chooseConsent('granted')}
+              className="mt-4 min-h-11 w-full rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:from-orange-600 hover:to-amber-600 hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2"
+            >
+              Chấp nhận
+            </button>
             </div>
           </div>
         </section>
