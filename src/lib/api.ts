@@ -28,3 +28,4 @@ export * from './api/imageMaintenance';
 export * from './api/contentRevalidation';
 export * from './api/propertyVerification';
 export * from './api/searchVisibility';
+export * from './api/googleAnalytics';

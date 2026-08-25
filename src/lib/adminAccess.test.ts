@@ -21,6 +21,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
       expect(tabs).toContain('leads');
       expect(tabs).toContain('nurture');
       expect(tabs).toContain('property-verification');
+      expect(tabs).toContain('google-analytics');
       expect(tabs.length).toBeGreaterThanOrEqual(19);
     });
 
