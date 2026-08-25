@@ -88,7 +88,7 @@ export function SiteSettingsTab() {
         <div className="divide-y divide-gray-100">
           {groupSettings.map(setting => (
             <div key={setting.key} className="p-4">
-              {setting.key === 'google_analytics_id' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Mã GA4 đang dùng: <strong>G-XK14HMKSK9</strong>. Chỉ nhập mã ngắn dạng <strong>G-...</strong>, không dán nguyên thẻ script.</p>}
+              {setting.key === 'google_analytics_id' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Mã GA4 đang dùng: <strong>G-SKF33YNMZZ</strong>. Chỉ nhập mã ngắn dạng <strong>G-...</strong>, không dán nguyên thẻ script.</p>}
               {setting.key === 'google_ads_id' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Nhập mã tài khoản Google Ads dạng <strong>AW-...</strong>. Thẻ Google sẽ được cài trên mọi trang khi mã hợp lệ.</p>}
               {setting.key === 'google_ads_lead_conversion' && <p className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Nhập đích chuyển đổi dạng <strong>AW-.../label</strong>. Conversion chỉ gửi sau khi form lead lưu thành công.</p>}
               <div className="flex items-start gap-4">

@@ -6,7 +6,7 @@ export interface GoogleTagConfig {
 const GOOGLE_DESTINATION_RE = /^(?:G-[A-Z0-9]{6,20}|AW-\d{6,20})$/i;
 const GOOGLE_ADS_CONVERSION_RE = /^AW-\d{6,20}\/[A-Za-z0-9_-]{3,100}$/i;
 
-export const DEFAULT_GOOGLE_ANALYTICS_ID = 'G-XK14HMKSK9';
+export const DEFAULT_GOOGLE_ANALYTICS_ID = 'G-SKF33YNMZZ';
 export const DEFAULT_GOOGLE_ADS_ID = 'AW-18379274535';
 export const DEFAULT_GOOGLE_ADS_LEAD_CONVERSION = 'AW-18379274535/4QdoCJrk_uAcEKfy9btE';
 
@@ -27,8 +27,8 @@ export function resolveGoogleTagConfig(
   environmentGaId?: string,
 ): GoogleTagConfig {
   void environmentGaId;
-  // ID mới là destination GA4 duy nhất để không vô tình gửi cùng một page view
-  // vào ID cũ trong site_settings hoặc vào một ID khác ngoài ý muốn.
+  // Chỉ dùng một destination GA4 cố định để không gửi cùng một page view
+  // đồng thời vào mã khác trong site_settings hoặc biến môi trường.
   const configuredGaId = DEFAULT_GOOGLE_ANALYTICS_ID;
   const adsId = parseGoogleDestination(settings.google_ads_id);
   const destinations = [configuredGaId, adsId].filter((value): value is string => Boolean(value));

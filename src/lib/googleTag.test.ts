@@ -22,15 +22,22 @@ describe('Google tag configuration', () => {
     expect(parseGoogleAdsConversion('AW-123456/label with spaces')).toBeNull();
   });
 
-  it('uses only the new GA4 destination and keeps configured Ads conversion', () => {
+  it('uses only the restored GA4 destination and keeps configured Ads conversion', () => {
     expect(resolveGoogleTagConfig({
-      google_analytics_id: 'G-OLD1234',
+      google_analytics_id: 'G-NEW1234',
       google_ads_id: DEFAULT_GOOGLE_ADS_ID,
       google_ads_lead_conversion: DEFAULT_GOOGLE_ADS_LEAD_CONVERSION,
     }, 'G-OTHER1234')).toEqual({
       destinations: [DEFAULT_GOOGLE_ANALYTICS_ID, DEFAULT_GOOGLE_ADS_ID],
       leadConversion: DEFAULT_GOOGLE_ADS_LEAD_CONVERSION,
     });
+    expect(DEFAULT_GOOGLE_ANALYTICS_ID).toBe('G-SKF33YNMZZ');
+  });
+
+  it('does not load the newer GA4 destination alongside the restored one', () => {
+    expect(resolveGoogleTagConfig({ google_analytics_id: 'G-XK14HMKSK9' }).destinations).toEqual([
+      'G-SKF33YNMZZ',
+    ]);
   });
 
   it('keeps the new GA4 destination even when settings are empty or unavailable', () => {
