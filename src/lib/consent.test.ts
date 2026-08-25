@@ -12,6 +12,11 @@ describe('consent — trạng thái đồng ý cookie phân tích (GA4)', () => 
     cases.forEach(c => expect(parseConsent(c)).toBe('unset' as ConsentStatus));
   });
 
+  it('không coi trạng thái unset là đã đồng ý analytics', () => {
+    expect(parseConsent(null)).not.toBe('granted');
+    expect(parseConsent('')).not.toBe('granted');
+  });
+
   it('CONSENT_KEY ổn định (đổi key = mất lịch sử đồng ý của user)', () => {
     expect(CONSENT_KEY).toBe('analytics_consent');
   });

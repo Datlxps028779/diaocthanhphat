@@ -1,7 +1,7 @@
 // Đồng ý cookie phân tích (GA4 dùng cookie → cần consent). Vercel Analytics
-// cookieless nên KHÔNG bị chặn bởi consent — chỉ GA4 chờ 'granted'. Lưu lựa chọn
-// vào localStorage; 'unset' = chưa quyết định → AnalyticsConsent tự grant khi
-// user truy cập web (implicit consent theo hành vi), không hiển thị banner.
+// cookieless nên KHÔNG bị chặn bởi consent — chỉ GA4 chờ lựa chọn 'granted'. Lưu
+// lựa chọn vào localStorage; 'unset' = chưa quyết định và không được tải analytics
+// tuỳ chọn cho đến khi khách tự chọn trong thông báo cookie.
 
 export type ConsentStatus = 'granted' | 'denied' | 'unset';
 

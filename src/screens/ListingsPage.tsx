@@ -24,6 +24,7 @@ import { shouldResetChild } from '../lib/cascadeReset';
 import { nextListingPageParam } from '../lib/listingPaging';
 import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
+import { RecentlyViewed } from '../components/RecentlyViewed';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
 import { Breadcrumb } from '../components/Layout';
@@ -36,6 +37,7 @@ import { buildDiscoveryEventProps } from '../lib/discoveryJourney';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
+import { savedSearchManagementHref, shouldShowSavedSearchNotice, type SavedSearchNoticeState } from '../lib/savedSearchJourney';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
@@ -108,6 +110,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const [contactProp, setContactProp] = useState<Property | null>(null);
   const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
   const savedSearchNoticeTracked = useRef(false);
+  const lastSavedSearchNotice = useRef<SavedSearchNoticeState | null>(null);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -182,13 +185,17 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
       if (saved) {
-        setSavedSearchPrompt(true);
-        if (!savedSearchNoticeTracked.current) {
-          savedSearchNoticeTracked.current = true;
-          track(EVENTS.SAVED_SEARCH_NOTICE_SHOWN, {
-            hasFilters: true,
-            listingType: listingType || 'all',
-          });
+        const nextNotice = { savedSearchId: saved.id, signature: autoSaveSignature };
+        if (shouldShowSavedSearchNotice(lastSavedSearchNotice.current, nextNotice)) {
+          lastSavedSearchNotice.current = nextNotice;
+          setSavedSearchPrompt(true);
+          if (!savedSearchNoticeTracked.current) {
+            savedSearchNoticeTracked.current = true;
+            track(EVENTS.SAVED_SEARCH_NOTICE_SHOWN, {
+              hasFilters: true,
+              listingType: listingType || 'all',
+            });
+          }
         }
       }
     },
@@ -658,10 +665,10 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                 aria-label="Mở bộ lọc nâng cao"
                 aria-expanded={mobileFilter}
                 aria-controls="mobile-listing-filters"
-                className="lg:hidden flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"
+                className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 lg:hidden"
               >
-                <Filter className="w-4 h-4" />
-                {hasActiveFilters && <span className="w-2 h-2 bg-red-500 rounded-full" />}
+                <Filter className="h-4 w-4" />Bộ lọc
+                {activeFilterCount > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{activeFilterCount}</span>}
               </button>
             </div>
           </div>
@@ -720,7 +727,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </a>
             )}
             {/* Sort + view mode bar */}
-            <div className="flex items-center justify-between mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2.5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm sm:px-4">
               <div className="flex items-center gap-2">
                 <ArrowUpDown className="w-4 h-4 text-gray-400" />
                 <select value={effectiveSort} onChange={e => setFilter(() => setSort(e.target.value as PropertySort))}
@@ -740,7 +747,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                     { mode: 'map' as const, icon: <MapIcon className="w-4 h-4" />, label: 'Bản đồ' },
                   ].map(v => (
                     <button key={v.mode} onClick={() => setViewMode(v.mode)} title={v.label}
-                      className={`p-1.5 rounded transition-colors ${viewMode === v.mode ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                      aria-label={v.label}
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${viewMode === v.mode ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-gray-600'}`}>
                       {v.icon}
                     </button>
                   ))}
@@ -752,8 +760,21 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               <div className="mb-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-start gap-3 text-sm animate-fade-in">
                 <Bell className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-emerald-800">Đã tự lưu nhu cầu tìm kiếm</p>
-                  <p className="text-emerald-700 text-xs mt-0.5">Vào Tài khoản → Tìm kiếm đã lưu để bật cảnh báo khi có tin mới phù hợp.</p>
+                  <p className="font-bold text-emerald-800">Đã lưu tiêu chí tìm kiếm</p>
+                  <p className="text-emerald-700 text-xs mt-0.5">Bạn có thể quản lý tùy chọn cảnh báo cho tìm kiếm này trong Tài khoản. Hệ thống chưa xác nhận đã gửi thông báo nào.</p>
+                  <Link
+                    href={savedSearchManagementHref()}
+                    onClick={() => track(EVENTS.SAVED_SEARCH_MANAGE_CLICK, buildDiscoveryEventProps({
+                      surface: 'listings',
+                      module: 'saved_search_notice',
+                      hasFilters: true,
+                      listingType: listingType || undefined,
+                      source: 'saved_search_notice',
+                    }))}
+                    className="mt-2 inline-flex text-xs font-bold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
+                  >
+                    Quản lý cảnh báo
+                  </Link>
                 </div>
                 <button onClick={() => {
                   setSavedSearchPrompt(false);
@@ -921,8 +942,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </div>
             ) : viewMode === 'grid' && (
               loading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {Array.from({ length: 8 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-72 animate-pulse border border-gray-100" />)}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 md:gap-4">
+                  {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-72 rounded-xl border border-gray-100 bg-white animate-pulse" />)}
                 </div>
               ) : properties.length === 0 ? (
                 <EmptyState
@@ -932,7 +953,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   resultSummary={resultSummary}
                 />
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 md:gap-4">
                   {properties.map((p, index) => (
                     <GridCard key={p.id} property={p}
                       onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'grid')}
@@ -1031,6 +1052,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
             {viewMode !== 'map' && (
               <ForYou surface="listings" source="listings_after_results" />
             )}
+            {viewMode !== 'map' && (
+              <RecentlyViewed
+                title="Xem lại tin đã quan tâm"
+                subtitle="Tiếp tục từ những bất động sản bạn đã mở gần đây."
+                surface="listings"
+                source="listings_continue_browsing"
+              />
+            )}
           </div>
         </div>
       </div>
@@ -1039,14 +1068,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       {mobileFilter && (
         <div id="mobile-listing-filters" role="dialog" aria-modal="true" aria-label="Bộ lọc nâng cao" className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFilter(false)} />
-          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white overflow-y-auto">
+          <div className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-3xl bg-white pb-[env(safe-area-inset-bottom)] sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:w-[min(22rem,calc(100vw-1rem))] sm:rounded-none">
             <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-red-500" />Bộ lọc nâng cao
               </h3>
               <button type="button" onClick={() => setMobileFilter(false)} aria-label="Đóng bộ lọc nâng cao" className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4"><FilterPanel /></div>
+            <div className="p-4 text-[14px] sm:text-sm"><FilterPanel /></div>
             <div className="p-4 border-t border-gray-100 sticky bottom-0 bg-white">
               <button onClick={() => setMobileFilter(false)} className="w-full bg-red-600 text-white font-bold py-3 rounded-xl text-sm">
                 Xem {total.toLocaleString('vi-VN')} kết quả
@@ -1157,8 +1186,8 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
 
 function ListCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   return (
-    <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-100 flex transition-all group">
-      <div className="relative w-48 flex-shrink-0 overflow-hidden">
+    <div className="group flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md">
+      <div className="relative w-28 shrink-0 overflow-hidden sm:w-48">
         <Link href={buildPropertyPath(p)} onClick={onResultClick} aria-label={p.title} className="absolute inset-0 z-[1]" />
         <BlurFillImage
           src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
