@@ -33,6 +33,18 @@ export type GoogleAnalyticsConfig = {
 
 export type GoogleAnalyticsConfigurationState = 'not_configured' | 'configured' | 'invalid';
 
+export type GoogleAnalyticsDiagnosticStage = 'configuration' | 'token' | 'property_report';
+
+export type GoogleAnalyticsDiagnostic = {
+  ok: boolean;
+  configurationState: GoogleAnalyticsConfigurationState;
+  stage: GoogleAnalyticsDiagnosticStage;
+  propertyId: string | null;
+  serviceAccount: string | null;
+  message: string;
+  errorCode: GoogleAnalyticsError['code'] | null;
+};
+
 export type GoogleAnalyticsOverview = {
   activeUsers: number;
   newUsers: number;
@@ -213,6 +225,51 @@ async function runReport(config: GoogleAnalyticsConfig, token: string, body: Rec
     throw new GoogleAnalyticsError('GOOGLE_RESPONSE', 'Google Analytics trả về báo cáo không hợp lệ.');
   }
   return payload as GaReportResponse;
+}
+
+export async function diagnoseGoogleAnalytics(config: GoogleAnalyticsConfig, fetchImpl: FetchLike = fetch): Promise<GoogleAnalyticsDiagnostic> {
+  const base = {
+    configurationState: 'configured' as const,
+    propertyId: config.propertyId,
+    serviceAccount: config.clientEmail,
+  };
+  let token: string;
+  try {
+    token = await getGoogleAnalyticsAccessToken(config, fetchImpl);
+  } catch (error) {
+    const gaError = error instanceof GoogleAnalyticsError ? error : null;
+    return {
+      ...base,
+      ok: false,
+      stage: 'token',
+      message: gaError?.message ?? 'Không lấy được OAuth access token từ Google.',
+      errorCode: gaError?.code ?? 'GOOGLE_AUTH',
+    };
+  }
+
+  try {
+    await runReport(config, token, {
+      dateRanges: [{ startDate: '7daysAgo', endDate: 'today' }],
+      metrics: [{ name: 'activeUsers' }],
+      limit: '1',
+    }, fetchImpl);
+    return {
+      ...base,
+      ok: true,
+      stage: 'property_report',
+      message: 'Service account đã xác thực và đọc được GA4 Property bằng Google Analytics Data API.',
+      errorCode: null,
+    };
+  } catch (error) {
+    const gaError = error instanceof GoogleAnalyticsError ? error : null;
+    return {
+      ...base,
+      ok: false,
+      stage: 'property_report',
+      message: gaError?.message ?? 'Google đã cấp token nhưng từ chối đọc Property.',
+      errorCode: gaError?.code ?? 'GOOGLE_REQUEST',
+    };
+  }
 }
 
 export async function getGoogleAnalyticsReport(config: GoogleAnalyticsConfig, requestedDays: unknown, fetchImpl: FetchLike = fetch): Promise<GoogleAnalyticsReport> {

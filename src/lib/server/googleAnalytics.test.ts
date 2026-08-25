@@ -5,6 +5,7 @@ import {
   GOOGLE_ANALYTICS_SCOPE,
   GOOGLE_TOKEN_ENDPOINT,
   createGoogleAnalyticsAssertion,
+  diagnoseGoogleAnalytics,
   getGoogleAnalyticsConfig,
   getGoogleAnalyticsReport,
   normalizeGoogleAnalyticsDays,
@@ -59,6 +60,16 @@ describe('googleAnalytics', () => {
     expect(report.overview).toEqual({ activeUsers: 20, newUsers: 11, sessions: 32, pageViews: 55, engagementRate: 0.625 });
     expect(report.daily).toEqual([{ date: '25/08', activeUsers: 2, newUsers: 1, sessions: 3, pageViews: 5, engagementRate: 0.5 }]);
     expect(report.topPages).toEqual([{ path: '/tin-tuc', pageViews: 12, activeUsers: 7 }]);
+  });
+
+  it('identifies token failures separately from property permission failures', async () => {
+    const tokenFailure = await diagnoseGoogleAnalytics(config, vi.fn().mockResolvedValue(response({ error: 'invalid_grant' }, 401)));
+    expect(tokenFailure).toMatchObject({ ok: false, stage: 'token', errorCode: 'GOOGLE_AUTH' });
+
+    const permissionFailure = await diagnoseGoogleAnalytics(config, vi.fn()
+      .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
+      .mockResolvedValueOnce(response({ error: { message: 'User does not have sufficient permissions for this property.' } }, 403)));
+    expect(permissionFailure).toMatchObject({ ok: false, stage: 'property_report', errorCode: 'GOOGLE_AUTH' });
   });
 
   it('calls only the GA4 Data API with bounded page rows and never exposes the access token', async () => {

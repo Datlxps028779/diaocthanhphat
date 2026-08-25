@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BarChart3, Eye, RefreshCw, Users, UserPlus, Activity } from 'lucide-react';
-import { getGoogleAnalyticsReport, type GoogleAnalyticsReport } from '../../../lib/api';
+import { diagnoseGoogleAnalytics, getGoogleAnalyticsReport, type GoogleAnalyticsReport } from '../../../lib/api';
+import type { GoogleAnalyticsDiagnostic } from '../../../lib/api/googleAnalytics';
 
 const RANGES = [7, 30, 90] as const;
 type Range = (typeof RANGES)[number];
@@ -59,9 +60,12 @@ export function GoogleAnalyticsTab() {
   const [configurationState, setConfigurationState] = useState<'not_configured' | 'configured' | 'invalid' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [diagnostic, setDiagnostic] = useState<GoogleAnalyticsDiagnostic | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
 
   const load = async (range = days) => {
     setLoading(true); setError('');
+    setDiagnostic(null);
     try { const result = await getGoogleAnalyticsReport(range); setConfigurationState(result.configurationState); setReport(result.report); }
     catch (err) { setError(err instanceof Error ? err.message : 'Không tải được báo cáo Google Analytics.'); }
     finally { setLoading(false); }
@@ -72,10 +76,11 @@ export function GoogleAnalyticsTab() {
   return <div className="space-y-5">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><h2 className="flex items-center gap-2 text-lg font-bold text-gray-900"><BarChart3 className="h-5 w-5 text-red-500" />Thống kê website</h2><p className="mt-0.5 text-sm text-gray-500">Báo cáo GA4 server-side; hoạt động admin không được tính vào traffic khách hàng.</p></div>
-      <div className="flex items-center gap-2"><div className="flex rounded-lg border border-gray-200 bg-white p-1">{RANGES.map(range => <button key={range} onClick={() => { setDays(range); void load(range); }} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${days === range ? 'bg-red-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{range} ngày</button>)}</div><button onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-50" title="Tải lại"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div>
+      <div className="flex items-center gap-2"><div className="flex rounded-lg border border-gray-200 bg-white p-1">{RANGES.map(range => <button key={range} onClick={() => { setDays(range); void load(range); }} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${days === range ? 'bg-red-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{range} ngày</button>)}</div><button onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-50" title="Tải lại"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button><button onClick={async () => { setDiagnosing(true); setDiagnostic(null); try { setDiagnostic(await diagnoseGoogleAnalytics()); } catch (err) { setError(err instanceof Error ? err.message : 'Không chạy được chẩn đoán.'); } finally { setDiagnosing(false); } }} disabled={diagnosing} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">{diagnosing ? 'Đang kiểm tra…' : 'Kiểm tra kết nối'}</button></div>
     </div>
 
     {error && <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4"><AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" /><div><p className="text-sm font-semibold text-red-800">Không tải được báo cáo</p><p className="mt-0.5 text-xs text-red-700">{error}</p></div></div>}
+    {diagnostic && <div className={`rounded-xl border p-4 ${diagnostic.ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}><p className={`text-sm font-bold ${diagnostic.ok ? 'text-emerald-800' : 'text-red-800'}`}>{diagnostic.ok ? 'Kết nối GA4 thành công' : 'Chẩn đoán xác định lỗi'}</p><p className={`mt-1 text-xs ${diagnostic.ok ? 'text-emerald-700' : 'text-red-700'}`}>{diagnostic.message}</p><p className="mt-2 text-[11px] text-gray-600">Giai đoạn: {diagnostic.stage} · Property: {diagnostic.propertyId ?? 'không đọc được'} · Service account: {diagnostic.serviceAccount ?? 'không đọc được'}</p></div>}
     {!error && configurationState !== 'configured' && !loading && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-bold text-amber-900">GA4 chưa sẵn sàng</p><p className="mt-1 text-sm leading-6 text-amber-800">Cần cấu hình GOOGLE_ANALYTICS_CLIENT_EMAIL, GOOGLE_ANALYTICS_PRIVATE_KEY và GOOGLE_ANALYTICS_PROPERTY_ID trên server, sau đó cấp quyền Viewer cho service account trong GA4.</p></div>}
     {loading && <div className="rounded-xl border border-gray-200 bg-white p-12 text-center text-sm text-gray-400">Đang tải báo cáo GA4...</div>}
     {!loading && !error && report && <ReportContent report={report} />}
