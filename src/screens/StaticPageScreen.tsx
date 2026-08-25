@@ -4,6 +4,7 @@ import type { ManagedPage, PageBlock } from '../lib/supabase';
 import { Breadcrumb } from '../components/Layout';
 import { isHtmlContent } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
+import { ReadableContent } from '../components/ReadableContent';
 
 type StaticPageScreenProps = {
   page: ManagedPage;
@@ -65,10 +66,10 @@ export function StaticPageScreen({ page, blocks }: StaticPageScreenProps) {
       <section className="mx-auto max-w-4xl px-4 py-8 md:py-12">
         <Breadcrumb items={[{ label: 'Trang chủ', href: '/' }, { label: page.title }]} />
         <article className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-8">
-          <div className="space-y-6">
+          <ReadableContent>
             {bodyBlocks.map(renderBlock)}
-            {bodyBlocks.length === 0 && <p className="text-sm leading-7 text-gray-600">Nội dung đang được cập nhật.</p>}
-          </div>
+            {bodyBlocks.length === 0 && <p>Nội dung đang được cập nhật.</p>}
+          </ReadableContent>
         </article>
       </section>
     </main>

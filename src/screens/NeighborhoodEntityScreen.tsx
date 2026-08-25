@@ -7,6 +7,7 @@ import { pickOverallStat, formatPricePerSqm, buildPriceAnswer } from '../lib/pri
 import { PriceStatsBlock } from '../components/PriceStatsBlock';
 import { buildProductPath } from '../lib/productPath';
 import { districtDisplaySlug } from '../lib/areaPath';
+import { ReadableContent } from '../components/ReadableContent';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -53,7 +54,7 @@ function renderContentBlock(block: PageBlock) {
   const value = block.value?.trim() ?? '';
   if (!value) return null;
   if (block.type === 'html' || isHtmlContent(value)) {
-    return <div key={block.id} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(value) }} />;
+    return <ReadableContent key={block.id} className="max-w-none"><div dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(value) }} /></ReadableContent>;
   }
   if (block.type === 'list') {
     return (
@@ -65,7 +66,7 @@ function renderContentBlock(block: PageBlock) {
   if (block.type === 'image') {
     return <img key={block.id} src={value} alt={block.label} className="w-full rounded-2xl object-cover shadow-sm" />;
   }
-  return <p key={block.id} className="whitespace-pre-line text-sm leading-7 text-gray-700">{value}</p>;
+  return <ReadableContent key={block.id} className="max-w-none"><p className="whitespace-pre-line">{value}</p></ReadableContent>;
 }
 
 function PropertyCard({ property }: { property: Property }) {

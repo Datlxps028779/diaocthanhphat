@@ -37,7 +37,7 @@ SELECT
   count(*) FILTER (WHERE p.is_active AND p.is_verified AND ul.id IS NULL) AS without_linked_user_listing,
   count(*) FILTER (WHERE p.is_active AND p.is_verified AND ul.status = 'approved') AS with_approved_linked_listing
 FROM public.properties p
-LEFT JOIN public.user_listings ul ON ul.approved_property_id = p.id;
+LEFT JOIN public.user_listings ul ON ul.property_id = p.id;
 
 -- 4) Existing source fields are incomplete administrative data only. This exposes
 -- what a future human review can inspect, not documentary proof.

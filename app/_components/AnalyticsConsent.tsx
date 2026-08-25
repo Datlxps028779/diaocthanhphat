@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Script from 'next/script';
-import { Cookie, Settings2 } from 'lucide-react';
+import { Cookie } from 'lucide-react';
 import { getConsent, setConsent, CONSENT_EVENT, type ConsentStatus } from '@/lib/consent';
 import { getSiteSettings } from '@/lib/api';
 import { resolveGoogleTagConfig, type GoogleTagConfig } from '@/lib/googleTag';
@@ -20,17 +21,15 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
   const [tagReady, setTagReady] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [showNotice, setShowNotice] = useState(false);
-  const loadOptionalAnalytics = mounted && status === 'granted';
+  const pathname = usePathname();
+  const isPrivateWorkspace = pathname === '/noi-bo' || pathname.startsWith('/noi-bo/') || pathname === '/quantrihethong' || pathname.startsWith('/quantrihethong/');
+  const loadOptionalAnalytics = mounted && !isPrivateWorkspace && status === 'granted';
   const loadGa = loadOptionalAnalytics && config.destinations.length > 0;
 
   const chooseConsent = (nextStatus: Exclude<ConsentStatus, 'unset'>) => {
     setConsent(nextStatus);
     setStatus(nextStatus);
     setShowNotice(false);
-  };
-
-  const reopenChoices = () => {
-    setShowNotice(true);
   };
 
   useEffect(() => {
@@ -116,19 +115,7 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
         </Script>
       )}
 
-      {mounted && !showNotice && status !== 'unset' && (
-        <button
-          type="button"
-          onClick={reopenChoices}
-          className="fixed bottom-4 left-4 z-[70] inline-flex min-h-11 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-lg transition hover:border-red-200 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
-          aria-label="Mở tuỳ chọn cookie"
-        >
-          <Settings2 className="h-4 w-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Tuỳ chọn cookie</span>
-        </button>
-      )}
-
-      {mounted && showNotice && (
+      {mounted && !isPrivateWorkspace && showNotice && (
         <section
           role="region"
           aria-label="Thông báo chính sách Cookie"

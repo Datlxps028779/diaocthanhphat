@@ -237,8 +237,9 @@ function ProfileTab() {
 }
 
 // ─── Tìm kiếm đã lưu ──────────────────────────────────────────────────────────
-// Danh sách bộ lọc đã lưu: bật/tắt cảnh báo tin mới, đổi tần suất, xem lại, xóa.
-// Slice này chỉ quản lý; gửi cảnh báo thật là foundation cho bước sau.
+// Danh sách bộ lọc đã lưu: bật/tắt tùy chọn cảnh báo, đổi tần suất, xem lại, xóa.
+// Đây là preference của người dùng; chỉ trạng thái delivery có bằng chứng mới được
+// mô tả là thông báo đã gửi.
 function SavedSearchesTab({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const queryClient = useQueryClient();
   const { data: searches = [], isLoading } = useQuery({
@@ -301,7 +302,7 @@ function SavedSearchesTab({ onNavigate }: { onNavigate: (p: Page) => void }) {
       <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
         <SearchIcon className="w-14 h-14 text-gray-200 mx-auto mb-3" />
         <p className="text-gray-600 font-semibold">Chưa có tìm kiếm nào được lưu</p>
-        <p className="text-gray-400 text-sm mt-1">Khi bạn lọc/tìm trên trang danh sách, hệ thống tự lưu nhu cầu để cảnh báo tin mới phù hợp</p>
+        <p className="text-gray-400 text-sm mt-1">Khi bạn lọc/tìm trên trang danh sách, hệ thống sẽ lưu tiêu chí để bạn quản lý tùy chọn cảnh báo tại đây.</p>
       </div>
     );
   }
@@ -325,26 +326,29 @@ function SavedSearchesTab({ onNavigate }: { onNavigate: (p: Page) => void }) {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-50">
-            <button
-              onClick={() => toggleMutation.mutate({ id: s.id, alert_enabled: !s.alert_enabled })}
-              className={`inline-flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${s.alert_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-              {s.alert_enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
-              {s.alert_enabled ? 'Đang bật cảnh báo' : 'Đã tắt cảnh báo'}
-            </button>
+          <div className="mt-3 border-t border-gray-50 pt-3">
+            <p className="mb-2 text-xs leading-5 text-gray-500">Tùy chọn này lưu nhu cầu và tần suất mong muốn. Chỉ hiển thị “đã gửi” khi có hệ thống delivery xác nhận trong tương lai.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => toggleMutation.mutate({ id: s.id, alert_enabled: !s.alert_enabled })}
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${s.alert_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                {s.alert_enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+                {s.alert_enabled ? 'Đã bật tùy chọn cảnh báo' : 'Đã tắt tùy chọn cảnh báo'}
+              </button>
 
-            <label className="inline-flex items-center gap-1.5 text-sm text-gray-500">
-              Tần suất:
-              <select
-                value={isAlertCadence(s.cadence) ? s.cadence : 'daily'}
-                disabled={!s.alert_enabled}
-                onChange={e => cadenceMutation.mutate({ id: s.id, cadence: e.target.value as AlertCadence })}
-                className="border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50">
-                {Object.entries(CADENCE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
-            </label>
+              <label className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+                Tần suất:
+                <select
+                  value={isAlertCadence(s.cadence) ? s.cadence : 'daily'}
+                  disabled={!s.alert_enabled}
+                  onChange={e => cadenceMutation.mutate({ id: s.id, cadence: e.target.value as AlertCadence })}
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50">
+                  {Object.entries(CADENCE_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
         </div>
       ))}
