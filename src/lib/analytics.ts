@@ -66,4 +66,5 @@ export const EVENTS = {
   DISCOVERY_MODULE_CLICK: 'discovery_module_click',
   SAVED_SEARCH_NOTICE_SHOWN: 'saved_search_notice_shown',
   SAVED_SEARCH_NOTICE_DISMISSED: 'saved_search_notice_dismissed',
+  SAVED_SEARCH_MANAGE_CLICK: 'saved_search_manage_click',
 } as const;
