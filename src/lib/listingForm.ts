@@ -1,6 +1,7 @@
 import type { UserListing, ListingType, Property, PropertyType } from './supabase';
 import type { FaqItem } from './propertyFaq';
 import { generateSlug } from './useSEOAutofill';
+import { parsePriceInput, priceInputFromNumber } from './listingPrice';
 
 // State của form đăng tin (PostListingPage). Mọi trường là chuỗi vì input HTML
 // dùng chuỗi; số/JSON được nén lại lúc submit.
@@ -31,9 +32,9 @@ export function listingToFormState(l: UserListing): ListingFormState {
   return {
     listing_type: l.listing_type,
     title: s(l.title), description: s(l.description),
-    price: n(l.price), price_unit: s(l.price_unit) || 'tỷ', price_label: s(l.price_label),
-    price_per_month: n(l.price_per_month),
-    loan_support: n(l.loan_support),
+    price: priceInputFromNumber(l.price), price_unit: s(l.price_unit) || 'tỷ', price_label: s(l.price_label),
+    price_per_month: priceInputFromNumber(l.price_per_month),
+    loan_support: priceInputFromNumber(l.loan_support),
     area_sqm: n(l.area_sqm), address: s(l.address), city: s(l.city),
     district: s(l.district), ward: s(l.ward), neighborhood_slug: s(l.neighborhood_slug),
     area_id: s(l.area_id), district_id: s(l.district_id), property_type_id: s(l.property_type_id),
@@ -66,6 +67,9 @@ export function formToProperty(
     const parsed = Number(v);
     return Number.isFinite(parsed) ? parsed : null;
   };
+  // Giá trên form cho phép dấu phẩy nhóm nghìn, khác với các thông số kỹ thuật.
+  // Vì vậy không dùng Number() cho các trường này (Number('1,500') là NaN).
+  const price = (v: unknown) => typeof v === 'string' ? parsePriceInput(v) : num(v);
   const str = (v: unknown) => (v === '' || v === null || v === undefined ? null : String(v));
   const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : null);
   const slug = (str(form.slug) || generateSlug(String(form.title ?? '')) || 'slug') as string;
@@ -76,11 +80,11 @@ export function formToProperty(
     id: property?.id ?? 'draft',
     title: String(form.title ?? ''),
     description: str(form.description),
-    price: num(form.price) ?? 0,
+    price: price(form.price) ?? 0,
     price_unit: String(form.price_unit ?? 'tỷ'),
     price_label: str(form.price_label),
-    price_per_month: num(form.price_per_month),
-    loan_support: num(form.loan_support),
+    price_per_month: price(form.price_per_month),
+    loan_support: price(form.loan_support),
     listing_type: (form.listing_type as Property['listing_type']) ?? 'mua_ban',
     area_sqm: num(form.area_sqm),
     address: str(form.address),

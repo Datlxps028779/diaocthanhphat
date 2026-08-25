@@ -16,6 +16,7 @@ const EVENT_LABELS: Record<UserListingLifecycleEvent['event_type'], string> = {
   expired: 'Tin hết hạn',
   expiry_changed: 'Đổi thời hạn',
   deleted: 'Xóa tin',
+  admin_edited: 'Chỉnh sửa trước duyệt',
 };
 
 const ACTOR_LABELS: Record<UserListingLifecycleEvent['actor_role'], string> = {

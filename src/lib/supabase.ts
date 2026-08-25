@@ -360,7 +360,7 @@ export type UserListing = {
 };
 export type UserListingLifecycleEventType =
   | 'submitted' | 'approved' | 'rejected' | 'resubmitted'
-  | 'renewed' | 'expired' | 'expiry_changed' | 'deleted';
+  | 'renewed' | 'expired' | 'expiry_changed' | 'deleted' | 'admin_edited';
 export type UserListingLifecycleEvent = {
   id: string;
   listing_id: string | null;

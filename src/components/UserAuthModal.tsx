@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { signIn, signUp, requestPasswordReset, resendConfirmation, getCurrentRole } from '../lib/api';
 import { interpretSignUpResult, isEmailNotConfirmedError } from '../lib/authFlow';
-import { isElevatedRole } from '../lib/authGuard';
+import { privateWorkspacePath } from '../lib/authGuard';
 
 interface UserAuthModalProps {
   mode: 'login' | 'register';
@@ -42,8 +42,9 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
         // và đưa thẳng vào trang quản trị (điều hướng cứng để không phụ thuộc router
         // của từng nơi mở modal). Người dùng thường thì đóng modal như cũ.
         const role = await getCurrentRole().catch(() => null);
-        if (isElevatedRole(role)) {
-          window.location.href = '/quantrihethong';
+        const workspace = privateWorkspacePath(role);
+        if (workspace) {
+          window.location.href = workspace;
           return;
         }
         onSuccess();

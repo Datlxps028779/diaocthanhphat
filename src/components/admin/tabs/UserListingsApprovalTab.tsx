@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X } from 'lucide-react';
+import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X, Pencil } from 'lucide-react';
+import { PostListingPage } from '../../../screens/PostListingPage';
+import type { Page } from '../../../lib/router';
 import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
 import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
+import { formatListingPrice } from '../../../lib/listingPrice';
 
 // ─── User Listings Approval Tab ───────────────────────────────────────────────
 export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -21,7 +24,10 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [historyEvents, setHistoryEvents] = useState<UserListingLifecycleEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [editingListing, setEditingListing] = useState<UserListing | null>(null);
   const historyRequest = useRef(0);
+
+  const noOpNavigate = (_page: Page) => {};
 
   const load = async () => { setLoading(true); const data = await adminGetUserListings(statusFilter); setListings(data); setLoading(false); };
   useEffect(() => { load(); }, [statusFilter]);
@@ -127,6 +133,30 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     expired: { label: 'Hết hạn', cls: 'bg-gray-200 text-gray-600' },
   };
 
+  if (editingListing) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-100">
+        <div className="min-h-full py-6">
+          <div className="max-w-6xl mx-auto px-4 mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Kiểm duyệt nội dung</p>
+              <h2 className="text-xl font-black text-gray-900">Chỉnh tin trước khi duyệt</h2>
+            </div>
+            <button onClick={() => setEditingListing(null)} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 hover:border-gray-400">
+              <X className="w-4 h-4" /> Đóng
+            </button>
+          </div>
+          <PostListingPage
+            onNavigate={noOpNavigate}
+            editId={editingListing.id}
+            adminMode
+            onAdminSaved={async () => { setEditingListing(null); await load(); onRefreshStats(); }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {statusFilter === 'rejected' && (
@@ -203,7 +233,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                     <div className="flex items-start justify-between gap-2 flex-wrap">
                       <div>
                         <h4 className="font-bold text-gray-900 text-sm line-clamp-1">{listing.title}</h4>
-                        <p className="text-red-600 font-bold text-sm">{listing.price} {listing.price_unit}</p>
+                        <p className="text-red-600 font-bold text-sm">{formatListingPrice(listing.price, listing.price_unit)}</p>
                         <div className="flex gap-3 text-xs text-gray-500 mt-1 flex-wrap">
                           <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{listing.city}</span>
                           <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{listing.contact_phone}</span>
@@ -230,6 +260,10 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                   <div className="flex flex-col gap-2 flex-shrink-0 items-stretch">
                     {listing.status === 'pending' && (
                       <>
+                        <button onClick={() => setEditingListing(listing)}
+                          className="flex items-center justify-center gap-1 border border-blue-300 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+                          <Pencil className="w-3.5 h-3.5" />Xem & chỉnh
+                        </button>
                         <button onClick={() => handleApprove(listing.id)} disabled={processingId === listing.id}
                           className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                           <CheckCircle className="w-3.5 h-3.5" />Duyệt

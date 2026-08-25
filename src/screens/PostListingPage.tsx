@@ -6,7 +6,7 @@ import {
   CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle, Plus, X, Zap, Eye
 } from 'lucide-react';
 import { type ListingType } from '../lib/supabase';
-import { submitUserListing, updateMyListing, getMyListing } from '../lib/api';
+import { submitUserListing, updateMyListing, getMyListing, adminUpdatePendingUserListing } from '../lib/api';
 import { listingToFormState, formToProperty } from '../lib/listingForm';
 import { LocationPicker, type GeocodeTarget } from '../components/LocationPicker';
 import { PropertyDetailPage } from './PropertyDetailPage';
@@ -25,10 +25,13 @@ import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
+import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/listingPrice';
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
   editId?: string;   // có id = chế độ sửa: nạp tin cũ, submit sẽ update
+  adminMode?: boolean;
+  onAdminSaved?: () => void;
 }
 
 const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO', 'Xem trước'];
@@ -63,7 +66,7 @@ const SPEC_PLACEHOLDERS: Partial<Record<SpecFieldKey, string>> = {
   bathrooms: 'VD: 2',
 };
 
-export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
+export function PostListingPage({ onNavigate, editId, adminMode = false, onAdminSaved }: PostListingPageProps) {
   const { user, loading: authLoading } = useAuth();
   const [step, setStep] = useState(0);
   const { data: areas = [] } = useAreas();
@@ -128,9 +131,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
   const seo = useSEOAutofill({
     title: form.title,
     description: form.description,
-    price: form.price,
+    price: parsePriceInput(form.price) ?? undefined,
     price_unit: form.price_unit,
-    price_per_month: form.price_per_month,
+    price_per_month: parsePriceInput(form.price_per_month) ?? undefined,
     listing_type: form.listing_type,
     city: form.city,
     district: form.district,
@@ -233,8 +236,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
     return { ...f, faq: [...f.faq, ...generated.filter(g => !existing.has(g.question.trim()))] };
   });
 
-  // parseFloat('abc') → NaN, và NaN <= 0 là false nên số rác từng lọt qua validate.
-  // Guard: chỉ hợp lệ khi là số hữu hạn và > 0.
+  // Giá dùng chuỗi đã nhóm dấu phẩy trên UI; parse tập trung để không gửi 1,500
+  // thành 1 hoặc NaN xuống DB. Các field số kỹ thuật khác vẫn dùng Number chuẩn.
+  const isPositivePrice = (raw: string) => parsePriceInput(raw) !== null;
   const isPositiveNumber = (raw: string) => {
     const n = parseFloat(raw);
     return Number.isFinite(n) && n > 0;
@@ -246,9 +250,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
       if (!form.title.trim()) errs.title = 'Vui lòng nhập tiêu đề';
       if (!form.property_type_id) errs.property_type_id = 'Vui lòng chọn loại BĐS';
       if (isRental(form.listing_type)) {
-        if (!isPositiveNumber(form.price_per_month)) errs.price_per_month = 'Vui lòng nhập giá thuê hợp lệ (số lớn hơn 0)';
+        if (!isPositivePrice(form.price_per_month)) errs.price_per_month = 'Vui lòng nhập giá thuê hợp lệ (số lớn hơn 0)';
       } else {
-        if (!isPositiveNumber(form.price)) errs.price = 'Vui lòng nhập giá hợp lệ (số lớn hơn 0)';
+        if (!isPositivePrice(form.price)) errs.price = 'Vui lòng nhập giá hợp lệ (số lớn hơn 0)';
       }
     }
     if (step === 1) {
@@ -277,11 +281,11 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
         listing_type: specForm.listing_type,
         title: specForm.title,
         description: specForm.description || null,
-        price: specForm.price ? parseFloat(specForm.price) : 0,
+        price: parsePriceInput(specForm.price) ?? 0,
         price_unit: specForm.price_unit,
         price_label: specForm.price_label || null,
-        price_per_month: specForm.price_per_month ? parseFloat(specForm.price_per_month) : null,
-        loan_support: specForm.loan_support ? parseFloat(specForm.loan_support) : null,
+        price_per_month: parsePriceInput(specForm.price_per_month),
+        loan_support: parsePriceInput(specForm.loan_support),
         area_sqm: specForm.area_sqm ? parseFloat(specForm.area_sqm) : null,
         address: specForm.address || null,
         city: specForm.city,
@@ -318,10 +322,14 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
           return valid.length ? valid : null;
         })(),
       };
-      if (editId) await updateMyListing(editId, payload);
+      if (editId && adminMode) await adminUpdatePendingUserListing(editId, payload);
+      else if (editId) await updateMyListing(editId, payload);
       else await submitUserListing(payload);
     },
-    onSuccess: () => setSubmitted(true),
+    onSuccess: () => {
+      if (adminMode) onAdminSaved?.();
+      else setSubmitted(true);
+    },
     onError: (err) => setErrors({ submit: extractErrorMessage(err, editId ? 'Không lưu được tin' : 'Không gửi được tin') }),
   });
   const submitting = submitMutation.isPending;
@@ -505,7 +513,7 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
               {isRental(form.listing_type) ? (
                 <FormField label="Giá thuê / tháng *" error={errors.price_per_month}>
                   <div className="flex gap-2">
-                    <input type="number" value={form.price_per_month} onChange={e => set('price_per_month', e.target.value)}
+                    <input type="text" inputMode="decimal" value={form.price_per_month} onChange={e => set('price_per_month', formatPriceInput(e.target.value))}
                       placeholder="VD: 8" className={`flex-1 ${inputCls(errors.price_per_month)}`} />
                     <div className="flex items-center px-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 whitespace-nowrap">
                       triệu/tháng
@@ -516,8 +524,8 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 <div className="grid sm:grid-cols-3 gap-4">
                   <FormField label="Giá bán *" error={errors.price} className="sm:col-span-2">
                     <div className="flex gap-2">
-                      <input type="number" value={form.price} onChange={e => set('price', e.target.value)}
-                        placeholder="Nhập giá" className={`flex-1 ${inputCls(errors.price)}`} />
+                      <input type="text" inputMode="decimal" value={form.price} onChange={e => set('price', formatPriceInput(e.target.value))}
+                        placeholder="VD: 1,500" className={`flex-1 ${inputCls(errors.price)}`} />
                       <select value={form.price_unit} onChange={e => set('price_unit', e.target.value)}
                         className="border border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
                         <option>tỷ</option><option>triệu</option>
@@ -529,13 +537,17 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                       placeholder="VD: 2.5 tỷ" className={inputCls()} />
                   </FormField>
                   <FormField label={`Chủ hỗ trợ vay ngân hàng (${form.price_unit})`} className="sm:col-span-3">
-                    <input type="number" value={form.loan_support} onChange={e => set('loan_support', e.target.value)}
-                      placeholder="VD: 3.5 (số tiền chủ hỗ trợ vay 3 bên)" className={inputCls()} />
-                    {form.price && form.loan_support && parseFloat(form.loan_support) > 0 && parseFloat(form.loan_support) < parseFloat(form.price) && (
-                      <p className="text-xs text-emerald-600 mt-1 font-medium">
-                        Khách trả trước: {(parseFloat(form.price) - parseFloat(form.loan_support)).toFixed(2)} {form.price_unit} · Hỗ trợ vay: {parseFloat(form.loan_support)} {form.price_unit}
-                      </p>
-                    )}
+                    <input type="text" inputMode="decimal" value={form.loan_support} onChange={e => set('loan_support', formatPriceInput(e.target.value))}
+                      placeholder="VD: 1,500 (cùng đơn vị giá bán)" className={inputCls()} />
+                    {(() => {
+                      const price = parsePriceInput(form.price);
+                      const loan = parsePriceInput(form.loan_support);
+                      return price && loan && loan < price ? (
+                        <p className="text-xs text-emerald-600 mt-1 font-medium">
+                          Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}
+                        </p>
+                      ) : null;
+                    })()}
                   </FormField>
                 </div>
               )}
@@ -665,7 +677,8 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                   images={form.images}
                   onChange={imgs => setForm(f => ({ ...f, images: imgs, image_url: imgs[0] ?? f.image_url }))}
                   maxImages={10}
-                  folder="user-listings"
+                  folder={adminMode && editId ? `listing-review/${editId}` : 'user-listings'}
+                  isAdmin={adminMode}
                 />
               </div>
 
@@ -675,7 +688,8 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                     value={form.image_url}
                     onChange={url => set('image_url', url)}
                     placeholder="https://..."
-                    folder="user-listings"
+                    folder={adminMode && editId ? `listing-review/${editId}` : 'user-listings'}
+                    isAdmin={adminMode}
                   />
                   <p className="text-gray-400 text-xs mt-1 flex items-center gap-1">
                     <Info className="w-3 h-3" />Dán link ảnh từ Pexels, ImgBB hoặc dịch vụ lưu ảnh
@@ -687,7 +701,9 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                 keywords={form.title}
                 listingType={form.listing_type}
                 area={areas.find(a => a.id === form.area_id)?.name ?? ''}
-                price={isRental(form.listing_type) ? `${form.price_per_month} triệu/tháng` : `${form.price} ${form.price_unit}`}
+                price={isRental(form.listing_type)
+                  ? formatListingPrice(parsePriceInput(form.price_per_month), 'triệu/tháng')
+                  : formatListingPrice(parsePriceInput(form.price), form.price_unit)}
                 onApply={text => set('description', text)}
               />
 
@@ -793,8 +809,8 @@ export function PostListingPage({ onNavigate, editId }: PostListingPageProps) {
                   {
                     label: 'Giá',
                     value: isRental(form.listing_type)
-                      ? `${form.price_per_month} triệu/tháng`
-                      : `${form.price} ${form.price_unit}`
+                      ? formatListingPrice(parsePriceInput(form.price_per_month), 'triệu/tháng')
+                      : formatListingPrice(parsePriceInput(form.price), form.price_unit)
                   },
                   { label: 'Khu vực', value: areas.find(a => a.id === form.area_id)?.name ?? form.city },
                   { label: 'Diện tích', value: form.area_sqm ? `${form.area_sqm} m²` : '—' },

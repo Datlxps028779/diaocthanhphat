@@ -25,6 +25,7 @@ import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 import { parseLegacyPropertyVideo, parseVrTourUrl } from '../../../lib/videoMedia';
 import { buildProductPath } from '../../../lib/productPath';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../../../lib/locationSelection';
+import { formatListingPrice, formatPriceInput, parsePriceInput, priceInputFromNumber } from '../../../lib/listingPrice';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -464,11 +465,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     slug: property?.slug ?? '',
     description: property?.description ?? '',
     listing_type: property?.listing_type ?? 'mua_ban',
-    price: property?.price ?? 0,
+    price: priceInputFromNumber(property?.price),
     price_unit: property?.price_unit ?? 'tỷ',
     price_label: property?.price_label ?? '',
-    price_per_month: property?.price_per_month ?? '',
-    loan_support: property?.loan_support ?? '',
+    price_per_month: priceInputFromNumber(property?.price_per_month),
+    loan_support: priceInputFromNumber(property?.loan_support),
     area_sqm: property?.area_sqm ?? '',
     address: property?.address ?? '',
     city: property?.city ?? '',
@@ -531,7 +532,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const seo = useSEOAutofill({
     title: form.title,
     description: form.description,
-    price: form.price,
+    price: parsePriceInput(form.price) ?? undefined,
     price_unit: form.price_unit,
     listing_type: form.listing_type,
     city: form.city,
@@ -675,6 +676,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     }
     const cs = (v: string) => v?.trim() || null;
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
+    const priceValue = (v: string | number) => typeof v === 'string'
+      ? parsePriceInput(v)
+      : (v != null && Number.isFinite(v) ? v : null);
     const videoUrl = cs(specForm.video_url);
     const vrTourUrl = cs(specForm.vr_tour_url);
     if (videoUrl && !parseLegacyPropertyVideo(videoUrl, `Video: ${specForm.title}`)) {
@@ -693,11 +697,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       // Renderer public vẫn sanitize lại như lớp phòng thủ thứ hai.
       description: cs(sanitizeArticleHtml(specForm.description)),
       listing_type: specForm.listing_type,
-      price: Number(specForm.price) || 0,
+      price: priceValue(specForm.price) ?? 0,
       price_unit: specForm.price_unit,
       price_label: cs(specForm.price_label),
-      price_per_month: cn(specForm.price_per_month),
-      loan_support: cn(specForm.loan_support),
+      price_per_month: priceValue(specForm.price_per_month),
+      loan_support: priceValue(specForm.loan_support),
       area_sqm: cn(specForm.area_sqm),
       address: cs(specForm.address),
       city: specForm.city,
@@ -820,7 +824,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-gray-700 mb-1">{isRent ? 'Giá thuê' : 'Giá bán'} *</label>
               <div className="flex gap-2">
-                <input type="number" value={String(form.price)} onChange={e => setField('price', parseFloat(e.target.value) || 0)}
+                <input type="text" inputMode="decimal" value={form.price} onChange={e => setField('price', formatPriceInput(e.target.value))}
+                  placeholder="VD: 1,500"
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 <select value={form.price_unit} onChange={e => setField('price_unit', e.target.value)}
                   className="border border-gray-200 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
@@ -836,14 +841,18 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           {!isRent && (
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ hỗ trợ vay ngân hàng ({form.price_unit})</label>
-              <input type="number" value={String(form.loan_support)} onChange={e => setField('loan_support', e.target.value)}
-                placeholder="VD: 3.5 (số tiền chủ hỗ trợ vay 3 bên)"
+              <input type="text" inputMode="decimal" value={form.loan_support} onChange={e => setField('loan_support', formatPriceInput(e.target.value))}
+                placeholder="VD: 1,500 (cùng đơn vị giá bán)"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-              {Number(form.price) > 0 && Number(form.loan_support) > 0 && Number(form.loan_support) < Number(form.price) && (
-                <p className="text-xs text-emerald-600 mt-1 font-medium">
-                  Khách trả trước: {(Number(form.price) - Number(form.loan_support)).toFixed(2)} {form.price_unit} · Hỗ trợ vay: {Number(form.loan_support)} {form.price_unit}
-                </p>
-              )}
+              {(() => {
+                const price = parsePriceInput(form.price);
+                const loan = parsePriceInput(form.loan_support);
+                return price && loan && loan < price ? (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">
+                    Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}
+                  </p>
+                ) : null;
+              })()}
             </div>
           )}
 
@@ -1162,7 +1171,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               { label: 'Mô tả ≥ 120 ký tự', ok: descLen >= 120 },
               { label: 'Ảnh đại diện', ok: !!form.image_url },
               { label: 'Diện tích', ok: !!form.area_sqm },
-              { label: 'Giá bán', ok: Number(form.price) > 0 },
+              { label: 'Giá bán', ok: parsePriceInput(form.price) !== null },
               { label: 'Vị trí bản đồ', ok: !!form.latitude && !!form.longitude },
               { label: 'Pháp lý', ok: !!form.legal_status },
               { label: 'Người liên hệ', ok: !!form.contact_phone },

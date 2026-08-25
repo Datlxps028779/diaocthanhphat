@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isElevatedRole } from './authGuard';
+import { isElevatedRole, privateWorkspacePath } from './authGuard';
 
 // Chính sách bảo mật: tài khoản có quyền cao (admin) KHÔNG được phép đăng nhập hay
 // đặt lại mật khẩu qua cổng người dùng thường — chỉ được vào qua /quantrihethong.
@@ -31,5 +31,23 @@ describe('isElevatedRole', () => {
   it('không phân biệt hoa thường (ADMIN vẫn bị chặn)', () => {
     expect(isElevatedRole('ADMIN')).toBe(true);
     expect(isElevatedRole('Admin')).toBe(true);
+  });
+});
+
+describe('privateWorkspacePath', () => {
+  it('đưa nhân viên tới cổng nội bộ thay vì cổng owner-MFA', () => {
+    expect(privateWorkspacePath('staff')).toBe('/noi-bo');
+    expect(privateWorkspacePath('STAFF')).toBe('/noi-bo');
+  });
+
+  it('chỉ đưa admin tới cổng quản trị owner', () => {
+    expect(privateWorkspacePath('admin')).toBe('/quantrihethong');
+  });
+
+  it('không có cổng riêng cho user, role lạ hoặc chưa có profile', () => {
+    expect(privateWorkspacePath('user')).toBeNull();
+    expect(privateWorkspacePath('editor')).toBeNull();
+    expect(privateWorkspacePath(null)).toBeNull();
+    expect(privateWorkspacePath(undefined)).toBeNull();
   });
 });

@@ -61,6 +61,22 @@ export async function adminGetUserListingLifecycle(id: string): Promise<UserList
   return (data ?? []) as UserListingLifecycleEvent[];
 }
 
+// Chỉnh nội dung tin đang chờ duyệt qua RPC whitelist; không cho client đụng
+// status/property_id/user_id. Approval vẫn chỉ do approve_user_listing đảm nhiệm.
+export async function adminUpdatePendingUserListing(
+  id: string,
+  patch: Partial<Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>>,
+): Promise<UserListing> {
+  const { data, error } = await supabase
+    .rpc('admin_update_pending_user_listing', { p_listing_id: id, p_patch: patch })
+    .single();
+  if (error) throw error;
+  if (!data || typeof data !== 'object' || !('id' in data)) {
+    throw new Error('Lưu chỉnh sửa không trả về tin đăng hợp lệ.');
+  }
+  return data as UserListing;
+}
+
 // RPC return shape. The database locks the listing then inserts its public
 // property and updates lifecycle state in one transaction; the browser never
 // constructs an approval insert itself.

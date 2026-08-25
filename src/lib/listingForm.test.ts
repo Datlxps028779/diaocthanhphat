@@ -85,6 +85,23 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
     expect(f.district_id).toBe('district-di-an');
   });
 
+  it('format giá khi nạp từ DB và parse lại giá có dấu phẩy trong preview', () => {
+    const loaded = listingToFormState(makeListing({
+      price: 1500, price_unit: 'triệu', price_per_month: 12.5, loan_support: 250,
+    }));
+    expect(loaded.price).toBe('1,500');
+    expect(loaded.price_per_month).toBe('12.5');
+    expect(loaded.loan_support).toBe('250');
+
+    const preview = formToProperty({
+      title: 'Bán nhà', city: 'Bình Dương', price: '1,500', price_unit: 'triệu',
+      price_per_month: '12.5', loan_support: '250', property_type_id: '',
+    }, null, [] as PropertyType[], []);
+    expect(preview.price).toBe(1500);
+    expect(preview.price_per_month).toBe(12.5);
+    expect(preview.loan_support).toBe(250);
+  });
+
   it('preview ưu tiên district_id hiện đang chọn, rồi mới giữ ID tin cũ', () => {
     const existing = { district_id: 'old-district' } as Property;
     const selected = formToProperty({
