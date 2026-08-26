@@ -33,8 +33,12 @@ export async function adminGetAllSiteSettings(): Promise<SiteSetting[]> {
   return (data ?? []) as SiteSetting[];
 }
 export async function updateSiteSetting(key: string, value: string): Promise<void> {
-  const { error } = await supabase.from('site_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+  const { count, error } = await supabase
+    .from('site_settings')
+    .update({ value, updated_at: new Date().toISOString() }, { count: 'exact' })
+    .eq('key', key);
   if (error) throw error;
+  if (count === 0) throw new Error(`Không tìm thấy cài đặt "${key}" để cập nhật.`);
 }
 
 export async function upsertSiteSetting(input: Pick<SiteSetting, 'key' | 'value' | 'label' | 'group_name' | 'type'>): Promise<void> {

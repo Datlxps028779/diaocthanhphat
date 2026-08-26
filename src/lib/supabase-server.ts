@@ -583,6 +583,7 @@ export async function serverGetNewsCategories(): Promise<NewsCategoryRow[]> {
 // Đọc site_settings phía server cho layout (làm giàu JSON-LD LocalBusiness). Trả {}
 // nếu lỗi để layout không vỡ khi DB gặp sự cố.
 export async function serverGetSiteSettings(): Promise<Record<string, string>> {
+  noStore();
   try {
     const sb = serverClient();
     const { data } = await sb.from('site_settings').select('key, value');

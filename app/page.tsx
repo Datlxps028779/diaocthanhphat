@@ -2,6 +2,8 @@ import { HomeClient } from './HomeClient';
 import { buildFaqJsonLd } from '@/lib/faq';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
+import { serverGetSiteSettings } from '@/lib/supabase-server';
+import { DEFAULT_OG_IMAGE } from '@/lib/seo';
 
 const PATH = '/';
 const fallback = {
@@ -15,7 +17,10 @@ const fallback = {
 
 // Home revalidate mỗi 30 phút (nội dung động: featured/hot/recent + CMS blocks).
 export async function generateMetadata() {
-  const { metadata } = await loadRouteSeo(PATH, fallback);
+  const { metadata } = await loadRouteSeo(PATH, {
+    ...fallback,
+    ogImage: ((await serverGetSiteSettings()).og_image || '').trim() || DEFAULT_OG_IMAGE,
+  });
   return metadata;
 }
 export const revalidate = 1800;

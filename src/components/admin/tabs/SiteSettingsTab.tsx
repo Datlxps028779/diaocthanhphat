@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, Save, Settings } from 'lucide-react';
+import { CheckCircle, Image as ImageIcon, Save, Settings, Share2 } from 'lucide-react';
 import type { SiteSetting } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, updateSiteSetting } from '../../../lib/api';
+import { adminGetAllSiteSettings, updateSiteSetting, upsertSiteSetting } from '../../../lib/api';
 import { parseGoogleAdsConversion, parseGoogleDestination } from '../../../lib/googleTag';
 import { ImageUrlInput } from '../../ImageUpload';
 
@@ -9,9 +9,11 @@ import { ImageUrlInput } from '../../ImageUpload';
 export function SiteSettingsTab() {
   const [settings, setSettings] = useState<SiteSetting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [editVals, setEditVals] = useState<Record<string, string>>({});
   const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeGroup, setActiveGroup] = useState('general');
 
   useEffect(() => {
@@ -20,12 +22,16 @@ export function SiteSettingsTab() {
       const vals: Record<string, string> = {};
       data.forEach(s => { vals[s.key] = s.value ?? ''; });
       setEditVals(vals);
-      setLoading(false);
-    });
+    }).catch(error => {
+      console.error('[AdminPanel]', error);
+      setLoadError(error instanceof Error ? error.message : 'Không thể tải cài đặt trang web.');
+    }).finally(() => setLoading(false));
   }, []);
 
-  const groups = [...new Set(settings.map(s => s.group_name))];
-  const groupSettings = settings.filter(s => s.group_name === activeGroup);
+  const groups = [...new Set([...settings.map(s => s.group_name), 'seo'])];
+  const groupSettings = settings.filter(s => s.group_name === activeGroup && s.key !== 'og_image');
+  const ogImageSetting = settings.find(setting => setting.key === 'og_image');
+  const ogImageValue = editVals.og_image ?? ogImageSetting?.value ?? '';
 
   const validateSetting = (key: string, value: string): string | null => {
     if (key === 'google_analytics_id' || key === 'google_ads_id') {
@@ -43,13 +49,37 @@ export function SiteSettingsTab() {
     if (validationError) { window.alert(validationError); return; }
     setSaving(key);
     try {
-      await updateSiteSetting(key, value);
+      if (key === 'og_image' && !ogImageSetting) {
+        await upsertSiteSetting({
+          key,
+          value,
+          label: 'Ảnh bìa chia sẻ trang chủ',
+          group_name: 'seo',
+          type: 'image',
+        });
+        setSettings(current => [...current, {
+          id: key,
+          key,
+          value,
+          label: 'Ảnh bìa chia sẻ trang chủ',
+          group_name: 'seo',
+          type: 'image',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }]);
+      } else {
+        await updateSiteSetting(key, value);
+      }
+      setErrors(current => ({ ...current, [key]: '' }));
       setSavedKeys(s => ({ ...s, [key]: true }));
       if (key === 'google_analytics_id' || key === 'google_ads_id' || key === 'google_ads_lead_conversion') {
         window.alert('Đã lưu. Hãy tải lại trang công khai để Google tag nhận cấu hình mới.');
       }
       setTimeout(() => setSavedKeys(s => ({ ...s, [key]: false })), 2000);
-    } catch (e) { console.error("[AdminPanel]", e); } finally { setSaving(null); }
+    } catch (e) {
+      console.error("[AdminPanel]", e);
+      setErrors(current => ({ ...current, [key]: e instanceof Error ? e.message : 'Không thể lưu cài đặt. Vui lòng thử lại.' }));
+    } finally { setSaving(null); }
   };
 
   const GROUP_LABELS: Record<string, string> = {
@@ -64,6 +94,7 @@ export function SiteSettingsTab() {
   };
 
   if (loading) return <div className="text-center py-12"><div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
+  if (loadError) return <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{loadError}</div>;
 
   return (
     <div className="space-y-4">
@@ -83,6 +114,41 @@ export function SiteSettingsTab() {
           </button>
         ))}
       </div>
+
+      {activeGroup === 'seo' && (
+        <section className="overflow-hidden rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-sky-50 shadow-sm">
+          <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white"><Share2 className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-slate-900">Ảnh bìa chia sẻ trang chủ</p>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Dùng khi chia sẻ <strong>https://chonhaviet.com/</strong> qua Facebook, Zalo, X và ứng dụng hỗ trợ Open Graph. Ảnh này không thay ảnh nền Hero của trang chủ.</p>
+              </div>
+            </div>
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-indigo-700 shadow-sm ring-1 ring-indigo-100"><ImageIcon className="h-3.5 w-3.5" />1200 × 630 px</span>
+          </div>
+          <div className="border-t border-indigo-100 bg-white/70 p-5">
+            <ImageUrlInput
+              value={ogImageValue}
+              onChange={url => setEditVals(values => ({ ...values, og_image: url }))}
+              placeholder="Tải ảnh bìa lên hoặc chọn từ thư viện"
+              folder="branding"
+              isAdmin
+            />
+            {errors.og_image && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{errors.og_image}</p>}
+            <div className="mt-3 flex flex-col gap-3 rounded-xl border border-sky-100 bg-sky-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs leading-5 text-sky-900">Nên dùng ảnh ngang 1200 × 630 px, có tên thương hiệu rõ ràng và ít chữ. Facebook/Zalo có thể giữ cache ảnh cũ; sau khi lưu, hãy dùng công cụ debug hoặc chia sẻ lại để yêu cầu đọc preview mới.</p>
+              <button onClick={() => handleSave('og_image')} disabled={saving === 'og_image'}
+                className={`inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${savedKeys.og_image ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'} disabled:opacity-60`}>
+                {saving === 'og_image' ? <div className="h-3.5 w-3.5 animate-spin rounded-full border border-white border-t-transparent" />
+                  : savedKeys.og_image ? <CheckCircle className="h-3.5 w-3.5" />
+                  : <Save className="h-3.5 w-3.5" />}
+                {savedKeys.og_image ? 'Đã lưu' : 'Lưu ảnh bìa'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="divide-y divide-gray-100">
