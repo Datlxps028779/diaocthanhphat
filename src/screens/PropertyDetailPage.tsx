@@ -132,7 +132,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     onSuccess: (favorited) => {
       queryClient.invalidateQueries({ queryKey: qk.favoriteIds() });
       // Chỉ ghi tín hiệu khi vừa BẬT yêu thích (true) — bỏ tim không phải ý định.
-      if (favorited && property) captureSignalFromProperty('favorite', property);
+      if (favorited && property) {
+        captureSignalFromProperty('favorite', property);
+        track(EVENTS.LISTING_SAVE, { listingId: property.id, source: 'property_detail' });
+      }
     },
   });
 
@@ -145,6 +148,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
     if (property?.id && viewedRef.current !== property.id) {
       viewedRef.current = property.id;
       viewMutation.mutate(property.id);
+      track(EVENTS.LISTING_VIEW, { listingId: property.id, source: 'property_detail' });
       recordRecentlyViewed(property);
       captureSignalFromProperty('view', property);
     }

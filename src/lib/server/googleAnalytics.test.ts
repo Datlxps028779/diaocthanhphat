@@ -8,6 +8,7 @@ import {
   diagnoseGoogleAnalytics,
   getGoogleAnalyticsConfig,
   getGoogleAnalyticsReport,
+  publicPagePathFilter,
   normalizeGoogleAnalyticsDays,
   normalizeGoogleAnalyticsReport,
   type GoogleAnalyticsConfig,
@@ -43,6 +44,18 @@ describe('googleAnalytics', () => {
     expect(claim).toMatchObject({ iss: config.clientEmail, scope: GOOGLE_ANALYTICS_SCOPE, aud: GOOGLE_TOKEN_ENDPOINT, iat: 1_700_000_000, exp: 1_700_003_600 });
   });
 
+  it('excludes private workspace paths from public page reports', () => {
+    expect(publicPagePathFilter()).toEqual({
+      andGroup: {
+        expressions: [
+          { notExpression: { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: '/quantrihethong' } } } },
+          { notExpression: { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: '/quantrithethong' } } } },
+          { notExpression: { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: '/noi-bo' } } } },
+        ],
+      },
+    });
+  });
+
   it('bounds unknown report ranges to the safe default', () => {
     expect(normalizeGoogleAnalyticsDays(7)).toBe(7);
     expect(normalizeGoogleAnalyticsDays('90')).toBe(90);
@@ -60,6 +73,15 @@ describe('googleAnalytics', () => {
     expect(report.overview).toEqual({ activeUsers: 20, newUsers: 11, sessions: 32, pageViews: 55, engagementRate: 0.625 });
     expect(report.daily).toEqual([{ date: '25/08', activeUsers: 2, newUsers: 1, sessions: 3, pageViews: 5, engagementRate: 0.5 }]);
     expect(report.topPages).toEqual([{ path: '/tin-tuc', pageViews: 12, activeUsers: 7 }]);
+    expect(report.funnel).toEqual([
+      { name: 'search', label: 'Tìm kiếm', eventCount: 0, activeUsers: 0 },
+      { name: 'listing_view', label: 'Xem tin', eventCount: 0, activeUsers: 0 },
+      { name: 'contact_open', label: 'Mở liên hệ', eventCount: 0, activeUsers: 0 },
+      { name: 'lead_submit', label: 'Gửi lead', eventCount: 0, activeUsers: 0 },
+    ]);
+    expect(report.topEvents).toEqual([]);
+    expect(report.acquisition).toEqual([]);
+    expect(report.devices).toEqual([]);
   });
 
   it('identifies token failures separately from property permission failures', async () => {
@@ -77,16 +99,28 @@ describe('googleAnalytics', () => {
       .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
       .mockResolvedValueOnce(response({ rows: [] }))
       .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
       .mockResolvedValueOnce(response({ rows: [] }));
 
     const report = await getGoogleAnalyticsReport(config, 30, fetchMock);
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
     for (const [, init] of fetchMock.mock.calls.slice(1)) {
       expect(init).toMatchObject({ method: 'POST', headers: { Authorization: 'Bearer secret-token' } });
     }
     expect(fetchMock.mock.calls[1][0]).toBe(`${GOOGLE_ANALYTICS_DATA_ENDPOINT}/properties/${config.propertyId}:runReport`);
-    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toMatchObject({ limit: '10', dimensions: [{ name: 'pagePath' }] });
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toMatchObject({
+      limit: '10',
+      dimensions: [{ name: 'pagePath' }],
+      dimensionFilter: publicPagePathFilter(),
+    });
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toMatchObject({
+      dimensions: [{ name: 'eventName' }, { name: 'pagePath' }],
+      limit: '100000',
+      dimensionFilter: { andGroup: { expressions: expect.any(Array) } },
+    });
     expect(JSON.stringify(report)).not.toContain('secret-token');
   });
 });

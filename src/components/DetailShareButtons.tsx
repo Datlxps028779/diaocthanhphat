@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Check, Copy, Facebook, Share2 } from 'lucide-react';
+import { track, EVENTS } from '../lib/analytics';
 
 type DetailShareButtonsProps = {
   title: string;
@@ -21,6 +22,7 @@ export function DetailShareButtons({ title, canonicalPathname, compact = false, 
     const url = getShareUrl(canonicalPathname);
     try {
       await navigator.clipboard.writeText(url);
+      track(EVENTS.CONTENT_SHARE, { platform: 'copy', source: 'property_detail' });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -28,12 +30,13 @@ export function DetailShareButtons({ title, canonicalPathname, compact = false, 
     }
   };
 
-  const share = async () => {
+  const share = async (platform: 'native' | 'zalo' = 'native') => {
     const url = getShareUrl(canonicalPathname);
     const shareData = { title, text: title, url };
     try {
       if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
         await navigator.share(shareData);
+        track(EVENTS.CONTENT_SHARE, { platform, source: 'property_detail' });
         return;
       }
     } catch (error) {
@@ -45,6 +48,7 @@ export function DetailShareButtons({ title, canonicalPathname, compact = false, 
   const openFacebookShare = () => {
     const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getShareUrl(canonicalPathname))}`;
     window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    track(EVENTS.CONTENT_SHARE, { platform: 'facebook', source: 'property_detail' });
   };
   const buttonClass = compact
     ? 'h-9 w-9 justify-center rounded-full'
@@ -54,7 +58,7 @@ export function DetailShareButtons({ title, canonicalPathname, compact = false, 
     <div className={`flex flex-wrap items-center gap-2 ${className}`} aria-label="Chia sẻ nội dung">
       <button
         type="button"
-        onClick={share}
+        onClick={() => void share()}
         aria-label="Chia sẻ"
         className={`inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors ${buttonClass}`}
       >
@@ -81,7 +85,7 @@ export function DetailShareButtons({ title, canonicalPathname, compact = false, 
       </button>
       <button
         type="button"
-        onClick={share}
+        onClick={() => void share('zalo')}
         aria-label="Chia sẻ qua Zalo"
         className={`inline-flex items-center gap-1.5 bg-[#0068FF] text-white text-sm font-semibold hover:bg-[#0059D9] transition-colors ${buttonClass}`}
       >

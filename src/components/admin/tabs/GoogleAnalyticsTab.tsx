@@ -24,6 +24,7 @@ function MetricCard({ label, value, icon, tone }: { label: string; value: string
 
 function ReportContent({ report }: { report: GoogleAnalyticsReport }) {
   const maxViews = useMemo(() => Math.max(...report.daily.map(point => point.pageViews), 1), [report.daily]);
+  const maxFunnel = Math.max(...report.funnel.map(step => step.eventCount), 1);
   return <div className="space-y-5">
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       <MetricCard label="Người dùng hoạt động" value={number(report.overview.activeUsers)} icon={<Users className="h-4 w-4 text-blue-600" />} tone="bg-blue-50" />
@@ -33,24 +34,25 @@ function ReportContent({ report }: { report: GoogleAnalyticsReport }) {
       <MetricCard label="Tỷ lệ tương tác" value={percent(report.overview.engagementRate)} icon={<BarChart3 className="h-4 w-4 text-red-600" />} tone="bg-red-50" />
     </div>
 
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div><h3 className="font-bold text-gray-900">Lượt xem theo ngày</h3><p className="mt-0.5 text-xs text-gray-500">{report.startDate} → {report.endDate}</p></div>
-        <span className="text-xs text-gray-400">Nguồn: GA4</span>
-      </div>
-      {report.daily.length === 0 ? <p className="py-8 text-center text-sm text-gray-400">GA4 chưa trả về dữ liệu theo ngày.</p> : <div className="space-y-2">
-        {report.daily.map(point => <div key={point.date} className="grid grid-cols-[44px_1fr_64px] items-center gap-2 text-xs">
-          <span className="text-gray-500">{point.date}</span>
-          <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-red-500" style={{ width: `${Math.max(2, (point.pageViews / maxViews) * 100)}%` }} /></div>
-          <span className="text-right font-semibold text-gray-700">{number(point.pageViews)}</span>
-        </div>)}
-      </div>}
+    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+      <strong>Phạm vi dữ liệu:</strong> bảng trang và phễu lọc các đường dẫn quản trị `/quantrihethong/*`, `/quantrithethong/*`, `/noi-bo/*`. Các chỉ số tổng hợp/nguồn/thiết bị có thể còn gồm dữ liệu lịch sử trước khi chặn GA4 ở workspace nội bộ.
     </div>
 
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 font-bold text-gray-900">Trang được xem nhiều nhất</h3>
-      {report.topPages.length === 0 ? <p className="py-8 text-center text-sm text-gray-400">GA4 chưa trả về dữ liệu trang.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="pb-3 font-semibold">Đường dẫn</th><th className="pb-3 text-right font-semibold">Lượt xem</th><th className="pb-3 text-right font-semibold">Người dùng</th></tr></thead><tbody>{report.topPages.map(page => <tr key={page.path} className="border-b border-gray-50 last:border-0"><td className="py-3 font-medium text-gray-700">{page.path}</td><td className="py-3 text-right text-gray-600">{number(page.pageViews)}</td><td className="py-3 text-right text-gray-600">{number(page.activeUsers)}</td></tr>)}</tbody></table></div>}
+      <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="font-bold text-gray-900">Phễu hành vi khách hàng</h3><p className="mt-0.5 text-xs text-gray-500">Tìm kiếm → xem tin → mở liên hệ → gửi lead</p></div><span className="text-xs text-gray-400">GA4 events</span></div>
+      <div className="grid gap-3 sm:grid-cols-4">{report.funnel.map(step => <div key={step.name} className="rounded-lg bg-gray-50 p-3"><p className="text-xs font-semibold text-gray-500">{step.label}</p><p className="mt-2 text-xl font-black text-gray-900">{number(step.eventCount)}</p><p className="mt-1 text-[11px] text-gray-500">{number(step.activeUsers)} người dùng · {percent(step.eventCount / maxFunnel)} so với bước cao nhất</p><div className="mt-2 h-1.5 rounded-full bg-gray-200"><div className="h-full rounded-full bg-red-500" style={{ width: `${Math.max(2, (step.eventCount / maxFunnel) * 100)}%` }} /></div></div>)}</div>
     </div>
+
+    <div className="grid gap-5 lg:grid-cols-2">
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 className="mb-4 font-bold text-gray-900">Nguồn truy cập</h3><div className="overflow-x-auto"><table className="w-full min-w-[460px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="pb-3 font-semibold">Nguồn / phương tiện</th><th className="pb-3 text-right font-semibold">Phiên</th><th className="pb-3 text-right font-semibold">Người dùng</th></tr></thead><tbody>{report.acquisition.map(row => <tr key={row.sourceMedium} className="border-b border-gray-50 last:border-0"><td className="py-3 font-medium text-gray-700">{row.sourceMedium}</td><td className="py-3 text-right text-gray-600">{number(row.sessions)}</td><td className="py-3 text-right text-gray-600">{number(row.activeUsers)}</td></tr>)}</tbody></table></div></div>
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 className="mb-4 font-bold text-gray-900">Thiết bị</h3><div className="overflow-x-auto"><table className="w-full min-w-[420px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="pb-3 font-semibold">Thiết bị</th><th className="pb-3 text-right font-semibold">Phiên</th><th className="pb-3 text-right font-semibold">Lượt xem</th></tr></thead><tbody>{report.devices.map(row => <tr key={row.category} className="border-b border-gray-50 last:border-0"><td className="py-3 font-medium capitalize text-gray-700">{row.category}</td><td className="py-3 text-right text-gray-600">{number(row.sessions)}</td><td className="py-3 text-right text-gray-600">{number(row.pageViews)}</td></tr>)}</tbody></table></div></div>
+    </div>
+
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 className="mb-4 font-bold text-gray-900">Lượt xem theo ngày</h3><p className="mb-4 text-xs text-gray-500">{report.startDate} → {report.endDate} · dữ liệu tổng hợp GA4</p>{report.daily.length === 0 ? <p className="py-8 text-center text-sm text-gray-400">GA4 chưa trả về dữ liệu theo ngày.</p> : <div className="space-y-2">{report.daily.map(point => <div key={point.date} className="grid grid-cols-[44px_1fr_64px] items-center gap-2 text-xs"><span className="text-gray-500">{point.date}</span><div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-red-500" style={{ width: `${Math.max(2, (point.pageViews / maxViews) * 100)}%` }} /></div><span className="text-right font-semibold text-gray-700">{number(point.pageViews)}</span></div>)}</div>}</div>
+
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 className="mb-4 font-bold text-gray-900">Hành động nổi bật</h3>{report.topEvents.length === 0 ? <p className="py-8 text-center text-sm text-gray-400">Chưa có event hành vi trong khoảng thời gian này.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="pb-3 font-semibold">Event</th><th className="pb-3 text-right font-semibold">Số lần</th><th className="pb-3 text-right font-semibold">Người dùng</th></tr></thead><tbody>{report.topEvents.map(event => <tr key={event.name} className="border-b border-gray-50 last:border-0"><td className="py-3 font-medium text-gray-700">{event.name}</td><td className="py-3 text-right text-gray-600">{number(event.eventCount)}</td><td className="py-3 text-right text-gray-600">{number(event.activeUsers)}</td></tr>)}</tbody></table></div>}</div>
+
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 className="mb-4 font-bold text-gray-900">Trang được xem nhiều nhất</h3>{report.topPages.length === 0 ? <p className="py-8 text-center text-sm text-gray-400">GA4 chưa trả về dữ liệu trang.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="pb-3 font-semibold">Đường dẫn</th><th className="pb-3 text-right font-semibold">Lượt xem</th><th className="pb-3 text-right font-semibold">Người dùng</th></tr></thead><tbody>{report.topPages.map(page => <tr key={page.path} className="border-b border-gray-50 last:border-0"><td className="py-3 font-medium text-gray-700">{page.path}</td><td className="py-3 text-right text-gray-600">{number(page.pageViews)}</td><td className="py-3 text-right text-gray-600">{number(page.activeUsers)}</td></tr>)}</tbody></table></div>}</div>
   </div>;
 }
 

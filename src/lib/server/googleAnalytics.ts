@@ -7,6 +7,22 @@ export const GOOGLE_ANALYTICS_DATA_ENDPOINT = 'https://analyticsdata.googleapis.
 const MIN_DAYS = 7;
 const MAX_DAYS = 90;
 const DEFAULT_DAYS = 30;
+const REPORT_LIMIT = '10';
+
+export const GA4_BEHAVIOR_EVENTS = [
+  'search',
+  'listing_result_click',
+  'listing_view',
+  'listing_save',
+  'content_share',
+  'contact_open',
+  'phone_reveal',
+  'zalo_click',
+  'lead_submit',
+] as const;
+
+const FUNNEL_EVENT_NAMES = ['search', 'listing_view', 'contact_open', 'lead_submit'] as const;
+const PRIVATE_PATH_PREFIXES = ['/quantrihethong', '/quantrithethong', '/noi-bo'] as const;
 
 type FetchLike = typeof fetch;
 
@@ -55,6 +71,10 @@ export type GoogleAnalyticsOverview = {
 
 export type GoogleAnalyticsDailyPoint = GoogleAnalyticsOverview & { date: string };
 export type GoogleAnalyticsTopPage = { path: string; pageViews: number; activeUsers: number };
+export type GoogleAnalyticsEvent = { name: string; eventCount: number; activeUsers: number };
+export type GoogleAnalyticsFunnelStep = GoogleAnalyticsEvent & { label: string };
+export type GoogleAnalyticsAcquisition = { sourceMedium: string; sessions: number; activeUsers: number; engagementRate: number };
+export type GoogleAnalyticsDevice = { category: string; sessions: number; activeUsers: number; pageViews: number };
 
 export type GoogleAnalyticsReport = {
   days: number;
@@ -63,6 +83,10 @@ export type GoogleAnalyticsReport = {
   overview: GoogleAnalyticsOverview;
   daily: GoogleAnalyticsDailyPoint[];
   topPages: GoogleAnalyticsTopPage[];
+  funnel: GoogleAnalyticsFunnelStep[];
+  topEvents: GoogleAnalyticsEvent[];
+  acquisition: GoogleAnalyticsAcquisition[];
+  devices: GoogleAnalyticsDevice[];
 };
 
 export class GoogleAnalyticsError extends Error {
@@ -185,9 +209,80 @@ function metricRow(row: GaReportRow | undefined): GoogleAnalyticsOverview {
   };
 }
 
+function aggregateSimpleRows(rows: GaReportRow[], keyIndex: number, metricIndexes: [number, number, number]): Array<{ key: string; first: number; second: number; third: number }> {
+  const groups = new Map<string, GaReportRow[]>();
+  for (const row of rows) {
+    const key = dimensionValue(row, keyIndex);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups].map(([key, group]) => ({
+    key,
+    first: group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[metricIndexes[0]]?.value), 0),
+    second: group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[metricIndexes[1]]?.value), 0),
+    third: group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[metricIndexes[2]]?.value), 0),
+  }));
+}
+
+function aggregateAcquisition(rows: GaReportRow[]): GoogleAnalyticsAcquisition[] {
+  const groups = new Map<string, GaReportRow[]>();
+  for (const row of rows) {
+    const key = dimensionValue(row, 0, '(không xác định)');
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups].map(([sourceMedium, group]) => {
+    const sessions = group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[0]?.value), 0);
+    const activeUsers = group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[1]?.value), 0);
+    const weightedEngagement = group.reduce((sum, row) => sum + parseMetric(row.metricValues?.[2]?.value) * parseMetric(row.metricValues?.[0]?.value), 0);
+    return { sourceMedium, sessions, activeUsers, engagementRate: sessions > 0 ? weightedEngagement / sessions : 0 };
+  });
+}
+
+function aggregateDevices(rows: GaReportRow[]): GoogleAnalyticsDevice[] {
+  return aggregateSimpleRows(rows, 0, [0, 1, 2]).map(row => ({ category: row.key, sessions: row.first, activeUsers: row.second, pageViews: row.third }));
+}
+
 function displayDate(value: string | undefined): string {
   if (!value || !/^\d{8}$/.test(value)) return '';
   return `${value.slice(6, 8)}/${value.slice(4, 6)}`;
+}
+
+function dimensionValue(row: GaReportRow, index = 0, fallback = ''): string {
+  return row.dimensionValues?.[index]?.value || fallback;
+}
+
+export function publicPagePathFilter(): Record<string, unknown> {
+  return {
+    andGroup: {
+      expressions: PRIVATE_PATH_PREFIXES.map(prefix => ({
+        notExpression: {
+          filter: {
+            fieldName: 'pagePath',
+            stringFilter: { matchType: 'BEGINS_WITH', value: prefix },
+          },
+        },
+      })),
+    },
+  };
+}
+
+function behaviorEventFilter(): Record<string, unknown> {
+  return {
+    filter: {
+      fieldName: 'eventName',
+      inListFilter: { values: [...GA4_BEHAVIOR_EVENTS] },
+    },
+  };
+}
+
+function funnelLabel(name: string): string {
+  switch (name) {
+    case 'search': return 'Tìm kiếm';
+    case 'listing_view': return 'Xem tin';
+    case 'contact_open': return 'Mở liên hệ';
+    case 'lead_submit': return 'Gửi lead';
+    default: return name;
+  }
 }
 
 export function normalizeGoogleAnalyticsReport(
@@ -195,8 +290,24 @@ export function normalizeGoogleAnalyticsReport(
   overviewPayload: GaReportResponse,
   dailyPayload: GaReportResponse,
   pagesPayload: GaReportResponse,
+  eventsPayload: GaReportResponse = {},
+  acquisitionPayload: GaReportResponse = {},
+  devicesPayload: GaReportResponse = {},
 ): GoogleAnalyticsReport {
   const range = dateRange(days);
+  const eventGroups = new Map<string, GaReportRow[]>();
+  for (const row of eventsPayload.rows ?? []) {
+    const name = dimensionValue(row, 0);
+    if (!name) continue;
+    eventGroups.set(name, [...(eventGroups.get(name) ?? []), row]);
+  }
+  const topEvents = [...eventGroups].map(([name, rows]) => ({
+    name,
+    eventCount: rows.reduce((sum, row) => sum + parseMetric(row.metricValues?.[0]?.value), 0),
+    activeUsers: rows.reduce((sum, row) => sum + parseMetric(row.metricValues?.[1]?.value), 0),
+  })).sort((a, b) => b.eventCount - a.eventCount);
+  const eventByName = new Map(topEvents.map(event => [event.name, event]));
+
   return {
     days,
     ...range,
@@ -206,10 +317,17 @@ export function normalizeGoogleAnalyticsReport(
       ...metricRow(row),
     })).filter(row => row.date),
     topPages: (pagesPayload.rows ?? []).map(row => ({
-      path: row.dimensionValues?.[0]?.value || '/',
+      path: dimensionValue(row, 0, '/'),
       pageViews: parseMetric(row.metricValues?.[0]?.value),
       activeUsers: parseMetric(row.metricValues?.[1]?.value),
     })).filter(row => row.path.startsWith('/')),
+    funnel: FUNNEL_EVENT_NAMES.map(name => {
+      const event = eventByName.get(name);
+      return { name, label: funnelLabel(name), eventCount: event?.eventCount ?? 0, activeUsers: event?.activeUsers ?? 0 };
+    }),
+    topEvents,
+    acquisition: aggregateAcquisition(acquisitionPayload.rows ?? []),
+    devices: aggregateDevices(devicesPayload.rows ?? []),
   };
 }
 
@@ -276,12 +394,16 @@ export async function getGoogleAnalyticsReport(config: GoogleAnalyticsConfig, re
   const days = normalizeGoogleAnalyticsDays(requestedDays);
   const range = dateRange(days);
   const dateRanges = [range];
-  const metrics = ['activeUsers', 'newUsers', 'sessions', 'screenPageViews', 'engagementRate'].map(name => ({ name }));
+  const overviewMetrics = ['activeUsers', 'newUsers', 'sessions', 'screenPageViews', 'engagementRate'].map(name => ({ name }));
   const token = await getGoogleAnalyticsAccessToken(config, fetchImpl);
-  const [overview, daily, pages] = await Promise.all([
-    runReport(config, token, { dateRanges, metrics }, fetchImpl),
-    runReport(config, token, { dateRanges, dimensions: [{ name: 'date' }], metrics, orderBys: [{ dimension: { dimensionName: 'date' } }] }, fetchImpl),
-    runReport(config, token, { dateRanges, dimensions: [{ name: 'pagePath' }], metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }], orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: '10' }, fetchImpl),
+  const publicPathDimensionFilter = publicPagePathFilter();
+  const [overview, daily, pages, events, acquisition, devices] = await Promise.all([
+    runReport(config, token, { dateRanges, metrics: overviewMetrics }, fetchImpl),
+    runReport(config, token, { dateRanges, dimensions: [{ name: 'date' }], metrics: overviewMetrics, orderBys: [{ dimension: { dimensionName: 'date' } }] }, fetchImpl),
+    runReport(config, token, { dateRanges, dimensions: [{ name: 'pagePath' }], metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }], dimensionFilter: publicPathDimensionFilter, orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }], limit: REPORT_LIMIT }, fetchImpl),
+    runReport(config, token, { dateRanges, dimensions: [{ name: 'eventName' }, { name: 'pagePath' }], metrics: [{ name: 'eventCount' }, { name: 'activeUsers' }], dimensionFilter: { andGroup: { expressions: [behaviorEventFilter(), publicPathDimensionFilter] } }, orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }], limit: '100000' }, fetchImpl),
+    runReport(config, token, { dateRanges, dimensions: [{ name: 'sessionSourceMedium' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'engagementRate' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: REPORT_LIMIT }, fetchImpl),
+    runReport(config, token, { dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: REPORT_LIMIT }, fetchImpl),
   ]);
-  return normalizeGoogleAnalyticsReport(days, overview, daily, pages);
+  return normalizeGoogleAnalyticsReport(days, overview, daily, pages, events, acquisition, devices);
 }

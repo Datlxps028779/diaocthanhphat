@@ -8,6 +8,11 @@ export type GoogleAnalyticsOverview = {
   engagementRate: number;
 };
 
+export type GoogleAnalyticsEvent = { name: string; eventCount: number; activeUsers: number };
+export type GoogleAnalyticsFunnelStep = GoogleAnalyticsEvent & { label: string };
+export type GoogleAnalyticsAcquisition = { sourceMedium: string; sessions: number; activeUsers: number; engagementRate: number };
+export type GoogleAnalyticsDevice = { category: string; sessions: number; activeUsers: number; pageViews: number };
+
 export type GoogleAnalyticsReport = {
   days: number;
   startDate: string;
@@ -15,6 +20,10 @@ export type GoogleAnalyticsReport = {
   overview: GoogleAnalyticsOverview;
   daily: Array<GoogleAnalyticsOverview & { date: string }>;
   topPages: Array<{ path: string; pageViews: number; activeUsers: number }>;
+  funnel: GoogleAnalyticsFunnelStep[];
+  topEvents: GoogleAnalyticsEvent[];
+  acquisition: GoogleAnalyticsAcquisition[];
+  devices: GoogleAnalyticsDevice[];
 };
 
 export type GoogleAnalyticsDiagnostic = {

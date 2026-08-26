@@ -140,7 +140,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     mutationFn: (p: Property) => toggleFavorite(p.id),
     onSuccess: (favorited, p) => {
       queryClient.invalidateQueries({ queryKey: qk.favoriteIds() });
-      if (favorited) captureSignalFromProperty('favorite', p);
+      if (favorited) {
+        captureSignalFromProperty('favorite', p);
+        track(EVENTS.LISTING_SAVE, { listingId: p.id, source: 'landing' });
+      }
     },
   });
 
