@@ -27,6 +27,7 @@ import { ForYou } from '../components/ForYou';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
+import { formatPropertyPrice } from '../lib/listingPrice';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
@@ -36,6 +37,7 @@ import { track, EVENTS } from '../lib/analytics';
 import { buildDiscoveryEventProps } from '../lib/discoveryJourney';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
+import { PropertyGallery } from '../components/PropertyGallery';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
 import { savedSearchManagementHref, shouldShowSavedSearchNotice, type SavedSearchNoticeState } from '../lib/savedSearchJourney';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
@@ -874,7 +876,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                               </span>
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
-                                <p className="text-red-600 text-xs font-black mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+                                <p className="text-red-600 text-xs font-black mt-0.5">{formatPropertyPrice(p)}</p>
                               </div>
                             </button>
                           ))}
@@ -905,7 +907,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                             </span>
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
-                              <p className="text-red-600 text-xs font-black mt-0.5">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+                              <p className="text-red-600 text-xs font-black mt-0.5">{formatPropertyPrice(p)}</p>
                             </div>
                           </button>
                         ))}
@@ -945,7 +947,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </div>
             ) : viewMode === 'grid' && (
               loading ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 md:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-72 rounded-xl border border-gray-100 bg-white animate-pulse" />)}
                 </div>
               ) : properties.length === 0 ? (
@@ -956,7 +958,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   resultSummary={resultSummary}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 md:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
                   {properties.map((p, index) => (
                     <GridCard key={p.id} property={p}
                       onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'grid')}
@@ -1130,42 +1132,33 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
     : null;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-      <div className="relative overflow-hidden">
-        <Link href={buildPropertyPath(p)} onClick={onResultClick} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <BlurFillImage
-          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-          alt={buildPropertyImageAlt(p)}
-          sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
-          wrapperClassName="aspect-[4/3]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-        {p.badge ? (
-          <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
+      <PropertyGallery
+        property={p}
+        href={buildPropertyPath(p)}
+        onLinkClick={onResultClick}
+        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
+        topLeft={p.badge ? (
+          <span className={`absolute left-2 top-2 z-[2] rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
         ) : p.is_hot ? (
-          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm flex items-center gap-0.5"><Flame className="w-2.5 h-2.5" />HOT</span>
+          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Flame className="h-2.5 w-2.5" />HOT</span>
         ) : p.is_featured ? (
-          <span className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Nổi bật</span>
-        ) : null}
-        {p.listing_type === 'cho_thue' && (
-          <span className="absolute bottom-8 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
+          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Sparkles className="h-2.5 w-2.5" />Nổi bật</span>
+        ) : undefined}
+        topRight={(
+          <>
+            <CompareButton property={p} variant="overlay" />
+            {p.listing_type === 'cho_thue' && <span className="rounded-md bg-blue-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Cho thuê</span>}
+            <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-[10px] font-semibold text-white"><Eye className="h-3 w-3" />{p.views ?? 0}</span>
+          </>
         )}
-        <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>
-        <div className="absolute top-2 right-2 z-[2] flex items-center gap-1.5">
-          <CompareButton property={p} variant="overlay" />
-          <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
-            className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-            <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </button>
-        </div>
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 text-white/90 text-[10px]">
-          <Eye className="w-3 h-3" />{p.views ?? 0}
-        </div>
-      </div>
+        bottomLeft={<span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>}
+        showTotalPriceLabel={p.listing_type !== 'cho_thue'}
+        isFavorited={isFavorited}
+        onToggleFavorite={onToggleFavorite}
+      />
       <div className="p-3.5 flex flex-col flex-1">
         <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
-        <p className="text-red-600 font-black text-base">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+        <p className="text-red-600 font-black text-base">{formatPropertyPrice(p)}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
           {pricePerSqm && p.listing_type !== 'cho_thue' && <span className="text-gray-400">{pricePerSqm} tr/m²</span>}
@@ -1207,7 +1200,7 @@ function ListCard({ property: p, onContact, onResultClick, isFavorited = false, 
         <div>
           <VerifiedBadge property={p} />
           <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
-          <p className="text-red-600 font-black text-lg mb-1">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+          <p className="text-red-600 font-black text-lg mb-1">{formatPropertyPrice(p)}</p>
           <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5 flex-wrap">
             {p.area_sqm && <span className="flex items-center gap-0.5"><Building2 className="w-3 h-3" />{p.area_sqm} m²</span>}
             {p.bedrooms && <span>{p.bedrooms} PN</span>}
@@ -1219,12 +1212,12 @@ function ListCard({ property: p, onContact, onResultClick, isFavorited = false, 
             <MapPin className="w-3 h-3 text-red-400" />{[p.address, p.district, p.city].filter(Boolean).join(', ')}
           </p>
         </div>
-        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100">
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views}</span>
-            <span>{new Date(p.created_at).toLocaleDateString('vi-VN')}</span>
-          </div>
-          <div className="flex gap-2">
+          <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 text-xs text-gray-400">
+              <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views}</span>
+              <span>{new Date(p.created_at).toLocaleDateString('vi-VN')}</span>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
             <CompareButton property={p} variant="inline" />
             <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
               className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center hover:border-red-400 transition-colors">

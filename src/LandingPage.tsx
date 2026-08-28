@@ -9,6 +9,7 @@ import {
   CheckCircle, Users
 } from 'lucide-react';
 import { type Property } from './lib/supabase';
+import { formatPropertyPrice } from './lib/listingPrice';
 import {
   getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
@@ -34,8 +35,9 @@ import { ForYou } from './components/ForYou';
 import { RecentlyViewed } from './components/RecentlyViewed';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
+import { PropertyGallery } from './components/PropertyGallery';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
-import { buildNewsImageAlt, buildPropertyImageAlt } from './lib/propertyImages';
+import { buildNewsImageAlt } from './lib/propertyImages';
 import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -284,7 +286,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   {section.display_style === 'horizontal' ? (
                     <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
                       {properties.map(p => (
-                        <div key={p.id} className="flex-shrink-0 w-64 snap-start">
+                        <div key={p.id} className="flex-shrink-0 w-[360px] sm:w-[380px] snap-start">
                           <PropertyCard property={p}
                             isFavorited={favoriteIds.has(p.id)}
                             onToggleFavorite={() => handleToggleFavorite(p)}
@@ -293,7 +295,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                       {properties.map(p => (
                         <PropertyCard key={p.id} property={p}
                           isFavorited={favoriteIds.has(p.id)}
@@ -877,36 +879,28 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
 }) {
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
-      <div className="relative overflow-hidden">
-        <Link href={buildPropertyPath(p)} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <BlurFillImage
-          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-          alt={buildPropertyImageAlt(p)}
-          sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
-          wrapperClassName="aspect-[4/3]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-        {p.badge ? (
-          <span className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
+      <PropertyGallery
+        property={p}
+        href={buildPropertyPath(p)}
+        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
+        topLeft={p.badge ? (
+          <span className={`absolute left-2 top-2 z-[2] rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
         ) : p.is_hot ? (
-          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm flex items-center gap-0.5"><Flame className="w-2.5 h-2.5" />HOT</span>
+          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Flame className="h-2.5 w-2.5" />HOT</span>
         ) : p.is_featured ? (
-          <span className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Nổi bật</span>
-        ) : null}
-        {p.listing_type === 'cho_thue' && (
-          <span className="absolute top-2 right-8 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">Cho thuê</span>
+          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Sparkles className="h-2.5 w-2.5" />Nổi bật</span>
+        ) : undefined}
+        bottomLeft={<span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>}
+        topRight={(
+          <>
+            {p.listing_type === 'cho_thue' && <span className="rounded-md bg-blue-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Cho thuê</span>}
+            <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-[10px] font-semibold text-white"><Eye className="h-3 w-3" />{p.views ?? 0}</span>
+          </>
         )}
-        <span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>
-        <button onClick={e => { e.stopPropagation(); onToggleFavorite?.(); }}
-          className="absolute top-2 right-2 z-[2] w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform">
-          <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-        </button>
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 text-white/90 text-[10px]">
-          <Eye className="w-3 h-3" />{p.views ?? 0}
-        </div>
-      </div>
+        showTotalPriceLabel={p.listing_type !== 'cho_thue'}
+        isFavorited={isFavorited}
+        onToggleFavorite={onToggleFavorite}
+      />
       <div className="p-3.5 flex flex-col flex-1">
         <h3 className="mb-1.5">
           <Link href={buildPropertyPath(p)}
@@ -914,7 +908,7 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
             {p.title}
           </Link>
         </h3>
-        <p className="text-red-600 font-black text-base">{p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+        <p className="text-red-600 font-black text-base">{formatPropertyPrice(p)}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
           {p.bedrooms && <span>{p.bedrooms} PN</span>}

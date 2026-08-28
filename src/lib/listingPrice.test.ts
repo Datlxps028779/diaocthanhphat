@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatListingPrice, formatPriceInput, normalizePriceInput, parsePriceInput, priceInputFromNumber } from './listingPrice';
+import { formatListingPrice, formatPriceInput, formatPropertyPrice, getEffectiveListingPrice, normalizePriceInput, parsePriceInput, priceInputFromNumber, priceToVnd } from './listingPrice';
 
 describe('listing price input', () => {
   it('groups digits while retaining a decimal value', () => {
@@ -12,11 +12,25 @@ describe('listing price input', () => {
     expect(parsePriceInput('1,500,000.5')).toBe(1500000.5);
   });
 
-  it('treats commas as grouping separators consistently with the UI', () => {
-    expect(parsePriceInput('1,5')).toBe(15);
-    expect(formatPriceInput('1,5')).toBe('15');
+  it('treats a short comma fraction as a decimal and three digits as grouping', () => {
+    expect(parsePriceInput('1,5')).toBe(1.5);
+    expect(formatPriceInput('1,5')).toBe('1.5');
+    expect(parsePriceInput('1,500')).toBe(1500);
   });
 
+  it('formats effective sale and rental prices from structured fields', () => {
+    expect(formatPropertyPrice({ listing_type: 'mua_ban', price: 2.3, price_unit: 'tỷ', price_label: '2 tỷ' })).toBe('2.3 tỷ');
+    expect(formatPropertyPrice({ listing_type: 'mua_ban', price: 690, price_unit: 'triệu' })).toBe('690 triệu');
+    expect(formatPropertyPrice({ listing_type: 'cho_thue', price: 0, price_per_month: 8, price_unit: 'triệu/tháng' })).toBe('8 triệu/tháng');
+    expect(formatPropertyPrice({ listing_type: 'cho_thue', price: 6, price_per_month: null, price_unit: 'triệu/tháng' })).toBe('6 triệu/tháng');
+    expect(formatPropertyPrice({ listing_type: 'mua_ban', price: null, price_label: 'Thỏa thuận' })).toBe('Thỏa thuận');
+  });
+
+  it('converts effective prices to VND without confusing the display unit', () => {
+    expect(priceToVnd({ listing_type: 'mua_ban', price: 2.3, price_unit: 'tỷ' })).toBe(2300000000);
+    expect(priceToVnd({ listing_type: 'cho_thue', price: 0, price_per_month: 8, price_unit: 'triệu/tháng' })).toBe(8000000);
+    expect(getEffectiveListingPrice({ listing_type: 'cho_thue', price: 0, price_per_month: 8, price_unit: 'triệu/tháng' }).source).toBe('price_per_month');
+  });
   it('rejects zero, empty, and incomplete decimal input for payload validation', () => {
     expect(parsePriceInput('')).toBeNull();
     expect(parsePriceInput('0')).toBeNull();

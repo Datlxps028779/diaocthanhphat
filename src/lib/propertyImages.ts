@@ -37,6 +37,14 @@ export function buildPropertyGallery(
   return gallery.length > 0 ? gallery : [FALLBACK_PROPERTY_IMAGE];
 }
 
+export function getPropertyGalleryMeta(
+  imageUrl: string | null | undefined,
+  images: Array<string | null | undefined> | null | undefined,
+): { imageCount: number; extraImageCount: number } {
+  const imageCount = buildSeoImageGallery(imageUrl, images).length;
+  return { imageCount, extraImageCount: Math.max(0, imageCount - 3) };
+}
+
 export function buildPropertyImageAlt(property: Pick<Property, 'title' | 'ward' | 'district' | 'city'>, index?: number): string {
   const location = [property.ward, property.district, property.city]
     .map(s => s?.trim())

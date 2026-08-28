@@ -4,6 +4,7 @@ import {
   buildPropertyGallery,
   buildPropertyImageAlt,
   buildSeoImageGallery,
+  getPropertyGalleryMeta,
   FALLBACK_PROPERTY_IMAGE,
   normalizeSeoImageUrl,
 } from './propertyImages';
@@ -27,6 +28,17 @@ describe('buildPropertyGallery', () => {
 
   it('dùng ảnh fallback khi không có URL hợp lệ', () => {
     expect(buildPropertyGallery(null, ['', undefined])).toEqual([FALLBACK_PROPERTY_IMAGE]);
+  });
+});
+
+describe('getPropertyGalleryMeta', () => {
+  it('đếm đúng ảnh thật và số ảnh còn lại sau ba ô hiển thị', () => {
+    expect(getPropertyGalleryMeta('/a.jpg', ['/b.jpg', '/c.jpg', '/d.jpg'])).toEqual({ imageCount: 4, extraImageCount: 1 });
+    expect(getPropertyGalleryMeta('/a.jpg', ['/b.jpg', '/c.jpg'])).toEqual({ imageCount: 3, extraImageCount: 0 });
+  });
+
+  it('không tính fallback là ảnh thật', () => {
+    expect(getPropertyGalleryMeta(null, ['', null])).toEqual({ imageCount: 0, extraImageCount: 0 });
   });
 });
 
