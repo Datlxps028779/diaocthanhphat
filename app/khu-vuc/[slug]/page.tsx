@@ -9,6 +9,7 @@ import { PriceStatsBlock } from '@/components/PriceStatsBlock';
 import { WardPriceBreakdown } from '@/components/WardPriceBreakdown';
 import { buildPriceAnswer } from '@/lib/priceStatsFormat';
 import { buildProductPath } from '@/lib/productPath';
+import { formatPropertyPrice } from '@/lib/listingPrice';
 import { districtDisplaySlug } from '@/lib/areaPath';
 import { DiscoverySectionHeader } from '@/components/discovery/DiscoverySectionHeader';
 import {
@@ -60,8 +61,8 @@ function propertyHref(p: Property): string {
   return buildProductPath(p);
 }
 
-function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label'>): string {
-  return p.price_label || `${p.price} ${p.price_unit}`;
+function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type'>): string {
+  return formatPropertyPrice(p);
 }
 
 function PropertyAreaCard({ property }: { property: Property }) {

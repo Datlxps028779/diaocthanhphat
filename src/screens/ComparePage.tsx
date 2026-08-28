@@ -5,6 +5,7 @@ import { Scale, X, Trash2, Check, Plus, Share2 } from 'lucide-react';
 import { getCompareList, removeFromCompare, clearCompare, setCompareList, COMPARE_EVENT, COMPARE_MAX, type CompareProperty } from '../lib/compare';
 import { buildPropertyPath, getPropertyById } from '../lib/api/properties';
 import { Breadcrumb } from '../components/Layout';
+import { formatPropertyPrice, getEffectiveListingPrice } from '../lib/listingPrice';
 import { type Page } from '../lib/router';
 
 // Bảng so sánh BĐS đã chọn (tối đa 3). Đọc localStorage sau mount (tránh lệch
@@ -51,9 +52,14 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
     }
   };
 
-  const price = (p: CompareProperty) => p.price_label ?? `${p.price} ${p.price_unit}`;
-  const priceTrieu = (p: CompareProperty) => p.price ? (p.price_unit === 'tỷ' ? p.price * 1000 : p.price) : null;
+  const price = (p: CompareProperty) => formatPropertyPrice(p);
+  const priceTrieu = (p: CompareProperty) => {
+    const effective = getEffectiveListingPrice(p);
+    if (effective.value == null) return null;
+    return effective.unit === 'tỷ' ? effective.value * 1000 : effective.value;
+  };
   const pricePerSqm = (p: CompareProperty) => {
+    if (p.listing_type === 'cho_thue') return null;
     const t = priceTrieu(p);
     return p.area_sqm && t ? t / p.area_sqm : null;
   };

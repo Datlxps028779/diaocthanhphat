@@ -27,12 +27,12 @@ describe('buildAutoSchema — property', () => {
   it('mua bán có giá → offers VND', () => {
     const s = buildAutoSchema('property', { title: 'Nhà', listing_type: 'mua_ban', price: 3, price_unit: 'tỷ', path: '/bat-dong-san/nha' });
     expect(s['@type']).toBe('RealEstateListing');
-    expect((s.offers as Record<string, unknown>).price).toBe('3 tỷ');
+    expect((s.offers as Record<string, unknown>).price).toBe('3000000000');
   });
 
   it('cho thuê dùng price_per_month', () => {
     const s = buildAutoSchema('property', { title: 'Nhà thuê', listing_type: 'cho_thue', price_per_month: 10, path: '/p' });
-    expect((s.offers as Record<string, unknown>).price).toBe('10 VND');
+    expect((s.offers as Record<string, unknown>).price).toBe('10000000');
   });
 
   it('KHÔNG có giá → không set offers (không bịa)', () => {

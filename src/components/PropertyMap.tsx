@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Property } from '../lib/supabase';
 import type { Page } from '../lib/router';
 import type { Map as LeafletMap } from 'leaflet';
+import { formatCompactPropertyPrice, getEffectiveListingPrice } from '../lib/listingPrice';
 
 export interface MapBounds {
   north: number; south: number; east: number; west: number;
@@ -21,9 +22,9 @@ interface PropertyMapProps {
   fitToMarkers?: boolean;
 }
 
-// Price tier config
-function priceTier(price: number, unit: string): { color: string; bg: string; label: string } {
-  const bil = unit === 'triệu' ? price / 1000 : price;
+function priceTierForProperty(property: Property): { color: string; bg: string; label: string } {
+  const effective = getEffectiveListingPrice(property);
+  const bil = effective.value == null ? 0 : effective.unit === 'tỷ' ? effective.value : effective.value / 1000;
   if (bil < 1)  return { color: '#15803d', bg: '#dcfce7', label: '< 1 tỷ' };
   if (bil < 3)  return { color: '#b45309', bg: '#fef3c7', label: '1–3 tỷ' };
   if (bil < 8)  return { color: '#b91c1c', bg: '#fee2e2', label: '3–8 tỷ' };
@@ -31,14 +32,11 @@ function priceTier(price: number, unit: string): { color: string; bg: string; la
 }
 
 function priceLabel(p: Property): string {
-  if (p.price_label) return p.price_label;
-  const bil = p.price_unit === 'triệu' ? p.price / 1000 : p.price;
-  if (bil >= 1) return `${bil % 1 === 0 ? bil : bil.toFixed(1)} Tỷ`;
-  return `${p.price} Tr`;
+  return formatCompactPropertyPrice(p);
 }
 
 function markerHtml(p: Property): string {
-  const tier = priceTier(p.price, p.price_unit);
+  const tier = priceTierForProperty(p);
   const isRent = p.listing_type === 'cho_thue';
   const badgeBg = isRent ? '#1d4ed8' : tier.color;
   const label = priceLabel(p);
@@ -88,7 +86,7 @@ function markerHtml(p: Property): string {
 }
 
 function popupHtml(p: Property): string {
-  const tier = priceTier(p.price, p.price_unit);
+  const tier = priceTierForProperty(p);
   const isRent = p.listing_type === 'cho_thue';
   const badgeBg = isRent ? '#1d4ed8' : tier.color;
   const badgeLabel = isRent ? 'Cho thuê' : 'Mua bán';
@@ -131,7 +129,6 @@ function popupHtml(p: Property): string {
         <!-- Price row -->
         <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:7px;">
           <span style="font-size:20px;font-weight:900;color:${badgeBg};line-height:1;">${label}</span>
-          ${p.price_per_month ? `<span style="font-size:10px;color:#6b7280;">/tháng</span>` : ''}
         </div>
 
         <!-- Location -->

@@ -1,4 +1,5 @@
 import { sanitizeArticleHtml } from './sanitizeHtml';
+import { validateCoordinatePair } from './locationCoordinates';
 
 // Chuẩn hóa payload từ nguồn ngoài (make.com) trước khi ghi DB. Tách khỏi route để
 // test được không cần network/DB.
@@ -253,10 +254,18 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
   if (!title) errors.push('title: bắt buộc, phải là chuỗi không rỗng.');
 
   const price = num(body.price);
-  if (price === null || price <= 0) errors.push('price: bắt buộc, phải là số lớn hơn 0.');
+  const monthlyPrice = num(body.price_per_month);
+  const type = listingType(body.listing_type);
+  const effectivePrice = type === 'cho_thue' ? (monthlyPrice ?? price) : price;
+  if (effectivePrice === null || effectivePrice <= 0) {
+    errors.push(type === 'cho_thue' ? 'price_per_month: bắt buộc, phải là số lớn hơn 0.' : 'price: bắt buộc, phải là số lớn hơn 0.');
+  }
 
   const city = str(body.city, MAX_SHORT);
   if (!city) errors.push('city: bắt buộc (tên tỉnh/thành, ví dụ "Bình Dương").');
+
+  const coordinates = validateCoordinatePair(body.latitude, body.longitude);
+  if (!coordinates.valid) errors.push(`coordinates: ${coordinates.message}`);
 
   const rawImages = body.images;
   if (Array.isArray(rawImages) && rawImages.length > MAX_IMAGES) {
@@ -274,11 +283,11 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
     row: {
       title: title as string,
       description: str(body.description, MAX_TEXT),
-      price: price as number,
-      price_unit: str(body.price_unit, 20) ?? 'tỷ',
+      price: type === 'cho_thue' ? 0 : price as number,
+      price_unit: type === 'cho_thue' ? 'triệu/tháng' : str(body.price_unit, 20) ?? 'tỷ',
       price_label: str(body.price_label, MAX_SHORT),
-      price_per_month: num(body.price_per_month),
-      listing_type: listingType(body.listing_type),
+      price_per_month: type === 'cho_thue' ? effectivePrice : null,
+      listing_type: type,
       area_sqm: num(body.area_sqm),
       address: str(body.address, MAX_SHORT),
       city: city as string,
@@ -293,8 +302,8 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
       contact_name: str(body.contact_name, MAX_SHORT),
       contact_phone: str(body.contact_phone, 30),
       contact_zalo: str(body.contact_zalo, 30),
-      latitude: num(body.latitude),
-      longitude: num(body.longitude),
+      latitude: coordinates.valid ? coordinates.coordinates.latitude : null,
+      longitude: coordinates.valid ? coordinates.coordinates.longitude : null,
       video_url: httpUrl(body.video_url),
       meta_title: str(body.meta_title, MAX_SHORT),
       meta_description: str(body.meta_description, 400),

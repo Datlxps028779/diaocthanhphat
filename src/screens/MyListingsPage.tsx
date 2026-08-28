@@ -8,6 +8,7 @@ import { daysUntilExpiry, expiryLabel } from '../lib/listingExpiry';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
+import { formatPropertyPrice } from '../lib/listingPrice';
 
 interface MyListingsPageProps {
   onNavigate: (p: Page) => void;
@@ -184,7 +185,7 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
                         </span>
                       </div>
                       <p className="text-red-600 font-bold text-base mt-0.5">
-                        {listing.price} {listing.price_unit}
+                        {formatPropertyPrice(listing)}
                       </p>
                       <div className="flex items-center gap-3 text-gray-400 text-xs mt-1 flex-wrap">
                         <span>{listing.city}</span>

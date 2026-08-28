@@ -6,7 +6,7 @@ import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supaba
 import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
-import { formatListingPrice } from '../../../lib/listingPrice';
+import { formatPropertyPrice } from '../../../lib/listingPrice';
 
 // ─── User Listings Approval Tab ───────────────────────────────────────────────
 export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: () => void }) {
@@ -233,7 +233,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                     <div className="flex items-start justify-between gap-2 flex-wrap">
                       <div>
                         <h4 className="font-bold text-gray-900 text-sm line-clamp-1">{listing.title}</h4>
-                        <p className="text-red-600 font-bold text-sm">{formatListingPrice(listing.price, listing.price_unit)}</p>
+                        <p className="text-red-600 font-bold text-sm">{formatPropertyPrice(listing)}</p>
                         <div className="flex gap-3 text-xs text-gray-500 mt-1 flex-wrap">
                           <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{listing.city}</span>
                           <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{listing.contact_phone}</span>

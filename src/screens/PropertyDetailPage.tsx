@@ -32,6 +32,7 @@ import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { formatUpdateDate } from '../lib/priceStatsFormat';
+import { formatPropertyPrice, formatListingPrice } from '../lib/listingPrice';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
@@ -253,18 +254,16 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   // Ưu tiên FAQ nhập tay; nếu chưa có thì tự-sinh từ dữ liệu thật.
   const faq = property.faq && property.faq.length > 0 ? property.faq : buildPropertyFaq(property);
 
-  const pricePerSqm = property.area_sqm
-    ? ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0)
-    : null;
+  const pricePerSqm = property.listing_type === 'cho_thue' || !property.area_sqm
+    ? null
+    : ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0);
 
   // Answer Block (AIO): câu tóm tắt trực tiếp từ dữ liệu thật, chỉ ghép field có giá trị.
   const answerText = (() => {
     const typeLabel = property.property_types?.name?.trim() || 'Bất động sản';
     const verb = property.listing_type === 'cho_thue' ? 'cho thuê' : 'bán';
     const loc = [property.ward, property.district, property.city].map(s => s?.trim()).filter(Boolean).join(', ');
-    const priceStr = property.price_label?.trim()
-      || (property.listing_type === 'cho_thue' && property.price_per_month ? `${property.price_per_month} triệu/tháng`
-        : property.price ? `${property.price} ${property.price_unit ?? 'tỷ'}` : '');
+    const priceStr = formatPropertyPrice(property);
     const parts = [
       `${typeLabel} đang ${verb}${loc ? ` tại ${loc}` : ''}`,
       priceStr ? `giá ${priceStr}` : '',
@@ -448,15 +447,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               <div className="flex flex-wrap items-end justify-between gap-4 pt-4 border-t border-gray-100">
                 <div>
                   <p className="text-gray-500 text-xs mb-0.5">Mức giá</p>
-                  <p className="text-3xl font-black text-red-600">{property.price_label ?? `${property.price} ${property.price_unit}`}</p>
+                  <p className="text-3xl font-black text-red-600">{formatPropertyPrice(property)}</p>
                   {pricePerSqm && <p className="text-gray-400 text-xs mt-0.5">≈ {pricePerSqm} triệu/m²</p>}
                   {property.listing_type !== 'cho_thue' && property.loan_support != null && property.loan_support > 0 && property.loan_support < property.price && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                        Trả trước: {(property.price - property.loan_support).toFixed(2).replace(/\.00$/, '')} {property.price_unit}
+                        Trả trước: {formatListingPrice(property.price - property.loan_support, property.price_unit)}
                       </span>
                       <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                        Chủ hỗ trợ vay: {property.loan_support} {property.price_unit}
+                        Chủ hỗ trợ vay: {formatListingPrice(property.loan_support, property.price_unit)}
                       </span>
                     </div>
                   )}
@@ -673,7 +672,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <p className="text-xs text-gray-500 mb-1">Mức giá</p>
                 <p className="text-2xl font-black text-red-600 mb-1">
-                  {property.price_label ?? `${property.price} ${property.price_unit}`}
+                  {formatPropertyPrice(property)}
                 </p>
                 {pricePerSqm && <p className="text-gray-400 text-xs mb-4">≈ {pricePerSqm} triệu/m²</p>}
                 <button onClick={openContact}
@@ -736,8 +735,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 )}
               </div>
 
-              {/* Loan calculator */}
-              <LoanCalculator propertyPrice={property.price} priceUnit={property.price_unit} />
+              {property.listing_type !== 'cho_thue' && <LoanCalculator propertyPrice={property.price} priceUnit={property.price_unit} />}
 
               {/* Sidebar giữ vai trò điều hướng; danh sách BĐS tương tự đầy đủ nằm ở
                   block phía dưới để tránh lặp cùng một dataset trên desktop. */}
@@ -791,7 +789,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   </div>
                   <div className="p-3">
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{r.title}</p>
-                    <p className="text-red-600 text-sm font-black mt-1">{r.price_label}</p>
+                    <p className="text-red-600 text-sm font-black mt-1">{formatPropertyPrice(r)}</p>
                     <p className="text-gray-400 text-xs flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5" />{r.city}</p>
                     {r.relatedReason && <p className="mt-1 line-clamp-1 text-[11px] font-medium text-red-500">{r.relatedReason}</p>}
                   </div>

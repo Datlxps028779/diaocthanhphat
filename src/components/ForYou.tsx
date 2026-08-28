@@ -9,6 +9,7 @@ import { getRecentlyViewed } from '../lib/recentlyViewed';
 import { buildProfileDigest } from '../lib/recoDigest';
 import { fetchAiRanking, type RecoCandidate } from '../lib/api/aiReco';
 import { PropertyDiscoveryRail } from './discovery/PropertyDiscoveryRail';
+import { formatPropertyPrice } from '../lib/listingPrice';
 import type { DiscoverySurface } from '../lib/discoveryJourney';
 
 // "Gợi ý dành cho bạn" — tự học từ hành vi (tìm kiếm + xem), không cần khách thao tác.
@@ -65,7 +66,7 @@ export function ForYou({
     type: p.property_type_id ? typeNameById[p.property_type_id] ?? null : null,
     listingType: p.listing_type,
     price: p.price ?? null,
-    priceLabel: p.price_label ?? null,
+    priceLabel: formatPropertyPrice(p),
     district: p.district ?? null,
   })), [shortlist, areaNameById, typeNameById]);
 

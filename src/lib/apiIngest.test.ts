@@ -13,6 +13,32 @@ describe('normalizeListingPayload', () => {
     expect(r.row.city).toBe('Bình Dương');
   });
 
+  it('giữ cặp tọa độ hợp lệ và chặn tọa độ thiếu hoặc ngoài phạm vi', () => {
+    const validCoordinates = normalizeListingPayload({ ...valid, latitude: '10.9804', longitude: '106.6519' });
+    expect(validCoordinates.ok).toBe(true);
+    if (!validCoordinates.ok) return;
+    expect(validCoordinates.row.latitude).toBe(10.9804);
+    expect(validCoordinates.row.longitude).toBe(106.6519);
+
+    for (const coordinates of [{ latitude: '10.9' }, { longitude: '106.6' }, { latitude: '91', longitude: '106.6' }, { latitude: '10abc', longitude: '106.6' }]) {
+      expect(normalizeListingPayload({ ...valid, ...coordinates }).ok).toBe(false);
+    }
+    const empty = normalizeListingPayload(valid);
+    expect(empty.ok).toBe(true);
+    if (!empty.ok) return;
+    expect(empty.row.latitude).toBeNull();
+    expect(empty.row.longitude).toBeNull();
+  });
+
+  it('nhận giá thuê từ price_per_month và giữ giá tương thích bằng 0', () => {
+    const r = normalizeListingPayload({ ...valid, listing_type: 'cho_thue', price: 0, price_per_month: '8' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.row.price).toBe(0);
+    expect(r.row.price_per_month).toBe(8);
+    expect(r.row.price_unit).toBe('triệu/tháng');
+  });
+
   it('luôn ép status=pending, bỏ qua status trong body', () => {
     const r = normalizeListingPayload({ ...valid, status: 'approved' });
     expect(r.ok).toBe(true);

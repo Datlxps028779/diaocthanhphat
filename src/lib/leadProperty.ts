@@ -1,4 +1,5 @@
 // Helper thuần cho việc nối lead ↔ BĐS quan tâm (dùng ở PropertyPicker).
+import { formatPriceInput, formatPropertyPrice } from './listingPrice';
 // Tách khỏi component để test được nhãn hiển thị mà không cần render.
 
 export interface PropertyOption {
@@ -7,15 +8,17 @@ export interface PropertyOption {
   price: number;
   price_unit: string;
   price_label: string | null;
+  price_per_month?: number | null;
+  listing_type?: string | null;
   area_sqm: number | null;
 }
 
-// Nhãn giá: ưu tiên price_label (đã format sẵn ở CMS, vd "Thỏa thuận"),
-// else ghép số + đơn vị. price<=0 và không có label → rỗng (tránh "0 tỷ").
-export function priceText(p: Pick<PropertyOption, 'price' | 'price_unit' | 'price_label'>): string {
-  if (p.price_label && p.price_label.trim()) return p.price_label.trim();
-  if (p.price > 0) return `${p.price} ${p.price_unit || ''}`.trim();
-  return '';
+export function priceText(p: Pick<PropertyOption, 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type'>): string {
+  const label = p.price_label?.trim();
+  if (label && !/[\d]/.test(label)) return label;
+  if (p.price > 0 && !p.price_unit) return formatPriceInput(String(p.price));
+  const value = formatPropertyPrice(p);
+  return value === 'Giá thỏa thuận' ? '' : value;
 }
 
 // Dòng phụ gọn cho option: giá · diện tích. Bỏ phần rỗng, ngăn bằng " · ".

@@ -1,5 +1,21 @@
 import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType, type NewsCategoryRow } from '../supabase';
+import type { TaxonomyGeo } from '../taxonomyGeo';
 
+export async function getTaxonomyGeo(entityIds: string[]): Promise<TaxonomyGeo[]> {
+  const ids = [...new Set(entityIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('taxonomy_geo')
+    .select('entity_type, entity_id, bounds, center_lat, center_lng, geojson, source, source_year, administrative_vintage')
+    .in('entity_id', ids)
+    .eq('is_published', true)
+    .eq('administrative_vintage', 'legacy_pre_merger');
+  if (error) {
+    // Chưa seed geometry không được làm hỏng form; LocationPicker sẽ báo rõ thiếu dữ liệu.
+    return [];
+  }
+  return (data ?? []) as TaxonomyGeo[];
+}
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
   const { data } = await supabase.from('areas').select('*').order('order_index');

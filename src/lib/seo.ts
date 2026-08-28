@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
 import { buildSeoImageGallery, FALLBACK_PROPERTY_IMAGE, normalizeSeoImageUrl } from './propertyImages';
+import { formatPropertyPrice as formatListingPropertyPrice } from './listingPrice';
 import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { stripHtml, isHtmlContent } from './markdown';
@@ -123,9 +124,7 @@ export function ogDescription(text: string): string {
 }
 
 function formatPropertyPrice(p: Property): string {
-  if (p.listing_type === 'cho_thue' && p.price_per_month) return `${p.price_per_month} triệu/tháng`;
-  if (p.price) return `${p.price} ${p.price_unit ?? 'tỷ'}`;
-  return '';
+  return formatListingPropertyPrice(p);
 }
 
 // ─── Property → Metadata (Next.js Metadata API) ───────────────────────────────

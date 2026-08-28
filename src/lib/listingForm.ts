@@ -2,6 +2,7 @@ import type { UserListing, ListingType, Property, PropertyType } from './supabas
 import type { FaqItem } from './propertyFaq';
 import { generateSlug } from './useSEOAutofill';
 import { parsePriceInput, priceInputFromNumber } from './listingPrice';
+import { coordinatePairFromUnknown } from './locationCoordinates';
 
 // State của form đăng tin (PostListingPage). Mọi trường là chuỗi vì input HTML
 // dùng chuỗi; số/JSON được nén lại lúc submit.
@@ -33,7 +34,7 @@ export function listingToFormState(l: UserListing): ListingFormState {
     listing_type: l.listing_type,
     title: s(l.title), description: s(l.description),
     price: priceInputFromNumber(l.price), price_unit: s(l.price_unit) || 'tỷ', price_label: s(l.price_label),
-    price_per_month: priceInputFromNumber(l.price_per_month),
+    price_per_month: priceInputFromNumber(l.price_per_month ?? (l.listing_type === 'cho_thue' && l.price_unit === 'triệu/tháng' ? l.price : null)),
     loan_support: priceInputFromNumber(l.loan_support),
     area_sqm: n(l.area_sqm), address: s(l.address), city: s(l.city),
     district: s(l.district), ward: s(l.ward), neighborhood_slug: s(l.neighborhood_slug),
@@ -76,6 +77,7 @@ export function formToProperty(
   const now = new Date().toISOString();
   const typeId = str(form.property_type_id);
   const propertyType = types.find(t => t.id === typeId) ?? null;
+  const coordinates = coordinatePairFromUnknown(form.latitude, form.longitude);
   return {
     id: property?.id ?? 'draft',
     title: String(form.title ?? ''),
@@ -122,8 +124,8 @@ export function formToProperty(
     road_width: num(form.road_width),
     frontage: num(form.frontage),
     amenities: arr(form.amenities) ?? property?.amenities ?? null,
-    latitude: num(form.latitude),
-    longitude: num(form.longitude),
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
     formatted_address: property?.formatted_address ?? null,
     vr_tour_url: str(form.vr_tour_url),
     video_url: str(form.video_url),

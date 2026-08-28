@@ -23,9 +23,14 @@ import { RichTextEditor } from '../shared/RichTextEditor';
 import { stripHtml, isHtmlContent } from '../../../lib/markdown';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 import { parseLegacyPropertyVideo, parseVrTourUrl } from '../../../lib/videoMedia';
+import { validateCoordinatePair } from '../../../lib/locationCoordinates';
 import { buildProductPath } from '../../../lib/productPath';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../../../lib/locationSelection';
+import { useTaxonomyGeo } from '../../../lib/hooks/useTaxonomy';
+import { pickTaxonomyGeo, taxonomyGeoLabel } from '../../../lib/taxonomyGeo';
 import { formatListingPrice, formatPriceInput, parsePriceInput, priceInputFromNumber } from '../../../lib/listingPrice';
+import { ListingPrice } from '../../ListingPrice';
+import { PriceField } from '../../PriceField';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -341,7 +346,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                       <span className="text-gray-600 text-xs">{p.city}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-bold text-red-600 text-sm">{p.price_label ?? `${p.price} ${p.price_unit}`}</span>
+                      <ListingPrice source={p} variant="admin" />
                     </td>
                     <td className="px-4 py-3 text-center hidden sm:table-cell">
                       <button onClick={async () => {
@@ -468,7 +473,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     price: priceInputFromNumber(property?.price),
     price_unit: property?.price_unit ?? 'tỷ',
     price_label: property?.price_label ?? '',
-    price_per_month: priceInputFromNumber(property?.price_per_month),
+    price_per_month: priceInputFromNumber(property?.price_per_month ?? (property?.listing_type === 'cho_thue' && property.price_unit === 'triệu/tháng' ? property.price : null)),
     loan_support: priceInputFromNumber(property?.loan_support),
     area_sqm: property?.area_sqm ?? '',
     address: property?.address ?? '',
@@ -511,11 +516,24 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const districtsRequestRef = useRef(0);
+  const wardsRequestRef = useRef(0);
+  const neighborhoodsRequestRef = useRef(0);
+  const selectedDistrict = districts.find(d => d.id === form.district_id && d.area_id === form.area_id);
+  const selectedWard = wards.find(w => w.name === form.ward);
+  const taxonomyGeoIds = [form.area_id, selectedDistrict?.id, selectedWard?.id].filter((id): id is string => Boolean(id));
+  const { data: taxonomyGeo = [], isLoading: loadingTaxonomyGeo } = useTaxonomyGeo(taxonomyGeoIds);
+  const selectedTaxonomyGeo = pickTaxonomyGeo(taxonomyGeo, {
+    areaId: form.area_id,
+    districtId: selectedDistrict?.id,
+    wardId: selectedWard?.id,
+  });
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
-  const flyTo = useCallback((query: string, zoom: number) => {
+  const addressEditedRef = useRef(false);
+  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson']) => {
     if (!query) return;
-    setGeocodeTarget({ query, zoom, nonce: ++geocodeNonce.current });
+    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, nonce: ++geocodeNonce.current });
   }, []);
   const [showPreview, setShowPreview] = useState(false);
   const [descriptionMode, setDescriptionMode] = useState<'visual' | 'html'>('visual');
@@ -587,46 +605,72 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
 
   const handleAreaChange = useCallback((areaId: string) => {
     const area = areas.find(a => a.id === areaId);
+    const requestId = ++districtsRequestRef.current;
+    ++wardsRequestRef.current;
+    ++neighborhoodsRequestRef.current;
     setForm(f => applyAreaSelection(f, areaId, area?.name ?? ''));
     setWards([]);
     setNeighborhoods([]);
     if (areaId) {
-      getDistricts(areaId).then(setDistricts).catch(() => setDistricts([]));
-      if (area?.name) flyTo(area.name, 13);
+      getDistricts(areaId).then(next => {
+        if (requestId === districtsRequestRef.current) setDistricts(next);
+      }).catch(() => {
+        if (requestId === districtsRequestRef.current) setDistricts([]);
+      });
     } else {
       setDistricts([]);
     }
-  }, [areas, flyTo]);
+  }, [areas]);
 
   const handleDistrictChange = useCallback((districtId: string) => {
     const district = districts.find(x => x.id === districtId) ?? null;
+    const requestId = ++wardsRequestRef.current;
+    ++neighborhoodsRequestRef.current;
     setForm(f => applyDistrictSelection(f, district));
     setNeighborhoods([]);
-    if (district) getWards(district.id).then(setWards).catch(() => setWards([]));
+    if (district) getWards(district.id).then(next => {
+      if (requestId === wardsRequestRef.current) setWards(next);
+    }).catch(() => {
+      if (requestId === wardsRequestRef.current) setWards([]);
+    });
     else setWards([]);
-    flyTo([district?.name, form.city].filter(Boolean).join(', '), 14);
-  }, [form.city, districts, flyTo]);
+  }, [districts]);
 
   const handleDistrictTextChange = useCallback((districtName: string) => {
+    ++wardsRequestRef.current;
+    ++neighborhoodsRequestRef.current;
     setForm(f => applyDistrictSelection(f, null, districtName));
     setNeighborhoods([]);
     setWards([]);
-    flyTo([districtName, form.city].filter(Boolean).join(', '), 14);
-  }, [form.city, flyTo]);
+  }, []);
 
   // Chọn xã → zoom sát tới cấp phường/xã + nạp khu dân cư của xã đó.
   const handleWardChange = useCallback((wardName: string) => {
+    const requestId = ++neighborhoodsRequestRef.current;
     setField('ward', wardName);
     setField('neighborhood_slug', '');
     const w = wards.find(x => x.name === wardName);
-    if (w) getNeighborhoods(w.id).then(setNeighborhoods).catch(() => setNeighborhoods([]));
+    if (w) getNeighborhoods(w.id).then(next => {
+      if (requestId === neighborhoodsRequestRef.current) setNeighborhoods(next);
+    }).catch(() => {
+      if (requestId === neighborhoodsRequestRef.current) setNeighborhoods([]);
+    });
     else setNeighborhoods([]);
-    flyTo([wardName, form.district, form.city].filter(Boolean).join(', '), 15);
-  }, [form.district, form.city, wards, flyTo]);
+  }, [wards]);
 
   useEffect(() => {
-    if (property?.area_id) getDistricts(property.area_id).then(setDistricts).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const areaId = property?.area_id;
+    const requestId = ++districtsRequestRef.current;
+    if (!areaId) {
+      setDistricts([]);
+      return;
+    }
+    getDistricts(areaId).then(next => {
+      if (requestId === districtsRequestRef.current) setDistricts(next);
+    }).catch(() => {
+      if (requestId === districtsRequestRef.current) setDistricts([]);
+    });
+  }, [property?.area_id]);
 
   // Tin cũ chỉ có text district được nâng cấp trong state khi có đúng một match
   // dưới area hiện tại; tránh gán nhầm nếu taxonomy đã đổi hoặc tên trùng nhau.
@@ -640,15 +684,40 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   useEffect(() => {
     const districtId = form.district_id
       || resolveUniqueDistrict(districts, form.area_id, form.district)?.id;
-    if (districtId) getWards(districtId).then(setWards).catch(() => {});
+    const requestId = ++wardsRequestRef.current;
+    ++neighborhoodsRequestRef.current;
+    if (!districtId) {
+      setWards([]);
+      setNeighborhoods([]);
+      return;
+    }
+    getWards(districtId).then(next => {
+      if (requestId === wardsRequestRef.current) setWards(next);
+    }).catch(() => {
+      if (requestId === wardsRequestRef.current) setWards([]);
+    });
   }, [districts, form.area_id, form.district, form.district_id]);
 
   // Nạp khu dân cư khi sửa BĐS có sẵn ward (wards vừa load xong → map tên ra id).
   useEffect(() => {
     if (!property?.ward || wards.length === 0) return;
     const w = wards.find(x => x.name === property.ward);
-    if (w) getNeighborhoods(w.id).then(setNeighborhoods).catch(() => {});
+    if (!w) return;
+    const requestId = ++neighborhoodsRequestRef.current;
+    getNeighborhoods(w.id).then(next => {
+      if (requestId === neighborhoodsRequestRef.current) setNeighborhoods(next);
+    }).catch(() => {
+      if (requestId === neighborhoodsRequestRef.current) setNeighborhoods([]);
+    });
   }, [wards, property?.ward]);
+
+  useEffect(() => {
+    if (!form.area_id || loadingTaxonomyGeo) return;
+    const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
+    if (!query) return;
+    const zoom = form.ward ? 14 : form.district ? 13 : 11;
+    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined);
+  }, [form.area_id, form.district_id, form.ward, selectedDistrict?.id, selectedWard?.id, selectedTaxonomyGeo, loadingTaxonomyGeo, flyTo]);
 
   const seoColor = seoScore >= 70 ? 'text-emerald-600' : seoScore >= 40 ? 'text-amber-600' : 'text-red-600';
   const seoBarColor = seoScore >= 70 ? 'bg-emerald-500' : seoScore >= 40 ? 'bg-amber-500' : 'bg-red-500';
@@ -668,7 +737,25 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       setTypeError('Vui lòng chọn loại BĐS');
       return;
     }
+    const coordinates = validateCoordinatePair(form.latitude, form.longitude);
+    if (!coordinates.valid) {
+      window.alert(coordinates.message);
+      return;
+    }
+    if (!isRent) {
+      const price = parsePriceInput(form.price);
+      const loan = parsePriceInput(form.loan_support);
+      if (loan !== null && (!price || loan <= 0 || loan >= price)) {
+        window.alert('Khoản vay phải lớn hơn 0 và nhỏ hơn giá bán.');
+        return;
+      }
+    }
     const specForm = clearIncompatibleSpecValues(form, selectedPropertyType, 'admin_property');
+    const selectedDistrict = districts.find(d => d.id === specForm.district_id);
+    if (specForm.district_id && (!selectedDistrict || selectedDistrict.area_id !== specForm.area_id)) {
+      window.alert('Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại cấp hành chính.');
+      return;
+    }
     let parsedSchema: Record<string, unknown> | null = null;
     if (specForm.schema_markup && specForm.schema_markup.trim()) {
       try { parsedSchema = JSON.parse(specForm.schema_markup); }
@@ -697,10 +784,10 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       // Renderer public vẫn sanitize lại như lớp phòng thủ thứ hai.
       description: cs(sanitizeArticleHtml(specForm.description)),
       listing_type: specForm.listing_type,
-      price: priceValue(specForm.price) ?? 0,
-      price_unit: specForm.price_unit,
+      price: isRent ? 0 : priceValue(specForm.price) ?? 0,
+      price_unit: isRent ? 'triệu/tháng' : specForm.price_unit,
       price_label: cs(specForm.price_label),
-      price_per_month: priceValue(specForm.price_per_month),
+      price_per_month: isRent ? priceValue(specForm.price_per_month) : null,
       loan_support: priceValue(specForm.loan_support),
       area_sqm: cn(specForm.area_sqm),
       address: cs(specForm.address),
@@ -729,8 +816,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       frontage: cn(specForm.frontage),
       floor_count: cn(specForm.floor_count),
       floor_number: cn(specForm.floor_number),
-      latitude: cn(specForm.latitude),
-      longitude: cn(specForm.longitude),
+      latitude: coordinates.coordinates.latitude,
+      longitude: coordinates.coordinates.longitude,
       vr_tour_url: vrTourUrl,
       video_url: videoUrl,
       meta_title: cs(specForm.meta_title),
@@ -798,7 +885,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <label className="block text-xs font-semibold text-gray-700 mb-2">Loại tin đăng *</label>
             <div className="flex gap-2">
               {[{ v: 'mua_ban', l: 'Mua bán' }, { v: 'cho_thue', l: 'Cho thuê' }].map(({ v, l }) => (
-                <button key={v} type="button" onClick={() => setField('listing_type', v)}
+                <button key={v} type="button" onClick={() => setForm(f => ({ ...f, listing_type: v as 'mua_ban' | 'cho_thue', price_unit: v === 'cho_thue' ? 'triệu/tháng' : f.price_unit === 'triệu/tháng' ? 'tỷ' : f.price_unit }))}
                   className={`px-4 py-2 text-sm font-semibold rounded-lg border-2 transition-colors ${form.listing_type === v ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:border-red-400'}`}>
                   {l}
                 </button>
@@ -819,42 +906,39 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
 
-          {/* Price row */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-gray-700 mb-1">{isRent ? 'Giá thuê' : 'Giá bán'} *</label>
-              <div className="flex gap-2">
-                <input type="text" inputMode="decimal" value={form.price} onChange={e => setField('price', formatPriceInput(e.target.value))}
-                  placeholder="VD: 1,500"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-                <select value={form.price_unit} onChange={e => setField('price_unit', e.target.value)}
-                  className="border border-gray-200 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
-                  <option value="tỷ">tỷ</option>
-                  <option value="triệu">triệu</option>
-                  {isRent && <option value="triệu/tháng">tr/tháng</option>}
-                </select>
+          <section className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-gray-800">Giá bất động sản</h3>
+                <p className="mt-0.5 text-xs text-gray-500">Giá hiển thị sẽ tự lấy đúng giá bán hoặc giá thuê mỗi tháng.</p>
               </div>
+              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-red-600 ring-1 ring-red-100">Bắt buộc</span>
             </div>
-            {fld('Nhãn giá', 'price_label', { placeholder: '2.5 tỷ, Thỏa thuận...' })}
-          </div>
-
-          {!isRent && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ hỗ trợ vay ngân hàng ({form.price_unit})</label>
-              <input type="text" inputMode="decimal" value={form.loan_support} onChange={e => setField('loan_support', formatPriceInput(e.target.value))}
-                placeholder="VD: 1,500 (cùng đơn vị giá bán)"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-              {(() => {
-                const price = parsePriceInput(form.price);
-                const loan = parsePriceInput(form.loan_support);
-                return price && loan && loan < price ? (
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">
-                    Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}
-                  </p>
-                ) : null;
-              })()}
-            </div>
-          )}
+            <label className="mb-1 block text-xs font-semibold text-gray-700">{isRent ? 'Giá thuê mỗi tháng *' : 'Giá bán *'}</label>
+            <PriceField
+              mode={isRent ? 'rent' : 'sale'}
+              value={isRent ? form.price_per_month : form.price}
+              unit={form.price_unit}
+              onChange={value => setField(isRent ? 'price_per_month' : 'price', value)}
+              onUnitChange={unit => setField('price_unit', unit)}
+              error={undefined}
+              id="admin-listing-price"
+            />
+            {!isRent && (
+              <div className="mt-4 rounded-xl border border-white bg-white/80 p-3">
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Chủ hỗ trợ vay ngân hàng ({form.price_unit}, tùy chọn)</label>
+                <input type="text" inputMode="decimal" value={form.loan_support} onChange={e => setField('loan_support', formatPriceInput(e.target.value))}
+                  placeholder="Ví dụ: 1,500" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                {(() => {
+                  const price = parsePriceInput(form.price);
+                  const loan = parsePriceInput(form.loan_support);
+                  return price && loan && loan > 0 && loan < price ? (
+                    <p className="mt-1 text-xs font-medium text-emerald-600">Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}</p>
+                  ) : null;
+                })()}
+              </div>
+            )}
+          </section>
 
           {/* Province → District cascade */}
           <div className="grid grid-cols-2 gap-3">
@@ -868,7 +952,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Quận/Huyện</label>
-              {districts.length > 0 ? (
+              {form.area_id ? (districts.length > 0 ? (
                 <select value={form.district_id} onChange={e => handleDistrictChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                   <option value="">-- Chọn quận/huyện --</option>
@@ -878,11 +962,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 <input value={form.district} onChange={e => handleDistrictTextChange(e.target.value)}
                   placeholder="Nhập quận/huyện..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              )) : (
+                <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">-- Chọn tỉnh trước --</option></select>
               )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Phường/Xã</label>
-              {wards.length > 0 ? (
+              {form.district_id ? (wards.length > 0 ? (
                 <select value={form.ward} onChange={e => handleWardChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                   <option value="">-- Chọn phường/xã --</option>
@@ -892,6 +978,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 <input value={form.ward} onChange={e => handleWardChange(e.target.value)}
                   placeholder="Nhập phường/xã..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              )) : (
+                <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">-- Chọn quận/huyện trước --</option></select>
               )}
             </div>
           </div>
@@ -912,11 +1000,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Địa chỉ chi tiết</label>
             <div className="flex gap-2">
-              <input value={form.address} onChange={e => setField('address', e.target.value)}
+              <input value={form.address} onChange={e => { addressEditedRef.current = true; setField('address', e.target.value); }}
                 placeholder="Số nhà, tên đường..."
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               <button type="button"
-                onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16)}
+                onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address')}
                 disabled={!form.address.trim()}
                 className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 text-red-600 font-semibold px-3 rounded-lg text-sm hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <Search className="w-4 h-4" />Tìm trên bản đồ
@@ -935,8 +1023,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               lat={String(form.latitude)}
               lng={String(form.longitude)}
               geocodeTarget={geocodeTarget}
-              onChange={(lat, lng) => { setField('latitude', lat); setField('longitude', lng); }}
-              onReverseGeocode={addr => setField('address', addr)}
+              onChange={(lat, lng) => { addressEditedRef.current = false; setField('latitude', lat); setField('longitude', lng); }}
+              onReverseGeocode={addr => { if (!addressEditedRef.current) setField('address', addr); }}
               height="220px"
             />
             <div className="grid grid-cols-2 gap-3 mt-2">

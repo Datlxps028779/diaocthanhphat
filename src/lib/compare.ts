@@ -15,6 +15,7 @@ export interface CompareProperty {
   price: number;
   price_unit: string;
   price_label: string | null;
+  price_per_month?: number | null;
   area_sqm: number | null;
   bedrooms: number | null;
   bathrooms: number | null;
@@ -56,7 +57,7 @@ function toEntry(p: Property): CompareProperty {
   return {
     id: p.id, slug: p.slug ?? null, title: p.title,
     image_url: p.image_url, price: p.price, price_unit: p.price_unit,
-    price_label: p.price_label, area_sqm: p.area_sqm,
+    price_label: p.price_label, price_per_month: p.price_per_month, area_sqm: p.area_sqm,
     bedrooms: p.bedrooms, bathrooms: p.bathrooms, direction: p.direction,
     legal_status: p.legal_status, district: p.district, city: p.city,
     listing_type: p.listing_type ?? null,

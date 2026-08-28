@@ -4,6 +4,7 @@ import { parseSearchIntent, normalizeVietnamese, type AiSearchMatch, type Search
 import type { submitLead } from './api/leads';
 import { isValidVnPhone } from './phone';
 import { advisorMatchReasonLabels, type AdvisorMatchReasonCode } from './rankingPolicy';
+import { formatPropertyPrice } from './listingPrice';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
 export interface AdvisorCitation { title: string; source_url: string | null }
@@ -294,7 +295,7 @@ export function summarizePropertyForAdvisor(p: Property & { matchReasons?: Advis
     slug: p.slug,
     title: p.title,
     image_url: p.image_url,
-    priceText: p.price_label ?? (p.price != null ? `${p.price} ${p.price_unit}` : 'Giá thỏa thuận'),
+    priceText: formatPropertyPrice(p),
     location: [p.district, p.city].filter(Boolean).join(', '),
     legal: p.legal_status,
     area: p.area_sqm ? `${p.area_sqm} m²` : null,

@@ -8,6 +8,7 @@ import { FALLBACK_PROPERTY_IMAGE } from '../../lib/propertyImages';
 import { SafeImage } from '../SafeImage';
 import { track, EVENTS } from '../../lib/analytics';
 import { buildDiscoveryEventProps, type DiscoveryModule, type DiscoverySurface } from '../../lib/discoveryJourney';
+import { formatPropertyPrice } from '../../lib/listingPrice';
 import { DiscoverySectionHeader } from './DiscoverySectionHeader';
 
 // Một article render cả desktop/mobile variant trong HTML để tránh layout shift. Khóa
@@ -22,6 +23,7 @@ type PropertyDiscoveryItem = {
   price: number;
   price_unit: string;
   price_label: string | null;
+  price_per_month?: number | null;
   district: string | null;
   city: string;
   listing_type: string | null;
@@ -121,7 +123,7 @@ export function PropertyDiscoveryRail({
             </div>
             <div className="flex min-w-0 flex-1 flex-col justify-center p-1">
               <h3 className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-gray-900 transition-colors group-hover:text-red-600">{property.title}</h3>
-              <p className="text-sm font-black text-red-600">{property.price_label ?? `${property.price} ${property.price_unit}`}</p>
+              <p className="text-sm font-black text-red-600">{formatPropertyPrice(property)}</p>
               <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
                 <MapPin className="h-3 w-3 shrink-0 text-red-400" />
                 <span className="truncate">{property.district ? `${property.district}, ` : ''}{property.city}</span>

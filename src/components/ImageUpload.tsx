@@ -242,18 +242,18 @@ export function ImageUrlInput({ value, onChange, placeholder = 'https://...', fo
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           type="text"
           value={value}
           onChange={e => { onChange(e.target.value); setError(''); }}
           placeholder={placeholder}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+          className="min-w-0 basis-full flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 sm:basis-0"
         />
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="border border-gray-200 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50 text-xs flex items-center gap-1.5 transition-colors flex-shrink-0"
+          className="flex-1 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50 text-xs flex items-center justify-center gap-1.5 transition-colors sm:flex-none"
         >
           {uploading ? (
             <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -265,7 +265,7 @@ export function ImageUrlInput({ value, onChange, placeholder = 'https://...', fo
         <button
           type="button"
           onClick={() => { setLibraryOpen(true); setError(''); }}
-          className="border border-gray-200 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50 text-xs flex items-center gap-1.5 transition-colors flex-shrink-0"
+          className="flex-1 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50 text-xs flex items-center justify-center gap-1.5 transition-colors sm:flex-none"
         >
           <FolderOpen className="w-3.5 h-3.5" />
           Thư viện

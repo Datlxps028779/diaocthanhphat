@@ -3,6 +3,7 @@ import { X, Plus, Edit2, Trash2, Search, Save, AlertCircle, ArrowUp, ArrowDown, 
 import type { FeaturedSection, FeaturedSectionItem, Property, Area, PropertyType, District, Ward } from '../../../lib/supabase';
 import { adminGetAllProperties, getAreas, getDistricts, getWards, getPropertyTypes, adminGetFeaturedSections, adminCreateFeaturedSection, adminUpdateFeaturedSection, adminDeleteFeaturedSection, adminGetSectionItems, adminSetSectionItems } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { formatPropertyPrice } from '../../../lib/listingPrice';
 
 // ─── FeaturedSectionsTab ──────────────────────────────────────────────────────
 const BLANK_SECTION: Omit<FeaturedSection, 'id' | 'created_at' | 'updated_at'> = {
@@ -407,7 +408,7 @@ export function FeaturedSectionsTab() {
                           {p.image_url && <img src={p.image_url} alt="" className="w-8 h-6 object-cover rounded flex-shrink-0" />}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-800 truncate">{p.title}</p>
-                            <p className="text-gray-400">{p.city} – {p.price_label ?? `${p.price} ${p.price_unit}`}</p>
+                            <p className="text-gray-400">{p.city} – {formatPropertyPrice(p)}</p>
                           </div>
                           {!already && <Plus className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />}
                         </button>

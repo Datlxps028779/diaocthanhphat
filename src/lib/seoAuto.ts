@@ -1,4 +1,5 @@
 export type AutoSchemaTarget = 'news' | 'property' | 'area' | 'route' | 'home';
+import { parsePriceInput, priceToVnd } from './listingPrice';
 
 export interface AutoSchemaInput {
   title?: string;
@@ -86,9 +87,14 @@ export function buildAutoSchema(
         url: path,
       };
     case 'property': {
-      const price = input.listing_type === 'cho_thue'
-        ? (input.price_per_month ? `${input.price_per_month} VND` : '')
-        : (input.price ? `${input.price} ${input.price_unit ?? 'tỷ'}` : '');
+      const priceSource = {
+        listing_type: input.listing_type,
+        price: typeof input.price === 'number' ? input.price : parsePriceInput(input.price ?? ''),
+        price_unit: input.price_unit,
+        price_per_month: typeof input.price_per_month === 'number' ? input.price_per_month : parsePriceInput(String(input.price_per_month ?? '')),
+      };
+      const priceValue = priceToVnd(priceSource);
+      const price = priceValue == null ? '' : String(priceValue);
       const schema: Record<string, unknown> = {
         '@context': 'https://schema.org',
         '@type': 'RealEstateListing',

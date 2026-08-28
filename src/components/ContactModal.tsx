@@ -4,11 +4,15 @@ import { submitLead } from '../lib/api';
 import { useSetting } from '../lib/cms';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
+import { formatPropertyPrice } from '../lib/listingPrice';
 
 // Kiểu tối giản cho ContactModal — chỉ cần id, title, price_label
 interface ContactTarget {
   id: string;
   title: string;
+  price?: number | null;
+  price_unit?: string | null;
+  price_per_month?: number | null;
   price_label?: string | null;
 }
 
@@ -109,7 +113,7 @@ export function ContactModal({ property, onClose, onSubmitted, preview = false }
             <div className="mb-4">
               <p className="text-xs text-amber-600 font-semibold uppercase tracking-wider mb-1">Đăng ký tư vấn</p>
               <h3 className="text-lg font-bold text-gray-900 leading-snug line-clamp-2">{property.title}</h3>
-              <p className="text-amber-600 font-bold text-xl mt-1">{property.price_label}</p>
+              <p className="text-amber-600 font-bold text-xl mt-1">{formatPropertyPrice(property)}</p>
             </div>
 
             {/* Thông tin hỗ trợ có nguồn cấu hình, không phải bảo đảm pháp lý. */}

@@ -55,6 +55,11 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
     expect(f.video_url).toBe('');
   });
 
+  it('nạp fallback giá thuê cũ từ price khi thiếu price_per_month', () => {
+    const form = listingToFormState(makeListing({ listing_type: 'cho_thue', price: 8, price_unit: 'triệu/tháng', price_per_month: null }));
+    expect(form.price_per_month).toBe('8');
+  });
+
   it('price 0 (tin cho thuê) → rỗng, price_per_month lấy đúng', () => {
     const f = listingToFormState(makeListing({
       listing_type: 'cho_thue', price: 0, price_per_month: 8,
@@ -113,6 +118,22 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
       title: 'Bán nhà', city: 'Bình Dương', district_id: '', property_type_id: '',
     }, existing, [] as PropertyType[], []);
     expect(unchanged.district_id).toBe('old-district');
+  });
+
+  it('dùng giá thuê theo tháng trong preview thay vì price tương thích bằng 0', () => {
+    const preview = formToProperty({
+      title: 'Cho thuê nhà', city: 'Bình Dương', listing_type: 'cho_thue',
+      price: '', price_unit: 'triệu/tháng', price_per_month: '8', property_type_id: '',
+    }, null, [] as PropertyType[], []);
+    expect(preview.price).toBe(0);
+    expect(preview.price_per_month).toBe(8);
+  });
+  it('không giữ lại cặp tọa độ thiếu trong preview', () => {
+    const preview = formToProperty({
+      title: 'Bán nhà', city: 'Bình Dương', latitude: '10.98', longitude: '', property_type_id: '',
+    }, null, [] as PropertyType[], []);
+    expect(preview.latitude).toBeNull();
+    expect(preview.longitude).toBeNull();
   });
 
   it('giữ nguyên các trường chuỗi có sẵn (title, city, image_url, SEO)', () => {

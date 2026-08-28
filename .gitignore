@@ -38,6 +38,11 @@ supabase/_restore_once/
 
 testsprite_tests/tmp/config.json
 
-# Biên nhận cổng verify — trạng thái cục bộ từng máy, không chia sẻ qua git
-.claude/.verify-receipt.json
-.claude/.verify-receipt.selftest-bak
+# Local agent/tool outputs
+.agents/
+.codex/
+.npm-cache/
+graphify-out/
+supabase/.temp/
+.claude/plans/
+testsprite-plan.json

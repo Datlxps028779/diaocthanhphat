@@ -12,7 +12,7 @@ import { LocationPicker, type GeocodeTarget } from '../components/LocationPicker
 import { PropertyDetailPage } from './PropertyDetailPage';
 import { buildPropertyFaq, type FaqItem } from '../lib/propertyFaq';
 import { extractErrorMessage } from '../lib/errorMessage';
-import { useAreas, usePropertyTypes, useDistricts, useWards, useNeighborhoods } from '../lib/hooks/useTaxonomy';
+import { useAreas, usePropertyTypes, useDistricts, useWards, useNeighborhoods, useTaxonomyGeo } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { useAuth } from '../lib/auth';
@@ -26,6 +26,9 @@ import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
 import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/listingPrice';
+import { PriceField } from '../components/PriceField';
+import { coordinatePairFromUnknown, validateCoordinatePair } from '../lib/locationCoordinates';
+import { pickTaxonomyGeo, taxonomyGeoLabel } from '../lib/taxonomyGeo';
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
@@ -34,7 +37,7 @@ interface PostListingPageProps {
   onAdminSaved?: () => void;
 }
 
-const STEPS = ['Loại tin & Giá', 'Vị trí & Diện tích', 'Hình ảnh & Mô tả', 'Thông tin liên hệ', 'Cấu hình SEO', 'Xem trước'];
+const STEPS = ['Thông tin & Giá', 'Vị trí & Thông số', 'Ảnh & Mô tả', 'Liên hệ & Kiểm tra', 'Nâng cao', 'Xem trước'];
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
 const AMENITIES_OPTIONS = [
   'Điện nước đầy đủ', 'Đường nhựa', 'An ninh 24/7', 'Gần trường học',
@@ -75,9 +78,10 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
-  const flyTo = useCallback((query: string, zoom: number) => {
+  const addressEditedRef = useRef(false);
+  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson']) => {
     if (!query) return;
-    setGeocodeTarget({ query, zoom, nonce: ++geocodeNonce.current });
+    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, nonce: ++geocodeNonce.current });
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
@@ -103,7 +107,10 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const visibleSpecFields = getCompatibleSpecFields(selectedPropertyType, 'user_listing');
   const showSpec = (field: SpecFieldKey) => visibleSpecFields.includes(field);
 
-  const set = (k: string, v: string | string[] | ListingType) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k: string, v: string | string[] | ListingType) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setErrors(current => current[k] ? { ...current, [k]: '' } : current);
+  };
   const setPropertyType = (id: string) => {
     const nextType = types.find(t => t.id === id);
     setForm(f => clearIncompatibleSpecValues({ ...f, property_type_id: id }, nextType, 'user_listing'));
@@ -111,21 +118,42 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   // Quận/huyện theo khu vực đã chọn — tự fetch/cache qua React Query. ID là
   // nguồn chọn chính; fallback unique-name chỉ để mở các tin cũ chưa có district_id.
-  const { data: districts = [] } = useDistricts(form.area_id || undefined);
-  const selectedDistrictId = form.district_id
-    || resolveUniqueDistrict(districts, form.area_id, form.district)?.id;
-  const { data: wards = [] } = useWards(selectedDistrictId || undefined);
+  const { data: districts = [], isLoading: loadingDistricts } = useDistricts(form.area_id || undefined, { fetchAll: false });
+  const selectedDistrictById = districts.find(d => d.id === form.district_id && d.area_id === form.area_id);
+  const selectedDistrict = selectedDistrictById
+    ?? resolveUniqueDistrict(districts, form.area_id, form.district);
+  const selectedDistrictId = selectedDistrict?.id;
+  const { data: wards = [], isLoading: loadingWards } = useWards(selectedDistrictId || undefined, { fetchAll: false });
   // Khu dân cư theo phường/xã đã chọn. form.ward lưu TÊN nên map ra id.
   const selectedWardId = wards.find(w => w.name === form.ward)?.id;
-  const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined);
+  const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined, { fetchAll: false });
+  const taxonomyIds = [form.area_id, selectedDistrictId, selectedWardId].filter((id): id is string => Boolean(id));
+  const { data: taxonomyGeo = [], isLoading: loadingTaxonomyGeo } = useTaxonomyGeo(taxonomyIds);
+  const selectedTaxonomyGeo = pickTaxonomyGeo(taxonomyGeo, {
+    areaId: form.area_id,
+    districtId: selectedDistrictId,
+    wardId: selectedWardId,
+  });
+
+  useEffect(() => {
+    if (!form.area_id || loadingTaxonomyGeo) return;
+    const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
+    if (!query) return;
+    const zoom = form.ward ? 14 : form.district ? 13 : 11;
+    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined);
+  }, [form.area_id, form.district_id, form.ward, selectedDistrictId, selectedWardId, selectedTaxonomyGeo, loadingTaxonomyGeo, flyTo]);
 
   // Khi mở tin cũ, chỉ nâng cấp state từ text sang ID nếu có đúng một district
   // trong area hiện tại. Không tự chọn khi dữ liệu taxonomy thay đổi/không rõ ràng.
   useEffect(() => {
-    if (form.district_id || !form.area_id || !form.district) return;
+    if (!form.area_id || !form.district || districts.length === 0 || selectedDistrictById) return;
     const matched = resolveUniqueDistrict(districts, form.area_id, form.district);
-    if (matched) setForm(f => f.district_id ? f : { ...f, district_id: matched.id, district: matched.name });
-  }, [districts, form.area_id, form.district, form.district_id]);
+    if (matched) {
+      setForm(f => ({ ...f, district_id: matched.id, district: matched.name }));
+    } else if (form.district_id) {
+      setForm(f => ({ ...f, district_id: '' }));
+    }
+  }, [districts, form.area_id, form.district, form.district_id, selectedDistrictById]);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -166,9 +194,6 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         if (!alive) return;
         if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
         setForm(listingToFormState(listing));
-        if (!listing.latitude && listing.city) {
-          flyTo([listing.ward, listing.district, listing.city].filter(Boolean).join(', '), listing.ward ? 15 : listing.district ? 14 : 13);
-        }
       })
       .catch(() => { if (alive) setLoadError('Không tải được tin đăng để sửa.'); })
       .finally(() => { if (alive) setLoadingEdit(false); });
@@ -177,37 +202,28 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
   // form + reset district đã chọn + đồng bộ map search.
-  const setArea = useCallback((areaId: string, areaName: string) => {
-    setForm(f => applyAreaSelection(f, areaId, areaName));
-    if (areaName) flyTo(areaName, 13);
-  }, [flyTo]);
+  const setArea = useCallback((areaId: string, _areaName: string) => {
+    setForm(f => applyAreaSelection(f, areaId, _areaName));
+    setErrors(current => ({ ...current, district_id: '', latitude: '', longitude: '' }));
+  }, []);
 
   const setDistrict = useCallback((districtId: string) => {
-    setForm(f => {
-      const district = districts.find(d => d.id === districtId) ?? null;
-      const next = applyDistrictSelection(f, district);
-      flyTo([next.district, f.city].filter(Boolean).join(', '), 14);
-      return next;
-    });
-  }, [districts, flyTo]);
+    const district = districts.find(d => d.id === districtId) ?? null;
+    setForm(f => applyDistrictSelection(f, district));
+    setErrors(current => ({ ...current, district_id: '' }));
+  }, [districts]);
 
   const setDistrictText = useCallback((district: string) => {
-    setForm(f => {
-      const next = applyDistrictSelection(f, null, district);
-      flyTo([district, f.city].filter(Boolean).join(', '), 14);
-      return next;
-    });
-  }, [flyTo]);
+    setForm(f => applyDistrictSelection(f, null, district));
+  }, []);
 
   // Chọn xã → zoom sát tới cấp phường/xã (trước đây bản đồ đứng yên). Reset khu dân cư.
   const setWard = useCallback((ward: string) => {
-    setForm(f => {
-      flyTo([ward, f.district, f.city].filter(Boolean).join(', '), 15);
-      return { ...f, ward, neighborhood_slug: '' };
-    });
-  }, [flyTo]);
+    setForm(f => ({ ...f, ward, neighborhood_slug: '' }));
+  }, []);
 
   const setCoords = useCallback((lat: string, lng: string) => {
+    addressEditedRef.current = false;
     setForm(f => ({ ...f, latitude: lat, longitude: lng }));
   }, []);
 
@@ -244,6 +260,19 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     return Number.isFinite(n) && n > 0;
   };
 
+  const validateLocation = () => {
+    const nextErrors: Record<string, string> = {};
+    const coordinates = validateCoordinatePair(form.latitude, form.longitude);
+    if (!coordinates.valid) {
+      nextErrors.latitude = coordinates.message;
+      nextErrors.longitude = coordinates.message;
+    }
+    if (form.district_id && !selectedDistrictById) {
+      nextErrors.district_id = 'Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại.';
+    }
+    return nextErrors;
+  };
+
   const validateStep = () => {
     const errs: Record<string, string> = {};
     if (step === 0) {
@@ -253,11 +282,15 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         if (!isPositivePrice(form.price_per_month)) errs.price_per_month = 'Vui lòng nhập giá thuê hợp lệ (số lớn hơn 0)';
       } else {
         if (!isPositivePrice(form.price)) errs.price = 'Vui lòng nhập giá hợp lệ (số lớn hơn 0)';
+        const loan = parsePriceInput(form.loan_support);
+        const price = parsePriceInput(form.price);
+        if (loan !== null && (!price || loan >= price)) errs.loan_support = 'Khoản vay phải nhỏ hơn giá bán.';
       }
     }
     if (step === 1) {
       if (!form.city.trim()) errs.city = 'Vui lòng nhập tỉnh/thành phố';
       if (form.area_sqm.trim() && !isPositiveNumber(form.area_sqm)) errs.area_sqm = 'Diện tích phải là số lớn hơn 0';
+      Object.assign(errs, validateLocation());
     }
     if (step === 3) {
       if (!form.contact_name.trim()) errs.contact_name = 'Vui lòng nhập họ tên';
@@ -277,6 +310,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       const specForm = selectedPropertyType ? clearIncompatibleSpecValues(form, selectedPropertyType, 'user_listing') : form;
       const cleanImages = specForm.images.filter((url): url is string => !!url);
       const coverId = cleanImages[0] ?? (specForm.image_url || null);
+      const coordinates = coordinatePairFromUnknown(specForm.latitude, specForm.longitude);
       const payload = {
         listing_type: specForm.listing_type,
         title: specForm.title,
@@ -293,7 +327,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         ward: specForm.ward || null,
         neighborhood_slug: specForm.neighborhood_slug || null,
         area_id: specForm.area_id || null,
-        district_id: specForm.district_id || null,
+        district_id: selectedDistrict?.id || null,
         property_type_id: specForm.property_type_id || null,
         image_url: coverId,
         images: cleanImages.length > 0 ? cleanImages : null,
@@ -309,8 +343,8 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         contact_name: specForm.contact_name,
         contact_phone: specForm.contact_phone,
         amenities: specForm.amenities.length ? specForm.amenities : null,
-        latitude: specForm.latitude ? parseFloat(specForm.latitude) : null,
-        longitude: specForm.longitude ? parseFloat(specForm.longitude) : null,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         formatted_address: null,
         vr_tour_url: null,
         video_url: specForm.video_url || null,
@@ -335,6 +369,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const submitting = submitMutation.isPending;
 
   const handleSubmit = () => {
+    const locationErrors = validateLocation();
+    if (Object.keys(locationErrors).length > 0) {
+      setErrors(current => ({ ...current, ...locationErrors }));
+      setStep(1);
+      return;
+    }
     if (!validateStep()) return;
     submitMutation.mutate();
   };
@@ -451,6 +491,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               </div>
             ))}
           </div>
+          <p className="mt-3 text-center text-xs font-semibold text-red-600 sm:hidden" aria-current="step">Bước {step + 1}/{STEPS.length} · {STEPS[step]}</p>
         </div>
       </div>
 
@@ -465,7 +506,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               {/* Listing type selector */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">Loại tin đăng *</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid max-w-xl grid-cols-2 gap-2">
                   {LISTING_TYPE_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
@@ -509,48 +550,42 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   className={inputCls(errors.title)} />
               </FormField>
 
-              {/* Price fields */}
-              {isRental(form.listing_type) ? (
-                <FormField label="Giá thuê / tháng *" error={errors.price_per_month}>
-                  <div className="flex gap-2">
-                    <input type="text" inputMode="decimal" value={form.price_per_month} onChange={e => set('price_per_month', formatPriceInput(e.target.value))}
-                      placeholder="VD: 8" className={`flex-1 ${inputCls(errors.price_per_month)}`} />
-                    <div className="flex items-center px-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 whitespace-nowrap">
-                      triệu/tháng
-                    </div>
+              <section className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-black text-gray-800">Giá bất động sản</h3>
+                    <p className="mt-0.5 text-xs text-gray-500">Nhập số tiền thật, hệ thống sẽ tự hiển thị đúng đơn vị.</p>
                   </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-red-600 ring-1 ring-red-100">Bắt buộc</span>
+                </div>
+                <FormField label={isRental(form.listing_type) ? 'Giá thuê mỗi tháng *' : 'Giá bán *'} error={isRental(form.listing_type) ? errors.price_per_month : errors.price}>
+                  <PriceField
+                    mode={isRental(form.listing_type) ? 'rent' : 'sale'}
+                    value={isRental(form.listing_type) ? form.price_per_month : form.price}
+                    unit={form.price_unit}
+                    onChange={value => set(isRental(form.listing_type) ? 'price_per_month' : 'price', value)}
+                    onUnitChange={unit => set('price_unit', unit)}
+                    error={isRental(form.listing_type) ? errors.price_per_month : errors.price}
+                  />
                 </FormField>
-              ) : (
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <FormField label="Giá bán *" error={errors.price} className="sm:col-span-2">
-                    <div className="flex gap-2">
-                      <input type="text" inputMode="decimal" value={form.price} onChange={e => set('price', formatPriceInput(e.target.value))}
-                        placeholder="VD: 1,500" className={`flex-1 ${inputCls(errors.price)}`} />
-                      <select value={form.price_unit} onChange={e => set('price_unit', e.target.value)}
-                        className="border border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
-                        <option>tỷ</option><option>triệu</option>
-                      </select>
-                    </div>
-                  </FormField>
-                  <FormField label="Nhãn giá">
-                    <input value={form.price_label} onChange={e => set('price_label', e.target.value)}
-                      placeholder="VD: 2.5 tỷ" className={inputCls()} />
-                  </FormField>
-                  <FormField label={`Chủ hỗ trợ vay ngân hàng (${form.price_unit})`} className="sm:col-span-3">
+                {!isRental(form.listing_type) && (
+                  <div className="mt-4 rounded-xl border border-white bg-white/80 p-3">
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">Chủ hỗ trợ vay ngân hàng ({form.price_unit}, tùy chọn)</label>
                     <input type="text" inputMode="decimal" value={form.loan_support} onChange={e => set('loan_support', formatPriceInput(e.target.value))}
-                      placeholder="VD: 1,500 (cùng đơn vị giá bán)" className={inputCls()} />
+                      placeholder="Ví dụ: 1,500" className={inputCls(errors.loan_support)} />
+                    {errors.loan_support && <p className="mt-1 text-xs font-medium text-red-600">{errors.loan_support}</p>}
                     {(() => {
                       const price = parsePriceInput(form.price);
                       const loan = parsePriceInput(form.loan_support);
-                      return price && loan && loan < price ? (
-                        <p className="text-xs text-emerald-600 mt-1 font-medium">
+                      return price && loan && loan > 0 && loan < price ? (
+                        <p className="mt-1 text-xs font-medium text-emerald-600">
                           Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}
                         </p>
                       ) : null;
                     })()}
-                  </FormField>
-                </div>
-              )}
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
@@ -568,8 +603,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                     {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </FormField>
-                <FormField label="Quận/Huyện">
-                  {districts.length > 0 ? (
+                <FormField label="Quận/Huyện" error={errors.district_id}>
+                  {!form.area_id ? (
+                    <select disabled value="" className={selectCls()}><option value="">-- Chọn tỉnh trước --</option></select>
+                  ) : loadingDistricts ? (
+                    <select disabled value="" className={selectCls()}><option value="">Đang tải quận/huyện...</option></select>
+                  ) : districts.length > 0 ? (
                     <select value={selectedDistrictId ?? ''} onChange={e => setDistrict(e.target.value)} className={selectCls()}>
                       <option value="">-- Chọn quận/huyện --</option>
                       {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -580,7 +619,11 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   )}
                 </FormField>
                 <FormField label="Phường/Xã">
-                  {wards.length > 0 ? (
+                  {!selectedDistrictId ? (
+                    <select disabled value="" className={selectCls()}><option value="">-- Chọn quận/huyện trước --</option></select>
+                  ) : loadingWards ? (
+                    <select disabled value="" className={selectCls()}><option value="">Đang tải phường/xã...</option></select>
+                  ) : wards.length > 0 ? (
                     <select value={form.ward} onChange={e => setWard(e.target.value)} className={selectCls()}>
                       <option value="">-- Chọn phường/xã --</option>
                       {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
@@ -600,13 +643,13 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 )}
               </div>
               <FormField label="Địa chỉ chi tiết">
-                <div className="flex gap-2">
-                  <input value={form.address} onChange={e => set('address', e.target.value)}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input value={form.address} onChange={e => { addressEditedRef.current = true; set('address', e.target.value); }}
                     placeholder="Số nhà, tên đường..." className={`flex-1 ${inputCls()}`} />
                   <button type="button"
-                    onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16)}
+                    onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address')}
                     disabled={!form.address.trim()}
-                    className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 text-red-600 font-semibold px-4 rounded-xl text-sm hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    className="flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:py-0">
                     <Search className="w-4 h-4" />Tìm trên bản đồ
                   </button>
                 </div>
@@ -623,24 +666,29 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   lng={form.longitude}
                   geocodeTarget={geocodeTarget}
                   onChange={setCoords}
-                  onReverseGeocode={addr => set('address', addr)}
+                  onReverseGeocode={addr => { if (!addressEditedRef.current) set('address', addr); }}
                 />
                 <p className="text-gray-400 text-xs mt-1.5 flex items-start gap-1.5">
                   <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                  Chọn Tỉnh/Huyện/Xã để bản đồ tự zoom sát. Bấm "Tìm trên bản đồ" để nhảy tới địa chỉ, hoặc click/kéo ghim để đặt vị trí chính xác — địa chỉ tự cập nhật theo ghim.
+                  Chọn Tỉnh/Huyện/Xã để bản đồ tự zoom theo khu vực. Bấm "Tìm trên bản đồ" để xem điểm tham khảo màu vàng, sau đó bấm "Xác nhận vị trí này" hoặc click/kéo ghim đỏ để lưu vị trí. Địa chỉ chỉ được gợi ý sau khi xác nhận.
                 </p>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Vĩ độ (Latitude)">
-                  <input type="number" step="any" value={form.latitude} onChange={e => set('latitude', e.target.value)}
-                    placeholder="Tự động từ bản đồ" className={inputCls()} />
-                </FormField>
-                <FormField label="Kinh độ (Longitude)">
-                  <input type="number" step="any" value={form.longitude} onChange={e => set('longitude', e.target.value)}
-                    placeholder="Tự động từ bản đồ" className={inputCls()} />
-                </FormField>
-              </div>
+              <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-semibold text-gray-600">Tùy chọn nâng cao: nhập tọa độ thủ công</summary>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <FormField label="Vĩ độ (Latitude)">
+                    <input type="number" step="any" value={form.latitude} onChange={e => set('latitude', e.target.value)}
+                      placeholder="Tự động từ bản đồ" className={inputCls(errors.latitude)} />
+                    {errors.latitude && <p className="mt-1 text-xs text-red-600">{errors.latitude}</p>}
+                  </FormField>
+                  <FormField label="Kinh độ (Longitude)">
+                    <input type="number" step="any" value={form.longitude} onChange={e => set('longitude', e.target.value)}
+                      placeholder="Tự động từ bản đồ" className={inputCls(errors.longitude)} />
+                    {errors.longitude && <p className="mt-1 text-xs text-red-600">{errors.longitude}</p>}
+                  </FormField>
+                </div>
+              </details>
               <div className="grid sm:grid-cols-3 gap-4">
                 {(['area_sqm', 'bedrooms', 'bathrooms'] as const).filter(field => showSpec(field)).map(field => (
                   <FormField key={field} label={SPEC_LABELS[field]}>
@@ -675,7 +723,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 </label>
                 <ImageUpload
                   images={form.images}
-                  onChange={imgs => setForm(f => ({ ...f, images: imgs, image_url: imgs[0] ?? f.image_url }))}
+                  onChange={imgs => setForm(f => ({ ...f, images: imgs, image_url: imgs[0] ?? '' }))}
                   maxImages={10}
                   folder={adminMode && editId ? `listing-review/${editId}` : 'user-listings'}
                   isAdmin={adminMode}
@@ -829,13 +877,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
           {/* Step 4: SEO Configuration */}
           {step === 4 && (
             <div className="space-y-5">
-              <SectionLabel icon={<Search className="w-4 h-4 text-red-500" />} label="Cấu hình SEO" />
+              <SectionLabel icon={<Search className="w-4 h-4 text-red-500" />} label="Thông tin nâng cao (không bắt buộc)" />
 
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 flex gap-2.5">
                 <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                 <p className="text-blue-800 text-xs leading-relaxed">
-                  Các trường SEO được tự động điền dựa trên thông tin tin đăng. Bạn có thể chỉnh sửa thủ công.
-                  Slug (URL thân thiện) sẽ tự tạo khi đăng.
+                  Hệ thống đã tự điền nội dung SEO từ tin đăng. Bạn có thể bấm <strong>Tiếp theo</strong> ngay; chỉ chỉnh các trường này nếu bạn biết rõ SEO.
                 </p>
               </div>
 
@@ -925,17 +972,17 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
           {/* Navigation */}
           <div className="flex justify-between mt-6 pt-5 border-t border-gray-100">
-            <button disabled={step === 0} onClick={prev}
+            <button type="button" disabled={step === 0} onClick={prev}
               className="flex items-center gap-2 border border-gray-200 text-gray-600 px-5 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-40">
               <ArrowLeft className="w-4 h-4" />Quay lại
             </button>
             {step < STEPS.length - 1 ? (
-              <button onClick={next}
+              <button type="button" onClick={next}
                 className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-colors">
                 Tiếp theo →
               </button>
             ) : (
-              <button onClick={handleSubmit} disabled={submitting}
+              <button type="button" onClick={handleSubmit} disabled={submitting}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-colors flex items-center gap-2 disabled:opacity-60">
                 <CheckCircle className="w-4 h-4" />
                 {submitting ? (editId ? 'Đang lưu...' : 'Đang gửi...') : (editId ? 'Lưu thay đổi' : 'Gửi duyệt tin')}

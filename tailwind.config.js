@@ -8,7 +8,7 @@ import colors from 'tailwindcss/colors';
 //   primary  = đỏ (brand, khớp red-600 đang dùng 90+ lần)
 //   success  = emerald   warning = amber   info = blue   danger = red   neutral = gray
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}', './app/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class', // sẵn sàng cho dark mode (Sprint 4), chưa bật ở đâu
   theme: {
     extend: {

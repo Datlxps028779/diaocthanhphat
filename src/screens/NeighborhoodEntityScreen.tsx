@@ -8,6 +8,7 @@ import { PriceStatsBlock } from '../components/PriceStatsBlock';
 import { buildProductPath } from '../lib/productPath';
 import { districtDisplaySlug } from '../lib/areaPath';
 import { ReadableContent } from '../components/ReadableContent';
+import { formatPropertyPrice } from '../lib/listingPrice';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -43,8 +44,8 @@ type Props = {
 
 const DEFAULT_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo-1642125.jpeg?auto=compress&w=1400';
 
-function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label'>): string {
-  return p.price_label || `${p.price} ${p.price_unit}`;
+function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type'>): string {
+  return formatPropertyPrice(p);
 }
 function propertyHref(p: Property): string {
   return buildProductPath(p);
