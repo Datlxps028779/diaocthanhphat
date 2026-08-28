@@ -46,3 +46,7 @@ graphify-out/
 supabase/.temp/
 .claude/plans/
 testsprite-plan.json
+
+# Verify receipt — local machine state
+.claude/.verify-receipt.json
+.claude/.verify-receipt.selftest-bak
