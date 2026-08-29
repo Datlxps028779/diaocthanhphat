@@ -22,6 +22,7 @@ export function PropertyGallery({
   isFavorited = false,
   onToggleFavorite,
   onLinkClick,
+  mobileList = false,
   className = '',
 }: {
   property: GalleryProperty;
@@ -34,6 +35,7 @@ export function PropertyGallery({
   isFavorited?: boolean;
   onToggleFavorite?: () => void;
   onLinkClick?: () => void;
+  mobileList?: boolean;
   className?: string;
 }) {
   const gallery = buildPropertyGallery(property.image_url, property.images);
@@ -56,13 +58,15 @@ export function PropertyGallery({
   );
 
   return (
-    <div data-testid="property-gallery" className={`group relative aspect-[16/10] overflow-hidden bg-gray-100 ${className}`}>
+    <div data-testid="property-gallery" className={`group relative overflow-hidden bg-gray-100 ${mobileList ? 'h-36 w-32 shrink-0 sm:aspect-[16/10] sm:h-auto sm:w-auto sm:shrink' : 'aspect-[16/10]'} ${className}`}>
       <Link
         href={href}
         onClick={onLinkClick}
         aria-label={property.title}
         className="absolute inset-0 z-[1]"
       />
+      {mobileList && <div className="h-full sm:hidden">{renderImage(visibleImages[0], 0, 'h-full w-full')}</div>}
+      <div className={mobileList ? 'hidden h-full sm:block' : 'h-full'}>
       {visibleImages.length === 1 ? (
         renderImage(visibleImages[0], 0, 'h-full w-full')
       ) : visibleImages.length === 2 ? (
@@ -86,6 +90,7 @@ export function PropertyGallery({
           )}
         </div>
       )}
+      </div>
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
       {topLeft ?? (
@@ -94,9 +99,9 @@ export function PropertyGallery({
         </span>
       )}
       <div className="absolute right-2 top-2 z-[3] flex items-center gap-1.5">
-        {topRight}
+        {mobileList ? <span className="hidden sm:contents">{topRight}</span> : topRight}
         {hasMultipleImages && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-gray-900/70 px-2.5 py-1 text-[10px] font-bold text-white">
+          <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} items-center gap-1 rounded-full bg-gray-900/70 px-2.5 py-1 text-[10px] font-bold text-white`}>
             <ImageIcon className="h-3 w-3" />{imageCount} ẢNH
           </span>
         )}
@@ -114,7 +119,7 @@ export function PropertyGallery({
       </div>
       {bottomLeft}
       {showTotalPriceLabel && (
-        <span className="absolute bottom-2 right-2 z-[2] rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+        <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} absolute bottom-2 right-2 z-[2] rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white`}>
           TỔNG GIÁ
         </span>
       )}

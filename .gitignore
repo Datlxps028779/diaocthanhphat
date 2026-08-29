@@ -38,15 +38,6 @@ supabase/_restore_once/
 
 testsprite_tests/tmp/config.json
 
-# Local agent/tool outputs
-.agents/
-.codex/
-.npm-cache/
-graphify-out/
-supabase/.temp/
-.claude/plans/
-testsprite-plan.json
-
 # Verify receipt — local machine state
 .claude/.verify-receipt.json
 .claude/.verify-receipt.selftest-bak

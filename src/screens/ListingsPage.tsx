@@ -1131,7 +1131,7 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
     ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
     : null;
   return (
-    <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-col">
+    <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-row sm:flex-col">
       <PropertyGallery
         property={p}
         href={buildPropertyPath(p)}
@@ -1155,8 +1155,9 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
         showTotalPriceLabel={p.listing_type !== 'cho_thue'}
         isFavorited={isFavorited}
         onToggleFavorite={onToggleFavorite}
+        mobileList
       />
-      <div className="p-3.5 flex flex-col flex-1">
+      <div className="min-w-0 p-3.5 flex flex-col flex-1">
         <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
         <p className="text-red-600 font-black text-base">{formatPropertyPrice(p)}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
