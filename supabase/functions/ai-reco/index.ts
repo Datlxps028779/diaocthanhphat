@@ -6,7 +6,7 @@ import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
 
 // ── Kiểu dữ liệu vào ──────────────────────────────────────────────────────────
 // profileDigest: hồ sơ sở thích ĐÃ ẨN DANH do FE tính (tên khu vực/loại/loại-tin ưa
-// thích + khoảng giá). KHÔNG id thô, KHÔNG lịch sử, KHÔNG PII.
+// thích). KHÔNG id thô, lịch sử, giá chưa chuẩn hóa hoặc PII.
 // candidates: pool BĐS THẬT đã lọc sơ bộ (≤20). Chỉ id trong đây mới được AI xếp.
 interface Candidate {
   id: string;
@@ -14,8 +14,6 @@ interface Candidate {
   area?: string | null;
   type?: string | null;
   listingType?: string | null;
-  price?: number | null;
-  priceLabel?: string | null;
   district?: string | null;
 }
 interface RecoInput {
@@ -23,8 +21,6 @@ interface RecoInput {
     areas?: string[];
     types?: string[];
     listingTypes?: string[];
-    priceMin?: number | null;
-    priceMax?: number | null;
   };
   candidates: Candidate[];
 }
@@ -45,25 +41,21 @@ function buildSystemPrompt(): string {
 
 NGUYÊN TẮC BẮT BUỘC (không được vi phạm):
 - CHỈ được chọn và xếp lại các id CÓ SẴN trong danh sách ứng viên. TUYỆT ĐỐI KHÔNG tạo id mới, không tạo tin/giá/khu vực không có trong danh sách.
-- Mỗi tin kèm 1 lý do NGẮN (≤12 từ) chỉ dựa trên hồ sơ sở thích + thuộc tính có sẵn của tin (khu vực, loại, khoảng giá). KHÔNG bịa số liệu, KHÔNG viện dẫn dữ liệu ngoài.
+- Mỗi tin kèm 1 lý do NGẮN (≤12 từ) chỉ dựa trên hồ sơ sở thích + thuộc tính có sẵn của tin (khu vực, loại, hình thức). KHÔNG bịa số liệu, KHÔNG viện dẫn dữ liệu ngoài.
 - Nếu một tin không có cơ sở rõ để ưu tiên, cho lý do trung tính (ví dụ "Phù hợp nhu cầu bạn đang tìm").
 - Chỉ trả về JSON thuần theo đúng định dạng yêu cầu, không thêm chữ nào ngoài JSON.`;
 }
 
 function buildPrompt(input: RecoInput): string {
   const d = input.profileDigest;
-  const priceStr = d.priceMin != null || d.priceMax != null
-    ? `${d.priceMin ?? "?"} - ${d.priceMax ?? "?"} tỷ`
-    : "không rõ";
   const cand = input.candidates.map((c, i) =>
-    `${i + 1}. id=${c.id} | "${c.title}" | khu vực: ${c.area ?? "?"}${c.district ? " / " + c.district : ""} | loại: ${c.type ?? "?"} | hình thức: ${c.listingType === "cho_thue" ? "cho thuê" : "mua bán"} | giá: ${c.priceLabel ?? (c.price != null ? c.price + " tỷ" : "?")}`
+    `${i + 1}. id=${c.id} | "${c.title}" | khu vực: ${c.area ?? "?"}${c.district ? " / " + c.district : ""} | loại: ${c.type ?? "?"} | hình thức: ${c.listingType === "cho_thue" ? "cho thuê" : "mua bán"}`
   ).join("\n");
 
   return `HỒ SƠ SỞ THÍCH (suy từ hành vi, đã ẩn danh):
 - Khu vực hay quan tâm: ${d.areas?.length ? d.areas.join(", ") : "chưa rõ"}
 - Loại BĐS hay quan tâm: ${d.types?.length ? d.types.join(", ") : "chưa rõ"}
 - Hình thức: ${d.listingTypes?.length ? d.listingTypes.join(", ") : "chưa rõ"}
-- Khoảng giá điển hình: ${priceStr}
 
 DANH SÁCH ỨNG VIÊN (chỉ được xếp trong đây):
 ${cand}

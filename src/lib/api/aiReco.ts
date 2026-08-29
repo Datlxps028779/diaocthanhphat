@@ -8,8 +8,6 @@ export interface RecoCandidate {
   area?: string | null;
   type?: string | null;
   listingType?: string | null;
-  price?: number | null;
-  priceLabel?: string | null;
   district?: string | null;
 }
 

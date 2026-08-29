@@ -45,16 +45,10 @@ describe('buildProfileDigest', () => {
     expect(d.areas).toEqual(['B']);
   });
 
-  it('mang theo khoảng giá khi có', () => {
-    const profile: TasteProfile = { ...base, priceMin: 2, priceMax: 5 };
-    const d = buildProfileDigest(profile);
-    expect(d.priceMin).toBe(2);
-    expect(d.priceMax).toBe(5);
-  });
-
-  it('không có giá → bỏ trường giá', () => {
+  it('không đưa giá chưa chuẩn hóa vào digest gửi AI', () => {
     const d = buildProfileDigest(base);
-    expect(d.priceMin).toBeUndefined();
-    expect(d.priceMax).toBeUndefined();
+    expect(d).toEqual({ areas: [], types: [], listingTypes: [] });
+    expect('priceMin' in d).toBe(false);
+    expect('priceMax' in d).toBe(false);
   });
 });

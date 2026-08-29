@@ -1,14 +1,12 @@
 import type { TasteProfile } from './taste';
 
-// Hồ sơ sở thích ĐÃ ẨN DANH gửi cho lớp AI ranking (Edge ai-reco). Chỉ tên khu vực/
-// loại/hình thức ưa thích (đã map id→tên) + khoảng giá. KHÔNG id thô, KHÔNG lịch sử,
-// KHÔNG PII. AI chỉ dùng để hiểu "gu" khách rồi xếp lại pool BĐS thật.
+// Hồ sơ sở thích ĐÃ ẨN DANH gửi cho lớp AI ranking (Edge ai-reco). Chỉ tên khu vực,
+// loại và hình thức ưa thích đã map id→tên. KHÔNG id thô, lịch sử, giá chưa chuẩn hóa
+// hoặc PII. AI chỉ dùng để hiểu "gu" khách rồi xếp lại pool BĐS thật.
 export interface ProfileDigest {
   areas: string[];
   types: string[];
   listingTypes: string[];
-  priceMin?: number;
-  priceMax?: number;
 }
 
 export interface DigestLabels {
@@ -39,7 +37,7 @@ function topLabels(weights: Record<string, number>, labels: Record<string, strin
 const LISTING_LABELS: Record<string, string> = { mua_ban: 'mua bán', cho_thue: 'cho thuê' };
 
 // Suy digest ẩn danh từ hồ sơ: 3 khu vực + 3 loại ưa thích nhất (map id→tên, bỏ id
-// không có nhãn), hình thức, khoảng giá. Thuần — không đụng DB/localStorage.
+// không có nhãn) và hình thức. Giá tạm loại khỏi profile đến khi được chuẩn hóa.
 export function buildProfileDigest(profile: TasteProfile, labels: DigestLabels = {}): ProfileDigest {
   const areas = topLabels(profile.areaWeights, labels.areas, 3);
   const types = topLabels(profile.typeWeights, labels.types, 3);
@@ -47,8 +45,5 @@ export function buildProfileDigest(profile: TasteProfile, labels: DigestLabels =
     .slice(0, 2)
     .map(k => LISTING_LABELS[k] ?? k);
 
-  const digest: ProfileDigest = { areas, types, listingTypes };
-  if (profile.priceMin !== undefined) digest.priceMin = profile.priceMin;
-  if (profile.priceMax !== undefined) digest.priceMax = profile.priceMax;
-  return digest;
+  return { areas, types, listingTypes };
 }

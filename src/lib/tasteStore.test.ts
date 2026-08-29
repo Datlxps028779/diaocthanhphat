@@ -21,6 +21,7 @@ function installLocalStorage() {
 describe('tasteStore', () => {
   let getSignals: typeof import('./tasteStore').getSignals;
   let recordSignal: typeof import('./tasteStore').recordSignal;
+  let reconcileSignalEventId: typeof import('./tasteStore').reconcileSignalEventId;
   let store: Map<string, string>;
 
   beforeEach(async () => {
@@ -29,13 +30,16 @@ describe('tasteStore', () => {
     const mod = await import('./tasteStore');
     getSignals = mod.getSignals;
     recordSignal = mod.recordSignal;
+    reconcileSignalEventId = mod.reconcileSignalEventId;
   });
 
   it('recordSignal ghi tín hiệu có thuộc tính, đọc lại được', () => {
-    recordSignal('view', { areaId: 'a1', typeId: null, listingType: 'mua_ban', price: 3 });
+    const eventId = recordSignal('view', { areaId: 'a1', typeId: null, listingType: 'mua_ban', price: 3 }, { eventId: 'event-1' });
     const signals = getSignals();
+    expect(eventId).toBe('event-1');
     expect(signals).toHaveLength(1);
     expect(signals[0].kind).toBe('view');
+    expect(signals[0].eventId).toBe('event-1');
     expect(signals[0].areaId).toBe('a1');
     expect(signals[0].listingType).toBe('mua_ban');
     expect(signals[0].price).toBe(3);
@@ -58,6 +62,39 @@ describe('tasteStore', () => {
     expect(signals[1].areaId).toBe('a1');
   });
 
+  it('coalesce cùng search intent trong cửa sổ dedupe', () => {
+    const windowMs = 30 * 60 * 1000;
+    expect(recordSignal('search', { areaId: 'a1', listingType: 'mua_ban' }, { now: 1_000_000, dedupeWindowMs: windowMs, eventId: 'event-1' })).toBe('event-1');
+    expect(recordSignal('search', { areaId: 'a1', listingType: 'mua_ban' }, { now: 1_000_000 + windowMs - 1, dedupeWindowMs: windowMs, eventId: 'event-2' })).toBe('event-1');
+    expect(getSignals()).toHaveLength(1);
+  });
+
+  it('ghi search mới khi intent đổi hoặc cửa sổ dedupe đã qua', () => {
+    const windowMs = 30 * 60 * 1000;
+    recordSignal('search', { areaId: 'a1', typeId: 't1' }, { now: 1_000_000, dedupeWindowMs: windowMs, eventId: 'event-1' });
+    expect(recordSignal('search', { areaId: 'a1', typeId: 't2' }, { now: 1_000_001, dedupeWindowMs: windowMs, eventId: 'event-2' })).toBe('event-2');
+    expect(recordSignal('search', { areaId: 'a1', typeId: 't1' }, { now: 1_000_000 + windowMs, dedupeWindowMs: windowMs, eventId: 'event-3' })).toBe('event-3');
+    expect(getSignals()).toHaveLength(3);
+  });
+
+  it('chuẩn hóa empty string và giá không hợp lệ trước khi dedupe', () => {
+    const opts = { now: 1_000_000, dedupeWindowMs: 30 * 60 * 1000, eventId: 'event-1' };
+    expect(recordSignal('search', { areaId: 'a1', typeId: '', price: Number.NaN }, opts)).toBe('event-1');
+    expect(recordSignal('search', { areaId: 'a1', typeId: null, price: null }, { ...opts, now: opts.now + 1, eventId: 'event-2' })).toBe('event-1');
+  });
+
+  it('không dedupe view/favorite/contact khi không yêu cầu', () => {
+    recordSignal('view', { areaId: 'a1' }, { now: 1_000_000 });
+    recordSignal('view', { areaId: 'a1' }, { now: 1_000_001 });
+    expect(getSignals()).toHaveLength(2);
+  });
+
+  it('hội tụ event id local về canonical id do RPC trả về', () => {
+    recordSignal('search', { areaId: 'a1' }, { eventId: 'local-event' });
+    reconcileSignalEventId('local-event', 'remote-canonical-event');
+    expect(getSignals()[0].eventId).toBe('remote-canonical-event');
+  });
+
   it('giới hạn tối đa 60 tín hiệu (cắt phần cũ nhất)', () => {
     for (let i = 0; i < 70; i++) recordSignal('view', { areaId: `a${i}` });
     const signals = getSignals();
@@ -65,6 +102,11 @@ describe('tasteStore', () => {
     // tín hiệu mới nhất (a69) ở đầu, các tín hiệu cũ nhất (a0..a9) đã bị cắt
     expect(signals[0].areaId).toBe('a69');
     expect(signals.some(s => s.areaId === 'a0')).toBe(false);
+  });
+
+  it('localStorage bị chặn vẫn trả accepted để tầng remote có thể ghi', () => {
+    (window.localStorage.setItem as (key: string, value: string) => void) = () => { throw new Error('blocked'); };
+    expect(recordSignal('search', { areaId: 'a1' }, { eventId: 'event-1' })).toBe('event-1');
   });
 
   it('localStorage chứa JSON hỏng → getSignals trả [] không throw', () => {

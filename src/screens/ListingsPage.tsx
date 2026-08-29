@@ -5,14 +5,13 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousDa
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
   CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
-  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag, Bell
+  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
 } from 'lucide-react';
 import Link from 'next/link';
 import { SafeImage } from '../components/SafeImage';
 import { type Property } from '../lib/supabase';
-import { captureSignalFromProperty } from '../lib/captureSignal';
-import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite, pushTasteSignal, autoSaveSearch } from '../lib/api';
-import { buildSearchName, hasSavedSearchCriteria, type SavedFilters } from '../lib/savedSearch';
+import { captureSignal, captureSignalFromProperty } from '../lib/captureSignal';
+import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { buildPropertyPath, PropertySearchUnavailableError, type ListingInitialFilters, type PropertySort } from '../lib/api/properties';
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
@@ -22,7 +21,6 @@ import { qk } from '../lib/queryKeys';
 import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
 import { shouldResetChild } from '../lib/cascadeReset';
 import { nextListingPageParam } from '../lib/listingPaging';
-import { recordSignal } from '../lib/tasteStore';
 import { ForYou } from '../components/ForYou';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
@@ -34,12 +32,10 @@ import type { MapBounds } from '../components/PropertyMap';
 import { buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { listingInitialDataScopeMatches } from '../lib/listingInitialData';
 import { track, EVENTS } from '../lib/analytics';
-import { buildDiscoveryEventProps } from '../lib/discoveryJourney';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { PropertyGallery } from '../components/PropertyGallery';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
-import { savedSearchManagementHref, shouldShowSavedSearchNotice, type SavedSearchNoticeState } from '../lib/savedSearchJourney';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
@@ -110,9 +106,6 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const [page, setPage] = useState(initialFilters?.page ?? 1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
-  const [savedSearchPrompt, setSavedSearchPrompt] = useState(false);
-  const savedSearchNoticeTracked = useRef(false);
-  const lastSavedSearchNotice = useRef<SavedSearchNoticeState | null>(null);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -183,28 +176,6 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         track(EVENTS.LISTING_SAVE, { listingId: p.id, source: 'listings' });
       }
     },
-  });
-
-  const { mutate: autoSaveCurrentSearch } = useMutation({
-    mutationFn: (input: { name: string; filters: SavedFilters }) => autoSaveSearch(input),
-    onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: ['savedSearches'] });
-      if (saved) {
-        const nextNotice = { savedSearchId: saved.id, signature: autoSaveSignature };
-        if (shouldShowSavedSearchNotice(lastSavedSearchNotice.current, nextNotice)) {
-          lastSavedSearchNotice.current = nextNotice;
-          setSavedSearchPrompt(true);
-          if (!savedSearchNoticeTracked.current) {
-            savedSearchNoticeTracked.current = true;
-            track(EVENTS.SAVED_SEARCH_NOTICE_SHOWN, {
-              hasFilters: true,
-              listingType: listingType || 'all',
-            });
-          }
-        }
-      }
-    },
-    onError: (e) => console.warn('[ListingsPage] Auto-save search failed:', e),
   });
 
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
@@ -305,43 +276,25 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const autoSavedFilters = useMemo<SavedFilters>(() => ({
-    listingType: listingType || undefined,
-    areaId: areaId || undefined,
-    typeId: typeId || undefined,
-    district: district || undefined,
-    ward: ward || undefined,
-    keyword: debouncedKeyword.trim() || undefined,
-    minPrice: pr.min, maxPrice: pr.max,
-    minArea: ar.min, maxArea: ar.max,
-    bedrooms: bedrooms || undefined,
-    direction: direction || undefined,
-    legal: legal || undefined,
-    sort: sort !== 'newest' ? sort : undefined,
-  }), [listingType, areaId, typeId, district, ward, debouncedKeyword, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal, sort]);
-
-  const autoSaveSignature = JSON.stringify(autoSavedFilters);
-
+  // Tự học im lặng từ ý định tìm kiếm đã ổn định. Đây là behavior signal,
+  // không phải saved search/cảnh báo và không tạo bất kỳ UI nào cho người dùng.
   useEffect(() => {
-    if (!hasSavedSearchCriteria(autoSavedFilters)) return;
-    const labels = {
-      areas: Object.fromEntries(areas.map(a => [a.id, a.name])),
-      types: Object.fromEntries(types.map(t => [t.id, t.name])),
-    };
+    const areaIdForSignal = filters.areaId || null;
+    const typeIdForSignal = filters.typeId || null;
+    const listingTypeForSignal = filters.listingType || null;
+    if (!areaIdForSignal && !typeIdForSignal && !listingTypeForSignal) return;
+
     const t = setTimeout(() => {
-      autoSaveCurrentSearch({ name: buildSearchName(autoSavedFilters, labels), filters: autoSavedFilters });
+      captureSignal('search', {
+        areaId: areaIdForSignal,
+        typeId: typeIdForSignal,
+        listingType: listingTypeForSignal,
+        // Price personalization tạm tắt đến khi mua bán và thuê được chuẩn hóa
+        // theo cùng một đơn vị và tách range theo listing type.
+        price: null,
+      }, { dedupeWindowMs: 30 * 60 * 1000 });
     }, 800);
     return () => clearTimeout(t);
-  }, [autoSaveSignature, areas, types, autoSaveCurrentSearch]);
-
-  // Tự học: ghi tín hiệu tìm kiếm khi khách chọn khu vực/loại/loại-tin (bỏ qua view
-  // mặc định rỗng). localStorage (mọi khách) + đồng bộ tài khoản khi đã đăng nhập.
-  useEffect(() => {
-    if (filters.areaId || filters.typeId || filters.listingType) {
-      const attrs = { areaId: filters.areaId || null, typeId: filters.typeId || null, listingType: filters.listingType || null };
-      recordSignal('search', attrs);
-      pushTasteSignal('search', attrs).catch(() => {});
-    }
   }, [filters.areaId, filters.typeId, filters.listingType]);
 
   // Đồng bộ bộ lọc → URL một chiều qua replaceState (KHÔNG router.push → không refetch
@@ -760,41 +713,6 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                 </div>
               </div>
             </div>
-
-            {savedSearchPrompt && (
-              <div className="mb-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-start gap-3 text-sm animate-fade-in">
-                <Bell className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-emerald-800">Đã lưu tiêu chí tìm kiếm</p>
-                  <p className="text-emerald-700 text-xs mt-0.5">Bạn có thể quản lý tùy chọn cảnh báo cho tìm kiếm này trong Tài khoản. Hệ thống chưa xác nhận đã gửi thông báo nào.</p>
-                  <Link
-                    href={savedSearchManagementHref()}
-                    onClick={() => track(EVENTS.SAVED_SEARCH_MANAGE_CLICK, buildDiscoveryEventProps({
-                      surface: 'listings',
-                      module: 'saved_search_notice',
-                      hasFilters: true,
-                      listingType: listingType || undefined,
-                      source: 'saved_search_notice',
-                    }))}
-                    className="mt-2 inline-flex text-xs font-bold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
-                  >
-                    Quản lý cảnh báo
-                  </Link>
-                </div>
-                <button onClick={() => {
-                  setSavedSearchPrompt(false);
-                  track(EVENTS.SAVED_SEARCH_NOTICE_DISMISSED, buildDiscoveryEventProps({
-                    surface: 'listings',
-                    module: 'saved_search_notice',
-                    hasFilters: true,
-                    listingType: listingType || undefined,
-                    source: 'dismiss_button',
-                  }));
-                }} className="text-emerald-600 hover:text-emerald-800" aria-label="Ẩn thông báo tìm kiếm đã lưu">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
 
             {/* Active filter chips */}
             {hasActiveFilters && (

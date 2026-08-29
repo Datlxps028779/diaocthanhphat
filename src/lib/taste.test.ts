@@ -1,11 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { inferTaste, topKey, hasEnoughSignal, scoreCandidate, rankRecommendations, diversify, type Signal, type Candidate } from './taste';
+import { inferTaste, mergeSignalSources, topKey, hasEnoughSignal, scoreCandidate, rankRecommendations, diversify, normalizeSignalAttrs, signalDedupeKey, type Signal, type Candidate } from './taste';
+
+describe('signal normalization', () => {
+  it('tạo dedupe key ổn định cho empty string/null và giá hợp lệ', () => {
+    expect(normalizeSignalAttrs({ areaId: '', typeId: null, listingType: 'mua_ban', price: Number.NaN }))
+      .toEqual({ areaId: null, typeId: null, listingType: 'mua_ban', price: null });
+    expect(signalDedupeKey('search', { areaId: '', listingType: 'mua_ban' }))
+      .toBe(signalDedupeKey('search', { areaId: null, listingType: 'mua_ban', price: null }));
+  });
+});
 
 const NOW = new Date('2026-07-14T12:00:00Z').getTime();
 const DAY = 86_400_000;
 
 const sig = (o: Partial<Signal> = {}): Signal => ({
   kind: 'view', areaId: 'a1', typeId: 't1', listingType: 'mua_ban', price: 3, ts: NOW, ...o,
+});
+
+describe('mergeSignalSources', () => {
+  it('khử đúng một event đã dual-write local và remote', () => {
+    const local = [sig({ eventId: 'e1', ts: NOW, areaId: 'a1' })];
+    const remote = [
+      sig({ eventId: 'e1', ts: NOW + 10, areaId: 'a1' }),
+      sig({ eventId: 'e2', ts: NOW + 20, areaId: 'a2' }),
+    ];
+    const merged = mergeSignalSources(local, remote);
+    expect(merged.map(signal => signal.eventId)).toEqual(['e2', 'e1']);
+  });
+
+  it('giữ signal legacy không có event id thay vì đoán trùng theo thuộc tính', () => {
+    const merged = mergeSignalSources(
+      [sig({ eventId: null, ts: NOW })],
+      [sig({ eventId: null, ts: NOW + 1 })],
+    );
+    expect(merged).toHaveLength(2);
+  });
 });
 
 describe('inferTaste', () => {
@@ -29,23 +58,17 @@ describe('inferTaste', () => {
     expect(p.areaWeights['f']).toBeGreaterThan(p.areaWeights['v']);
     expect(p.areaWeights['v']).toBeGreaterThan(p.areaWeights['s']);
   });
-  it('favorite/contact có giá cũng đóng góp khoảng giá', () => {
-    const p = inferTaste([sig({ kind: 'favorite', price: 2 }), sig({ kind: 'contact', price: 4 })], NOW);
-    expect(p.priceMin).toBeCloseTo(1.7, 5);   // 2 * 0.85
-    expect(p.priceMax).toBeCloseTo(4.6, 5);   // 4 * 1.15
+  it('không suy khoảng giá khi đơn vị mua bán/cho thuê chưa được chuẩn hóa', () => {
+    const p = inferTaste([
+      sig({ kind: 'view', price: 2, listingType: 'mua_ban' }),
+      sig({ kind: 'contact', price: 8, listingType: 'cho_thue' }),
+    ], NOW);
+    expect('priceMin' in p).toBe(false);
+    expect('priceMax' in p).toBe(false);
   });
   it('tín hiệu cũ nhẹ hơn tín hiệu mới', () => {
     const p = inferTaste([sig({ areaId: 'new', ts: NOW }), sig({ areaId: 'old', ts: NOW - 28 * DAY })], NOW);
     expect(p.areaWeights['new']).toBeGreaterThan(p.areaWeights['old']);
-  });
-  it('khoảng giá nới ±15% từ BĐS đã xem', () => {
-    const p = inferTaste([sig({ kind: 'view', price: 2 }), sig({ kind: 'view', price: 4 })], NOW);
-    expect(p.priceMin).toBeCloseTo(1.7, 5);   // 2 * 0.85
-    expect(p.priceMax).toBeCloseTo(4.6, 5);   // 4 * 1.15
-  });
-  it('search không đặt khoảng giá', () => {
-    const p = inferTaste([sig({ kind: 'search', price: null }), sig({ kind: 'search', price: null })], NOW);
-    expect(p.priceMin).toBeUndefined();
   });
   it('session boost: intent phiên vượt hồ sơ cũ mạnh hơn', () => {
     // "old" tích luỹ 3 view cách đây 2 ngày; "now" chỉ 1 view vừa xong trong phiên.
@@ -92,12 +115,15 @@ describe('scoreCandidate', () => {
     expect(scoreCandidate(cand({ area_id: 'a1', property_type_id: 't1' }), p)).toBeGreaterThan(0);
     expect(scoreCandidate(cand({ area_id: 'zz', property_type_id: 'zz', listing_type: 'zz', price: 999 }), p)).toBe(0);
   });
-  it('thưởng khi giá trong khoảng ưa thích', () => {
-    const p = inferTaste([sig({ kind: 'view', areaId: null, typeId: null, listingType: null, price: 3 }),
-                          sig({ kind: 'view', areaId: null, typeId: null, listingType: null, price: 3 })], NOW);
+  it('không cộng điểm giá khi price personalization đang tắt', () => {
+    const p = inferTaste([
+      sig({ kind: 'view', areaId: null, typeId: null, listingType: null, price: 3 }),
+      sig({ kind: 'view', areaId: null, typeId: null, listingType: null, price: 3 }),
+    ], NOW);
     const inRange = scoreCandidate(cand({ area_id: null, property_type_id: null, listing_type: null, price: 3 }), p);
     const outRange = scoreCandidate(cand({ area_id: null, property_type_id: null, listing_type: null, price: 99 }), p);
-    expect(inRange).toBeGreaterThan(outRange);
+    expect(inRange).toBe(0);
+    expect(outRange).toBe(0);
   });
 });
 

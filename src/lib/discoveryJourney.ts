@@ -4,8 +4,7 @@ export type DiscoveryModule =
   | 'featured'
   | 'related_properties'
   | 'explore_filters'
-  | 'related_news'
-  | 'saved_search_notice';
+  | 'related_news';
 
 export type DiscoverySurface = 'home' | 'listings' | 'property_detail' | 'news';
 

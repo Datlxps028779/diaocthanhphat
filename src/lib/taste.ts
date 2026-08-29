@@ -8,20 +8,61 @@ export type SignalKind = 'search' | 'view' | 'favorite' | 'contact';
 // 1 tín hiệu hành vi đã ghi. Chỉ giữ thuộc tính suy sở thích (không PII).
 export interface Signal {
   kind: SignalKind;
+  eventId?: string | null;
   areaId?: string | null;
   typeId?: string | null;
   listingType?: string | null;
-  price?: number | null;      // giá BĐS gắn với tín hiệu (view/favorite/contact); search không có
+  price?: number | null;      // legacy/reserved; không dùng cho ranking khi chưa chuẩn hóa đơn vị
   ts: number;                 // epoch ms, để tính trọng số theo độ mới
 }
 
-// Hồ sơ sở thích suy ra: trọng số theo khu vực/loại + khoảng giá điển hình.
+export type SignalAttrs = Omit<Signal, 'kind' | 'eventId' | 'ts'>;
+
+export function createSignalEventId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+    const value = Math.floor(Math.random() * 16);
+    return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function normalizeSignalAttrs(attrs: SignalAttrs): SignalAttrs {
+  return {
+    areaId: attrs.areaId || null,
+    typeId: attrs.typeId || null,
+    listingType: attrs.listingType || null,
+    price: typeof attrs.price === 'number' && Number.isFinite(attrs.price) && attrs.price > 0
+      ? attrs.price
+      : null,
+  };
+}
+
+export function signalDedupeKey(kind: SignalKind, attrs: SignalAttrs): string {
+  const normalized = normalizeSignalAttrs(attrs);
+  return JSON.stringify([
+    kind,
+    normalized.areaId,
+    normalized.typeId,
+    normalized.listingType,
+    normalized.price,
+  ]);
+}
+
+export function mergeSignalSources(local: Signal[], remote: Signal[]): Signal[] {
+  const remoteEventIds = new Set(
+    remote.map(signal => signal.eventId).filter((id): id is string => Boolean(id)),
+  );
+  return [
+    ...remote,
+    ...local.filter(signal => !signal.eventId || !remoteEventIds.has(signal.eventId)),
+  ].sort((a, b) => b.ts - a.ts);
+}
+
+// Hồ sơ sở thích suy ra: trọng số theo khu vực/loại/hình thức.
 export interface TasteProfile {
   areaWeights: Record<string, number>;
   typeWeights: Record<string, number>;
   listingTypeWeights: Record<string, number>;
-  priceMin?: number;
-  priceMax?: number;
   sampleSize: number;         // số tín hiệu dùng để suy (0 = chưa đủ dữ liệu)
 }
 
@@ -50,11 +91,10 @@ export interface InferOpts {
   sessionBoost?: number;
 }
 
-// Suy hồ sơ sở thích từ danh sách tín hiệu. Khoảng giá = min/max của các BĐS đã xem
-// (nới ±15% để không quá hẹp). now truyền vào để test tất định.
+// Suy hồ sơ sở thích từ danh sách tín hiệu. Price personalization tạm thời không
+// tham gia profile/ranking cho đến khi giá bán và thuê được chuẩn hóa theo listing type.
 export function inferTaste(signals: Signal[], now: number, opts?: InferOpts): TasteProfile {
   const profile: TasteProfile = { areaWeights: {}, typeWeights: {}, listingTypeWeights: {}, sampleSize: signals.length };
-  const viewedPrices: number[] = [];
   for (const s of signals) {
     const inSession = opts?.sessionWindowMs !== undefined && now - s.ts <= opts.sessionWindowMs;
     const boost = inSession ? (opts?.sessionBoost ?? 1) : 1;
@@ -62,15 +102,6 @@ export function inferTaste(signals: Signal[], now: number, opts?: InferOpts): Ta
     bump(profile.areaWeights, s.areaId, w);
     bump(profile.typeWeights, s.typeId, w);
     bump(profile.listingTypeWeights, s.listingType, w);
-    // Giá suy khoảng ưa thích: lấy từ mọi tín hiệu có giá thật (view/favorite/contact).
-    // Search không kèm giá BĐS cụ thể nên tự khắc bỏ qua.
-    if (typeof s.price === 'number' && s.price > 0) viewedPrices.push(s.price);
-  }
-  if (viewedPrices.length > 0) {
-    const min = Math.min(...viewedPrices);
-    const max = Math.max(...viewedPrices);
-    profile.priceMin = Math.max(0, Math.round(min * 0.85 * 100) / 100);
-    profile.priceMax = Math.round(max * 1.15 * 100) / 100;
   }
   return profile;
 }
@@ -104,9 +135,6 @@ export function scoreCandidate(c: Candidate, profile: TasteProfile): number {
   if (c.area_id && profile.areaWeights[c.area_id]) score += profile.areaWeights[c.area_id] * 3;
   if (c.property_type_id && profile.typeWeights[c.property_type_id]) score += profile.typeWeights[c.property_type_id] * 2;
   if (c.listing_type && profile.listingTypeWeights[c.listing_type]) score += profile.listingTypeWeights[c.listing_type];
-  if (profile.priceMin !== undefined && profile.priceMax !== undefined) {
-    if (c.price >= profile.priceMin && c.price <= profile.priceMax) score += 2;
-  }
   return score;
 }
 
