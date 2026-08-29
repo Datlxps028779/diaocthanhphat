@@ -96,7 +96,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           {navItems.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
               <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`px-3 py-2 text-[15px] rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-bold' : 'font-normal text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+                className={`cnv-nav-type px-3 py-2 rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
                 {item.label}<ChevronDown className="w-3.5 h-3.5 opacity-60" />
               </button>
               {desktopMenuOpen === item.key && (
@@ -124,7 +124,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`px-3 py-2 text-[15px] rounded-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-bold' : 'font-normal text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+              className={`cnv-nav-type px-3 py-2 rounded-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
               {item.label}
             </Link>
           ))}
@@ -197,7 +197,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           {navItems.map(item => item.children ? (
             <div key={item.key}>
               <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
-                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+                className={`cnv-nav-type flex w-full items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
                 <span>{item.label}</span><ChevronDown className={`w-4 h-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
               </button>
               {mobileSubmenuOpen === item.key && (
@@ -207,7 +207,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                       <p className="px-3 pt-1.5 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
                       {child.children.map(grand => (
                         <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                          className="block px-3 py-2 text-sm rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          className="cnv-nav-type block px-3 py-2 rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
                           {grand.label}
                         </Link>
                       ))}
@@ -223,7 +223,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
             </div>
           ) : (
             <Link key={item.key} href={hrefFor(item)} onClick={closeMenus} {...newTabProps(item)}
-              className={`block w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+              className={`cnv-nav-type block w-full text-left px-3 py-2.5 rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
               {item.label}
             </Link>
           ))}

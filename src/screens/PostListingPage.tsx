@@ -29,6 +29,7 @@ import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/li
 import { PriceField } from '../components/PriceField';
 import { coordinatePairFromUnknown, validateCoordinatePair } from '../lib/locationCoordinates';
 import { pickTaxonomyGeo, taxonomyGeoLabel } from '../lib/taxonomyGeo';
+import { normalizeListingTitle } from '../lib/listingTitle';
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
@@ -85,6 +86,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
+  const [titleCorrection, setTitleCorrection] = useState('');
 
   const [form, setForm] = useState({
     listing_type: 'mua_ban' as ListingType,
@@ -111,6 +113,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     setForm(f => ({ ...f, [k]: v }));
     setErrors(current => current[k] ? { ...current, [k]: '' } : current);
   };
+  const normalizeTitleInput = useCallback(() => {
+    const normalized = normalizeListingTitle(form.title, [form.city, form.district, form.ward]);
+    if (!normalized.changed) return;
+    setForm(current => ({ ...current, title: normalized.value }));
+    setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
+  }, [form.title, form.city, form.district, form.ward]);
   const setPropertyType = (id: string) => {
     const nextType = types.find(t => t.id === id);
     setForm(f => clearIncompatibleSpecValues({ ...f, property_type_id: id }, nextType, 'user_listing'));
@@ -314,12 +322,17 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     mutationFn: async () => {
       // Lọc bỏ các phần tử rỗng/falsy để đảm bảo mảng ảnh chỉ chứa URL hợp lệ
       const specForm = selectedPropertyType ? clearIncompatibleSpecValues(form, selectedPropertyType, 'user_listing') : form;
+      const canonicalTitle = normalizeListingTitle(specForm.title, [specForm.city, specForm.district, specForm.ward]).value;
+      if (canonicalTitle !== specForm.title) {
+        setForm(current => ({ ...current, title: canonicalTitle }));
+        setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
+      }
       const cleanImages = specForm.images.filter((url): url is string => !!url);
       const coverId = cleanImages[0] ?? (specForm.image_url || null);
       const coordinates = coordinatePairFromUnknown(specForm.latitude, specForm.longitude);
       const payload = {
         listing_type: specForm.listing_type,
-        title: specForm.title,
+        title: canonicalTitle,
         description: specForm.description || null,
         price: parsePriceInput(specForm.price) ?? 0,
         price_unit: specForm.price_unit,
@@ -549,11 +562,15 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               </div>
 
               <FormField label="Tiêu đề tin đăng *" error={errors.title}>
-                <input value={form.title} onChange={e => set('title', e.target.value)}
+                <input value={form.title} onChange={e => { set('title', e.target.value); setTitleCorrection(''); }}
+                  onBlur={normalizeTitleInput}
+                  spellCheck
+                  autoCapitalize="sentences"
                   placeholder={isRental(form.listing_type)
                     ? 'VD: Cho thuê nhà nguyên căn 3PN tại Dĩ An, 8 triệu/tháng'
                     : 'VD: Bán đất nền khu dân cư Hiệp Thành 3, Thủ Dầu Một, 120m²'}
                   className={inputCls(errors.title)} />
+                {titleCorrection && <p role="status" aria-live="polite" className="mt-1.5 text-xs font-medium text-emerald-600">{titleCorrection}</p>}
               </FormField>
 
               <section className="rounded-2xl border border-red-100 bg-red-50/40 p-4">

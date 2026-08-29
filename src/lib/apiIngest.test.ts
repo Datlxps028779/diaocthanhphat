@@ -13,6 +13,17 @@ describe('normalizeListingPayload', () => {
     expect(r.row.city).toBe('Bình Dương');
   });
 
+  it('chuẩn hóa CAPS LOCK nhưng giữ acronym và địa danh listing', () => {
+    const r = normalizeListingPayload({
+      ...valid,
+      title: '  BÁN   ĐẤT KCN DĨ AN SỔ HONG  ',
+      district: 'Dĩ An',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.row.title).toBe('Bán đất KCN Dĩ An sổ hồng');
+  });
+
   it('giữ cặp tọa độ hợp lệ và chặn tọa độ thiếu hoặc ngoài phạm vi', () => {
     const validCoordinates = normalizeListingPayload({ ...valid, latitude: '10.9804', longitude: '106.6519' });
     expect(validCoordinates.ok).toBe(true);

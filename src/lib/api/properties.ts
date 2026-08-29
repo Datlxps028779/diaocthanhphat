@@ -3,6 +3,7 @@ import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
 import { mergeRelatedPropertyCandidates, rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
+import { normalizeListingTitle } from '../listingTitle';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -498,15 +499,19 @@ export function buildPropertyPath(p: {
 }
 
 export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {
-  const slug = (p.slug && p.slug.trim()) || buildUniquePropertySlug(p.title);
-  const { data, error } = await supabase.from('properties').insert({ ...p, slug }).select().single();
+  const title = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
+  const slug = (p.slug && p.slug.trim()) || buildUniquePropertySlug(title);
+  const { data, error } = await supabase.from('properties').insert({ ...p, title, slug }).select().single();
   if (error) throw error;
   return data as Property;
 }
 export async function updateProperty(id: string, p: Partial<Property>): Promise<Property> {
+  const patch = typeof p.title === 'string'
+    ? { ...p, title: normalizeListingTitle(p.title, [p.city ?? '', p.district ?? '', p.ward ?? '']).value }
+    : p;
   const { data, error } = await supabase
     .from('properties')
-    .update({ ...p, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();

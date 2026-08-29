@@ -30,6 +30,7 @@ import { useTaxonomyGeo } from '../../../lib/hooks/useTaxonomy';
 import { pickTaxonomyGeo, taxonomyGeoLabel } from '../../../lib/taxonomyGeo';
 import { formatListingPrice, formatPriceInput, parsePriceInput, priceInputFromNumber } from '../../../lib/listingPrice';
 import { ListingPrice } from '../../ListingPrice';
+import { normalizeListingTitle } from '../../../lib/listingTitle';
 import { PriceField } from '../../PriceField';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
@@ -511,6 +512,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     focus_keywords: property?.focus_keywords ?? '',
     schema_markup: property?.schema_markup ? JSON.stringify(property.schema_markup, null, 2) : '',
   });
+  const [titleCorrection, setTitleCorrection] = useState('');
   const [faq, setFaq] = useState<FaqItem[]>(property?.faq ?? []);
 
   const [districts, setDistricts] = useState<District[]>([]);
@@ -597,6 +599,12 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   };
 
   const setField = (name: string, value: unknown) => setForm(f => ({ ...f, [name]: value }));
+  const normalizeTitleInput = useCallback(() => {
+    const normalized = normalizeListingTitle(form.title, [form.city, form.district, form.ward]);
+    if (!normalized.changed) return;
+    setForm(current => ({ ...current, title: normalized.value }));
+    setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
+  }, [form.title, form.city, form.district, form.ward]);
   const setPropertyType = (id: string) => {
     const nextType = types.find(t => t.id === id);
     setTypeError('');
@@ -757,6 +765,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       }
     }
     const specForm = clearIncompatibleSpecValues(form, selectedPropertyType, 'admin_property');
+    const canonicalTitle = normalizeListingTitle(specForm.title, [specForm.city, specForm.district, specForm.ward]).value;
+    if (canonicalTitle !== specForm.title) {
+      setForm(current => ({ ...current, title: canonicalTitle }));
+      setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
+    }
     const selectedDistrict = districts.find(d => d.id === specForm.district_id);
     if (specForm.district_id && (!selectedDistrict || selectedDistrict.area_id !== specForm.area_id)) {
       window.alert('Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại cấp hành chính.');
@@ -785,7 +798,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     onSave({
       // Để trống → createProperty tự sinh slug duy nhất; có nhập → dùng nguyên
       slug: cs(specForm.slug),
-      title: specForm.title,
+      title: canonicalTitle,
       // Dữ liệu từ visual/source editor được chuẩn hóa trước khi lưu, giống News.
       // Renderer public vẫn sanitize lại như lớp phòng thủ thứ hai.
       description: cs(sanitizeArticleHtml(specForm.description)),
@@ -907,9 +920,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 {form.title.length}/65 ký tự
               </span>
             </label>
-            <input value={form.title} onChange={e => setField('title', e.target.value)}
+            <input value={form.title} onChange={e => { setField('title', e.target.value); setTitleCorrection(''); }}
+              onBlur={normalizeTitleInput}
+              spellCheck
+              autoCapitalize="sentences"
               placeholder="Tiêu đề BĐS (30–65 ký tự tối ưu SEO)"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            {titleCorrection && <p role="status" aria-live="polite" className="mt-1.5 text-xs font-medium text-emerald-600">{titleCorrection}</p>}
           </div>
 
           <section className="rounded-2xl border border-red-100 bg-red-50/40 p-4">

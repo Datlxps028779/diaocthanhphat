@@ -39,6 +39,7 @@ import { PropertyGallery } from './components/PropertyGallery';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt } from './lib/propertyImages';
 import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
+import { normalizeListingTitle } from './lib/listingTitle';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
@@ -67,6 +68,28 @@ const LISTING_TYPE_TABS = [
   { key: 'mua_ban', label: 'Mua bán' },
   { key: 'cho_thue', label: 'Cho thuê' },
 ] as const;
+
+type HomeAtmosphereVariant = 'soft' | 'warm' | 'ambient';
+
+function HomeSectionAtmosphere({ variant }: { variant: HomeAtmosphereVariant }) {
+  const primary = variant === 'soft'
+    ? 'bg-slate-200/45'
+    : variant === 'warm'
+      ? 'bg-red-200/35'
+      : 'bg-red-100/35';
+  const secondary = variant === 'soft'
+    ? 'bg-amber-100/25'
+    : variant === 'warm'
+      ? 'bg-amber-200/30'
+      : 'bg-amber-100/20';
+
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className={`absolute -right-24 -top-28 h-72 w-72 rounded-full blur-3xl ${primary}`} />
+      <div className={`absolute -bottom-32 -left-24 h-72 w-72 rounded-full blur-3xl ${secondary}`} />
+    </div>
+  );
+}
 
 export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) {
   const queryClient = useQueryClient();
@@ -193,12 +216,13 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     switch (id) {
       case 'hero': return null; // always rendered separately at the top
       case 'categories': return (
-        <section key="categories" className="border-b border-slate-100 bg-white py-10">
-          <div className="max-w-7xl mx-auto px-4">
+        <section key="categories" className="relative isolate overflow-hidden border-b border-slate-100 bg-slate-50 py-10">
+          <HomeSectionAtmosphere variant="soft" />
+          <div className="relative z-10 max-w-7xl mx-auto px-4">
             <div className="mb-6 flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Khám phá theo nhu cầu</p>
-                <h2 className="mt-1 text-xl font-black text-slate-900">Loại hình bất động sản</h2>
+                <p className="cnv-eyebrow text-red-600">Khám phá theo nhu cầu</p>
+                <h2 className="cnv-section-title mt-1 text-slate-900">Loại hình bất động sản</h2>
               </div>
               <Link href={pageToHref({ name: 'listings' })} className="hidden items-center gap-1 text-sm font-bold text-red-700 hover:text-red-800 sm:flex">
                 Xem tất cả<ChevronRight className="h-4 w-4" />
@@ -243,8 +267,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         </section>
       );
       case 'for_you': return (
-        <section key="for_you" className="pt-4 pb-2 bg-white">
-          <div className="max-w-7xl mx-auto px-4">
+        <section key="for_you" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 pt-4 pb-2">
+          <HomeSectionAtmosphere variant="warm" />
+          <div className="relative z-10 max-w-7xl mx-auto px-4">
             <ForYou surface="home" source="home_for_you" />
           </div>
         </section>
@@ -254,28 +279,33 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         const isLoading = featuredSections.length > 0 && sectionQueries.some(query => query.isLoading);
 
         if (isLoading) return (
-          <section key="featured_sections_loading" className="bg-gray-50 py-10">
-            <div className="max-w-7xl mx-auto px-4"><HomeSectionLoading /></div>
+          <section key="featured_sections_loading" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 py-10">
+            <HomeSectionAtmosphere variant="warm" />
+            <div className="relative z-10 max-w-7xl mx-auto px-4"><HomeSectionLoading /></div>
           </section>
         );
 
         if (sections.length === 0) {
           if (config.emptyBehavior !== 'empty_state') return null;
           return (
-            <section key="featured_sections_empty" className="bg-gray-50 py-10">
-              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            <section key="featured_sections_empty" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 py-10">
+              <HomeSectionAtmosphere variant="warm" />
+              <div className="relative z-10 max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
             </section>
           );
         }
 
         return (
           <React.Fragment key="featured_sections">
-            {sections.map(({ section, properties }) => (
-              <section key={section.id} className="py-10 bg-gray-50">
-                <div className="max-w-7xl mx-auto px-4">
+            {sections.map(({ section, properties }, sectionIndex) => {
+              const warmSurface = sectionIndex % 2 === 0;
+              return (
+                <section key={section.id} className={`relative isolate overflow-hidden py-10 ${warmSurface ? 'bg-gradient-to-br from-white via-red-50/30 to-amber-50/20' : 'bg-slate-50'}`}>
+                  <HomeSectionAtmosphere variant={warmSurface ? 'warm' : 'soft'} />
+                  <div className="relative z-10 max-w-7xl mx-auto px-4">
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h2 className="inline-block text-xl font-black text-gray-900">{section.title}</h2>
+                      <h2 className="cnv-section-title text-gray-900">{section.title}</h2>
                       {section.subtitle && <p className="text-gray-500 text-sm mt-1">{section.subtitle}</p>}
                     </div>
                     <Link href={pageToHref({ name: 'listings', ...(section.filter_listing_type ? { listingType: section.filter_listing_type as 'mua_ban' | 'cho_thue' } : {}) })}
@@ -286,7 +316,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                   {section.display_style === 'horizontal' ? (
                     <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
                       {properties.map(p => (
-                        <div key={p.id} className="flex-shrink-0 w-[360px] sm:w-[380px] snap-start">
+                        <div key={p.id} className="flex-shrink-0 w-[360px] sm:w-[300px] snap-start">
                           <PropertyCard property={p}
                             isFavorited={favoriteIds.has(p.id)}
                             onToggleFavorite={() => handleToggleFavorite(p)}
@@ -295,7 +325,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {properties.map(p => (
                         <PropertyCard key={p.id} property={p}
                           isFavorited={favoriteIds.has(p.id)}
@@ -304,9 +334,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       ))}
                     </div>
                   )}
-                </div>
-              </section>
-            ))}
+                  </div>
+                </section>
+              );
+            })}
           </React.Fragment>
         );
       }
@@ -334,19 +365,21 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         if (regionCards.length === 0) {
           if (config.emptyBehavior !== 'empty_state') return null;
           return (
-            <section key="region_banners_empty" className="bg-white py-10">
-              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            <section key="region_banners_empty" className="relative isolate overflow-hidden bg-white py-10">
+              <HomeSectionAtmosphere variant="ambient" />
+              <div className="relative z-10 max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
             </section>
           );
         }
 
         return (
-          <section key="region_banners" className="bg-white py-12">
-            <div className="max-w-7xl mx-auto px-4">
+          <section key="region_banners" className="relative isolate overflow-hidden bg-white py-12">
+            <HomeSectionAtmosphere variant="ambient" />
+            <div className="relative z-10 max-w-7xl mx-auto px-4">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Theo khu vực</p>
-                  <h2 className="mt-1 text-xl font-black text-slate-900">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
+                  <p className="cnv-eyebrow text-red-600">Theo khu vực</p>
+                  <h2 className="cnv-section-title mt-1 text-slate-900">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
                 </div>
                 <Link href={pageToHref({ name: 'regions' })} className="hidden items-center gap-1 text-sm font-bold text-red-700 hover:text-red-800 sm:flex">
                   Xem tất cả khu vực<ChevronRight className="h-4 w-4" />
@@ -359,7 +392,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                     <div className={`absolute inset-0 bg-gradient-to-t ${card.color} opacity-80 transition-opacity group-hover:opacity-90`} />
                     <div className="absolute inset-0 flex flex-col justify-end p-5">
                       <span className="mb-2 w-fit border border-white/25 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">{card.badge}</span>
-                      <h3 className="text-xl font-black text-white">{card.title}</h3>
+                      <h3 className="cnv-section-title text-white">{card.title}</h3>
                       <p className="mt-1 text-xs font-semibold text-white/90">{card.subtitle}</p>
                       <p className="mt-1 text-[11px] leading-4 text-white/70">{card.desc}</p>
                     </div>
@@ -371,10 +404,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         );
       }
       case 'why_us': return (
-        <section key="why_us" className="py-12 bg-white">
-          <div className="max-w-6xl mx-auto px-4">
+        <section key="why_us" className="relative isolate overflow-hidden bg-slate-50 py-12">
+          <HomeSectionAtmosphere variant="soft" />
+          <div className="relative z-10 max-w-6xl mx-auto px-4">
             <div className="text-center mb-8">
-              <h2 className="inline-block text-2xl font-black text-gray-900">{sec('why_us')('title', 'Tại sao chọn chúng tôi?')}</h2>
+              <h2 className="cnv-major-title text-gray-900">{sec('why_us')('title', 'Tại sao chọn chúng tôi?')}</h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {[
@@ -385,8 +419,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               ].map((f, i) => (
                 <div key={i} className="text-center">
                   <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-red-600 mx-auto mb-3">{f.icon}</div>
-                  <h3 className="font-bold text-sm text-gray-900 mb-1.5">{f.title}</h3>
-                  <p className="text-gray-500 text-xs leading-relaxed">{f.desc}</p>
+                  <h3 className="cnv-body-copy font-medium text-gray-900 mb-1.5">{f.title}</h3>
+                  <p className="cnv-body-copy text-gray-500">{f.desc}</p>
                 </div>
               ))}
             </div>
@@ -398,17 +432,19 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         if (testimonials.length === 0) {
           if (config.emptyBehavior !== 'empty_state') return null;
           return (
-            <section key="testimonials_empty" className="py-10 bg-gray-50">
-              <div className="max-w-6xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            <section key="testimonials_empty" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 py-10">
+              <HomeSectionAtmosphere variant="warm" />
+              <div className="relative z-10 max-w-6xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
             </section>
           );
         }
 
         return (
-          <section key="testimonials" className="py-10 bg-gray-50">
-            <div className="max-w-6xl mx-auto px-4">
+          <section key="testimonials" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 py-10">
+            <HomeSectionAtmosphere variant="warm" />
+            <div className="relative z-10 max-w-6xl mx-auto px-4">
               <div className="text-center mb-6">
-                <h2 className="inline-block text-xl font-black text-gray-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
+                <h2 className="cnv-section-title text-gray-900">{sec('testimonials')('title', 'Khách hàng nói gì về chúng tôi')}</h2>
               </div>
               <div className="grid md:grid-cols-3 gap-4">
                 {testimonials.slice(0, secNum('testimonials', 'max_count', 3)).map(t => (
@@ -438,8 +474,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         if (news.length === 0) {
           if (config.emptyBehavior !== 'empty_state') return null;
           return (
-            <section key="news_empty" className="py-10 bg-white">
-              <div className="max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
+            <section key="news_empty" className="relative isolate overflow-hidden bg-white py-10">
+              <HomeSectionAtmosphere variant="ambient" />
+              <div className="relative z-10 max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
             </section>
           );
         }
@@ -469,15 +506,16 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         });
 
         return (
-          <section key="news" className="bg-white py-12 md:py-16">
-            <div className="max-w-7xl mx-auto px-4">
+          <section key="news" className="relative isolate overflow-hidden bg-white py-12 md:py-16">
+            <HomeSectionAtmosphere variant="ambient" />
+            <div className="relative z-10 max-w-7xl mx-auto px-4">
               <div className="mb-8 text-center">
-                <div className="mb-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-red-600">
+                <div className="cnv-eyebrow mb-3 inline-flex items-center gap-2 text-red-600">
                   <span className="h-7 w-1 rounded-full bg-red-600" />
                   Tin tức bất động sản
                   <span className="h-7 w-1 rounded-full bg-red-600" />
                 </div>
-                <h2 className="text-3xl font-black tracking-tight text-gray-900 md:text-4xl">
+                <h2 className="cnv-major-title text-gray-900">
                   {sec('news')('title', 'Cập nhật thị trường')}
                 </h2>
                 <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-500 md:text-base">
@@ -488,7 +526,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(250px,0.9fr)] lg:items-start">
                 <div className="order-2 min-w-0 lg:order-1">
                   <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-xl font-black text-gray-900">Tin nổi bật</h3>
+                    <h3 className="cnv-section-title text-gray-900">Tin nổi bật</h3>
                     <Link href={allNewsHref} className="flex items-center gap-1 text-sm font-semibold text-red-600 hover:underline">
                       Xem tất cả <ChevronRight className="h-4 w-4" />
                     </Link>
@@ -553,7 +591,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 
                 <div className="order-3 min-w-0">
                   <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-xl font-black text-gray-900">Đọc nhiều nhất</h3>
+                    <h3 className="cnv-section-title text-gray-900">Đọc nhiều nhất</h3>
                     <Eye className="h-5 w-5 text-red-500" />
                   </div>
                   <div className="divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white px-4 shadow-sm">
@@ -574,9 +612,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         );
       }
       case 'faq': return (
-        <section key="faq" className="py-12 bg-gray-50 border-t border-gray-100">
-          <div className="max-w-6xl mx-auto px-4">
-            <h2 className="text-2xl md:text-3xl font-black text-gray-900 text-center mb-2">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
+        <section key="faq" className="relative isolate overflow-hidden bg-slate-50 py-12 border-t border-gray-100">
+          <HomeSectionAtmosphere variant="soft" />
+          <div className="relative z-10 max-w-6xl mx-auto px-4">
+            <h2 className="cnv-major-title text-center text-gray-900 mb-2">{sec('faq')('title', 'Câu hỏi thường gặp')}</h2>
             <p className="text-gray-500 text-sm text-center mb-8">{sec('faq')('subtitle', 'Những điều bạn cần biết trước khi mua bán, cho thuê bất động sản')}</p>
             {/* items-start: câu mở rộng chỉ kéo dài thẻ của nó, không kéo giãn thẻ bên cạnh. */}
             <div data-testid="faq-grid" className="grid items-start gap-4 md:grid-cols-2 md:gap-x-6">
@@ -587,12 +626,12 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                     <button onClick={() => setOpenFaq(open ? null : i)}
                       className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
                       aria-expanded={open}>
-                      <span className="font-semibold text-gray-900 text-[15px] leading-6">{item.q}</span>
+                      <span className="cnv-body-copy font-medium text-gray-900">{item.q}</span>
                       <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gray-50 border border-gray-100">
                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
                       </span>
                     </button>
-                    {open && <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed">{item.a}</div>}
+                    {open && <div className="cnv-body-copy px-5 pb-4 text-gray-600">{item.a}</div>}
                   </div>
                 );
               })}
@@ -606,7 +645,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
           </div>
           <div className="relative max-w-3xl mx-auto px-4 text-center text-white">
-            <h2 className="text-2xl md:text-3xl font-black mb-3">{sec('cta')('title', 'Bạn có bất động sản cần bán hoặc cho thuê?')}</h2>
+            <h2 className="cnv-major-title mb-3">{sec('cta')('title', 'Bạn có bất động sản cần bán hoặc cho thuê?')}</h2>
             <p className="text-red-100 mb-6 text-sm md:text-base">{sec('cta')('subtitle', 'Đăng tin miễn phí ngay hôm nay – tiếp cận hàng nghìn khách hàng tiềm năng')}</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button onClick={() => user ? onNavigate({ name: 'post-listing' }) : onShowAuth('register')}
@@ -727,7 +766,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                 <button
                   key={tab.key}
                   onClick={() => { setActiveTab(tab.key); setSearchPriceIdx(0); }}
-                  className={`pb-3 text-[15px] font-bold border-b-2 -mb-px transition-colors ${activeTab === tab.key ? 'text-red-600 border-red-600' : 'text-slate-600 border-transparent hover:text-red-600'}`}
+                  className={`cnv-control-type pb-3 border-b-2 -mb-px transition-colors ${activeTab === tab.key ? 'text-red-600 border-red-600' : 'text-slate-600 border-transparent hover:text-red-600'}`}
                 >
                   {tab.key === 'mua_ban' ? sec('hero')('tab_buy', tab.label) : sec('hero')('tab_rent', tab.label)}
                 </button>
@@ -774,7 +813,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               </div>
               <button
                 onClick={handleSearch}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-[15px] font-bold text-white transition-colors hover:bg-red-700 md:w-[140px] md:shrink-0"
+                className="cnv-control-type flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-white transition-colors hover:bg-red-700 md:w-[140px] md:shrink-0"
               >
                 <Search className="h-4 w-4" />
                 {sec('hero')('btn_search', 'Tìm kiếm')}
@@ -867,7 +906,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 export function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div>
-      <h2 className="inline-block text-xl font-black text-gray-900">{title}</h2>
+      <h2 className="cnv-section-title text-gray-900">{title}</h2>
       {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
     </div>
   );
@@ -877,6 +916,7 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
   property: Property; onContact: () => void;
   isFavorited?: boolean; onToggleFavorite?: () => void;
 }) {
+  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-row sm:flex-col">
       <PropertyGallery
@@ -905,23 +945,23 @@ export function PropertyCard({ property: p, onContact, isFavorited = false, onTo
       <div className="min-w-0 p-3.5 flex flex-col flex-1">
         <h3 className="mb-1.5">
           <Link href={buildPropertyPath(p)}
-            className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">
-            {p.title}
+            className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">
+            {displayTitle}
           </Link>
         </h3>
-        <p className="text-red-600 font-black text-base">{formatPropertyPrice(p)}</p>
-        <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
+        <p className="cnv-property-price text-red-600">{formatPropertyPrice(p)}</p>
+        <div className="cnv-property-meta flex items-center gap-2 text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
           {p.bedrooms && <span>{p.bedrooms} PN</span>}
           {p.legal_status && <span className="flex items-center gap-0.5 text-emerald-600 ml-auto"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
         </div>
-        <div className="flex items-center gap-1 text-gray-400 text-xs mb-3">
+        <div className="cnv-property-meta flex items-center gap-1 text-gray-400 mb-3">
           <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
           <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
         </div>
         <div className="flex gap-2 mt-auto">
-          <Link href={buildPropertyPath(p)} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-          <button onClick={onContact} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
+          <Link href={buildPropertyPath(p)} className="cnv-control-type flex-1 text-center border border-red-400 text-red-600 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
+          <button onClick={onContact} className="cnv-control-type flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
             <Phone className="w-3 h-3" />Liên hệ
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { sanitizeArticleHtml } from './sanitizeHtml';
 import { validateCoordinatePair } from './locationCoordinates';
+import { normalizeListingTitle } from './listingTitle';
 
 // Chuẩn hóa payload từ nguồn ngoài (make.com) trước khi ghi DB. Tách khỏi route để
 // test được không cần network/DB.
@@ -250,8 +251,8 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
 
   const errors: string[] = [];
 
-  const title = str(body.title, MAX_TITLE);
-  if (!title) errors.push('title: bắt buộc, phải là chuỗi không rỗng.');
+  const rawTitle = str(body.title, MAX_TITLE);
+  if (!rawTitle) errors.push('title: bắt buộc, phải là chuỗi không rỗng.');
 
   const price = num(body.price);
   const monthlyPrice = num(body.price_per_month);
@@ -263,6 +264,11 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
 
   const city = str(body.city, MAX_SHORT);
   if (!city) errors.push('city: bắt buộc (tên tỉnh/thành, ví dụ "Bình Dương").');
+  const district = str(body.district, MAX_SHORT);
+  const ward = str(body.ward, MAX_SHORT);
+  const title = rawTitle
+    ? normalizeListingTitle(rawTitle, [city ?? '', district ?? '', ward ?? '']).value
+    : null;
 
   const coordinates = validateCoordinatePair(body.latitude, body.longitude);
   if (!coordinates.valid) errors.push(`coordinates: ${coordinates.message}`);
@@ -291,8 +297,8 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
       area_sqm: num(body.area_sqm),
       address: str(body.address, MAX_SHORT),
       city: city as string,
-      district: str(body.district, MAX_SHORT),
-      ward: str(body.ward, MAX_SHORT),
+      district,
+      ward,
       image_url: httpUrl(body.image_url) ?? images[0] ?? null,
       images: images.length ? images : null,
       legal_status: str(body.legal_status, MAX_SHORT),

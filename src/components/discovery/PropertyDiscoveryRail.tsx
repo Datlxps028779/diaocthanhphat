@@ -10,6 +10,7 @@ import { track, EVENTS } from '../../lib/analytics';
 import { buildDiscoveryEventProps, type DiscoveryModule, type DiscoverySurface } from '../../lib/discoveryJourney';
 import { formatPropertyPrice } from '../../lib/listingPrice';
 import { DiscoverySectionHeader } from './DiscoverySectionHeader';
+import { normalizeListingTitle } from '../../lib/listingTitle';
 
 // Một article render cả desktop/mobile variant trong HTML để tránh layout shift. Khóa
 // theo tập tin hiển thị để đổi breakpoint không bắn thêm module-view cho cùng dữ liệu.
@@ -122,13 +123,13 @@ export function PropertyDiscoveryRail({
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col justify-center p-1">
-              <h3 className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-gray-900 transition-colors group-hover:text-red-600">{property.title}</h3>
-              <p className="text-sm font-black text-red-600">{formatPropertyPrice(property)}</p>
-              <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+              <h3 className={`mb-1 line-clamp-2 text-gray-900 transition-colors group-hover:text-red-600 ${sidebar ? 'text-sm font-medium leading-snug' : 'cnv-property-title'}`}>{normalizeListingTitle(property.title, [property.city, property.district ?? '']).value}</h3>
+              <p className={sidebar ? 'text-sm font-black text-red-600' : 'cnv-property-price text-red-600'}>{formatPropertyPrice(property)}</p>
+              <div className="cnv-property-meta mt-1 flex items-center gap-1 text-gray-400">
                 <MapPin className="h-3 w-3 shrink-0 text-red-400" />
                 <span className="truncate">{property.district ? `${property.district}, ` : ''}{property.city}</span>
               </div>
-              {itemNote?.(property) && <p className="mt-1 line-clamp-1 text-[11px] font-medium text-red-500">{itemNote(property)}</p>}
+              {itemNote?.(property) && <p className="cnv-property-meta mt-1 line-clamp-1 font-medium text-red-500">{itemNote(property)}</p>}
             </div>
           </Link>
         ))}

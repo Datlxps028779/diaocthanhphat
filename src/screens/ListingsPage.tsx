@@ -37,6 +37,7 @@ import { BlurFillImage } from '../components/BlurFillImage';
 import { PropertyGallery } from '../components/PropertyGallery';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
+import { normalizeListingTitle } from '../lib/listingTitle';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
   // Dữ liệu SSR seed sẵn cho view mà server thực sự đã truy vấn. Scope tách riêng
@@ -865,7 +866,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </div>
             ) : viewMode === 'grid' && (
               loading ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4">
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-72 rounded-xl border border-gray-100 bg-white animate-pulse" />)}
                 </div>
               ) : properties.length === 0 ? (
@@ -876,7 +877,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   resultSummary={resultSummary}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4">
                   {properties.map((p, index) => (
                     <GridCard key={p.id} property={p}
                       onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'grid')}
@@ -1048,6 +1049,7 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
   const pricePerSqm = p.area_sqm && p.price
     ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
     : null;
+  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-row sm:flex-col">
       <PropertyGallery
@@ -1076,21 +1078,21 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
         mobileList
       />
       <div className="min-w-0 p-3.5 flex flex-col flex-1">
-        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="text-gray-900 font-semibold text-sm leading-snug line-clamp-2 hover:text-red-600 transition-colors block">{p.title}</Link></h3>
-        <p className="text-red-600 font-black text-base">{formatPropertyPrice(p)}</p>
-        <div className="flex items-center gap-2 text-xs text-gray-500 my-1 flex-wrap">
+        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">{displayTitle}</Link></h3>
+        <p className="cnv-property-price text-red-600">{formatPropertyPrice(p)}</p>
+        <div className="cnv-property-meta flex items-center gap-2 text-gray-500 my-1 flex-wrap">
           {p.area_sqm && <span>{p.area_sqm} m²</span>}
           {pricePerSqm && p.listing_type !== 'cho_thue' && <span className="text-gray-400">{pricePerSqm} tr/m²</span>}
           {p.bedrooms && <span>{p.bedrooms} PN</span>}
           {p.legal_status && <span className="flex items-center gap-0.5 text-emerald-600 ml-auto"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
         </div>
-        <div className="flex items-center gap-1 text-gray-400 text-xs mb-3">
+        <div className="cnv-property-meta flex items-center gap-1 text-gray-400 mb-3">
           <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
           <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
         </div>
         <div className="flex gap-2 mt-auto">
-          <Link href={buildPropertyPath(p)} onClick={onResultClick} className="flex-1 text-center border border-red-400 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-          <button onClick={onContact} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
+          <Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-control-type flex-1 text-center border border-red-400 text-red-600 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
+          <button onClick={onContact} className="cnv-control-type flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
             <Phone className="w-3 h-3" />Liên hệ
           </button>
         </div>
@@ -1100,6 +1102,7 @@ function GridCard({ property: p, onContact, onResultClick, isFavorited = false, 
 }
 
 function ListCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
+  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   return (
     <div className="group flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md">
       <div className="relative w-28 shrink-0 overflow-hidden sm:w-48">
@@ -1118,16 +1121,16 @@ function ListCard({ property: p, onContact, onResultClick, isFavorited = false, 
       <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
         <div>
           <VerifiedBadge property={p} />
-          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="font-semibold text-gray-900 text-sm leading-snug hover:text-red-600 transition-colors line-clamp-2 block">{p.title}</Link></h3>
-          <p className="text-red-600 font-black text-lg mb-1">{formatPropertyPrice(p)}</p>
-          <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5 flex-wrap">
+          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">{displayTitle}</Link></h3>
+          <p className="cnv-property-price text-red-600 mb-1">{formatPropertyPrice(p)}</p>
+          <div className="cnv-property-meta flex items-center gap-3 text-gray-500 mb-1.5 flex-wrap">
             {p.area_sqm && <span className="flex items-center gap-0.5"><Building2 className="w-3 h-3" />{p.area_sqm} m²</span>}
             {p.bedrooms && <span>{p.bedrooms} PN</span>}
             {p.bathrooms && <span>{p.bathrooms} WC</span>}
             {p.direction && <span>Hướng {p.direction}</span>}
             {p.legal_status && <span className="text-emerald-600 flex items-center gap-0.5"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
           </div>
-          <p className="text-gray-400 text-xs flex items-center gap-1">
+          <p className="cnv-property-meta text-gray-400 flex items-center gap-1">
             <MapPin className="w-3 h-3 text-red-400" />{[p.address, p.district, p.city].filter(Boolean).join(', ')}
           </p>
         </div>
@@ -1144,8 +1147,8 @@ function ListCard({ property: p, onContact, onResultClick, isFavorited = false, 
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>
-            <Link href={buildPropertyPath(p)} onClick={onResultClick} className="inline-flex items-center border border-red-400 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-            <button onClick={onContact} className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+            <Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-control-type inline-flex items-center border border-red-400 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
+            <button onClick={onContact} className="cnv-control-type bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
               <Phone className="w-3 h-3" />Liên hệ
             </button>
           </div>

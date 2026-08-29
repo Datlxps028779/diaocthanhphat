@@ -1,8 +1,16 @@
 import { supabase, type UserListing, type UserListingLifecycleEvent } from '../supabase';
+import { normalizeListingTitle } from '../listingTitle';
+
+function canonicalListingTitle<T extends { title: string; city?: string | null; district?: string | null; ward?: string | null }>(listing: T): T {
+  return {
+    ...listing,
+    title: normalizeListingTitle(listing.title, [listing.city ?? '', listing.district ?? '', listing.ward ?? '']).value,
+  };
+}
 
 // ─── User Listings ────────────────────────────────────────────────────────────
 export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
-  const { error } = await supabase.from('user_listings').insert(listing);
+  const { error } = await supabase.from('user_listings').insert(canonicalListingTitle(listing));
   if (error) throw error;
 }
 export async function getMyListings(): Promise<UserListing[]> {
@@ -30,9 +38,10 @@ export async function updateMyListing(
   id: string,
   listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
 ): Promise<void> {
+  const canonical = canonicalListingTitle(listing);
   const { data, error } = await supabase
     .from('user_listings')
-    .update({ ...listing, status: 'pending', reject_reason: null, expires_at: null })
+    .update({ ...canonical, status: 'pending', reject_reason: null, expires_at: null })
     .eq('id', id)
     .select('id');
   if (error) throw error;
@@ -67,8 +76,14 @@ export async function adminUpdatePendingUserListing(
   id: string,
   patch: Partial<Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>>,
 ): Promise<UserListing> {
+  const canonicalPatch = typeof patch.title === 'string'
+    ? {
+        ...patch,
+        title: normalizeListingTitle(patch.title, [patch.city ?? '', patch.district ?? '', patch.ward ?? '']).value,
+      }
+    : patch;
   const { data, error } = await supabase
-    .rpc('admin_update_pending_user_listing', { p_listing_id: id, p_patch: patch })
+    .rpc('admin_update_pending_user_listing', { p_listing_id: id, p_patch: canonicalPatch })
     .single();
   if (error) throw error;
   if (!data || typeof data !== 'object' || !('id' in data)) {
