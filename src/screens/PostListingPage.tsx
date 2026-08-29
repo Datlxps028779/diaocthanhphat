@@ -8,7 +8,7 @@ import {
 import { type ListingType } from '../lib/supabase';
 import { submitUserListing, updateMyListing, getMyListing, adminUpdatePendingUserListing } from '../lib/api';
 import { listingToFormState, formToProperty } from '../lib/listingForm';
-import { LocationPicker, type GeocodeTarget } from '../components/LocationPicker';
+import { LocationPicker, type GeocodeTarget, type TaxonomyScope } from '../components/LocationPicker';
 import { PropertyDetailPage } from './PropertyDetailPage';
 import { buildPropertyFaq, type FaqItem } from '../lib/propertyFaq';
 import { extractErrorMessage } from '../lib/errorMessage';
@@ -79,9 +79,9 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
   const addressEditedRef = useRef(false);
-  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson']) => {
+  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope) => {
     if (!query) return;
-    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, nonce: ++geocodeNonce.current });
+    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, nonce: ++geocodeNonce.current });
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
@@ -128,7 +128,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const selectedWardId = wards.find(w => w.name === form.ward)?.id;
   const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined, { fetchAll: false });
   const taxonomyIds = [form.area_id, selectedDistrictId, selectedWardId].filter((id): id is string => Boolean(id));
-  const { data: taxonomyGeo = [], isLoading: loadingTaxonomyGeo } = useTaxonomyGeo(taxonomyIds);
+  const { data: taxonomyGeo = [] } = useTaxonomyGeo(taxonomyIds);
   const selectedTaxonomyGeo = pickTaxonomyGeo(taxonomyGeo, {
     areaId: form.area_id,
     districtId: selectedDistrictId,
@@ -136,12 +136,18 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   });
 
   useEffect(() => {
-    if (!form.area_id || loadingTaxonomyGeo) return;
+    if (!form.area_id) return;
     const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
     if (!query) return;
+    const taxonomyScope: TaxonomyScope = {
+      level: form.ward ? 'ward' : form.district ? 'district' : 'area',
+      areaName: form.city,
+      districtName: form.district || undefined,
+      wardName: form.ward || undefined,
+    };
     const zoom = form.ward ? 14 : form.district ? 13 : 11;
-    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined);
-  }, [form.area_id, form.district_id, form.ward, selectedDistrictId, selectedWardId, selectedTaxonomyGeo, loadingTaxonomyGeo, flyTo]);
+    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined, taxonomyScope);
+  }, [form.area_id, form.city, form.district, form.ward, selectedTaxonomyGeo, flyTo]);
 
   // Khi mở tin cũ, chỉ nâng cấp state từ text sang ID nếu có đúng một district
   // trong area hiện tại. Không tự chọn khi dữ liệu taxonomy thay đổi/không rõ ràng.

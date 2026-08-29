@@ -13,7 +13,7 @@ import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
 import { parseSeoSchema } from '../shared/SeoFields';
 import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { formToProperty } from '../../../lib/listingForm';
-import { LocationPicker, type GeocodeTarget } from '../../LocationPicker';
+import { LocationPicker, type GeocodeTarget, type TaxonomyScope } from '../../LocationPicker';
 import { PropertyDetailPage } from '../../../screens/PropertyDetailPage';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
@@ -522,7 +522,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const selectedDistrict = districts.find(d => d.id === form.district_id && d.area_id === form.area_id);
   const selectedWard = wards.find(w => w.name === form.ward);
   const taxonomyGeoIds = [form.area_id, selectedDistrict?.id, selectedWard?.id].filter((id): id is string => Boolean(id));
-  const { data: taxonomyGeo = [], isLoading: loadingTaxonomyGeo } = useTaxonomyGeo(taxonomyGeoIds);
+  const { data: taxonomyGeo = [] } = useTaxonomyGeo(taxonomyGeoIds);
   const selectedTaxonomyGeo = pickTaxonomyGeo(taxonomyGeo, {
     areaId: form.area_id,
     districtId: selectedDistrict?.id,
@@ -531,9 +531,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
   const addressEditedRef = useRef(false);
-  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson']) => {
+  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope) => {
     if (!query) return;
-    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, nonce: ++geocodeNonce.current });
+    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, nonce: ++geocodeNonce.current });
   }, []);
   const [showPreview, setShowPreview] = useState(false);
   const [descriptionMode, setDescriptionMode] = useState<'visual' | 'html'>('visual');
@@ -712,12 +712,18 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   }, [wards, property?.ward]);
 
   useEffect(() => {
-    if (!form.area_id || loadingTaxonomyGeo) return;
+    if (!form.area_id) return;
     const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
     if (!query) return;
+    const taxonomyScope: TaxonomyScope = {
+      level: form.ward ? 'ward' : form.district ? 'district' : 'area',
+      areaName: form.city,
+      districtName: form.district || undefined,
+      wardName: form.ward || undefined,
+    };
     const zoom = form.ward ? 14 : form.district ? 13 : 11;
-    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined);
-  }, [form.area_id, form.district_id, form.ward, selectedDistrict?.id, selectedWard?.id, selectedTaxonomyGeo, loadingTaxonomyGeo, flyTo]);
+    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined, taxonomyScope);
+  }, [form.area_id, form.city, form.district, form.ward, selectedTaxonomyGeo, flyTo]);
 
   const seoColor = seoScore >= 70 ? 'text-emerald-600' : seoScore >= 40 ? 'text-amber-600' : 'text-red-600';
   const seoBarColor = seoScore >= 70 ? 'bg-emerald-500' : seoScore >= 40 ? 'bg-amber-500' : 'bg-red-500';

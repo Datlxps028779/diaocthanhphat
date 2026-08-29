@@ -2,11 +2,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { isValidTaxonomyBounds, type TaxonomyBounds } from '../lib/taxonomyGeo';
 
+export type TaxonomyLevel = 'area' | 'district' | 'ward';
+
+export type TaxonomyScope = {
+  level: TaxonomyLevel;
+  areaName: string;
+  districtName?: string;
+  wardName?: string;
+};
+
 export interface GeocodeTarget {
   query: string;
   zoom: number;
   nonce: number;
   intent: 'taxonomy' | 'address';
+  taxonomyScope?: TaxonomyScope;
   bounds?: TaxonomyBounds;
   geojson?: Record<string, unknown>;
   taxonomyLabel?: string;
@@ -25,10 +35,16 @@ type MapStatus = 'idle' | 'searching' | 'candidate' | 'placed' | 'review' | 'mis
 type Candidate = { lat: number; lng: number; label: string };
 type GeocodeResult = { lat: number; lng: number; label: string };
 
-type NominatimSearchResult = { lat?: string; lon?: string; display_name?: string };
-type PhotonFeature = { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> };
+type NominatimSearchResult = {
+  lat?: string;
+  lon?: string;
+  display_name?: string;
+  address?: Record<string, string>;
+  boundingbox?: string[];
+};
+type PhotonFeature = { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown>; bbox?: number[] };
 type PhotonResponse = { features?: PhotonFeature[] };
-type ArcGisCandidate = { address?: string; score?: number; location?: { x?: number; y?: number } };
+type ArcGisCandidate = { address?: string; score?: number; location?: { x?: number; y?: number }; extent?: { xmin?: number; ymin?: number; xmax?: number; ymax?: number } };
 type ArcGisResponse = { candidates?: ArcGisCandidate[] };
 
 const PIN_SVG = `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#dc2626"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
@@ -67,34 +83,226 @@ async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   }
 }
 
+export type GeocoderCandidate = {
+  lat: number;
+  lng: number;
+  label: string;
+  score: number;
+  areaName?: string;
+  districtName?: string;
+  wardName?: string;
+  bounds?: TaxonomyBounds;
+};
+
 function photonLabel(properties: Record<string, unknown>): string {
   return [properties.housenumber, properties.street, properties.name, properties.locality, properties.district, properties.city, properties.state]
     .filter(value => typeof value === 'string' && value.trim())
     .join(', ');
 }
 
-function photonResult(feature: PhotonFeature | undefined): GeocodeResult | null {
+function parseBounds(values: unknown): TaxonomyBounds | undefined {
+  if (!Array.isArray(values) || values.length < 4) return undefined;
+  const numbers = values.map(value => Number(value));
+  const [south, north, west, east] = numbers;
+  const bounds = { south, west, north, east };
+  return isValidTaxonomyBounds(bounds) ? bounds : undefined;
+}
+
+function photonResult(feature: PhotonFeature | undefined): GeocoderCandidate | null {
   const coordinates = feature?.geometry?.coordinates;
   if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
   const lng = typeof coordinates[0] === 'number' ? coordinates[0] : Number(coordinates[0]);
   const lat = typeof coordinates[1] === 'number' ? coordinates[1] : Number(coordinates[1]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng, label: photonLabel(feature?.properties ?? {}) || 'Điểm tìm thấy gần đúng' };
+  const properties = feature?.properties ?? {};
+  const label = photonLabel(properties) || 'Điểm tìm thấy gần đúng';
+  return {
+    lat,
+    lng,
+    label,
+    score: 0,
+    areaName: typeof properties.state === 'string' ? properties.state : undefined,
+    districtName: typeof properties.district === 'string' ? properties.district : undefined,
+    wardName: typeof properties.name === 'string' ? properties.name : undefined,
+    bounds: parseBounds(feature?.bbox),
+  };
 }
 
-async function searchGeocode(query: string, intent: GeocodeTarget['intent']): Promise<GeocodeResult | null> {
-  if (intent === 'taxonomy') return null;
+function normalizeSearchPart(value: string): string {
+  let result = value.trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'đ');
+  result = result.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  result = result.replace(/đac lua/gu, 'đak lua');
+  const prefixes = /^(tinh|thanh pho|tp|huyen|quan|thi xa|thi tran|phuong|xa)\s+/u;
+  while (prefixes.test(result)) result = result.replace(prefixes, '').trim();
+  return result;
+}
+
+function normalizedPhrase(value: string): string[] {
+  return normalizeSearchPart(value).split(/\s+/).filter(Boolean);
+}
+
+function containsPlacePhrase(actual: string | undefined, expected: string | undefined): boolean {
+  if (!actual || !expected) return false;
+  const actualTokens = normalizedPhrase(actual);
+  const expectedTokens = normalizedPhrase(expected);
+  if (actualTokens.length === 0 || expectedTokens.length === 0 || actualTokens.length < expectedTokens.length) return false;
+  return actualTokens.some((_, start) => expectedTokens.every((token, index) => actualTokens[start + index] === token));
+}
+
+function samePlaceName(actual: string | undefined, expected: string | undefined): boolean {
+  if (!actual || !expected) return false;
+  const a = normalizedPhrase(actual);
+  const e = normalizedPhrase(expected);
+  return a.length === e.length && a.every((token, index) => token === e[index]);
+}
+
+function labelContainsPlace(label: string, expected: string | undefined): boolean {
+  return containsPlacePhrase(label, expected);
+}
+
+function pointInBounds(candidate: Pick<GeocoderCandidate, 'lat' | 'lng'>, bounds: TaxonomyBounds | undefined): boolean {
+  return Boolean(bounds && candidate.lat >= bounds.south && candidate.lat <= bounds.north && candidate.lng >= bounds.west && candidate.lng <= bounds.east);
+}
+
+export function taxonomyQueryVariants(scope: TaxonomyScope): string[] {
+  const selectedName = scope.level === 'ward' ? scope.wardName : scope.level === 'district' ? scope.districtName : scope.areaName;
+  if (!selectedName) return [];
+  const prefixes = scope.level === 'ward'
+    ? ['Phường', 'Xã', 'Thị trấn']
+    : scope.level === 'district'
+      ? ['Huyện', 'Quận', 'Thị xã', 'Thành phố']
+      : ['Tỉnh', 'Thành phố'];
+  const parent = [
+    scope.level === 'ward' ? scope.districtName : undefined,
+    scope.areaName,
+  ].filter(Boolean).join(', ');
+  return [...new Set([
+    ...prefixes.map(prefix => `${prefix} ${selectedName}${parent ? `, ${parent}` : ''}`),
+    `${selectedName}${parent ? `, ${parent}` : ''}`,
+  ])];
+}
+
+export function candidateMatchesTaxonomy(candidate: GeocoderCandidate, scope: TaxonomyScope, parentBounds?: TaxonomyBounds): boolean {
+  const selectedName = scope.level === 'ward' ? scope.wardName : scope.level === 'district' ? scope.districtName : scope.areaName;
+  const selectedMatches = samePlaceName(
+    scope.level === 'area' ? candidate.areaName : scope.level === 'district' ? candidate.districtName : candidate.wardName,
+    selectedName,
+  ) || labelContainsPlace(candidate.label, selectedName);
+  if (!selectedMatches) return false;
+
+  const areaMatches = samePlaceName(candidate.areaName, scope.areaName) || labelContainsPlace(candidate.label, scope.areaName);
+  if (candidate.areaName && !areaMatches) return false;
+  if (!candidate.areaName && !areaMatches && scope.level !== 'area' && !pointInBounds(candidate, parentBounds)) return false;
+
+  if (scope.level === 'ward' && scope.districtName) {
+    const districtMatches = samePlaceName(candidate.districtName, scope.districtName) || labelContainsPlace(candidate.label, scope.districtName);
+    if (candidate.districtName && !districtMatches) return false;
+    if (!candidate.districtName && !districtMatches && !pointInBounds(candidate, parentBounds)) return false;
+  }
+  return true;
+}
+
+function nominatimCandidate(result: NominatimSearchResult): GeocoderCandidate | null {
+  const lat = result.lat ? Number(result.lat) : NaN;
+  const lng = result.lon ? Number(result.lon) : NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const address = result.address ?? {};
+  return {
+    lat,
+    lng,
+    label: result.display_name || 'Điểm tìm thấy gần đúng',
+    score: 0,
+    areaName: address.state || address.province || address.city,
+    districtName: address.county || address.district || address.municipality,
+    wardName: address.suburb || address.village || address.town || address.city_district,
+    bounds: parseBounds(result.boundingbox),
+  };
+}
+
+function arcGisCandidate(candidate: ArcGisCandidate): GeocoderCandidate | null {
+  const lat = candidate.location?.y;
+  const lng = candidate.location?.x;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const extent = candidate.extent;
+  const bounds = extent
+    ? { south: extent.ymin ?? NaN, west: extent.xmin ?? NaN, north: extent.ymax ?? NaN, east: extent.xmax ?? NaN }
+    : undefined;
+  return {
+    lat: lat as number,
+    lng: lng as number,
+    label: candidate.address?.trim() || 'Điểm tìm thấy gần đúng',
+    score: Number.isFinite(candidate.score) ? candidate.score ?? 0 : 0,
+    bounds: bounds && isValidTaxonomyBounds(bounds) ? bounds : undefined,
+  };
+}
+
+async function searchTaxonomyGeocode(scope: TaxonomyScope, signal?: AbortSignal): Promise<GeocodeResult | null> {
+  const parentScope: TaxonomyScope | null = scope.level === 'ward' && scope.districtName
+    ? { level: 'district', areaName: scope.areaName, districtName: scope.districtName }
+    : scope.level === 'district'
+      ? { level: 'area', areaName: scope.areaName }
+      : null;
+  let parentBounds: TaxonomyBounds | undefined;
+  if (parentScope) {
+    const parentCandidates = await searchProviderCandidates(parentScope, undefined, signal);
+    const parent = parentCandidates
+      .filter(candidate => candidateMatchesTaxonomy(candidate, parentScope))
+      .sort((a, b) => b.score - a.score)[0];
+    parentBounds = parent?.bounds;
+  }
+  const candidates = await searchProviderCandidates(scope, parentBounds, signal);
+  const winner = candidates
+    .filter(candidate => candidateMatchesTaxonomy(candidate, scope, parentBounds))
+    .sort((a, b) => b.score - a.score)[0];
+  return winner ? { lat: winner.lat, lng: winner.lng, label: winner.label } : null;
+}
+
+async function searchProviderCandidates(scope: TaxonomyScope, parentBounds?: TaxonomyBounds, signal?: AbortSignal): Promise<GeocoderCandidate[]> {
+  const output: GeocoderCandidate[] = [];
+  for (const query of taxonomyQueryVariants(scope)) {
+    const nominatim = new URLSearchParams({
+      q: `${query}, Vietnam`, format: 'jsonv2', limit: '5', addressdetails: '1', countrycodes: 'vn', 'accept-language': 'vi',
+    });
+    if (parentBounds) {
+      nominatim.set('viewbox', `${parentBounds.west},${parentBounds.north},${parentBounds.east},${parentBounds.south}`);
+      nominatim.set('bounded', '1');
+    }
+    try {
+      const results = await fetchJson<NominatimSearchResult[]>(`https://nominatim.openstreetmap.org/search?${nominatim.toString()}`, signal);
+      output.push(...results.map(nominatimCandidate).filter((candidate): candidate is GeocoderCandidate => Boolean(candidate)).map(candidate => ({ ...candidate, score: candidate.score + 300 })));
+    } catch {
+      // Try the next provider.
+    }
+
+    const photon = new URLSearchParams({ q: `${query}, Vietnam`, limit: '5' });
+    if (parentBounds) photon.set('bbox', `${parentBounds.west},${parentBounds.south},${parentBounds.east},${parentBounds.north}`);
+    try {
+      const response = await fetchJson<PhotonResponse>(`https://photon.komoot.io/api/?${photon.toString()}`, signal);
+      output.push(...(response.features ?? []).map(photonResult).filter((candidate): candidate is GeocoderCandidate => Boolean(candidate)).map(candidate => ({ ...candidate, score: candidate.score + 200 })));
+    } catch {
+      // Try ArcGIS below.
+    }
+
+    const params = new URLSearchParams({ SingleLine: query, f: 'json', maxLocations: '10', countryCode: 'VNM' });
+    if (parentBounds) params.set('searchExtent', `${parentBounds.west},${parentBounds.south},${parentBounds.east},${parentBounds.north}`);
+    try {
+      const response = await fetchJson<ArcGisResponse>(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?${params.toString()}`, signal);
+      output.push(...(response.candidates ?? []).map(arcGisCandidate).filter((candidate): candidate is GeocoderCandidate => Boolean(candidate)));
+    } catch {
+      // Continue with the next query variant.
+    }
+  }
+  return output;
+}
+
+async function searchGeocode(query: string, intent: GeocodeTarget['intent'], scope?: TaxonomyScope, signal?: AbortSignal): Promise<GeocodeResult | null> {
+  if (intent === 'taxonomy') return scope ? searchTaxonomyGeocode(scope, signal) : null;
 
   const nominatim = new URLSearchParams({
-    q: `${query}, Vietnam`,
-    format: 'jsonv2',
-    limit: '1',
-    addressdetails: '1',
-    countrycodes: 'vn',
-    'accept-language': 'vi',
+    q: `${query}, Vietnam`, format: 'jsonv2', limit: '1', addressdetails: '1', countrycodes: 'vn', 'accept-language': 'vi',
   });
   try {
-    const results = await fetchJson<NominatimSearchResult[]>(`https://nominatim.openstreetmap.org/search?${nominatim.toString()}`);
+    const results = await fetchJson<NominatimSearchResult[]>(`https://nominatim.openstreetmap.org/search?${nominatim.toString()}`, signal);
     const result = results[0];
     const lat = result?.lat ? Number(result.lat) : NaN;
     const lng = result?.lon ? Number(result.lon) : NaN;
@@ -105,25 +313,20 @@ async function searchGeocode(query: string, intent: GeocodeTarget['intent']): Pr
 
   const photon = new URLSearchParams({ q: query, limit: '5' });
   try {
-    const response = await fetchJson<PhotonResponse>(`https://photon.komoot.io/api/?${photon.toString()}`);
+    const response = await fetchJson<PhotonResponse>(`https://photon.komoot.io/api/?${photon.toString()}`, signal);
     for (const feature of response.features ?? []) {
       const result = photonResult(feature);
-      if (result) return result;
+      if (result) return { lat: result.lat, lng: result.lng, label: result.label };
     }
   } catch {
     // Try ArcGIS as a final provider for address searches.
   }
-  return searchArcGis(query);
+  return searchArcGis(query, signal);
 }
 
 function photonReverseAddress(data: PhotonResponse): string {
   const properties = data.features?.[0]?.properties ?? {};
   return photonLabel(properties);
-}
-
-function normalizeSearchPart(value: string): string {
-  return value.trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
-    .replace(/^(tinh|thanh pho|tp\.?|huyen|quan|phuong|xa|thi tran)\s+/i, '');
 }
 
 export function canonicalGeocoderQuery(query: string): string {
@@ -162,7 +365,7 @@ export function pickArcGisCandidate(candidates: ArcGisCandidate[], query: string
   return { lat: lat as number, lng: lng as number, label: winner?.address || 'Điểm tìm thấy gần đúng' };
 }
 
-async function searchArcGis(query: string): Promise<GeocodeResult | null> {
+async function searchArcGis(query: string, signal?: AbortSignal): Promise<GeocodeResult | null> {
   const normalizedQuery = canonicalGeocoderQuery(query);
   const results = await Promise.all(geocoderQueryVariants(normalizedQuery).map(async variant => {
     const params = new URLSearchParams({
@@ -172,7 +375,7 @@ async function searchArcGis(query: string): Promise<GeocodeResult | null> {
       countryCode: 'VNM',
     });
     try {
-      const response = await fetchJson<ArcGisResponse>(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?${params.toString()}`);
+      const response = await fetchJson<ArcGisResponse>(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?${params.toString()}`, signal);
       return pickArcGisCandidate(response.candidates ?? [], normalizedQuery);
     } catch {
       return null;
@@ -328,14 +531,24 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
     if (!map || !mapReady || !geocodeTarget?.query || geocodeTarget.nonce === lastNonceRef.current) return;
     lastNonceRef.current = geocodeTarget.nonce;
     const searchRequestId = ++searchRequestIdRef.current;
+    const controller = new AbortController();
     let cancelled = false;
-    if (geocodeTarget.intent === 'taxonomy') {
+    removeCandidate();
+
+    const applyViewportResult = (result: GeocodeResult | null) => {
+      if (cancelled || controller.signal.aborted || searchRequestId !== searchRequestIdRef.current || !mapRef.current) return;
+      if (!result) {
+        setStatus('none');
+        return;
+      }
+      const zoom = Math.min(geocodeTarget.zoom, geocodeTarget.intent === 'address' ? 16 : 15);
+      mapRef.current.flyTo([result.lat, result.lng], zoom, { duration: 1.2 });
+      return result;
+    };
+
+    if (geocodeTarget.intent === 'taxonomy' && isValidTaxonomyBounds(geocodeTarget.bounds)) {
       geoLayerRef.current?.remove();
       geoLayerRef.current = null;
-      if (!isValidTaxonomyBounds(geocodeTarget.bounds)) {
-        setStatus('missing_geo');
-        return () => { cancelled = true; };
-      }
       map.fitBounds([[geocodeTarget.bounds.south, geocodeTarget.bounds.west], [geocodeTarget.bounds.north, geocodeTarget.bounds.east]], {
         padding: [24, 24],
         maxZoom: Math.min(geocodeTarget.zoom, 15),
@@ -344,47 +557,41 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       });
       if (geocodeTarget.geojson) {
         import('leaflet').then(module => {
-          if (cancelled || !mapRef.current) return;
+          if (cancelled || controller.signal.aborted || !mapRef.current) return;
           geoLayerRef.current = module.default.geoJSON(geocodeTarget.geojson as never, {
             style: { color: '#dc2626', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08 },
           }).addTo(mapRef.current);
         });
       }
       setStatus(markerRef.current ? 'review' : 'idle');
-      return () => { cancelled = true; };
+      return () => { cancelled = true; controller.abort(); };
     }
+
     setStatus('searching');
-    removeCandidate();
     const run = async () => {
       try {
-        const result = await searchGeocode(geocodeTarget.query, geocodeTarget.intent);
-        if (cancelled || searchRequestId !== searchRequestIdRef.current || !mapRef.current) return;
-        if (!result) {
-          setStatus('none');
+        const result = await searchGeocode(geocodeTarget.query, geocodeTarget.intent, geocodeTarget.taxonomyScope, controller.signal);
+        const applied = applyViewportResult(result);
+        if (!applied || geocodeTarget.intent !== 'address') {
+          if (applied && geocodeTarget.intent === 'taxonomy') setStatus(markerRef.current ? 'review' : 'idle');
           return;
         }
-        const zoom = Math.min(geocodeTarget.zoom, geocodeTarget.intent === 'address' ? 16 : 15);
-        mapRef.current.flyTo([result.lat, result.lng], zoom, { duration: 1.2 });
-        if (geocodeTarget.intent === 'address') {
-          const nextCandidate = { lat: result.lat, lng: result.lng, label: result.label };
-          setCandidate(nextCandidate);
-          const L = await import('leaflet').then(module => module.default);
-          if (cancelled || searchRequestId !== searchRequestIdRef.current || !mapRef.current || !candidateIconRef.current) return;
-          searchMarkerRef.current = L.marker([result.lat, result.lng], { icon: candidateIconRef.current, draggable: true }).addTo(mapRef.current);
-          searchMarkerRef.current.on('dragend', () => {
-            const position = searchMarkerRef.current!.getLatLng();
-            setCandidate(current => current ? { ...current, lat: position.lat, lng: position.lng } : current);
-          });
-          setStatus('candidate');
-        } else {
-          setStatus(markerRef.current ? 'review' : 'idle');
-        }
+        const nextCandidate = { lat: applied.lat, lng: applied.lng, label: applied.label };
+        setCandidate(nextCandidate);
+        const L = await import('leaflet').then(module => module.default);
+        if (cancelled || controller.signal.aborted || searchRequestId !== searchRequestIdRef.current || !mapRef.current || !candidateIconRef.current) return;
+        searchMarkerRef.current = L.marker([applied.lat, applied.lng], { icon: candidateIconRef.current, draggable: true }).addTo(mapRef.current);
+        searchMarkerRef.current.on('dragend', () => {
+          const position = searchMarkerRef.current!.getLatLng();
+          setCandidate(current => current ? { ...current, lat: position.lat, lng: position.lng } : current);
+        });
+        setStatus('candidate');
       } catch {
-        if (!cancelled) setStatus('error');
+        if (!cancelled && !controller.signal.aborted) setStatus('error');
       }
     };
     void run();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [geocodeTarget, mapReady]);
 
   const confirmCandidate = () => {
@@ -430,7 +637,7 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
         : status === 'review'
           ? 'Bạn vừa đổi khu vực hành chính. Hãy kiểm tra và kéo ghim đỏ về đúng vị trí trước khi lưu.'
           : status === 'missing_geo'
-        ? geocodeTarget?.taxonomyLabel || 'Chưa có ranh giới bản đồ chuẩn cho cấp đang chọn. Không tự đoán vị trí.'
+        ? 'Chưa có ranh giới nội bộ; đang thử định vị theo đúng chuỗi tỉnh, huyện, xã.'
         : status === 'none'
           ? 'Không tìm thấy địa chỉ. Hãy thử tên đường/phường ngắn hơn hoặc bấm trực tiếp lên bản đồ.'
           : status === 'error'

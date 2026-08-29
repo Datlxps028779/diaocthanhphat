@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { pickArcGisCandidate, canonicalGeocoderQuery, geocoderQueryVariants } from './LocationPicker';
+import {
+  candidateMatchesTaxonomy,
+  canonicalGeocoderQuery,
+  geocoderQueryVariants,
+  pickArcGisCandidate,
+  taxonomyQueryVariants,
+  type GeocoderCandidate,
+  type TaxonomyScope,
+} from './LocationPicker';
 
 describe('canonicalGeocoderQuery', () => {
   it('normalizes the seeded Đắc Lua spelling for providers', () => {
@@ -16,6 +24,49 @@ describe('canonicalGeocoderQuery', () => {
       'Thị trấn An Phú, Thuận An, Bình Dương',
       'An Phú, Thuận An, Bình Dương',
     ]);
+  });
+});
+
+describe('taxonomyQueryVariants', () => {
+  it('builds level-specific legacy hierarchy queries', () => {
+    const wardScope: TaxonomyScope = { level: 'ward', areaName: 'Bình Phước', districtName: 'Đồng Phú', wardName: 'Tân Phước' };
+    const districtScope: TaxonomyScope = { level: 'district', areaName: 'Đồng Nai', districtName: 'Tân Phú' };
+    expect(taxonomyQueryVariants(wardScope)).toContain('Xã Tân Phước, Đồng Phú, Bình Phước');
+    expect(taxonomyQueryVariants(districtScope)).toContain('Huyện Tân Phú, Đồng Nai');
+  });
+});
+
+describe('candidateMatchesTaxonomy', () => {
+  const candidate = (overrides: Partial<GeocoderCandidate>): GeocoderCandidate => ({
+    lat: 10.95,
+    lng: 106.74,
+    label: 'Điểm tìm thấy',
+    score: 80,
+    ...overrides,
+  });
+
+  it('accepts a child label with omitted parent only inside the resolved parent bounds', () => {
+    expect(candidateMatchesTaxonomy(candidate({ label: 'Phường An Phú, Bình Dương', lat: 10.94734, lng: 106.73683 }), {
+      level: 'ward', areaName: 'Bình Dương', districtName: 'Thuận An', wardName: 'An Phú',
+    }, { south: 10.9, west: 106.7, north: 11, east: 106.8 })).toBe(true);
+  });
+
+  it('rejects the same child name outside the selected parent bounds', () => {
+    expect(candidateMatchesTaxonomy(candidate({ label: 'Xã Tân Phước', lat: 10.3, lng: 105.6 }), {
+      level: 'ward', areaName: 'Bình Phước', districtName: 'Đồng Phú', wardName: 'Tân Phước',
+    }, { south: 11.4, west: 106.8, north: 11.7, east: 107.2 })).toBe(false);
+  });
+
+  it('accepts the Đak Lua provider spelling only within Tân Phú bounds', () => {
+    expect(candidateMatchesTaxonomy(candidate({ label: 'Đak Lua, Đồng Nai', lat: 11.537466, lng: 107.374648 }), {
+      level: 'ward', areaName: 'Đồng Nai', districtName: 'Tân Phú', wardName: 'Đắc Lua',
+    }, { south: 11.17, west: 107.17, north: 11.59, east: 107.55 })).toBe(true);
+  });
+
+  it('rejects an explicitly conflicting province or district', () => {
+    expect(candidateMatchesTaxonomy(candidate({ label: 'An Phú, Thủ Đức, Hồ Chí Minh', areaName: 'Hồ Chí Minh', districtName: 'Thủ Đức' }), {
+      level: 'ward', areaName: 'Bình Dương', districtName: 'Thuận An', wardName: 'An Phú',
+    }, { south: 10.9, west: 106.7, north: 11, east: 106.8 })).toBe(false);
   });
 });
 
