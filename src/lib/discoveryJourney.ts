@@ -6,7 +6,7 @@ export type DiscoveryModule =
   | 'explore_filters'
   | 'related_news';
 
-export type DiscoverySurface = 'home' | 'listings' | 'property_detail' | 'news';
+export type DiscoverySurface = 'home' | 'listings' | 'property_detail' | 'regions' | 'projects' | 'news';
 
 export type DiscoveryEventProps = {
   surface: DiscoverySurface;

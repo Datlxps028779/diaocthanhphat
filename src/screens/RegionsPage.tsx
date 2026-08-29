@@ -145,7 +145,7 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
         {/* Comparison table */}
         {!loading && areas.length > 0 && <ComparisonTable areas={areas} />}
 
-        <ForYou />
+        <ForYou surface="regions" source="regions_for_you" />
       </div>
 
       {/* CTA */}

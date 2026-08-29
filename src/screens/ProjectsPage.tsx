@@ -319,7 +319,7 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
             ))}
           </div>
         )}
-        <ForYou />
+        <ForYou surface="projects" source="projects_for_you" />
       </div>
 
       {/* CTA Banner */}

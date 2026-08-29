@@ -34,7 +34,12 @@ function topLabels(weights: Record<string, number>, labels: Record<string, strin
   return out;
 }
 
-const LISTING_LABELS: Record<string, string> = { mua_ban: 'mua bán', cho_thue: 'cho thuê' };
+const LISTING_LABELS: Record<string, string> = {
+  mua_ban: 'mua bán',
+  cho_thue: 'cho thuê',
+  can_mua: 'cần mua',
+  can_thue: 'cần thuê',
+};
 
 // Suy digest ẩn danh từ hồ sơ: 3 khu vực + 3 loại ưa thích nhất (map id→tên, bỏ id
 // không có nhãn) và hình thức. Giá tạm loại khỏi profile đến khi được chuẩn hóa.

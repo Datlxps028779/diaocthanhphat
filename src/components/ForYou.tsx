@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAllProperties } from '../lib/api';
 import { useAreas, usePropertyTypes } from '../lib/hooks/useTaxonomy';
@@ -17,25 +17,46 @@ import type { DiscoverySurface } from '../lib/discoveryJourney';
 export function ForYou({
   excludeId,
   title = 'Gợi ý dành cho bạn',
-  surface = 'property_detail',
-  source = 'for_you',
+  surface,
+  source,
 }: {
   excludeId?: string;
   title?: string;
-  surface?: DiscoverySurface;
+  surface: DiscoverySurface;
   source?: string;
 }) {
   const { profile, ready } = useTasteProfile();
+  const gateRef = useRef<HTMLDivElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
 
   const enough = ready && hasEnoughSignal(profile);
-  const { data: areas = [] } = useAreas();
-  const { data: types = [] } = usePropertyTypes();
+  const areasQuery = useAreas();
+  const typesQuery = usePropertyTypes();
+  const areas = areasQuery.data ?? [];
+  const types = typesQuery.data ?? [];
+  const taxonomyReady = areasQuery.isSuccess && typesQuery.isSuccess;
 
-  // Pool ứng viên: BĐS active mới nhất. Chỉ fetch khi đã đủ tín hiệu để gợi ý.
+  useEffect(() => {
+    if (!enough || nearViewport) return;
+    const node = gateRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      setNearViewport(true);
+      observer.disconnect();
+    }, { rootMargin: '600px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [enough, nearViewport]);
+
+  // Pool ứng viên: BĐS active mới nhất. Chỉ fetch khi đã đủ tín hiệu và rail sắp vào viewport.
   const { data: pool } = useQuery({
     queryKey: ['forYouPool'],
     queryFn: () => getAllProperties({ sort: 'newest', limit: 60 }),
-    enabled: enough,
+    enabled: enough && nearViewport,
   });
 
   // Bước 1 (deterministic, tức thì): lọc pool 60 → top ~12 ứng viên liên quan nhất.
@@ -60,6 +81,7 @@ export function ForYou({
   );
   const candidates = useMemo<RecoCandidate[]>(() => shortlist.map(p => ({
     id: p.id,
+    revision: p.updated_at,
     title: p.title,
     area: p.area_id ? areaNameById[p.area_id] ?? null : null,
     type: p.property_type_id ? typeNameById[p.property_type_id] ?? null : null,
@@ -69,7 +91,7 @@ export function ForYou({
 
   // Khóa cache ổn định: digest + đúng tập id ứng viên.
   const digestKey = useMemo(
-    () => JSON.stringify({ d: digest, ids: candidates.map(c => c.id) }),
+    () => JSON.stringify({ d: digest, candidates: [...candidates].sort((a, b) => a.id.localeCompare(b.id)) }),
     [digest, candidates],
   );
 
@@ -77,7 +99,7 @@ export function ForYou({
   const { data: aiRanked } = useQuery({
     queryKey: ['aiReco', digestKey],
     queryFn: () => fetchAiRanking(digest, candidates),
-    enabled: enough && candidates.length > 0,
+    enabled: enough && nearViewport && taxonomyReady && candidates.length > 0,
     staleTime: 30 * 60 * 1000,
     retry: false,
   });
@@ -94,7 +116,14 @@ export function ForYou({
     return pick([...ordered, ...shortlist.filter(p => !used.has(p.id))]);
   }, [aiRanked, shortlist]);
 
-  if (!enough || recs.length === 0) return null;
+  const safeReasons = useMemo(
+    () => new Map((aiRanked ?? []).filter(item => item.reason).map(item => [item.id, item.reason])),
+    [aiRanked],
+  );
+
+  if (!enough) return null;
+  if (!nearViewport) return <div ref={gateRef} className="h-px" aria-hidden="true" />;
+  if (recs.length === 0) return null;
 
   // Nhãn "vì bạn quan tâm X" từ khu vực/loại có trọng số cao nhất.
   const topArea = topKey(profile.areaWeights);
@@ -110,7 +139,8 @@ export function ForYou({
       properties={recs}
       surface={surface}
       module="for_you"
-      source={source}
+      source={source ?? `${surface}_for_you`}
+      itemNote={property => safeReasons.get(property.id)}
     />
   );
 }

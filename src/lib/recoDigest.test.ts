@@ -33,10 +33,16 @@ describe('buildProfileDigest', () => {
     expect(d.areas).toEqual(['D', 'C', 'B']); // top 3, bỏ a1
   });
 
-  it('map hình thức sang nhãn tiếng Việt', () => {
-    const profile: TasteProfile = { ...base, listingTypeWeights: { mua_ban: 3, cho_thue: 1 } };
+  it('map đủ bốn hình thức sang nhãn tiếng Việt', () => {
+    const profile: TasteProfile = {
+      ...base,
+      listingTypeWeights: { mua_ban: 4, cho_thue: 3, can_mua: 2, can_thue: 1 },
+    };
     const d = buildProfileDigest(profile);
     expect(d.listingTypes).toEqual(['mua bán', 'cho thuê']);
+
+    const demandProfile: TasteProfile = { ...base, listingTypeWeights: { can_thue: 3, can_mua: 2 } };
+    expect(buildProfileDigest(demandProfile).listingTypes).toEqual(['cần thuê', 'cần mua']);
   });
 
   it('bỏ trọng số 0 và âm', () => {
