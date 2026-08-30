@@ -34,6 +34,12 @@ export function isValidTaxonomyBounds(bounds: TaxonomyBounds | null | undefined)
     && bounds.west >= -180 && bounds.east <= 180;
 }
 
+export function isValidTaxonomyCenter(geo: Pick<TaxonomyGeo, 'center_lat' | 'center_lng'> | null | undefined): boolean {
+  return Boolean(geo && Number.isFinite(geo.center_lat) && Number.isFinite(geo.center_lng)
+    && (geo.center_lat as number) >= -90 && (geo.center_lat as number) <= 90
+    && (geo.center_lng as number) >= -180 && (geo.center_lng as number) <= 180);
+}
+
 export function pickTaxonomyGeo(geo: TaxonomyGeo[], selection: TaxonomySelection): TaxonomyGeo | null {
   const candidates: Array<[TaxonomyGeoLevel, string | undefined]> = [
     ['ward', selection.wardId],
@@ -42,7 +48,7 @@ export function pickTaxonomyGeo(geo: TaxonomyGeo[], selection: TaxonomySelection
   ];
   for (const [level, id] of candidates) {
     if (!id) continue;
-    const match = geo.find(item => item.entity_type === level && item.entity_id === id && isValidTaxonomyBounds(item.bounds));
+    const match = geo.find(item => item.entity_type === level && item.entity_id === id && (isValidTaxonomyBounds(item.bounds) || isValidTaxonomyCenter(item)));
     if (match) return match;
   }
   return null;
@@ -50,9 +56,13 @@ export function pickTaxonomyGeo(geo: TaxonomyGeo[], selection: TaxonomySelection
 
 export function taxonomyGeoLabel(geo: TaxonomyGeo | null): string {
   if (!geo) return 'Chưa có ranh giới bản đồ chuẩn cho khu vực này.';
-  return geo.entity_type === 'ward'
-    ? 'Bản đồ đang hiển thị đúng khu vực xã/phường đã chọn.'
-    : geo.entity_type === 'district'
-      ? 'Chưa có geometry cấp xã; đang hiển thị đúng địa giới huyện/quận.'
-      : 'Chưa có geometry cấp huyện/xã; đang hiển thị đúng địa giới tỉnh/thành.';
+  if (isValidTaxonomyBounds(geo.bounds)) {
+    return geo.entity_type === 'ward'
+      ? 'Bản đồ đang hiển thị đúng khu vực xã/phường đã chọn.'
+      : geo.entity_type === 'district'
+        ? 'Chưa có geometry cấp xã; đang hiển thị đúng địa giới huyện/quận.'
+        : 'Chưa có geometry cấp huyện/xã; đang hiển thị đúng địa giới tỉnh/thành.';
+  }
+  const levelLabel = geo.entity_type === 'ward' ? 'xã/phường' : geo.entity_type === 'district' ? 'huyện/quận' : 'tỉnh/thành';
+  return `Đã định tâm theo ${levelLabel} nội bộ; chưa có ranh giới bản đồ công bố.`;
 }

@@ -28,8 +28,10 @@ import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill'
 import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/listingPrice';
 import { PriceField } from '../components/PriceField';
 import { coordinatePairFromUnknown, validateCoordinatePair } from '../lib/locationCoordinates';
-import { pickTaxonomyGeo, taxonomyGeoLabel } from '../lib/taxonomyGeo';
+import { pickTaxonomyGeo, taxonomyGeoLabel, isValidTaxonomyCenter } from '../lib/taxonomyGeo';
 import { normalizeListingTitle } from '../lib/listingTitle';
+import { validateListingForm, parseOptionalPositiveDecimal, parseOptionalNonNegativeInteger, plainTextDescription, DESCRIPTION_MIN, LISTING_TITLE_MAX, countListingImages } from '../lib/listingValidation';
+import { clearListingDraft, hasListingDraftContent, readListingDraft, writeListingDraft, type ListingDraft } from '../lib/listingDraft';
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
@@ -80,13 +82,15 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
   const geocodeNonce = useRef(0);
   const addressEditedRef = useRef(false);
-  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope) => {
+  const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope, center?: GeocodeTarget['center']) => {
     if (!query) return;
-    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, nonce: ++geocodeNonce.current });
+    setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, center, nonce: ++geocodeNonce.current });
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
   const [titleCorrection, setTitleCorrection] = useState('');
+  const [draftCandidate, setDraftCandidate] = useState<ListingDraft<Record<string, unknown>> | null>(null);
+  const draftReadyRef = useRef(false);
 
   const [form, setForm] = useState({
     listing_type: 'mua_ban' as ListingType,
@@ -154,7 +158,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       wardName: form.ward || undefined,
     };
     const zoom = form.ward ? 14 : form.district ? 13 : 11;
-    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined, taxonomyScope);
+    flyTo(query, zoom, 'taxonomy', selectedTaxonomyGeo?.bounds, taxonomyGeoLabel(selectedTaxonomyGeo), selectedTaxonomyGeo?.geojson ?? undefined, taxonomyScope, selectedTaxonomyGeo && isValidTaxonomyCenter(selectedTaxonomyGeo) ? { lat: selectedTaxonomyGeo.center_lat as number, lng: selectedTaxonomyGeo.center_lng as number } : undefined);
   }, [form.area_id, form.city, form.district, form.ward, selectedTaxonomyGeo, flyTo]);
 
   // Khi mở tin cũ, chỉ nâng cấp state từ text sang ID nếu có đúng một district
@@ -208,45 +212,84 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         if (!alive) return;
         if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
         setForm(listingToFormState(listing));
+        addressEditedRef.current = Boolean(listing.address?.trim());
       })
       .catch(() => { if (alive) setLoadError('Không tải được tin đăng để sửa.'); })
       .finally(() => { if (alive) setLoadingEdit(false); });
     return () => { alive = false; };
   }, [editId]);
 
-  // districts tự fetch/cache qua useDistricts(form.area_id); ở đây chỉ cập nhật
-  // form + reset district đã chọn + đồng bộ map search.
+  useEffect(() => {
+    if (authLoading || !user || (editId && loadingEdit)) return;
+    const draft = readListingDraft<Record<string, unknown>>(user.id, editId);
+    draftReadyRef.current = true;
+    if (draft && hasListingDraftContent(draft.form)) setDraftCandidate(draft);
+  }, [authLoading, user, editId, loadingEdit]);
+
+  useEffect(() => {
+    if (!draftReadyRef.current || !user || !hasListingDraftContent(form)) return;
+    const timer = window.setTimeout(() => writeListingDraft(user.id, editId, form, step), 800);
+    return () => window.clearTimeout(timer);
+  }, [form, step, user, editId]);
+
+  const restoreDraft = () => {
+    if (!draftCandidate) return;
+    setForm(draftCandidate.form as typeof form);
+    addressEditedRef.current = Boolean(String(draftCandidate.form.address ?? '').trim());
+    setStep(Math.min(Math.max(draftCandidate.step, 0), STEPS.length - 1));
+    setDraftCandidate(null);
+  };
+
+  const discardDraft = () => {
+    if (user) clearListingDraft(user.id, editId);
+    setDraftCandidate(null);
+  };
+
   const setArea = useCallback((areaId: string, _areaName: string) => {
-    setForm(f => applyAreaSelection(f, areaId, _areaName));
+    setForm(f => ({ ...applyAreaSelection(f, areaId, _areaName), latitude: '', longitude: '' }));
     setErrors(current => ({ ...current, district_id: '', latitude: '', longitude: '' }));
   }, []);
 
   const setDistrict = useCallback((districtId: string) => {
     const district = districts.find(d => d.id === districtId) ?? null;
-    setForm(f => applyDistrictSelection(f, district));
-    setErrors(current => ({ ...current, district_id: '' }));
+    setForm(f => ({ ...applyDistrictSelection(f, district), latitude: '', longitude: '' }));
+    setErrors(current => ({ ...current, district_id: '', latitude: '', longitude: '' }));
   }, [districts]);
 
   const setDistrictText = useCallback((district: string) => {
-    setForm(f => applyDistrictSelection(f, null, district));
+    setForm(f => ({ ...applyDistrictSelection(f, null, district), latitude: '', longitude: '' }));
+    setErrors(current => ({ ...current, latitude: '', longitude: '' }));
   }, []);
 
-  // Chọn xã → zoom sát tới cấp phường/xã (trước đây bản đồ đứng yên). Reset khu dân cư.
+  // Chọn xã → reset ghim cũ vì ghim thuộc taxonomy trước đó.
   const setWard = useCallback((ward: string) => {
-    setForm(f => ({ ...f, ward, neighborhood_slug: '' }));
+    setForm(f => ({ ...f, ward, neighborhood_slug: '', latitude: '', longitude: '' }));
+    setErrors(current => ({ ...current, latitude: '', longitude: '' }));
   }, []);
 
   const setCoords = useCallback((lat: string, lng: string) => {
-    addressEditedRef.current = false;
     setForm(f => ({ ...f, latitude: lat, longitude: lng }));
   }, []);
 
   const setListingType = (lt: ListingType) => {
+    if (lt === form.listing_type) return;
+    const hasIncompatiblePrice = Boolean(form.price.trim() || form.price_per_month.trim() || form.loan_support.trim());
+    if (hasIncompatiblePrice && typeof window !== 'undefined' && !window.confirm('Đổi loại tin sẽ xóa giá và khoản vay đang nhập để tránh gửi nhầm dữ liệu. Bạn có muốn tiếp tục không?')) return;
     setForm(f => ({
       ...f,
       listing_type: lt,
+      price: '',
+      price_per_month: '',
+      loan_support: '',
       price_unit: isRental(lt) ? 'triệu/tháng' : 'tỷ',
     }));
+    setErrors(current => {
+      const next = { ...current };
+      delete next.price;
+      delete next.price_per_month;
+      delete next.loan_support;
+      return next;
+    });
   };
 
   const toggleAmenity = (a: string) => {
@@ -266,51 +309,35 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     return { ...f, faq: [...f.faq, ...generated.filter(g => !existing.has(g.question.trim()))] };
   });
 
-  // Giá dùng chuỗi đã nhóm dấu phẩy trên UI; parse tập trung để không gửi 1,500
-  // thành 1 hoặc NaN xuống DB. Các field số kỹ thuật khác vẫn dùng Number chuẩn.
-  const isPositivePrice = (raw: string) => parsePriceInput(raw) !== null;
-  const isPositiveNumber = (raw: string) => {
-    const n = parseFloat(raw);
-    return Number.isFinite(n) && n > 0;
-  };
-
   const validateLocation = () => {
     const nextErrors: Record<string, string> = {};
     const coordinates = validateCoordinatePair(form.latitude, form.longitude);
-    if (!coordinates.valid) {
-      nextErrors.latitude = coordinates.message;
-      nextErrors.longitude = coordinates.message;
-    }
+    if (!coordinates.valid) Object.assign(nextErrors, coordinates.fieldErrors ?? { latitude: coordinates.message, longitude: coordinates.message });
     if (form.district_id && !selectedDistrictById) {
       nextErrors.district_id = 'Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại.';
     }
     return nextErrors;
   };
 
+  const validateCurrentStep = (targetStep = step) => {
+    const all = validateListingForm(form, { includeQualityGate: true });
+    const keysByStep: Record<number, string[]> = {
+      0: ['title', 'property_type_id', 'price', 'price_per_month', 'loan_support'],
+      1: ['city', 'area_sqm', 'bedrooms', 'bathrooms', 'latitude', 'longitude', 'district_id'],
+      2: ['images', 'description'],
+      3: ['contact_name', 'contact_phone'],
+    };
+    const errorsForStep: Record<string, string> = {};
+    for (const key of keysByStep[targetStep] ?? []) if (all[key]) errorsForStep[key] = all[key];
+    if (targetStep === 3 && form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
+      errorsForStep.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
+    }
+    if (targetStep === 1) Object.assign(errorsForStep, validateLocation());
+    return errorsForStep;
+  };
+
   const validateStep = () => {
-    const errs: Record<string, string> = {};
-    if (step === 0) {
-      if (!form.title.trim()) errs.title = 'Vui lòng nhập tiêu đề';
-      if (!form.property_type_id) errs.property_type_id = 'Vui lòng chọn loại BĐS';
-      if (isRental(form.listing_type)) {
-        if (!isPositivePrice(form.price_per_month)) errs.price_per_month = 'Vui lòng nhập giá thuê hợp lệ (số lớn hơn 0)';
-      } else {
-        if (!isPositivePrice(form.price)) errs.price = 'Vui lòng nhập giá hợp lệ (số lớn hơn 0)';
-        const loan = parsePriceInput(form.loan_support);
-        const price = parsePriceInput(form.price);
-        if (loan !== null && (!price || loan >= price)) errs.loan_support = 'Khoản vay phải nhỏ hơn giá bán.';
-      }
-    }
-    if (step === 1) {
-      if (!form.city.trim()) errs.city = 'Vui lòng nhập tỉnh/thành phố';
-      if (form.area_sqm.trim() && !isPositiveNumber(form.area_sqm)) errs.area_sqm = 'Diện tích phải là số lớn hơn 0';
-      Object.assign(errs, validateLocation());
-    }
-    if (step === 3) {
-      if (!form.contact_name.trim()) errs.contact_name = 'Vui lòng nhập họ tên';
-      if (!form.contact_phone.trim()) errs.contact_phone = 'Vui lòng nhập số điện thoại';
-      else if (!isValidVnPhone(form.contact_phone)) errs.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
-    }
+    const errs = validateCurrentStep();
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -339,7 +366,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         price_label: specForm.price_label || null,
         price_per_month: parsePriceInput(specForm.price_per_month),
         loan_support: parsePriceInput(specForm.loan_support),
-        area_sqm: specForm.area_sqm ? parseFloat(specForm.area_sqm) : null,
+        area_sqm: specForm.area_sqm ? parseOptionalPositiveDecimal(specForm.area_sqm) : null,
         address: specForm.address || null,
         city: specForm.city,
         district: specForm.district || null,
@@ -356,8 +383,8 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         focus_keywords: specForm.focus_keywords || null,
         schema_markup: parseSchema(specForm.schema_markup),
         legal_status: specForm.legal_status || null,
-        bedrooms: specForm.bedrooms ? parseInt(specForm.bedrooms) : null,
-        bathrooms: specForm.bathrooms ? parseInt(specForm.bathrooms) : null,
+        bedrooms: specForm.bedrooms ? parseOptionalNonNegativeInteger(specForm.bedrooms) : null,
+        bathrooms: specForm.bathrooms ? parseOptionalNonNegativeInteger(specForm.bathrooms) : null,
         direction: specForm.direction || null,
         contact_name: specForm.contact_name,
         contact_phone: specForm.contact_phone,
@@ -380,6 +407,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       else await submitUserListing(payload);
     },
     onSuccess: () => {
+      if (user) clearListingDraft(user.id, editId);
       if (adminMode) onAdminSaved?.();
       else setSubmitted(true);
     },
@@ -388,13 +416,23 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const submitting = submitMutation.isPending;
 
   const handleSubmit = () => {
-    const locationErrors = validateLocation();
-    if (Object.keys(locationErrors).length > 0) {
-      setErrors(current => ({ ...current, ...locationErrors }));
-      setStep(1);
+    const allErrors = validateListingForm(form, { includeQualityGate: true });
+    if (form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
+      allErrors.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
+    }
+    Object.assign(allErrors, validateLocation());
+    if (Object.keys(allErrors).length > 0) {
+      setErrors(allErrors);
+      const firstField = Object.keys(allErrors)[0];
+      const firstStep = firstField === 'title' || firstField === 'property_type_id' || firstField === 'price' || firstField === 'price_per_month' || firstField === 'loan_support'
+        ? 0
+        : firstField === 'city' || firstField === 'area_sqm' || firstField === 'bedrooms' || firstField === 'bathrooms' || firstField === 'latitude' || firstField === 'longitude' || firstField === 'district_id'
+          ? 1
+          : firstField === 'images' || firstField === 'description' ? 2 : 3;
+      setStep(firstStep);
+      window.setTimeout(() => document.getElementById(firstField)?.focus(), 0);
       return;
     }
-    if (!validateStep()) return;
     submitMutation.mutate();
   };
 
@@ -515,6 +553,15 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6">
+        {draftCandidate && (
+          <div role="status" className="mb-4 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+            <span>Có bản nháp được lưu từ {new Date(draftCandidate.savedAt).toLocaleString('vi-VN')}. Bạn có muốn khôi phục không?</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={restoreDraft} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">Khôi phục</button>
+              <button type="button" onClick={discardDraft} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700">Bỏ bản nháp</button>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
 
           {/* Step 0: Listing type, basic info, price */}
@@ -561,15 +608,19 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 </FormField>
               </div>
 
-              <FormField label="Tiêu đề tin đăng *" error={errors.title}>
-                <input value={form.title} onChange={e => { set('title', e.target.value); setTitleCorrection(''); }}
+              <FormField label="Tiêu đề tin đăng *" error={errors.title} id="title">
+                <input id="title" value={form.title} onChange={e => { set('title', e.target.value); setTitleCorrection(''); }}
                   onBlur={normalizeTitleInput}
                   spellCheck
                   autoCapitalize="sentences"
+                  maxLength={LISTING_TITLE_MAX}
+                  aria-invalid={Boolean(errors.title)}
+                  aria-describedby={errors.title ? 'title-error' : undefined}
                   placeholder={isRental(form.listing_type)
                     ? 'VD: Cho thuê nhà nguyên căn 3PN tại Dĩ An, 8 triệu/tháng'
                     : 'VD: Bán đất nền khu dân cư Hiệp Thành 3, Thủ Dầu Một, 120m²'}
                   className={inputCls(errors.title)} />
+                <p className="mt-1 text-right text-[11px] text-gray-400">{[...form.title].length}/{LISTING_TITLE_MAX}</p>
                 {titleCorrection && <p role="status" aria-live="polite" className="mt-1.5 text-xs font-medium text-emerald-600">{titleCorrection}</p>}
               </FormField>
 
@@ -670,7 +721,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   <input value={form.address} onChange={e => { addressEditedRef.current = true; set('address', e.target.value); }}
                     placeholder="Số nhà, tên đường..." className={`flex-1 ${inputCls()}`} />
                   <button type="button"
-                    onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address')}
+                    onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address', undefined, undefined, undefined, {
+                      level: form.ward ? 'ward' : form.district ? 'district' : 'area',
+                      areaName: form.city,
+                      districtName: form.district || undefined,
+                      wardName: form.ward || undefined,
+                    })}
                     disabled={!form.address.trim()}
                     className="flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:py-0">
                     <Search className="w-4 h-4" />Tìm trên bản đồ
@@ -700,23 +756,26 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
                 <summary className="cursor-pointer text-xs font-semibold text-gray-600">Tùy chọn nâng cao: nhập tọa độ thủ công</summary>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <FormField label="Vĩ độ (Latitude)">
-                    <input type="number" step="any" value={form.latitude} onChange={e => set('latitude', e.target.value)}
+                  <FormField label="Vĩ độ (Latitude)" id="latitude">
+                    <input id="latitude" type="number" step="any" value={form.latitude} onChange={e => set('latitude', e.target.value)}
+                      aria-invalid={Boolean(errors.latitude)} aria-describedby={errors.latitude ? 'latitude-error' : undefined}
                       placeholder="Tự động từ bản đồ" className={inputCls(errors.latitude)} />
-                    {errors.latitude && <p className="mt-1 text-xs text-red-600">{errors.latitude}</p>}
+                    {errors.latitude && <p id="latitude-error" className="mt-1 text-xs text-red-600">{errors.latitude}</p>}
                   </FormField>
-                  <FormField label="Kinh độ (Longitude)">
-                    <input type="number" step="any" value={form.longitude} onChange={e => set('longitude', e.target.value)}
+                  <FormField label="Kinh độ (Longitude)" id="longitude">
+                    <input id="longitude" type="number" step="any" value={form.longitude} onChange={e => set('longitude', e.target.value)}
+                      aria-invalid={Boolean(errors.longitude)} aria-describedby={errors.longitude ? 'longitude-error' : undefined}
                       placeholder="Tự động từ bản đồ" className={inputCls(errors.longitude)} />
-                    {errors.longitude && <p className="mt-1 text-xs text-red-600">{errors.longitude}</p>}
+                    {errors.longitude && <p id="longitude-error" className="mt-1 text-xs text-red-600">{errors.longitude}</p>}
                   </FormField>
                 </div>
               </details>
               <div className="grid sm:grid-cols-3 gap-4">
                 {(['area_sqm', 'bedrooms', 'bathrooms'] as const).filter(field => showSpec(field)).map(field => (
-                  <FormField key={field} label={SPEC_LABELS[field]}>
-                    <input type="number" value={String(form[field] ?? '')} onChange={e => set(field, e.target.value)}
-                      placeholder={SPEC_PLACEHOLDERS[field]} className={inputCls()} />
+                  <FormField key={field} label={SPEC_LABELS[field]} error={errors[field]} id={field}>
+                    <input id={field} type="number" min={field === 'area_sqm' ? '0.01' : '0'} step={field === 'area_sqm' ? 'any' : '1'} value={String(form[field] ?? '')} onChange={e => set(field, e.target.value)}
+                      aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `${field}-error` : undefined}
+                      placeholder={SPEC_PLACEHOLDERS[field]} className={inputCls(errors[field])} />
                   </FormField>
                 ))}
               </div>
@@ -742,7 +801,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">
-                  Ảnh bất động sản <span className="font-normal text-gray-400">(tối đa 10 ảnh)</span>
+                  Ảnh bất động sản <span className="font-normal text-gray-400">({countListingImages(form)}/10 ảnh · bắt buộc ít nhất 1)</span>
                 </label>
                 <ImageUpload
                   images={form.images}
@@ -751,6 +810,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   folder={adminMode && editId ? `listing-review/${editId}` : 'user-listings'}
                   isAdmin={adminMode}
                 />
+                {errors.images && <p role="alert" className="mt-1 text-xs font-medium text-red-600">{errors.images}</p>}
               </div>
 
               {form.images.length === 0 && (
@@ -789,11 +849,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 <p className="text-gray-400 text-xs mt-1">Không bắt buộc. Hỗ trợ YouTube và link MP4 trực tiếp.</p>
               </FormField>
 
-              <FormField label="Mô tả chi tiết">
+              <FormField label="Mô tả chi tiết" error={errors.description} id="description">
                 <RichTextEditor value={form.description} onChange={html => set('description', html)} enableImage={false}
                   placeholder={isRental(form.listing_type)
                     ? 'Mô tả vị trí, nội thất, tiện ích xung quanh, yêu cầu thuê. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'
                     : 'Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'} />
+                <p className={`mt-1 text-xs ${errors.description ? 'text-red-600' : 'text-gray-400'}`}>Nội dung: {plainTextDescription(form.description).length}/{DESCRIPTION_MIN} ký tự tối thiểu</p>
               </FormField>
 
               {/* FAQ nhập tay — hiển thị cuối trang chi tiết + sinh schema FAQPage */}
@@ -856,14 +917,16 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 </p>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Họ và tên *" error={errors.contact_name}>
-                  <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)}
-                    placeholder="Nguyễn Văn A" className={inputCls(errors.contact_name)} />
-                </FormField>
-                <FormField label="Số điện thoại *" error={errors.contact_phone}>
-                  <input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)}
-                    placeholder="0901 234 567" className={inputCls(errors.contact_phone)} />
-                </FormField>
+                  <FormField label="Họ và tên *" error={errors.contact_name} id="contact_name">
+                    <input id="contact_name" value={form.contact_name} onChange={e => set('contact_name', e.target.value)}
+                      aria-invalid={Boolean(errors.contact_name)} aria-describedby={errors.contact_name ? 'contact_name-error' : undefined}
+                      placeholder="Nguyễn Văn A" className={inputCls(errors.contact_name)} />
+                  </FormField>
+                  <FormField label="Số điện thoại *" error={errors.contact_phone} id="contact_phone">
+                    <input id="contact_phone" type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)}
+                      aria-invalid={Boolean(errors.contact_phone)} aria-describedby={errors.contact_phone ? 'contact_phone-error' : undefined}
+                      placeholder="0901 234 567" className={inputCls(errors.contact_phone)} />
+                  </FormField>
               </div>
 
               {/* Review summary */}
@@ -913,7 +976,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 <input
                   value={seo.metaTitle}
                   onChange={e => seo.setMetaTitle(e.target.value)}
-                  maxLength={70}
+                  maxLength={60}
                   placeholder="Tự động lấy từ tiêu đề tin..."
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                 />
@@ -923,7 +986,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 <textarea
                   value={seo.metaDescription}
                   onChange={e => seo.setMetaDescription(e.target.value)}
-                  maxLength={170}
+                  maxLength={155}
                   rows={3}
                   placeholder="Tự động lấy từ mô tả..."
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
@@ -986,6 +1049,16 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
             </div>
           )}
 
+          {Object.keys(errors).some(key => key !== 'submit') && (
+            <div role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p className="font-bold">Vui lòng kiểm tra {Object.keys(errors).filter(key => key !== 'submit').length} mục trước khi tiếp tục.</p>
+              <button type="button" className="mt-1 text-xs font-semibold underline" onClick={() => {
+                const first = Object.keys(errors).find(key => key !== 'submit');
+                if (first) document.getElementById(first)?.focus();
+              }}>Đi tới trường lỗi đầu tiên</button>
+            </div>
+          )}
+
           {/* Lỗi khi gửi tin — đặt ngoài các step để luôn hiển thị cạnh nút submit */}
           {errors.submit && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5 mt-6">
@@ -1024,12 +1097,13 @@ function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string })
     </div>
   );
 }
-function FormField({ label, error, children, className = '' }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
+function FormField({ label, error, children, className = '', id }: { label: string; error?: string; children: React.ReactNode; className?: string; id?: string }) {
+  const errorId = id ? `${id}-error` : undefined;
   return (
     <div className={className}>
-      <label className="block text-xs font-semibold text-gray-700 mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-xs font-semibold text-gray-700 mb-1.5">{label}</label>
       {children}
-      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+      {error && <p id={errorId} role="alert" className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
 }

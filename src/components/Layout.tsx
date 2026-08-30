@@ -30,9 +30,11 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const [logoError, setLogoError] = useState(false);
   const nav = useContent('navbar');
   const menu = useMenu();
-  const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
-  const siteSub = useSetting('site_logo_sub', 'Bất Động Sản Uy Tín');
+  const siteName = useSetting('site_logo_text', 'Chợ Nhà Việt');
+  const siteSub = useSetting('site_logo_sub', 'Nền tảng bất động sản uy tín');
   const logoUrl = useSetting('site_logo_url', '');
+  const hotline = useSetting('phone_hotline', '');
+  const address = useSetting('address', '');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -63,9 +65,9 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       {/* Top bar */}
       <div className="bg-red-600 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />Hotline: {useSetting('phone_hotline', '0901 234 567')}</span>
+          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{hotline ? `Hotline: ${hotline}` : 'Liên hệ qua biểu mẫu'}</span>
           <span className="opacity-60">|</span>
-          <span>{useSetting('address', 'Thủ Dầu Một, Bình Dương')}</span>
+          <span>{address || 'Thông tin liên hệ đang được cập nhật'}</span>
         </div>
         <div className="flex items-center gap-3 text-red-100">
           <span>{useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00')}</span>
@@ -303,13 +305,13 @@ function LinkColumn({ title, links }: { title: string; links: FooterLink[] }) {
 export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }: FooterProps) {
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const footer = useContent('footer');
-  const siteName = useSetting('site_logo_text', 'BĐS BÌNH DƯƠNG');
+  const siteName = useSetting('site_logo_text', 'Chợ Nhà Việt');
   const logoUrl = useSetting('site_logo_url', '');
   const [logoError, setLogoError] = useState(false);
-  const phone = useSetting('phone_main', '0901 234 567');
-  const email = useSetting('email', 'info@bdsbinhduong.vn');
-  const address = useSetting('address', 'Thủ Dầu Một, Bình Dương');
-  const desc = useSetting('footer_description', 'Nền tảng bất động sản uy tín tại Bình Dương và các tỉnh lân cận.');
+  const phone = useSetting('phone_main', '');
+  const email = useSetting('email', '');
+  const address = useSetting('address', '');
+  const desc = useSetting('footer_description', 'Nền tảng bất động sản minh bạch, kết nối người mua, người thuê và chủ nhà.');
   const col3sub1 = useSetting('footer_col3_sub1', 'Chuyên sâu: Bình Dương');
   const col3sub2 = useSetting('footer_col3_sub2', 'Mở rộng: Bình Phước, Đồng Nai');
   const license = useSetting('footer_license', 'Giấy phép ĐKKD: 0000000000 | Bình Dương');
@@ -551,7 +553,7 @@ export function SectionTitle({ title, subtitle }: { title: string; subtitle?: st
 }
 
 export function SidebarCta({ onContact }: { onContact: () => void }) {
-  const phone = useSetting('phone_hotline', '0901 234 567');
+  const phone = useSetting('phone_hotline', '');
   const title = useSetting('sidebar_cta_title', 'Cần tư vấn ngay?');
   const sub = useSetting('sidebar_cta_sub', 'Chuyên gia sẵn sàng hỗ trợ 7:00–21:00');
   const btnLabel = useSetting('sidebar_cta_btn', 'Gửi yêu cầu tư vấn');

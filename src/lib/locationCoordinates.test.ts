@@ -22,6 +22,10 @@ describe('validateCoordinatePair', () => {
     }
   });
 
+  it('attaches range errors to the affected coordinate only', () => {
+    expect(validateCoordinatePair('10', '200')).toMatchObject({ valid: false, fieldErrors: { longitude: 'Kinh độ phải nằm trong khoảng -180 đến 180.' } });
+    expect(validateCoordinatePair('100', '106')).toMatchObject({ valid: false, fieldErrors: { latitude: 'Vĩ độ phải nằm trong khoảng -90 đến 90.' } });
+  });
   it('normalizes invalid pairs to empty coordinates for previews', () => {
     expect(coordinatePairFromUnknown('10.9', '')).toEqual({ latitude: null, longitude: null });
     expect(coordinatePairFromUnknown('10.9', '106.6')).toEqual({ latitude: 10.9, longitude: 106.6 });

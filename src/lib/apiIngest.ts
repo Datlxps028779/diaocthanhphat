@@ -1,6 +1,7 @@
 import { sanitizeArticleHtml } from './sanitizeHtml';
 import { validateCoordinatePair } from './locationCoordinates';
 import { normalizeListingTitle } from './listingTitle';
+import { parseOptionalNonNegativeInteger, parseOptionalPositiveDecimal } from './listingValidation';
 
 // Chuẩn hóa payload từ nguồn ngoài (make.com) trước khi ghi DB. Tách khỏi route để
 // test được không cần network/DB.
@@ -127,11 +128,6 @@ function num(v: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
-}
-
-function int(v: unknown): number | null {
-  const n = num(v);
-  return n === null ? null : Math.trunc(n);
 }
 
 // Chỉ nhận http(s) — chặn javascript:, data:, và đường dẫn tương đối (ảnh ở host
@@ -270,6 +266,13 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
     ? normalizeListingTitle(rawTitle, [city ?? '', district ?? '', ward ?? '']).value
     : null;
 
+  const area = body.area_sqm == null || body.area_sqm === '' ? null : parseOptionalPositiveDecimal(body.area_sqm);
+  if (body.area_sqm != null && body.area_sqm !== '' && area === null) errors.push('area_sqm: phải là số lớn hơn 0.');
+  const bedrooms = body.bedrooms == null || body.bedrooms === '' ? null : parseOptionalNonNegativeInteger(body.bedrooms);
+  if (body.bedrooms != null && body.bedrooms !== '' && bedrooms === null) errors.push('bedrooms: phải là số nguyên từ 0 trở lên.');
+  const bathrooms = body.bathrooms == null || body.bathrooms === '' ? null : parseOptionalNonNegativeInteger(body.bathrooms);
+  if (body.bathrooms != null && body.bathrooms !== '' && bathrooms === null) errors.push('bathrooms: phải là số nguyên từ 0 trở lên.');
+
   const coordinates = validateCoordinatePair(body.latitude, body.longitude);
   if (!coordinates.valid) errors.push(`coordinates: ${coordinates.message}`);
 
@@ -294,7 +297,7 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
       price_label: str(body.price_label, MAX_SHORT),
       price_per_month: type === 'cho_thue' ? effectivePrice : null,
       listing_type: type,
-      area_sqm: num(body.area_sqm),
+      area_sqm: area,
       address: str(body.address, MAX_SHORT),
       city: city as string,
       district,
@@ -302,8 +305,8 @@ export function normalizeListingPayload(body: unknown): NormalizeResult<ListingR
       image_url: httpUrl(body.image_url) ?? images[0] ?? null,
       images: images.length ? images : null,
       legal_status: str(body.legal_status, MAX_SHORT),
-      bedrooms: int(body.bedrooms),
-      bathrooms: int(body.bathrooms),
+      bedrooms,
+      bathrooms,
       direction: str(body.direction, 50),
       contact_name: str(body.contact_name, MAX_SHORT),
       contact_phone: str(body.contact_phone, 30),

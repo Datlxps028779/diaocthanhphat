@@ -2,6 +2,7 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { getAllSiteContent, getSiteSettings, getMenuItems } from './api';
 import type { MenuItem } from './supabase';
+import { settingFallback } from './siteBrandDefaults';
 
 type CmsData = {
   content: Record<string, Record<string, string>>;
@@ -12,9 +13,9 @@ type CmsData = {
 
 const CmsContext = createContext<CmsData>({ content: {}, settings: {}, menu: [], loading: true });
 
-export function CmsProvider({ children }: { children: React.ReactNode }) {
+export function CmsProvider({ children, initialSettings = {} }: { children: React.ReactNode; initialSettings?: Record<string, string> }) {
   const [content, setContent] = useState<Record<string, Record<string, string>>>({});
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [settings, setSettings] = useState<Record<string, string>>(initialSettings);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,5 +44,5 @@ export function useContent(section: string): Record<string, string> {
 
 export function useSetting(key: string, fallback = ''): string {
   const { settings } = useCms();
-  return settings[key] ?? fallback;
+  return settings[key] ?? settingFallback(key, fallback);
 }

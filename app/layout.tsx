@@ -8,6 +8,7 @@ import { Providers } from './providers';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { AnalyticsConsent } from './_components/AnalyticsConsent';
+import { SITE_BRAND_DEFAULTS } from '@/lib/siteBrandDefaults';
 
 // Roboto để khớp phong cách chodat.vn. Next 14 chỉ chấp nhận các weight rời của
 // Roboto (100/300/400/500/700/900) — KHÔNG có 600, nên tailwind.config map
@@ -21,7 +22,7 @@ const roboto = Roboto({
 });
 
 const SITE_URL = getSiteUrl();
-const SITE_NAME = 'BĐS Bình Dương';
+const SITE_NAME = SITE_BRAND_DEFAULTS.site_logo_text;
 
 export async function generateMetadata(): Promise<Metadata> {
   // Favicon động: ưu tiên URL admin cấu hình (favicon_url / site_favicon_url),
@@ -81,7 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }} />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers initialSettings={settings}>{children}</Providers>
         <Analytics />
         <SpeedInsights />
         <AnalyticsConsent environmentGaId={process.env.NEXT_PUBLIC_GA_ID} />

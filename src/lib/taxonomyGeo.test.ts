@@ -36,6 +36,11 @@ describe('taxonomyGeo', () => {
     })?.entity_type).toBe('area');
   });
 
+  it('accepts an internal center when bounds are not available', () => {
+    const centerOnly = geo('ward', 'w', { south: 10, west: 107, north: 10, east: 107 });
+    expect(pickTaxonomyGeo([centerOnly], { wardId: 'w' })).toBe(centerOnly);
+    expect(taxonomyGeoLabel(centerOnly)).toContain('Đã định tâm');
+  });
   it('does not choose geometry for an unrelated entity with the same name', () => {
     expect(pickTaxonomyGeo([geo('ward', 'other-ward')], {
       areaId: 'a', districtId: 'd', wardId: 'selected-ward',

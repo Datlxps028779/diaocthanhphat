@@ -3,6 +3,7 @@ import type { FaqItem } from './propertyFaq';
 import { generateSlug } from './useSEOAutofill';
 import { parsePriceInput, priceInputFromNumber } from './listingPrice';
 import { coordinatePairFromUnknown } from './locationCoordinates';
+import { parseOptionalPositiveDecimal, parseOptionalNonNegativeInteger } from './listingValidation';
 
 // State của form đăng tin (PostListingPage). Mọi trường là chuỗi vì input HTML
 // dùng chuỗi; số/JSON được nén lại lúc submit.
@@ -65,8 +66,9 @@ export function formToProperty(
 ): Property {
   const num = (v: unknown) => {
     if (v === '' || v === null || v === undefined) return null;
+    if (typeof v === 'string') return parseOptionalPositiveDecimal(v);
     const parsed = Number(v);
-    return Number.isFinite(parsed) ? parsed : null;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   };
   // Giá trên form cho phép dấu phẩy nhóm nghìn, khác với các thông số kỹ thuật.
   // Vì vậy không dùng Number() cho các trường này (Number('1,500') là NaN).
@@ -88,7 +90,7 @@ export function formToProperty(
     price_per_month: price(form.price_per_month),
     loan_support: price(form.loan_support),
     listing_type: (form.listing_type as Property['listing_type']) ?? 'mua_ban',
-    area_sqm: num(form.area_sqm),
+    area_sqm: typeof form.area_sqm === 'string' ? parseOptionalPositiveDecimal(form.area_sqm) : num(form.area_sqm),
     address: str(form.address),
     city: String(form.city ?? ''),
     district: str(form.district),
@@ -116,8 +118,8 @@ export function formToProperty(
     views: property?.views ?? 0,
     contact_name: str(form.contact_name),
     contact_phone: str(form.contact_phone),
-    bedrooms: num(form.bedrooms),
-    bathrooms: num(form.bathrooms),
+    bedrooms: typeof form.bedrooms === 'string' ? parseOptionalNonNegativeInteger(form.bedrooms) : num(form.bedrooms),
+    bathrooms: typeof form.bathrooms === 'string' ? parseOptionalNonNegativeInteger(form.bathrooms) : num(form.bathrooms),
     floor_count: num(form.floor_count),
     floor_number: num(form.floor_number),
     direction: str(form.direction),

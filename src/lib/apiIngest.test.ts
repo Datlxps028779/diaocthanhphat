@@ -152,12 +152,17 @@ describe('normalizeListingPayload', () => {
     expect(r.row.image_url).toBe('https://a.com/1.jpg');
   });
 
-  it('ép bedrooms/bathrooms về số nguyên, bỏ giá trị rác', () => {
-    const r = normalizeListingPayload({ ...valid, bedrooms: '3', bathrooms: 'hai' });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.row.bedrooms).toBe(3);
-    expect(r.row.bathrooms).toBeNull();
+  it('chặn phòng không phải số nguyên không âm', () => {
+    const validRooms = normalizeListingPayload({ ...valid, bedrooms: '3', bathrooms: '2' });
+    expect(validRooms.ok).toBe(true);
+    if (!validRooms.ok) return;
+    expect(validRooms.row.bedrooms).toBe(3);
+    expect(validRooms.row.bathrooms).toBe(2);
+
+    for (const value of ['-1', '2.5', 'hai']) {
+      expect(normalizeListingPayload({ ...valid, bedrooms: value }).ok).toBe(false);
+      expect(normalizeListingPayload({ ...valid, bathrooms: value }).ok).toBe(false);
+    }
   });
 
   it('cắt tiêu đề quá dài', () => {

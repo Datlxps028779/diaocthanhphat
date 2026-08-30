@@ -6,7 +6,7 @@ import { CmsProvider } from '@/lib/cms';
 
 // QueryClient tạo trong useState để mỗi client có instance riêng, an toàn khi SSR
 // (không chia sẻ cache giữa các request trên server). Cấu hình đồng bộ queryClient.ts.
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, initialSettings = {} }: { children: React.ReactNode; initialSettings?: Record<string, string> }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -21,7 +21,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <CmsProvider>{children}</CmsProvider>
+        <CmsProvider initialSettings={initialSettings}>{children}</CmsProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

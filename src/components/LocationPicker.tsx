@@ -18,6 +18,7 @@ export interface GeocodeTarget {
   intent: 'taxonomy' | 'address';
   taxonomyScope?: TaxonomyScope;
   bounds?: TaxonomyBounds;
+  center?: { lat: number; lng: number };
   geojson?: Record<string, unknown>;
   taxonomyLabel?: string;
 }
@@ -32,8 +33,8 @@ interface LocationPickerProps {
 }
 
 type MapStatus = 'idle' | 'searching' | 'candidate' | 'placed' | 'review' | 'missing_geo' | 'none' | 'error';
-type Candidate = { lat: number; lng: number; label: string };
-type GeocodeResult = { lat: number; lng: number; label: string };
+type Candidate = { lat: number; lng: number; label: string; warning?: string };
+type GeocodeResult = { lat: number; lng: number; label: string; warning?: string };
 
 type NominatimSearchResult = {
   lat?: string;
@@ -158,6 +159,13 @@ function samePlaceName(actual: string | undefined, expected: string | undefined)
 
 function labelContainsPlace(label: string, expected: string | undefined): boolean {
   return containsPlacePhrase(label, expected);
+}
+
+function taxonomyMismatchWarning(candidate: GeocoderCandidate, scope?: TaxonomyScope): string | undefined {
+  if (!scope) return undefined;
+  if (candidateMatchesTaxonomy(candidate, scope)) return undefined;
+  const selected = [scope.wardName, scope.districtName, scope.areaName].filter(Boolean).join(' → ');
+  return `Kết quả bản đồ không khớp khu vực đã chọn (${selected}). Hãy kiểm tra hoặc bấm trực tiếp lên bản đồ.`;
 }
 
 function pointInBounds(candidate: Pick<GeocoderCandidate, 'lat' | 'lng'>, bounds: TaxonomyBounds | undefined): boolean {
@@ -304,9 +312,8 @@ async function searchGeocode(query: string, intent: GeocodeTarget['intent'], sco
   try {
     const results = await fetchJson<NominatimSearchResult[]>(`https://nominatim.openstreetmap.org/search?${nominatim.toString()}`, signal);
     const result = results[0];
-    const lat = result?.lat ? Number(result.lat) : NaN;
-    const lng = result?.lon ? Number(result.lon) : NaN;
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, label: result.display_name || 'Điểm tìm thấy gần đúng' };
+    const candidate = nominatimCandidate(result);
+    if (candidate) return { lat: candidate.lat, lng: candidate.lng, label: candidate.label, warning: taxonomyMismatchWarning(candidate, scope) };
   } catch {
     // Try the alternate OSM-backed geocoder below.
   }
@@ -316,12 +323,18 @@ async function searchGeocode(query: string, intent: GeocodeTarget['intent'], sco
     const response = await fetchJson<PhotonResponse>(`https://photon.komoot.io/api/?${photon.toString()}`, signal);
     for (const feature of response.features ?? []) {
       const result = photonResult(feature);
-      if (result) return { lat: result.lat, lng: result.lng, label: result.label };
+      if (result) return { lat: result.lat, lng: result.lng, label: result.label, warning: taxonomyMismatchWarning(result, scope) };
     }
   } catch {
     // Try ArcGIS as a final provider for address searches.
   }
-  return searchArcGis(query, signal);
+  const arcgisResult = await searchArcGis(query, signal);
+  if (!arcgisResult) return null;
+  const expected = [scope?.wardName, scope?.districtName, scope?.areaName].filter(Boolean) as string[];
+  const warning = scope && expected.length > 0 && !expected.every(part => labelContainsPlace(arcgisResult.label, part))
+    ? `Kết quả bản đồ không khớp khu vực đã chọn (${expected.join(' → ')}). Hãy kiểm tra hoặc bấm trực tiếp lên bản đồ.`
+    : undefined;
+  return { ...arcgisResult, warning };
 }
 
 function photonReverseAddress(data: PhotonResponse): string {
@@ -546,6 +559,14 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       return result;
     };
 
+    if (geocodeTarget.intent === 'taxonomy' && geocodeTarget.center && Number.isFinite(geocodeTarget.center.lat) && Number.isFinite(geocodeTarget.center.lng) && !isValidTaxonomyBounds(geocodeTarget.bounds)) {
+      geoLayerRef.current?.remove();
+      geoLayerRef.current = null;
+      map.setView([geocodeTarget.center.lat, geocodeTarget.center.lng], Math.min(geocodeTarget.zoom, 14), { animate: true });
+      setStatus('missing_geo');
+      return () => { cancelled = true; controller.abort(); };
+    }
+
     if (geocodeTarget.intent === 'taxonomy' && isValidTaxonomyBounds(geocodeTarget.bounds)) {
       geoLayerRef.current?.remove();
       geoLayerRef.current = null;
@@ -567,7 +588,7 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       return () => { cancelled = true; controller.abort(); };
     }
 
-    setStatus('searching');
+    setStatus(geocodeTarget.intent === 'taxonomy' ? 'missing_geo' : 'searching');
     const run = async () => {
       try {
         const result = await searchGeocode(geocodeTarget.query, geocodeTarget.intent, geocodeTarget.taxonomyScope, controller.signal);
@@ -576,7 +597,7 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
           if (applied && geocodeTarget.intent === 'taxonomy') setStatus(markerRef.current ? 'review' : 'idle');
           return;
         }
-        const nextCandidate = { lat: applied.lat, lng: applied.lng, label: applied.label };
+        const nextCandidate = { lat: applied.lat, lng: applied.lng, label: applied.label, warning: applied.warning };
         setCandidate(nextCandidate);
         const L = await import('leaflet').then(module => module.default);
         if (cancelled || controller.signal.aborted || searchRequestId !== searchRequestIdRef.current || !mapRef.current || !candidateIconRef.current) return;
@@ -652,12 +673,13 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
           <div className="absolute bottom-3 left-3 right-3 z-[500] rounded-xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur-sm">
             <p className="text-xs font-semibold text-amber-800">Kết quả tham khảo</p>
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-gray-600">{candidate.label}</p>
+            {candidate.warning && <p role="alert" className="mt-1 text-[11px] font-semibold leading-4 text-red-600">{candidate.warning}</p>}
             <button type="button" onClick={confirmCandidate} className="mt-2 min-h-10 w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">Xác nhận vị trí này</button>
           </div>
         )}
       </div>
       <div className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className={`text-xs leading-5 ${status === 'error' || status === 'none' || status === 'missing_geo' ? 'text-amber-700' : 'text-gray-600'}`}>{statusText}</p>
+        <p className={`text-xs leading-5 ${status === 'error' || status === 'none' || status === 'missing_geo' ? 'text-amber-700' : 'text-gray-600'}`}>{geocodeTarget?.taxonomyLabel && geocodeTarget.intent === 'taxonomy' ? `${geocodeTarget.taxonomyLabel} ` : ''}{statusText}</p>
         {(markerRef.current || candidate) && <button type="button" onClick={clearPin} className="flex-shrink-0 text-left text-xs font-semibold text-red-600 hover:text-red-700 sm:text-right">Xóa ghim</button>}
       </div>
     </div>
