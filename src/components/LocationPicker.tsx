@@ -38,6 +38,7 @@ interface LocationPickerProps {
 }
 
 type MapStatus = 'idle' | 'searching' | 'candidate' | 'placed' | 'review' | 'invalid' | 'missing_geo' | 'none' | 'error';
+type TileStatus = 'loading' | 'ready' | 'error';
 type Candidate = {
   lat: number;
   lng: number;
@@ -62,6 +63,12 @@ type ArcGisResponse = { candidates?: ArcGisCandidate[] };
 
 const VIETNAM_CENTER: [number, number] = [16.05, 108.2];
 const VIETNAM_ZOOM = 5;
+export const LOCATION_MAP_HEIGHT = 'clamp(280px, 32vw, 340px)';
+export const LOCATION_BASEMAP = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  maxZoom: 19,
+  attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> · Ranh giới © Kontur (ODbL)',
+} as const;
 const PIN_SVG = `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#dc2626"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
 const CANDIDATE_PIN_SVG = `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#d97706"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
 
@@ -411,7 +418,7 @@ async function searchArcGis(query: string, signal?: AbortSignal): Promise<Geocod
   return results.find((result): result is GeocodeResult => result !== null) ?? null;
 }
 
-export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce = 0, wardId, wardGeo, wardLabel = 'xã/phường đã chọn', onReverseGeocode, height = '280px' }: LocationPickerProps) {
+export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce = 0, wardId, wardGeo, wardLabel = 'xã/phường đã chọn', onReverseGeocode, height = LOCATION_MAP_HEIGHT }: LocationPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const markerRef = useRef<import('leaflet').Marker | null>(null);
@@ -436,6 +443,7 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
   const wardLabelRef = useRef(wardLabel);
   const [mapReady, setMapReady] = useState(false);
   const [status, setStatus] = useState<MapStatus>('idle');
+  const [tileStatus, setTileStatus] = useState<TileStatus>('loading');
   const [candidate, setCandidate] = useState<Candidate | null>(null);
 
   const onChangeRef = useRef(onChange);
@@ -541,6 +549,26 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     let disposed = false;
+    let tileLoaded = false;
+    let tileFailureTimer: ReturnType<typeof setTimeout> | null = null;
+    let tileErrorTimer: ReturnType<typeof setTimeout> | null = null;
+    let tileLayer: import('leaflet').TileLayer | null = null;
+
+    const markTileReady = () => {
+      tileLoaded = true;
+      if (tileFailureTimer) clearTimeout(tileFailureTimer);
+      if (tileErrorTimer) clearTimeout(tileErrorTimer);
+      if (!disposed) setTileStatus('ready');
+    };
+    const scheduleTileError = () => {
+      if (disposed || tileLoaded || tileErrorTimer) return;
+      tileErrorTimer = setTimeout(() => {
+        tileErrorTimer = null;
+        if (!disposed && !tileLoaded) setTileStatus('error');
+      }, 1200);
+    };
+
+    setTileStatus('loading');
     import('leaflet').then(module => {
       if (disposed || !containerRef.current || mapRef.current) return;
       const L = module.default;
@@ -558,8 +586,16 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
           setMapReady(true);
         }
       });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      L.control.attribution({ prefix: '© OpenStreetMap · Ranh giới © Kontur (ODbL)' }).addTo(map);
+      tileLayer = L.tileLayer(LOCATION_BASEMAP.url, {
+        maxZoom: LOCATION_BASEMAP.maxZoom,
+      });
+      tileLayer.on('tileload', markTileReady);
+      tileLayer.on('tileerror', scheduleTileError);
+      tileLayer.addTo(map);
+      tileFailureTimer = setTimeout(() => {
+        if (!disposed && !tileLoaded) setTileStatus('error');
+      }, 8000);
+      L.control.attribution({ prefix: LOCATION_BASEMAP.attribution }).addTo(map);
       iconRef.current = L.divIcon({ className: '', html: PIN_SVG, iconSize: [28, 36], iconAnchor: [14, 36] });
       candidateIconRef.current = L.divIcon({ className: '', html: CANDIDATE_PIN_SVG, iconSize: [28, 36], iconAnchor: [14, 36] });
 
@@ -629,10 +665,16 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
       };
 
       map.on('click', event => stageClickedPoint(event.latlng.lat, event.latlng.lng));
-    }).catch(() => setStatus('error'));
+    }).catch(() => {
+      if (!disposed) setTileStatus('error');
+    });
 
     return () => {
       disposed = true;
+      if (tileFailureTimer) clearTimeout(tileFailureTimer);
+      if (tileErrorTimer) clearTimeout(tileErrorTimer);
+      tileLayer?.off('tileload', markTileReady);
+      tileLayer?.off('tileerror', scheduleTileError);
       if (reverseTimerRef.current) clearTimeout(reverseTimerRef.current);
       reverseControllerRef.current?.abort();
       searchControllerRef.current?.abort();
@@ -933,6 +975,11 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
       <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm" style={{ height }}>
         <div ref={containerRef} className="h-full w-full" />
       </div>
+      {tileStatus === 'error' && (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          Không tải được nền bản đồ chi tiết. Ranh giới và ghim vẫn được giữ; bạn có thể nhập tọa độ thủ công hoặc tải lại trang để thử lại.
+        </div>
+      )}
       {candidate && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 shadow-sm">
           <p className="text-xs font-semibold text-amber-800">Kết quả tham khảo</p>

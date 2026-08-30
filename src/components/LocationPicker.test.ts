@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LOCATION_BASEMAP,
+  LOCATION_MAP_HEIGHT,
   candidateMatchesTaxonomy,
   canonicalGeocoderQuery,
   geocoderQueryVariants,
@@ -8,6 +10,16 @@ import {
   type GeocoderCandidate,
   type TaxonomyScope,
 } from './LocationPicker';
+
+describe('LOCATION_BASEMAP', () => {
+  it('uses the detailed keyless Esri basemap with complete attribution', () => {
+    expect(LOCATION_BASEMAP.url).toContain('server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map');
+    expect(LOCATION_BASEMAP.maxZoom).toBe(19);
+    expect(LOCATION_BASEMAP.attribution).toContain('Esri');
+    expect(LOCATION_BASEMAP.attribution).toContain('Kontur (ODbL)');
+    expect(LOCATION_MAP_HEIGHT).toBe('clamp(280px, 32vw, 340px)');
+  });
+});
 
 describe('canonicalGeocoderQuery', () => {
   it('normalizes the seeded Đắc Lua spelling for providers', () => {

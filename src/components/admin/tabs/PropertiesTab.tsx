@@ -1100,7 +1100,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               wardLabel={form.ward || 'xã/phường đã chọn'}
               onChange={(lat, lng) => { addressEditedRef.current = false; setForm(current => ({ ...current, latitude: lat, longitude: lng })); }}
               onReverseGeocode={addr => { if (!addressEditedRef.current) setField('address', addr); }}
-              height="220px"
             />
             <div className="grid grid-cols-2 gap-3 mt-2">
               <input type="number" step="any" value={String(form.latitude)} onChange={e => setField('latitude', e.target.value)}
