@@ -29,6 +29,7 @@ import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/li
 import { PriceField } from '../components/PriceField';
 import { coordinatePairFromUnknown, validateCoordinatePair } from '../lib/locationCoordinates';
 import { pickTaxonomyGeo, taxonomyGeoLabel, isValidTaxonomyCenter } from '../lib/taxonomyGeo';
+import { findExactTaxonomyGeo, validatePointForWard } from '../lib/taxonomyPoint';
 import { normalizeListingTitle } from '../lib/listingTitle';
 import { validateListingForm, parseOptionalPositiveDecimal, parseOptionalNonNegativeInteger, plainTextDescription, DESCRIPTION_MIN, LISTING_TITLE_MAX, countListingImages } from '../lib/listingValidation';
 import { clearListingDraft, hasListingDraftContent, readListingDraft, writeListingDraft, type ListingDraft } from '../lib/listingDraft';
@@ -80,10 +81,13 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
+  const [mapResetNonce, setMapResetNonce] = useState(0);
   const geocodeNonce = useRef(0);
+  const addressSearchActiveRef = useRef(false);
   const addressEditedRef = useRef(false);
   const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope, center?: GeocodeTarget['center']) => {
     if (!query) return;
+    if (intent === 'address') addressSearchActiveRef.current = true;
     setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, center, nonce: ++geocodeNonce.current });
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
@@ -99,7 +103,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     price_per_month: '',
     loan_support: '',
     area_sqm: '', address: '', city: '', district: '', ward: '', neighborhood_slug: '',
-    area_id: '', district_id: '', property_type_id: '',
+    area_id: '', district_id: '', ward_id: '', property_type_id: '',
     image_url: '', images: [] as string[],
     video_url: '',
     legal_status: '', bedrooms: '', bathrooms: '', direction: '',
@@ -136,8 +140,10 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     ?? resolveUniqueDistrict(districts, form.area_id, form.district);
   const selectedDistrictId = selectedDistrict?.id;
   const { data: wards = [], isLoading: loadingWards } = useWards(selectedDistrictId || undefined, { fetchAll: false });
-  // Khu dân cư theo phường/xã đã chọn. form.ward lưu TÊN nên map ra id.
-  const selectedWardId = wards.find(w => w.name === form.ward)?.id;
+  const selectedWardById = wards.find(w => w.id === form.ward_id && w.district_id === selectedDistrictId);
+  const legacyWardMatches = wards.filter(w => w.name === form.ward && w.district_id === selectedDistrictId);
+  const selectedWard = selectedWardById ?? (legacyWardMatches.length === 1 ? legacyWardMatches[0] : undefined);
+  const selectedWardId = selectedWard?.id;
   const { data: neighborhoods = [] } = useNeighborhoods(selectedWardId || undefined, { fetchAll: false });
   const taxonomyIds = [form.area_id, selectedDistrictId, selectedWardId].filter((id): id is string => Boolean(id));
   const { data: taxonomyGeo = [] } = useTaxonomyGeo(taxonomyIds);
@@ -146,9 +152,10 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     districtId: selectedDistrictId,
     wardId: selectedWardId,
   });
+  const selectedWardGeo = findExactTaxonomyGeo(taxonomyGeo, 'ward', selectedWardId);
 
   useEffect(() => {
-    if (!form.area_id) return;
+    if (!form.area_id || addressSearchActiveRef.current) return;
     const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
     if (!query) return;
     const taxonomyScope: TaxonomyScope = {
@@ -172,6 +179,15 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       setForm(f => ({ ...f, district_id: '' }));
     }
   }, [districts, form.area_id, form.district, form.district_id, selectedDistrictById]);
+
+  useEffect(() => {
+    if (!selectedDistrictId || !form.ward || wards.length === 0 || selectedWardById) return;
+    if (legacyWardMatches.length === 1) {
+      setForm(current => ({ ...current, ward_id: legacyWardMatches[0].id, ward: legacyWardMatches[0].name }));
+    } else if (form.ward_id) {
+      setForm(current => ({ ...current, ward_id: '' }));
+    }
+  }, [selectedDistrictId, form.ward, form.ward_id, wards, selectedWardById, legacyWardMatches]);
 
   // ─── SEO Autofill Hook ───────────────────────────────────────────────────────
   const seo = useSEOAutofill({
@@ -234,7 +250,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   const restoreDraft = () => {
     if (!draftCandidate) return;
-    setForm(draftCandidate.form as typeof form);
+    setForm(current => ({ ...current, ...draftCandidate.form, ward_id: String(draftCandidate.form.ward_id ?? '') } as typeof form));
     addressEditedRef.current = Boolean(String(draftCandidate.form.address ?? '').trim());
     setStep(Math.min(Math.max(draftCandidate.step, 0), STEPS.length - 1));
     setDraftCandidate(null);
@@ -246,29 +262,43 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   };
 
   const setArea = useCallback((areaId: string, _areaName: string) => {
-    setForm(f => ({ ...applyAreaSelection(f, areaId, _areaName), latitude: '', longitude: '' }));
-    setErrors(current => ({ ...current, district_id: '', latitude: '', longitude: '' }));
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
+    if (!areaId) {
+      setGeocodeTarget(undefined);
+      setMapResetNonce(current => current + 1);
+    }
+    setForm(f => applyAreaSelection(f, areaId, _areaName));
+    setErrors(current => ({ ...current, district_id: '', ward_id: '', map_location: '', latitude: '', longitude: '' }));
   }, []);
 
   const setDistrict = useCallback((districtId: string) => {
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
     const district = districts.find(d => d.id === districtId) ?? null;
-    setForm(f => ({ ...applyDistrictSelection(f, district), latitude: '', longitude: '' }));
-    setErrors(current => ({ ...current, district_id: '', latitude: '', longitude: '' }));
+    setForm(f => applyDistrictSelection(f, district));
+    setErrors(current => ({ ...current, district_id: '', ward_id: '', map_location: '', latitude: '', longitude: '' }));
   }, [districts]);
 
-  const setDistrictText = useCallback((district: string) => {
-    setForm(f => ({ ...applyDistrictSelection(f, null, district), latitude: '', longitude: '' }));
-    setErrors(current => ({ ...current, latitude: '', longitude: '' }));
-  }, []);
-
-  // Chọn xã → reset ghim cũ vì ghim thuộc taxonomy trước đó.
-  const setWard = useCallback((ward: string) => {
-    setForm(f => ({ ...f, ward, neighborhood_slug: '', latitude: '', longitude: '' }));
-    setErrors(current => ({ ...current, latitude: '', longitude: '' }));
-  }, []);
+  const setWard = useCallback((wardId: string) => {
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
+    const ward = wards.find(item => item.id === wardId) ?? null;
+    setForm(current => ({
+      ...current,
+      ward_id: ward?.id ?? '',
+      ward: ward?.name ?? '',
+      neighborhood_slug: '',
+      address: '',
+      latitude: '',
+      longitude: '',
+    }));
+    setErrors(current => ({ ...current, ward_id: '', map_location: '', latitude: '', longitude: '' }));
+  }, [wards]);
 
   const setCoords = useCallback((lat: string, lng: string) => {
     setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+    setErrors(current => ({ ...current, map_location: '', latitude: '', longitude: '' }));
   }, []);
 
   const setListingType = (lt: ListingType) => {
@@ -311,10 +341,31 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   const validateLocation = () => {
     const nextErrors: Record<string, string> = {};
-    const coordinates = validateCoordinatePair(form.latitude, form.longitude);
-    if (!coordinates.valid) Object.assign(nextErrors, coordinates.fieldErrors ?? { latitude: coordinates.message, longitude: coordinates.message });
-    if (form.district_id && !selectedDistrictById) {
+    if (!form.area_id || !areas.some(area => area.id === form.area_id && area.name === form.city)) {
+      nextErrors.city = 'Vui lòng chọn tỉnh/thành phố từ danh mục.';
+    }
+    if (!form.district_id) {
+      nextErrors.district_id = 'Vui lòng chọn quận/huyện.';
+    } else if (!selectedDistrictById) {
       nextErrors.district_id = 'Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại.';
+    }
+    if (!form.ward_id) {
+      nextErrors.ward_id = 'Vui lòng chọn xã/phường.';
+    } else if (!selectedWardById) {
+      nextErrors.ward_id = 'Xã/phường không thuộc quận/huyện đã chọn. Vui lòng chọn lại.';
+    }
+
+    const coordinates = validateCoordinatePair(form.latitude, form.longitude);
+    if (!coordinates.valid) {
+      Object.assign(nextErrors, coordinates.fieldErrors ?? { latitude: coordinates.message, longitude: coordinates.message });
+    } else if (coordinates.coordinates.latitude !== null && coordinates.coordinates.longitude !== null) {
+      const pointValidation = validatePointForWard(
+        { lat: coordinates.coordinates.latitude, lng: coordinates.coordinates.longitude },
+        selectedWardId,
+        selectedWardGeo,
+        form.ward || 'xã/phường đã chọn',
+      );
+      if (!pointValidation.valid) nextErrors.map_location = pointValidation.message;
     }
     return nextErrors;
   };
@@ -323,7 +374,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     const all = validateListingForm(form, { includeQualityGate: true });
     const keysByStep: Record<number, string[]> = {
       0: ['title', 'property_type_id', 'price', 'price_per_month', 'loan_support'],
-      1: ['city', 'area_sqm', 'bedrooms', 'bathrooms', 'latitude', 'longitude', 'district_id'],
+      1: ['city', 'district_id', 'ward_id', 'map_location', 'area_sqm', 'bedrooms', 'bathrooms', 'latitude', 'longitude'],
       2: ['images', 'description'],
       3: ['contact_name', 'contact_phone'],
     };
@@ -374,6 +425,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         neighborhood_slug: specForm.neighborhood_slug || null,
         area_id: specForm.area_id || null,
         district_id: selectedDistrict?.id || null,
+        ward_id: selectedWard?.id || null,
         property_type_id: specForm.property_type_id || null,
         image_url: coverId,
         images: cleanImages.length > 0 ? cleanImages : null,
@@ -426,7 +478,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       const firstField = Object.keys(allErrors)[0];
       const firstStep = firstField === 'title' || firstField === 'property_type_id' || firstField === 'price' || firstField === 'price_per_month' || firstField === 'loan_support'
         ? 0
-        : firstField === 'city' || firstField === 'area_sqm' || firstField === 'bedrooms' || firstField === 'bathrooms' || firstField === 'latitude' || firstField === 'longitude' || firstField === 'district_id'
+        : firstField === 'city' || firstField === 'area_sqm' || firstField === 'bedrooms' || firstField === 'bathrooms' || firstField === 'latitude' || firstField === 'longitude' || firstField === 'district_id' || firstField === 'ward_id' || firstField === 'map_location'
           ? 1
           : firstField === 'images' || firstField === 'description' ? 2 : 3;
       setStep(firstStep);
@@ -668,8 +720,8 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
             <div className="space-y-4">
               <SectionLabel icon={<MapPin className="w-4 h-4 text-red-500" />} label="Vị trí & Diện tích" />
               <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Tỉnh/Thành phố *" error={errors.city}>
-                  <select value={form.area_id} onChange={e => {
+                <FormField label="Tỉnh/Thành phố *" error={errors.city} id="city">
+                  <select id="city" value={form.area_id} onChange={e => {
                     const area = areas.find(a => a.id === e.target.value);
                     setArea(e.target.value, area?.name ?? '');
                   }} className={selectCls(errors.city)}>
@@ -677,34 +729,39 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                     {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </FormField>
-                <FormField label="Quận/Huyện" error={errors.district_id}>
+                <FormField label="Quận/Huyện *" error={errors.district_id} id="district_id">
                   {!form.area_id ? (
-                    <select disabled value="" className={selectCls()}><option value="">-- Chọn tỉnh trước --</option></select>
+                    <select id="district_id" disabled value="" className={selectCls(errors.district_id)}><option value="">-- Chọn tỉnh trước --</option></select>
                   ) : loadingDistricts ? (
-                    <select disabled value="" className={selectCls()}><option value="">Đang tải quận/huyện...</option></select>
+                    <select id="district_id" disabled value="" className={selectCls(errors.district_id)}><option value="">Đang tải quận/huyện...</option></select>
                   ) : districts.length > 0 ? (
-                    <select value={selectedDistrictId ?? ''} onChange={e => setDistrict(e.target.value)} className={selectCls()}>
+                    <select id="district_id" value={selectedDistrictId ?? ''} onChange={e => setDistrict(e.target.value)} aria-invalid={Boolean(errors.district_id)} aria-describedby={errors.district_id ? 'district_id-error' : undefined} className={selectCls(errors.district_id)}>
                       <option value="">-- Chọn quận/huyện --</option>
                       {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   ) : (
-                    <input value={form.district} onChange={e => setDistrictText(e.target.value)}
-                      placeholder="VD: Dĩ An, Thuận An..." className={inputCls()} />
+                    <select id="district_id" disabled value="" className={selectCls(errors.district_id)}><option value="">Chưa có taxonomy quận/huyện</option></select>
                   )}
                 </FormField>
-                <FormField label="Phường/Xã">
+                <FormField label="Phường/Xã *" error={errors.ward_id} id="ward_id">
                   {!selectedDistrictId ? (
-                    <select disabled value="" className={selectCls()}><option value="">-- Chọn quận/huyện trước --</option></select>
+                    <select id="ward_id" disabled value="" className={selectCls(errors.ward_id)}><option value="">-- Chọn quận/huyện trước --</option></select>
                   ) : loadingWards ? (
-                    <select disabled value="" className={selectCls()}><option value="">Đang tải phường/xã...</option></select>
+                    <select id="ward_id" disabled value="" className={selectCls(errors.ward_id)}><option value="">Đang tải phường/xã...</option></select>
                   ) : wards.length > 0 ? (
-                    <select value={form.ward} onChange={e => setWard(e.target.value)} className={selectCls()}>
+                    <select
+                      id="ward_id"
+                      value={selectedWardId ?? ''}
+                      onChange={e => setWard(e.target.value)}
+                      aria-invalid={Boolean(errors.ward_id)}
+                      aria-describedby={errors.ward_id ? 'ward_id-error' : undefined}
+                      className={selectCls(errors.ward_id)}
+                    >
                       <option value="">-- Chọn phường/xã --</option>
-                      {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                      {wards.map(ward => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
                     </select>
                   ) : (
-                    <input value={form.ward} onChange={e => setWard(e.target.value)}
-                      placeholder="VD: Bình Chuẩn, An Phú..." className={inputCls()} />
+                    <select id="ward_id" disabled value="" className={selectCls(errors.ward_id)}><option value="">Chưa có taxonomy phường/xã</option></select>
                   )}
                 </FormField>
                 {neighborhoods.length > 0 && (
@@ -727,7 +784,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                       districtName: form.district || undefined,
                       wardName: form.ward || undefined,
                     })}
-                    disabled={!form.address.trim()}
+                    disabled={!form.address.trim() || !selectedWardId}
                     className="flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:py-0">
                     <Search className="w-4 h-4" />Tìm trên bản đồ
                   </button>
@@ -744,12 +801,17 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                   lat={form.latitude}
                   lng={form.longitude}
                   geocodeTarget={geocodeTarget}
+                  resetNonce={mapResetNonce}
+                  wardId={selectedWardId}
+                  wardGeo={selectedWardGeo}
+                  wardLabel={form.ward || 'xã/phường đã chọn'}
                   onChange={setCoords}
                   onReverseGeocode={addr => { if (!addressEditedRef.current) set('address', addr); }}
                 />
+                {errors.map_location && <p id="map_location" tabIndex={-1} role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{errors.map_location}</p>}
                 <p className="text-gray-400 text-xs mt-1.5 flex items-start gap-1.5">
                   <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                  Chọn Tỉnh/Huyện/Xã để bản đồ tự zoom theo khu vực. Bấm "Tìm trên bản đồ" để xem điểm tham khảo màu vàng, sau đó bấm "Xác nhận vị trí này" hoặc click/kéo ghim đỏ để lưu vị trí. Địa chỉ chỉ được gợi ý sau khi xác nhận.
+                  Chọn đủ Tỉnh/Huyện/Xã để tải polygon chuẩn. Điểm tìm kiếm lệch khu vực sẽ bị khóa; chỉ ghim nằm trong polygon của đúng xã/phường mới được chuyển sang màu đỏ và lưu. Xã chưa có polygon vẫn có thể dùng địa chỉ chi tiết nhưng không lưu tọa độ ước lượng.
                 </p>
               </div>
 

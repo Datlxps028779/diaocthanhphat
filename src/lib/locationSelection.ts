@@ -8,8 +8,12 @@ export interface DistrictLocationFields {
   city: string;
   district_id: string;
   district: string;
+  ward_id?: string;
   ward: string;
   neighborhood_slug: string;
+  address?: string;
+  latitude?: string;
+  longitude?: string;
 }
 
 export function normalizeLocationName(value: string): string {
@@ -41,8 +45,12 @@ export function applyAreaSelection<T extends DistrictLocationFields>(
     city,
     district_id: '',
     district: '',
+    ward_id: '',
     ward: '',
     neighborhood_slug: '',
+    address: '',
+    latitude: '',
+    longitude: '',
   };
 }
 
@@ -55,7 +63,11 @@ export function applyDistrictSelection<T extends DistrictLocationFields>(
     ...current,
     district_id: district?.id ?? '',
     district: district?.name ?? districtText,
+    ward_id: '',
     ward: '',
     neighborhood_slug: '',
+    address: '',
+    latitude: '',
+    longitude: '',
   };
 }

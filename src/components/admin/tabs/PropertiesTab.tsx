@@ -28,6 +28,7 @@ import { buildProductPath } from '../../../lib/productPath';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../../../lib/locationSelection';
 import { useTaxonomyGeo } from '../../../lib/hooks/useTaxonomy';
 import { pickTaxonomyGeo, taxonomyGeoLabel } from '../../../lib/taxonomyGeo';
+import { findExactTaxonomyGeo, validatePointForWard } from '../../../lib/taxonomyPoint';
 import { formatListingPrice, formatPriceInput, parsePriceInput, priceInputFromNumber } from '../../../lib/listingPrice';
 import { ListingPrice } from '../../ListingPrice';
 import { normalizeListingTitle } from '../../../lib/listingTitle';
@@ -484,6 +485,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     neighborhood_slug: property?.neighborhood_slug ?? '',
     area_id: property?.area_id ?? '',
     district_id: property?.district_id ?? '',
+    ward_id: property?.ward_id ?? '',
     property_type_id: property?.property_type_id ?? '',
     image_url: property?.image_url ?? '',
     images: property?.images ?? [] as string[],
@@ -522,7 +524,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   const wardsRequestRef = useRef(0);
   const neighborhoodsRequestRef = useRef(0);
   const selectedDistrict = districts.find(d => d.id === form.district_id && d.area_id === form.area_id);
-  const selectedWard = wards.find(w => w.name === form.ward);
+  const selectedWardById = wards.find(w => w.id === form.ward_id && w.district_id === selectedDistrict?.id);
+  const legacyWardMatches = wards.filter(w => w.name === form.ward && w.district_id === selectedDistrict?.id);
+  const selectedWard = selectedWardById ?? (legacyWardMatches.length === 1 ? legacyWardMatches[0] : undefined);
   const taxonomyGeoIds = [form.area_id, selectedDistrict?.id, selectedWard?.id].filter((id): id is string => Boolean(id));
   const { data: taxonomyGeo = [] } = useTaxonomyGeo(taxonomyGeoIds);
   const selectedTaxonomyGeo = pickTaxonomyGeo(taxonomyGeo, {
@@ -530,11 +534,15 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     districtId: selectedDistrict?.id,
     wardId: selectedWard?.id,
   });
+  const selectedWardGeo = findExactTaxonomyGeo(taxonomyGeo, 'ward', selectedWard?.id);
   const [geocodeTarget, setGeocodeTarget] = useState<GeocodeTarget | undefined>();
+  const [mapResetNonce, setMapResetNonce] = useState(0);
   const geocodeNonce = useRef(0);
+  const addressSearchActiveRef = useRef(false);
   const addressEditedRef = useRef(false);
   const flyTo = useCallback((query: string, zoom: number, intent: GeocodeTarget['intent'] = 'taxonomy', bounds?: GeocodeTarget['bounds'], taxonomyLabel?: string, geojson?: GeocodeTarget['geojson'], taxonomyScope?: TaxonomyScope) => {
     if (!query) return;
+    if (intent === 'address') addressSearchActiveRef.current = true;
     setGeocodeTarget({ query, zoom, intent, bounds, taxonomyLabel, geojson, taxonomyScope, nonce: ++geocodeNonce.current });
   }, []);
   const [showPreview, setShowPreview] = useState(false);
@@ -612,6 +620,12 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   };
 
   const handleAreaChange = useCallback((areaId: string) => {
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
+    if (!areaId) {
+      setGeocodeTarget(undefined);
+      setMapResetNonce(current => current + 1);
+    }
     const area = areas.find(a => a.id === areaId);
     const requestId = ++districtsRequestRef.current;
     ++wardsRequestRef.current;
@@ -631,6 +645,8 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   }, [areas]);
 
   const handleDistrictChange = useCallback((districtId: string) => {
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
     const district = districts.find(x => x.id === districtId) ?? null;
     const requestId = ++wardsRequestRef.current;
     ++neighborhoodsRequestRef.current;
@@ -644,21 +660,21 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     else setWards([]);
   }, [districts]);
 
-  const handleDistrictTextChange = useCallback((districtName: string) => {
-    ++wardsRequestRef.current;
-    ++neighborhoodsRequestRef.current;
-    setForm(f => applyDistrictSelection(f, null, districtName));
-    setNeighborhoods([]);
-    setWards([]);
-  }, []);
-
-  // Chọn xã → zoom sát tới cấp phường/xã + nạp khu dân cư của xã đó.
-  const handleWardChange = useCallback((wardName: string) => {
+  const handleWardChange = useCallback((wardId: string) => {
+    addressSearchActiveRef.current = false;
+    addressEditedRef.current = false;
     const requestId = ++neighborhoodsRequestRef.current;
-    setField('ward', wardName);
-    setField('neighborhood_slug', '');
-    const w = wards.find(x => x.name === wardName);
-    if (w) getNeighborhoods(w.id).then(next => {
+    const ward = wards.find(item => item.id === wardId) ?? null;
+    setForm(current => ({
+      ...current,
+      ward_id: ward?.id ?? '',
+      ward: ward?.name ?? '',
+      neighborhood_slug: '',
+      address: '',
+      latitude: '',
+      longitude: '',
+    }));
+    if (ward) getNeighborhoods(ward.id).then(next => {
       if (requestId === neighborhoodsRequestRef.current) setNeighborhoods(next);
     }).catch(() => {
       if (requestId === neighborhoodsRequestRef.current) setNeighborhoods([]);
@@ -706,6 +722,15 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     });
   }, [districts, form.area_id, form.district, form.district_id]);
 
+  useEffect(() => {
+    if (!selectedDistrict?.id || !form.ward || wards.length === 0 || selectedWardById) return;
+    if (legacyWardMatches.length === 1) {
+      setForm(current => ({ ...current, ward_id: legacyWardMatches[0].id, ward: legacyWardMatches[0].name }));
+    } else if (form.ward_id) {
+      setForm(current => ({ ...current, ward_id: '' }));
+    }
+  }, [selectedDistrict?.id, form.ward, form.ward_id, wards, selectedWardById, legacyWardMatches]);
+
   // Nạp khu dân cư khi sửa BĐS có sẵn ward (wards vừa load xong → map tên ra id).
   useEffect(() => {
     if (!property?.ward || wards.length === 0) return;
@@ -720,7 +745,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
   }, [wards, property?.ward]);
 
   useEffect(() => {
-    if (!form.area_id) return;
+    if (!form.area_id || addressSearchActiveRef.current) return;
     const query = [form.ward, form.district, form.city].filter(Boolean).join(', ');
     if (!query) return;
     const taxonomyScope: TaxonomyScope = {
@@ -770,10 +795,31 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       setForm(current => ({ ...current, title: canonicalTitle }));
       setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
     }
-    const selectedDistrict = districts.find(d => d.id === specForm.district_id);
-    if (specForm.district_id && (!selectedDistrict || selectedDistrict.area_id !== specForm.area_id)) {
-      window.alert('Quận/huyện không thuộc tỉnh đã chọn. Vui lòng chọn lại cấp hành chính.');
+    const validatedDistrict = districts.find(d => d.id === specForm.district_id);
+    if (!specForm.area_id) {
+      window.alert('Vui lòng chọn tỉnh/thành phố từ taxonomy.');
       return;
+    }
+    if (!validatedDistrict || validatedDistrict.area_id !== specForm.area_id) {
+      window.alert('Vui lòng chọn quận/huyện thuộc đúng tỉnh/thành phố.');
+      return;
+    }
+    const validatedWard = wards.find(ward => ward.id === specForm.ward_id && ward.district_id === validatedDistrict.id);
+    if (!validatedWard) {
+      window.alert('Vui lòng chọn xã/phường thuộc đúng quận/huyện.');
+      return;
+    }
+    if (coordinates.coordinates.latitude !== null && coordinates.coordinates.longitude !== null) {
+      const pointValidation = validatePointForWard(
+        { lat: coordinates.coordinates.latitude, lng: coordinates.coordinates.longitude },
+        validatedWard.id,
+        selectedWardGeo,
+        validatedWard.name,
+      );
+      if (!pointValidation.valid) {
+        window.alert(pointValidation.message);
+        return;
+      }
     }
     let parsedSchema: Record<string, unknown> | null = null;
     if (specForm.schema_markup && specForm.schema_markup.trim()) {
@@ -816,6 +862,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       neighborhood_slug: cs(specForm.neighborhood_slug),
       area_id: cs(specForm.area_id),
       district_id: cs(specForm.district_id),
+      ward_id: cs(specForm.ward_id),
       property_type_id: cs(specForm.property_type_id),
       image_url: cs(specForm.image_url),
       images: specForm.images.length > 0 ? specForm.images : null,
@@ -974,7 +1021,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Quận/Huyện</label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Quận/Huyện *</label>
               {form.area_id ? (districts.length > 0 ? (
                 <select value={form.district_id} onChange={e => handleDistrictChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
@@ -982,25 +1029,21 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                   {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               ) : (
-                <input value={form.district} onChange={e => handleDistrictTextChange(e.target.value)}
-                  placeholder="Nhập quận/huyện..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">Chưa có taxonomy quận/huyện</option></select>
               )) : (
                 <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">-- Chọn tỉnh trước --</option></select>
               )}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Phường/Xã</label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Phường/Xã *</label>
               {form.district_id ? (wards.length > 0 ? (
-                <select value={form.ward} onChange={e => handleWardChange(e.target.value)}
+                <select value={selectedWard?.id ?? ''} onChange={e => handleWardChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                   <option value="">-- Chọn phường/xã --</option>
-                  {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+                  {wards.map(ward => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
                 </select>
               ) : (
-                <input value={form.ward} onChange={e => handleWardChange(e.target.value)}
-                  placeholder="Nhập phường/xã..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+                <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">Chưa có taxonomy phường/xã</option></select>
               )) : (
                 <select disabled value="" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50"><option value="">-- Chọn quận/huyện trước --</option></select>
               )}
@@ -1027,8 +1070,13 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 placeholder="Số nhà, tên đường..."
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               <button type="button"
-                onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address')}
-                disabled={!form.address.trim()}
+                onClick={() => flyTo([form.address, form.ward, form.district, form.city].filter(Boolean).join(', '), 16, 'address', undefined, undefined, undefined, {
+                  level: form.ward ? 'ward' : form.district ? 'district' : 'area',
+                  areaName: form.city,
+                  districtName: form.district || undefined,
+                  wardName: form.ward || undefined,
+                })}
+                disabled={!form.address.trim() || !selectedWard?.id}
                 className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 text-red-600 font-semibold px-3 rounded-lg text-sm hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <Search className="w-4 h-4" />Tìm trên bản đồ
               </button>
@@ -1046,7 +1094,11 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               lat={String(form.latitude)}
               lng={String(form.longitude)}
               geocodeTarget={geocodeTarget}
-              onChange={(lat, lng) => { addressEditedRef.current = false; setField('latitude', lat); setField('longitude', lng); }}
+              resetNonce={mapResetNonce}
+              wardId={selectedWard?.id}
+              wardGeo={selectedWardGeo}
+              wardLabel={form.ward || 'xã/phường đã chọn'}
+              onChange={(lat, lng) => { addressEditedRef.current = false; setForm(current => ({ ...current, latitude: lat, longitude: lng })); }}
               onReverseGeocode={addr => { if (!addressEditedRef.current) setField('address', addr); }}
               height="220px"
             />

@@ -49,7 +49,7 @@ export type Property = {
   loan_support: number | null;
   listing_type: ListingType;
   area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
-  area_id: string | null; district_id: string | null; property_type_id: string | null;
+  area_id: string | null; district_id: string | null; ward_id?: string | null; property_type_id: string | null;
   neighborhood_slug: string | null;
   image_url: string | null; images: string[] | null;
   badge: string | null; badge_color: string | null; legal_status: string | null;
@@ -343,7 +343,7 @@ export type UserListing = {
   loan_support: number | null;
   area_sqm: number | null; address: string | null; city: string; district: string | null; ward: string | null;
   neighborhood_slug: string | null;
-  area_id: string | null; district_id: string | null; property_type_id: string | null;
+  area_id: string | null; district_id: string | null; ward_id?: string | null; property_type_id: string | null;
   image_url: string | null; images: string[] | null; legal_status: string | null;
   bedrooms: number | null; bathrooms: number | null; direction: string | null;
   contact_name: string | null; contact_phone: string | null;

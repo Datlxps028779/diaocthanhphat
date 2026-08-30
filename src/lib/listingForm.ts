@@ -14,7 +14,7 @@ export interface ListingFormState {
   price_per_month: string;
   loan_support: string;
   area_sqm: string; address: string; city: string; district: string; ward: string; neighborhood_slug: string;
-  area_id: string; district_id: string; property_type_id: string;
+  area_id: string; district_id: string; ward_id: string; property_type_id: string;
   image_url: string; images: string[];
   video_url: string;
   legal_status: string; bedrooms: string; bathrooms: string; direction: string;
@@ -39,7 +39,7 @@ export function listingToFormState(l: UserListing): ListingFormState {
     loan_support: priceInputFromNumber(l.loan_support),
     area_sqm: n(l.area_sqm), address: s(l.address), city: s(l.city),
     district: s(l.district), ward: s(l.ward), neighborhood_slug: s(l.neighborhood_slug),
-    area_id: s(l.area_id), district_id: s(l.district_id), property_type_id: s(l.property_type_id),
+    area_id: s(l.area_id), district_id: s(l.district_id), ward_id: s(l.ward_id), property_type_id: s(l.property_type_id),
     image_url: s(l.image_url), images: l.images ?? [],
     video_url: s(l.video_url),
     legal_status: s(l.legal_status), bedrooms: n(l.bedrooms), bathrooms: n(l.bathrooms),
@@ -98,6 +98,7 @@ export function formToProperty(
     neighborhood_slug: str(form.neighborhood_slug),
     area_id: str(form.area_id),
     district_id: str(form.district_id) ?? property?.district_id ?? null,
+    ward_id: str(form.ward_id) ?? property?.ward_id ?? null,
     property_type_id: typeId,
     image_url: str(form.image_url),
     images: arr(form.images),

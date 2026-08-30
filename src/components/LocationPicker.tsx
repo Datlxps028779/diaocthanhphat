@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { isValidTaxonomyBounds, type TaxonomyBounds } from '../lib/taxonomyGeo';
+import { isValidTaxonomyBounds, type TaxonomyBounds, type TaxonomyGeo } from '../lib/taxonomyGeo';
+import { canConfirmTaxonomyCandidate, normalizePersistedTaxonomyPoint, validatePointForWard, type TaxonomyPointValidation } from '../lib/taxonomyPoint';
 
 export type TaxonomyLevel = 'area' | 'district' | 'ward';
 
@@ -28,12 +29,23 @@ interface LocationPickerProps {
   lng: string;
   onChange: (lat: string, lng: string) => void;
   geocodeTarget?: GeocodeTarget;
+  resetNonce?: number;
+  wardId?: string;
+  wardGeo?: TaxonomyGeo | null;
+  wardLabel?: string;
   onReverseGeocode?: (address: string) => void;
   height?: string;
 }
 
-type MapStatus = 'idle' | 'searching' | 'candidate' | 'placed' | 'review' | 'missing_geo' | 'none' | 'error';
-type Candidate = { lat: number; lng: number; label: string; warning?: string };
+type MapStatus = 'idle' | 'searching' | 'candidate' | 'placed' | 'review' | 'invalid' | 'missing_geo' | 'none' | 'error';
+type Candidate = {
+  lat: number;
+  lng: number;
+  label: string;
+  providerWarning?: string;
+  requiresManualAdjustment: boolean;
+  validation: TaxonomyPointValidation;
+};
 type GeocodeResult = { lat: number; lng: number; label: string; warning?: string };
 
 type NominatimSearchResult = {
@@ -48,6 +60,8 @@ type PhotonResponse = { features?: PhotonFeature[] };
 type ArcGisCandidate = { address?: string; score?: number; location?: { x?: number; y?: number }; extent?: { xmin?: number; ymin?: number; xmax?: number; ymax?: number } };
 type ArcGisResponse = { candidates?: ArcGisCandidate[] };
 
+const VIETNAM_CENTER: [number, number] = [16.05, 108.2];
+const VIETNAM_ZOOM = 5;
 const PIN_SVG = `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#dc2626"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
 const CANDIDATE_PIN_SVG = `<svg viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#d97706"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
 
@@ -397,7 +411,7 @@ async function searchArcGis(query: string, signal?: AbortSignal): Promise<Geocod
   return results.find((result): result is GeocodeResult => result !== null) ?? null;
 }
 
-export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeocode, height = '280px' }: LocationPickerProps) {
+export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce = 0, wardId, wardGeo, wardLabel = 'xã/phường đã chọn', onReverseGeocode, height = '280px' }: LocationPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const markerRef = useRef<import('leaflet').Marker | null>(null);
@@ -406,10 +420,20 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
   const iconRef = useRef<import('leaflet').DivIcon | null>(null);
   const candidateIconRef = useRef<import('leaflet').DivIcon | null>(null);
   const lastNonceRef = useRef(-1);
+  const lastResetNonceRef = useRef(resetNonce);
   const reverseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reverseControllerRef = useRef<AbortController | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
+  const confirmRequestIdRef = useRef(0);
+  const coordinateSyncIdRef = useRef(0);
+  const coordinateInputRef = useRef({ lat, lng });
+  const candidateRef = useRef<Candidate | null>(null);
+  const lastValidPointRef = useRef<{ lat: number; lng: number } | null>(null);
+  const wardIdRef = useRef(wardId);
+  const wardGeoRef = useRef(wardGeo);
+  const wardLabelRef = useRef(wardLabel);
   const [mapReady, setMapReady] = useState(false);
   const [status, setStatus] = useState<MapStatus>('idle');
   const [candidate, setCandidate] = useState<Candidate | null>(null);
@@ -418,6 +442,68 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
   onChangeRef.current = onChange;
   const onReverseRef = useRef(onReverseGeocode);
   onReverseRef.current = onReverseGeocode;
+  wardIdRef.current = wardId;
+  wardGeoRef.current = wardGeo;
+  wardLabelRef.current = wardLabel;
+  candidateRef.current = candidate;
+
+  const normalizedPoint = (nlat: number, nlng: number) => normalizePersistedTaxonomyPoint({ lat: nlat, lng: nlng });
+  const validatePoint = (nlat: number, nlng: number) => {
+    const point = normalizedPoint(nlat, nlng);
+    return validatePointForWard(
+      point,
+      wardIdRef.current,
+      wardGeoRef.current,
+      wardLabelRef.current,
+    );
+  };
+
+  const invalidateSearch = () => {
+    ++searchRequestIdRef.current;
+    searchControllerRef.current?.abort();
+    searchControllerRef.current = null;
+  };
+
+  const candidateCanConfirm = candidate
+    ? canConfirmTaxonomyCandidate(candidate.validation, candidate.requiresManualAdjustment)
+    : false;
+  const candidateWarning = candidate
+    ? (!candidate.validation.valid ? candidate.validation.message : candidate.requiresManualAdjustment ? candidate.providerWarning : undefined)
+    : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    const currentCandidate = candidateRef.current;
+    const validation = currentCandidate
+      ? validatePointForWard(
+          normalizePersistedTaxonomyPoint({ lat: currentCandidate.lat, lng: currentCandidate.lng }),
+          wardId,
+          wardGeo,
+          wardLabel,
+        )
+      : null;
+    if (currentCandidate && validation) {
+      setCandidate(current => current ? { ...current, validation } : current);
+    }
+
+    const map = mapRef.current;
+    if (map && wardGeo?.geojson) {
+      import('leaflet').then(module => {
+        if (cancelled || !mapRef.current) return;
+        geoLayerRef.current?.remove();
+        geoLayerRef.current = module.default.geoJSON(wardGeo.geojson as never, {
+          style: { color: '#dc2626', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08 },
+        }).addTo(mapRef.current);
+        if (currentCandidate && validation && !validation.valid && isValidTaxonomyBounds(wardGeo.bounds)) {
+          mapRef.current.fitBounds([
+            [Math.min(wardGeo.bounds.south, currentCandidate.lat), Math.min(wardGeo.bounds.west, currentCandidate.lng)],
+            [Math.max(wardGeo.bounds.north, currentCandidate.lat), Math.max(wardGeo.bounds.east, currentCandidate.lng)],
+          ], { padding: [32, 32], maxZoom: 14, animate: true, duration: 0.8 });
+        }
+      });
+    }
+    return () => { cancelled = true; };
+  }, [wardId, wardGeo, wardLabel]);
 
   const removeCandidate = () => {
     searchMarkerRef.current?.remove();
@@ -460,8 +546,8 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       const L = module.default;
       import('leaflet/dist/leaflet.css');
       const map = L.map(containerRef.current, {
-        center: [10.9804, 106.6519],
-        zoom: 10,
+        center: VIETNAM_CENTER,
+        zoom: VIETNAM_ZOOM,
         zoomControl: true,
         attributionControl: false,
       });
@@ -473,78 +559,185 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
         }
       });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      L.control.attribution({ prefix: '© OpenStreetMap' }).addTo(map);
+      L.control.attribution({ prefix: '© OpenStreetMap · Ranh giới © Kontur (ODbL)' }).addTo(map);
       iconRef.current = L.divIcon({ className: '', html: PIN_SVG, iconSize: [28, 36], iconAnchor: [14, 36] });
       candidateIconRef.current = L.divIcon({ className: '', html: CANDIDATE_PIN_SVG, iconSize: [28, 36], iconAnchor: [14, 36] });
 
-      const confirmPoint = (nlat: number, nlng: number) => {
+      const commitPoint = (nlat: number, nlng: number) => {
+        invalidateSearch();
+        ++confirmRequestIdRef.current;
+        const point = normalizedPoint(nlat, nlng);
+        const validation = validatePoint(point.lat, point.lng);
+        if (!validation.valid) {
+          setStatus('invalid');
+          return;
+        }
+        ++coordinateSyncIdRef.current;
         removeCandidate();
         if (!markerRef.current) {
-          markerRef.current = L.marker([nlat, nlng], { icon: iconRef.current!, draggable: true }).addTo(map);
+          markerRef.current = L.marker([point.lat, point.lng], { icon: iconRef.current!, draggable: true }).addTo(map);
           markerRef.current.on('dragend', () => {
             const position = markerRef.current!.getLatLng();
-            confirmPoint(position.lat, position.lng);
+            invalidateSearch();
+            ++confirmRequestIdRef.current;
+            const validation = validatePoint(position.lat, position.lng);
+            if (!validation.valid) {
+              const previous = lastValidPointRef.current;
+              if (previous) markerRef.current!.setLatLng([previous.lat, previous.lng]);
+              setStatus('invalid');
+              return;
+            }
+            commitPoint(position.lat, position.lng);
           });
         } else {
-          markerRef.current.setLatLng([nlat, nlng]);
+          markerRef.current.setLatLng([point.lat, point.lng]);
         }
-        onChangeRef.current(nlat.toFixed(6), nlng.toFixed(6));
+        lastValidPointRef.current = point;
+        onChangeRef.current(point.lat.toFixed(6), point.lng.toFixed(6));
         setStatus('placed');
-        scheduleReverseGeocode(nlat, nlng);
+        scheduleReverseGeocode(point.lat, point.lng);
       };
 
-      map.on('click', event => confirmPoint(event.latlng.lat, event.latlng.lng));
+      const stageClickedPoint = (nlat: number, nlng: number) => {
+        invalidateSearch();
+        ++confirmRequestIdRef.current;
+        ++coordinateSyncIdRef.current;
+        const point = normalizedPoint(nlat, nlng);
+        const validation = validatePoint(point.lat, point.lng);
+        if (validation.valid) {
+          commitPoint(point.lat, point.lng);
+          return;
+        }
+        removeCandidate();
+        searchMarkerRef.current = L.marker([point.lat, point.lng], { icon: candidateIconRef.current!, draggable: true }).addTo(map);
+        setCandidate({ lat: point.lat, lng: point.lng, label: 'Vị trí bạn vừa chọn', requiresManualAdjustment: false, validation });
+        searchMarkerRef.current.on('dragend', () => {
+          const position = searchMarkerRef.current!.getLatLng();
+          invalidateSearch();
+          ++confirmRequestIdRef.current;
+          const point = normalizedPoint(position.lat, position.lng);
+          searchMarkerRef.current!.setLatLng([point.lat, point.lng]);
+          setCandidate({
+            lat: point.lat,
+            lng: point.lng,
+            label: 'Vị trí bạn vừa kéo',
+            requiresManualAdjustment: false,
+            validation: validatePoint(point.lat, point.lng),
+          });
+        });
+        setStatus('invalid');
+      };
+
+      map.on('click', event => stageClickedPoint(event.latlng.lat, event.latlng.lng));
     }).catch(() => setStatus('error'));
 
     return () => {
       disposed = true;
       if (reverseTimerRef.current) clearTimeout(reverseTimerRef.current);
       reverseControllerRef.current?.abort();
+      searchControllerRef.current?.abort();
+      ++confirmRequestIdRef.current;
       if (mapRef.current) mapRef.current.remove();
       geoLayerRef.current = null;
       mapRef.current = null;
       markerRef.current = null;
       searchMarkerRef.current = null;
+      lastValidPointRef.current = null;
       setMapReady(false);
     };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapReady || resetNonce === lastResetNonceRef.current) return;
+    lastResetNonceRef.current = resetNonce;
+    invalidateSearch();
+    ++confirmRequestIdRef.current;
+    ++coordinateSyncIdRef.current;
+    ++requestIdRef.current;
+    reverseControllerRef.current?.abort();
+    if (reverseTimerRef.current) clearTimeout(reverseTimerRef.current);
+    markerRef.current?.remove();
+    markerRef.current = null;
+    lastValidPointRef.current = null;
+    removeCandidate();
+    geoLayerRef.current?.remove();
+    geoLayerRef.current = null;
+    map.setView(VIETNAM_CENTER, VIETNAM_ZOOM, { animate: true });
+    setStatus('idle');
+  }, [resetNonce, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !mapReady) return;
+    const coordinatesChanged = coordinateInputRef.current.lat !== lat || coordinateInputRef.current.lng !== lng;
+    coordinateInputRef.current = { lat, lng };
+    if (coordinatesChanged) {
+      invalidateSearch();
+      ++confirmRequestIdRef.current;
+      removeCandidate();
+    }
     const latN = coordinate(lat);
     const lngN = coordinate(lng);
     if (latN === null || lngN === null) {
       markerRef.current?.remove();
       markerRef.current = null;
+      lastValidPointRef.current = null;
       if (!candidate) setStatus('idle');
       return;
     }
+    const validation = validatePoint(latN, lngN);
+    if (!validation.valid) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      lastValidPointRef.current = null;
+      setStatus('invalid');
+      return;
+    }
+    const syncId = ++coordinateSyncIdRef.current;
+    let cancelled = false;
     import('leaflet').then(module => {
-      if (!mapRef.current || !iconRef.current) return;
+      if (cancelled || syncId !== coordinateSyncIdRef.current || !mapRef.current || !iconRef.current) return;
       const L = module.default;
       if (!markerRef.current) {
         markerRef.current = L.marker([latN, lngN], { icon: iconRef.current, draggable: true }).addTo(map);
         markerRef.current.on('dragend', () => {
           const position = markerRef.current!.getLatLng();
-          onChangeRef.current(position.lat.toFixed(6), position.lng.toFixed(6));
+          invalidateSearch();
+          ++confirmRequestIdRef.current;
+          const point = normalizedPoint(position.lat, position.lng);
+          const draggedValidation = validatePoint(point.lat, point.lng);
+          if (!draggedValidation.valid) {
+            const previous = lastValidPointRef.current;
+            if (previous) markerRef.current!.setLatLng([previous.lat, previous.lng]);
+            setStatus('invalid');
+            return;
+          }
+          markerRef.current!.setLatLng([point.lat, point.lng]);
+          lastValidPointRef.current = point;
+          onChangeRef.current(point.lat.toFixed(6), point.lng.toFixed(6));
           setStatus('placed');
-          scheduleReverseGeocode(position.lat, position.lng);
+          scheduleReverseGeocode(point.lat, point.lng);
         });
       } else {
         markerRef.current.setLatLng([latN, lngN]);
       }
+      lastValidPointRef.current = { lat: latN, lng: lngN };
       map.setView([latN, lngN], Math.max(map.getZoom(), 14));
       setStatus('placed');
     });
-  }, [lat, lng, mapReady]);
+    return () => { cancelled = true; };
+  }, [lat, lng, mapReady, wardId, wardGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !geocodeTarget?.query || geocodeTarget.nonce === lastNonceRef.current) return;
     lastNonceRef.current = geocodeTarget.nonce;
+    searchControllerRef.current?.abort();
     const searchRequestId = ++searchRequestIdRef.current;
     const controller = new AbortController();
+    searchControllerRef.current = controller;
+    ++confirmRequestIdRef.current;
     let cancelled = false;
     removeCandidate();
 
@@ -564,7 +757,7 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       geoLayerRef.current = null;
       map.setView([geocodeTarget.center.lat, geocodeTarget.center.lng], Math.min(geocodeTarget.zoom, 14), { animate: true });
       setStatus('missing_geo');
-      return () => { cancelled = true; controller.abort(); };
+      return () => { cancelled = true; controller.abort(); if (searchControllerRef.current === controller) searchControllerRef.current = null; };
     }
 
     if (geocodeTarget.intent === 'taxonomy' && isValidTaxonomyBounds(geocodeTarget.bounds)) {
@@ -585,26 +778,59 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
         });
       }
       setStatus(markerRef.current ? 'review' : 'idle');
-      return () => { cancelled = true; controller.abort(); };
+      return () => { cancelled = true; controller.abort(); if (searchControllerRef.current === controller) searchControllerRef.current = null; };
     }
 
     setStatus(geocodeTarget.intent === 'taxonomy' ? 'missing_geo' : 'searching');
     const run = async () => {
       try {
         const result = await searchGeocode(geocodeTarget.query, geocodeTarget.intent, geocodeTarget.taxonomyScope, controller.signal);
-        const applied = applyViewportResult(result);
-        if (!applied || geocodeTarget.intent !== 'address') {
-          if (applied && geocodeTarget.intent === 'taxonomy') setStatus(markerRef.current ? 'review' : 'idle');
+        if (!result) {
+          applyViewportResult(null);
           return;
         }
-        const nextCandidate = { lat: applied.lat, lng: applied.lng, label: applied.label, warning: applied.warning };
+        if (geocodeTarget.intent !== 'address') {
+          const applied = applyViewportResult(result);
+          if (applied) setStatus(markerRef.current ? 'review' : 'idle');
+          return;
+        }
+        const point = normalizedPoint(result.lat, result.lng);
+        const validation = validatePoint(point.lat, point.lng);
+        const wardBounds = wardGeoRef.current?.bounds;
+        if (!validation.valid && isValidTaxonomyBounds(wardBounds) && mapRef.current) {
+          mapRef.current.fitBounds([
+            [Math.min(wardBounds.south, point.lat), Math.min(wardBounds.west, point.lng)],
+            [Math.max(wardBounds.north, point.lat), Math.max(wardBounds.east, point.lng)],
+          ], { padding: [32, 32], maxZoom: 14, animate: true, duration: 0.8 });
+        } else {
+          applyViewportResult({ ...result, lat: point.lat, lng: point.lng });
+        }
+        const nextCandidate: Candidate = {
+          lat: point.lat,
+          lng: point.lng,
+          label: result.label,
+          providerWarning: result.warning,
+          requiresManualAdjustment: Boolean(result.warning),
+          validation,
+        };
         setCandidate(nextCandidate);
         const L = await import('leaflet').then(module => module.default);
         if (cancelled || controller.signal.aborted || searchRequestId !== searchRequestIdRef.current || !mapRef.current || !candidateIconRef.current) return;
-        searchMarkerRef.current = L.marker([applied.lat, applied.lng], { icon: candidateIconRef.current, draggable: true }).addTo(mapRef.current);
+        searchMarkerRef.current = L.marker([point.lat, point.lng], { icon: candidateIconRef.current, draggable: true }).addTo(mapRef.current);
         searchMarkerRef.current.on('dragend', () => {
           const position = searchMarkerRef.current!.getLatLng();
-          setCandidate(current => current ? { ...current, lat: position.lat, lng: position.lng } : current);
+          invalidateSearch();
+          ++confirmRequestIdRef.current;
+          const draggedPoint = normalizedPoint(position.lat, position.lng);
+          searchMarkerRef.current!.setLatLng([draggedPoint.lat, draggedPoint.lng]);
+          setCandidate(current => current ? {
+            ...current,
+            lat: draggedPoint.lat,
+            lng: draggedPoint.lng,
+            providerWarning: undefined,
+            requiresManualAdjustment: false,
+            validation: validatePoint(draggedPoint.lat, draggedPoint.lng),
+          } : current);
         });
         setStatus('candidate');
       } catch {
@@ -612,36 +838,69 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
       }
     };
     void run();
-    return () => { cancelled = true; controller.abort(); };
+    return () => { cancelled = true; controller.abort(); if (searchControllerRef.current === controller) searchControllerRef.current = null; };
   }, [geocodeTarget, mapReady]);
 
   const confirmCandidate = () => {
-    if (!candidate || !mapRef.current) return;
+    if (!candidate || !candidateCanConfirm || !mapRef.current) return;
+    const candidateSnapshot = candidate;
+    const wardIdSnapshot = wardIdRef.current;
+    const confirmRequestId = ++confirmRequestIdRef.current;
     const map = mapRef.current;
     import('leaflet').then(module => {
-      if (!mapRef.current) return;
+      if (
+        confirmRequestId !== confirmRequestIdRef.current
+        || candidateRef.current !== candidateSnapshot
+        || wardIdRef.current !== wardIdSnapshot
+        || !mapRef.current
+      ) return;
+      const point = normalizedPoint(candidateSnapshot.lat, candidateSnapshot.lng);
+      const validation = validatePoint(point.lat, point.lng);
+      if (!canConfirmTaxonomyCandidate(validation, candidateSnapshot.requiresManualAdjustment)) {
+        setCandidate(current => current === candidateSnapshot ? { ...current, validation } : current);
+        setStatus('invalid');
+        return;
+      }
       const L = module.default;
+      invalidateSearch();
+      ++coordinateSyncIdRef.current;
       removeCandidate();
       if (!markerRef.current) {
-        markerRef.current = L.marker([candidate.lat, candidate.lng], { icon: iconRef.current!, draggable: true }).addTo(map);
+        markerRef.current = L.marker([point.lat, point.lng], { icon: iconRef.current!, draggable: true }).addTo(map);
         markerRef.current.on('dragend', () => {
           const position = markerRef.current!.getLatLng();
-          onChangeRef.current(position.lat.toFixed(6), position.lng.toFixed(6));
+          invalidateSearch();
+          ++confirmRequestIdRef.current;
+          const point = normalizedPoint(position.lat, position.lng);
+          const draggedValidation = validatePoint(point.lat, point.lng);
+          if (!draggedValidation.valid) {
+            const previous = lastValidPointRef.current;
+            if (previous) markerRef.current!.setLatLng([previous.lat, previous.lng]);
+            setStatus('invalid');
+            return;
+          }
+          markerRef.current!.setLatLng([point.lat, point.lng]);
+          lastValidPointRef.current = point;
+          onChangeRef.current(point.lat.toFixed(6), point.lng.toFixed(6));
           setStatus('placed');
-          scheduleReverseGeocode(position.lat, position.lng);
+          scheduleReverseGeocode(point.lat, point.lng);
         });
-      } else markerRef.current.setLatLng([candidate.lat, candidate.lng]);
-      onChangeRef.current(candidate.lat.toFixed(6), candidate.lng.toFixed(6));
+      } else markerRef.current.setLatLng([point.lat, point.lng]);
+      lastValidPointRef.current = point;
+      onChangeRef.current(point.lat.toFixed(6), point.lng.toFixed(6));
       setStatus('placed');
-      scheduleReverseGeocode(candidate.lat, candidate.lng);
+      scheduleReverseGeocode(point.lat, point.lng);
     });
   };
 
   const clearPin = () => {
-    ++searchRequestIdRef.current;
+    invalidateSearch();
+    ++confirmRequestIdRef.current;
+    ++coordinateSyncIdRef.current;
     ++requestIdRef.current;
     markerRef.current?.remove();
     markerRef.current = null;
+    lastValidPointRef.current = null;
     removeCandidate();
     onChangeRef.current('', '');
     setStatus('idle');
@@ -654,8 +913,10 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
     : status === 'candidate'
       ? 'Ghim vàng là điểm tham khảo. Kiểm tra rồi bấm xác nhận hoặc kéo ghim đến đúng vị trí.'
       : status === 'placed'
-        ? 'Ghim đỏ là vị trí sẽ được lưu. Bạn có thể kéo ghim để chỉnh lại.'
-        : status === 'review'
+        ? 'Ghim đỏ đã được kiểm tra nằm trong polygon xã/phường và sẽ được lưu.'
+        : status === 'invalid'
+          ? 'Điểm vừa chọn hoặc kéo không hợp lệ nên không được lưu. Nếu đã có ghim đỏ, hệ thống giữ nguyên vị trí hợp lệ trước đó.'
+          : status === 'review'
           ? 'Bạn vừa đổi khu vực hành chính. Hãy kiểm tra và kéo ghim đỏ về đúng vị trí trước khi lưu.'
           : status === 'missing_geo'
         ? 'Chưa có ranh giới nội bộ; đang thử định vị theo đúng chuỗi tỉnh, huyện, xã.'
@@ -663,23 +924,32 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, onReverseGeo
           ? 'Không tìm thấy địa chỉ. Hãy thử tên đường/phường ngắn hơn hoặc bấm trực tiếp lên bản đồ.'
           : status === 'error'
             ? 'Không tải được dịch vụ tìm kiếm. Bạn vẫn có thể bấm trực tiếp lên bản đồ để đặt ghim.'
-            : 'Bấm vào đúng vị trí trên bản đồ để thả ghim. Vị trí chỉ là điểm tham khảo, không phải ranh giới pháp lý.';
+            : status === 'idle' && !geocodeTarget
+              ? 'Chọn tỉnh/thành phố để bản đồ hiển thị đúng khu vực hành chính.'
+              : 'Bấm vào đúng vị trí trên bản đồ để thả ghim. Vị trí chỉ là điểm tham khảo, không phải ranh giới pháp lý.';
 
   return (
     <div className="space-y-2">
       <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm" style={{ height }}>
         <div ref={containerRef} className="h-full w-full" />
-        {candidate && (
-          <div className="absolute bottom-3 left-3 right-3 z-[500] rounded-xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur-sm">
-            <p className="text-xs font-semibold text-amber-800">Kết quả tham khảo</p>
-            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-gray-600">{candidate.label}</p>
-            {candidate.warning && <p role="alert" className="mt-1 text-[11px] font-semibold leading-4 text-red-600">{candidate.warning}</p>}
-            <button type="button" onClick={confirmCandidate} className="mt-2 min-h-10 w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">Xác nhận vị trí này</button>
-          </div>
-        )}
       </div>
+      {candidate && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 shadow-sm">
+          <p className="text-xs font-semibold text-amber-800">Kết quả tham khảo</p>
+          <p className="mt-1 text-[11px] leading-4 text-gray-600">{candidate.label}</p>
+          {candidateWarning && <p role="alert" className="mt-1 text-[11px] font-semibold leading-4 text-red-600">{candidateWarning}</p>}
+          <button
+            type="button"
+            onClick={confirmCandidate}
+            disabled={!candidateCanConfirm}
+            className="mt-2 min-h-10 w-full rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
+          >
+            {candidateCanConfirm ? 'Xác nhận vị trí này' : 'Kéo ghim vào đúng xã/phường để xác nhận'}
+          </button>
+        </div>
+      )}
       <div className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className={`text-xs leading-5 ${status === 'error' || status === 'none' || status === 'missing_geo' ? 'text-amber-700' : 'text-gray-600'}`}>{geocodeTarget?.taxonomyLabel && geocodeTarget.intent === 'taxonomy' ? `${geocodeTarget.taxonomyLabel} ` : ''}{statusText}</p>
+        <p className={`text-xs leading-5 ${status === 'invalid' ? 'font-semibold text-red-700' : status === 'error' || status === 'none' || status === 'missing_geo' ? 'text-amber-700' : 'text-gray-600'}`}>{geocodeTarget?.taxonomyLabel && geocodeTarget.intent === 'taxonomy' ? `${geocodeTarget.taxonomyLabel} ` : ''}{statusText}</p>
         {(markerRef.current || candidate) && <button type="button" onClick={clearPin} className="flex-shrink-0 text-left text-xs font-semibold text-red-600 hover:text-red-700 sm:text-right">Xóa ghim</button>}
       </div>
     </div>

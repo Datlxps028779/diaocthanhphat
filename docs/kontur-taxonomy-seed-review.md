@@ -39,10 +39,13 @@ The acceptance path `Bình Dương → Thủ Dầu Một → Hiệp Thành` is i
 
 ## Run sequence
 
-1. Run `manual_taxonomy_geo_kontur_review.sql` and confirm current coverage.
-2. Run `manual_taxonomy_geo_kontur_seed.sql`. It writes all rows with `is_published = false`.
-3. Run the review SQL again and inspect the target path plus counts.
-4. Only after review, run `manual_taxonomy_geo_kontur_publish.sql` to publish exactly 702 rows.
-5. Reload the browser and verify the target path at `/dang-tin`.
+1. Run `manual_listing_coordinate_taxonomy_dry_run.sql` and save the pre-foundation inventory.
+2. Load polygon SQL. The original four province files preserve the reviewed source, but Supabase's linked query endpoint rejects requests above roughly 3–4 MB. For Dashboard/`supabase db query --linked`, run the TP.HCM and Bình Dương originals, then every `manual_taxonomy_geo_polygon_tinh-binh-phuoc_part_*.sql` and `manual_taxonomy_geo_polygon_tinh-dong-nai_part_*.sql` file in numeric order. The seven transport chunks are each below 2 MB and contain geometry byte-for-byte identical to the two large source files.
+3. Run `20260914000000_listing_coordinate_taxonomy_foundation.sql`. It enables PostGIS, adds/backfills `ward_id`, and installs the read-only polygon-cover helper without changing historical coordinates.
+4. Run `manual_listing_coordinate_taxonomy_repair_dry_run.sql`. The post-foundation production snapshot on 2026-08-30 found 10 active properties and 5 user listings (4 approved + 1 pending) with unprovable coordinates.
+5. After reviewing those rows, run `manual_listing_coordinate_taxonomy_repair.sql`. It is separately guarded to update exactly the measured 10 + 5 rows and only clears invalid latitude/longitude; it does not alter taxonomy, addresses, content, or lifecycle status.
+6. Deploy the `ward_id`-aware frontend/admin code. Then run `20260914010000_listing_coordinate_taxonomy_enforcement.sql`. It repeats one safe exact-match backfill for rows created by old frontend instances during the rollout window, aborts if any unprovable coordinate remains, and only then installs listing/admin/approval guards.
+7. Run `manual_listing_coordinate_taxonomy_verify.sql`; confirm 702 published polygon rows, zero invalid coordinates, and that the reported Lái Thiêu point is not covered by An Phú.
+8. Reload `/dang-tin` and verify a mismatched search candidate stays yellow and disabled until it is moved inside the selected ward polygon.
 
-The seed contains bounds and centers, not copied polygons. The map can fit each verified administrative extent without using an external geocoder to invent a boundary. `taxonomy_geo.geojson` remains available for a later licensed polygon publication if needed.
+The polygon files are generated deterministically by `scripts/generate-taxonomy-geo-polygons.py`. The generator does not rematch names: it joins every source polygon back to the exact bounds of the same 702 mappings that were already reviewed and published, and aborts on zero or multiple matches. Runtime coordinate validity uses the polygon linked to the selected `ward_id`; geocoder labels and rectangular bounds are never sufficient to confirm a point.
