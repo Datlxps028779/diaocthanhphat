@@ -292,3 +292,19 @@
   font-weight: 500;
 }
 .prose a:hover { color: #b91c1c; }
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .ai-search-panel {
+    position: fixed !important;
+    inset-inline: 1rem !important;
+    inset-block-start: 1rem !important;
+    bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    height: calc(100dvh - 2rem) !important;
+    max-height: calc(100dvh - 2rem) !important;
+  }
+  .compare-bar-ai-open,
+  .cookie-notice-ai-open {
+    display: none !important;
+  }
+}

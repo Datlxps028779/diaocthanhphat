@@ -4,23 +4,32 @@ import Link from 'next/link';
 import { Scale, X } from 'lucide-react';
 import { getCompareList, clearCompare, removeFromCompare, COMPARE_EVENT, type CompareProperty } from '../lib/compare';
 import { pageToHref } from '../lib/router';
+import { AI_PANEL_EVENT } from '../lib/siteOverlay';
 
 // Thanh nổi hiện ở đáy màn hình khi có BĐS trong danh sách so sánh, cho lối tắt
 // tới trang /so-sanh. Đọc localStorage + lắng nghe COMPARE_EVENT (client-only).
 export function CompareBar() {
   const [items, setItems] = useState<CompareProperty[]>([]);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     const sync = () => setItems(getCompareList());
+    const onAiPanelChange = (event: Event) => {
+      setAiOpen(Boolean((event as CustomEvent<boolean>).detail));
+    };
     sync();
     window.addEventListener(COMPARE_EVENT, sync);
-    return () => window.removeEventListener(COMPARE_EVENT, sync);
+    window.addEventListener(AI_PANEL_EVENT, onAiPanelChange);
+    return () => {
+      window.removeEventListener(COMPARE_EVENT, sync);
+      window.removeEventListener(AI_PANEL_EVENT, onAiPanelChange);
+    };
   }, []);
 
   if (items.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,640px)]">
+    <div className={`${aiOpen ? 'hidden sm:block compare-bar-ai-open' : 'block'} fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,640px)]`}>
       <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-3 flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
           {items.map(p => (

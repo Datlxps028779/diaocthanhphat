@@ -7,6 +7,7 @@ import { Cookie } from 'lucide-react';
 import { getConsent, setConsent, CONSENT_EVENT, type ConsentStatus } from '@/lib/consent';
 import { getSiteSettings } from '@/lib/api';
 import { resolveGoogleTagConfig, type GoogleTagConfig } from '@/lib/googleTag';
+import { AI_PANEL_EVENT } from '@/lib/siteOverlay';
 
 interface AnalyticsConsentProps {
   environmentGaId?: string;
@@ -21,6 +22,7 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
   const [tagReady, setTagReady] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [showNotice, setShowNotice] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const pathname = usePathname();
   const isPrivateWorkspace = pathname === '/noi-bo' || pathname.startsWith('/noi-bo/') || pathname === '/quantrihethong' || pathname.startsWith('/quantrihethong/');
   const loadOptionalAnalytics = mounted && !isPrivateWorkspace && status === 'granted';
@@ -48,8 +50,15 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
       setStatus(nextStatus);
       if (nextStatus === 'unset') setShowNotice(true);
     };
+    const onAiPanelChange = (event: Event) => {
+      setAiOpen(Boolean((event as CustomEvent<boolean>).detail));
+    };
     window.addEventListener(CONSENT_EVENT, onChange);
-    return () => window.removeEventListener(CONSENT_EVENT, onChange);
+    window.addEventListener(AI_PANEL_EVENT, onAiPanelChange);
+    return () => {
+      window.removeEventListener(CONSENT_EVENT, onChange);
+      window.removeEventListener(AI_PANEL_EVENT, onAiPanelChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -119,7 +128,7 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
         <section
           role="region"
           aria-label="Thông báo chính sách Cookie"
-          className="fixed bottom-6 left-3 z-[200] w-[calc(100%-1.5rem)] max-w-sm sm:left-6 sm:w-full"
+          className={`${aiOpen ? 'hidden sm:block cookie-notice-ai-open' : 'block'} fixed bottom-6 left-3 z-[200] w-[calc(100%-1.5rem)] max-w-sm sm:left-6 sm:w-full`}
         >
           <div className="rounded-2xl border border-gray-100 bg-white shadow-2xl">
             <div className="p-5">

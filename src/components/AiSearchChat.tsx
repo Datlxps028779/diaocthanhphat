@@ -15,6 +15,7 @@ import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestSt
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import { countAdvisorIntentCriteria, RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
+import { notifyAiPanel } from '../lib/siteOverlay';
 
 // Lời mặc định = fallback khi admin chưa cấu hình / mạng lỗi (site_settings group 'ai_chat').
 const DEFAULT_EXAMPLES = [
@@ -110,6 +111,10 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   const showExamples = !hasUserMessage && !loading;
   const showMatchActions = !loading && lastTurn?.stage === 'showing_matches';
   const showLeadCta = !leadSent && (Boolean(leadFor) || showGeneralLeadForm);
+
+  useEffect(() => {
+    notifyAiPanel(open);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -463,7 +468,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   return (
     <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6 transform-none' : 'top-1/2 -translate-y-1/2'}`}>
       {open && (
-        <div className="fixed sm:absolute bottom-4 sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78vh,640px)] sm:h-auto sm:max-h-[calc(100vh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
+        <div className="ai-search-panel fixed sm:absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78dvh,640px)] sm:h-auto sm:max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
             <div>
               <div className="flex items-center gap-2 font-black text-sm"><TakoMascot className="w-5 h-5" />Trợ lý BĐS</div>
