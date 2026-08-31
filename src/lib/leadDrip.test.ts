@@ -55,6 +55,7 @@ describe('leadDrip', () => {
 
   it('require_phone: bật thì loại lead thiếu SĐT, tắt thì vẫn nhận', () => {
     expect(pickDripStep(mk({ phone: '' }), [], NOW, STEPS, FILTER)).toBeNull();
+    expect(pickDripStep(mk({ phone: '   ' }), [], NOW, STEPS, FILTER)).toBeNull();
     expect(pickDripStep(mk({ phone: '' }), [], NOW, STEPS, { ...FILTER, require_phone: false })?.id).toBe('s1');
   });
 
@@ -66,6 +67,12 @@ describe('leadDrip', () => {
   it('dùng created_at nếu thiếu last_activity_at', () => {
     const lead = mk({ created_at: iso(at(2026, 7, 11)), last_activity_at: null });
     expect(pickDripStep(lead, [], NOW, STEPS, FILTER)?.id).toBe('s1');
+  });
+
+  it('fail-closed khi follow-up hoặc mốc tuổi lead không hợp lệ', () => {
+    expect(pickDripStep(mk({ follow_up_at: 'not-a-date' }), [], NOW, STEPS, FILTER)).toBeNull();
+    expect(pickDripStep(mk({ last_activity_at: 'not-a-date' }), [], NOW, STEPS, FILTER)).toBeNull();
+    expect(pickDripStep(mk({ last_activity_at: null, created_at: 'not-a-date' }), [], NOW, STEPS, FILTER)).toBeNull();
   });
 
   it('render tin: thay đủ 4 biến từ dữ liệu lead', () => {

@@ -54,10 +54,15 @@ export function pickDripStep(
   if (isTerminal(lead.status)) return null;
   if (!filter.eligible_statuses.includes(lead.status)) return null;
   if (filter.require_phone && !lead.phone?.trim()) return null;
-  if (lead.follow_up_at && new Date(lead.follow_up_at).getTime() > now.getTime()) return null;
+  if (lead.follow_up_at) {
+    const followUpAt = new Date(lead.follow_up_at).getTime();
+    if (!Number.isFinite(followUpAt) || followUpAt > now.getTime()) return null;
+  }
 
   const basis = lead.last_activity_at ?? lead.created_at;
-  const ageDays = Math.floor((now.getTime() - new Date(basis).getTime()) / 86_400_000);
+  const basisAt = new Date(basis).getTime();
+  if (!Number.isFinite(basisAt)) return null;
+  const ageDays = Math.floor((now.getTime() - basisAt) / 86_400_000);
   if (ageDays < 0) return null;
 
   const sent = new Set(sentStepIds);

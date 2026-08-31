@@ -43,9 +43,14 @@ function pickDripStep(lead: DripLead, sentStepIds: string[], now: Date, steps: D
   if (lead.status === "won" || lead.status === "lost") return null;
   if (!filter.eligible_statuses.includes(lead.status)) return null;
   if (filter.require_phone && !lead.phone?.trim()) return null;
-  if (lead.follow_up_at && new Date(lead.follow_up_at).getTime() > now.getTime()) return null;
+  if (lead.follow_up_at) {
+    const followUpAt = new Date(lead.follow_up_at).getTime();
+    if (!Number.isFinite(followUpAt) || followUpAt > now.getTime()) return null;
+  }
   const basis = lead.last_activity_at ?? lead.created_at;
-  const ageDays = Math.floor((now.getTime() - new Date(basis).getTime()) / 86_400_000);
+  const basisAt = new Date(basis).getTime();
+  if (!Number.isFinite(basisAt)) return null;
+  const ageDays = Math.floor((now.getTime() - basisAt) / 86_400_000);
   if (ageDays < 0) return null;
   const sent = new Set(sentStepIds);
   const ordered = steps
@@ -80,11 +85,12 @@ Deno.serve(async (req: Request) => {
   const now = new Date();
 
   // Cấu hình luật lọc + bước động đọc từ DB (không còn hard-code).
-  const { data: cfg } = await db
+  const { data: cfg, error: configError } = await db
     .from("nurture_drip_config")
     .select("eligible_statuses, require_phone")
     .eq("id", true)
     .maybeSingle();
+  if (configError) throw configError;
   const filter: DripFilter = {
     eligible_statuses: (cfg?.eligible_statuses as string[] | undefined) ?? ["new", "contacted", "nurturing", "viewing", "negotiating"],
     require_phone: (cfg?.require_phone as boolean | undefined) ?? true,
@@ -110,9 +116,10 @@ Deno.serve(async (req: Request) => {
   if (leadError) throw leadError;
 
   const leadIds = (leads ?? []).map((l: { id: string }) => l.id);
-  const { data: logs } = leadIds.length
+  const { data: logs, error: logReadError } = leadIds.length
     ? await db.from("lead_drip_log").select("lead_id, step, status").in("lead_id", leadIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (logReadError) throw logReadError;
 
   const byLead = new Map<string, { sent: Set<string>; logged: Set<string> }>();
   for (const log of logs ?? []) {
@@ -153,7 +160,15 @@ Deno.serve(async (req: Request) => {
     }
 
     if (status !== "skipped" || !seen.logged.has(step.id)) {
-      await db.from("lead_drip_log").insert({ lead_id: lead.id, step: step.id, channel: step.channel, status, detail, message: rendered });
+      const { error: logError } = await db.from("lead_drip_log").insert({
+        lead_id: lead.id,
+        step: step.id,
+        channel: step.channel,
+        status,
+        detail,
+        message: rendered,
+      });
+      if (logError) throw logError;
     }
     results[status]++;
   }

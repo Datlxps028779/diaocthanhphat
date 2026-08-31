@@ -62,12 +62,8 @@ export async function deleteDripStep(id: string): Promise<void> {
 }
 
 export async function reorderDripSteps(ids: string[]): Promise<void> {
-  const now = new Date().toISOString();
-  await Promise.all(ids.map((id, i) =>
-    supabase.from('nurture_drip_step').update({ sort_order: i, updated_at: now }).eq('id', id).then(({ error }) => {
-      if (error) throw error;
-    })
-  ));
+  const { error } = await supabase.rpc('admin_reorder_nurture_steps', { p_step_ids: ids });
+  if (error) throw error;
 }
 
 // Đếm gần đúng lead đủ điều kiện cơ bản (status ∈ eligible & không terminal, có SĐT nếu require_phone).
@@ -75,11 +71,16 @@ export async function reorderDripSteps(ids: string[]): Promise<void> {
 export async function countEligibleLeads(filter: { eligible_statuses: string[]; require_phone: boolean }): Promise<number> {
   const statuses = filter.eligible_statuses.filter(s => !isTerminal(s as StageKey));
   if (statuses.length === 0) return 0;
-  let q = supabase.from('leads').select('id', { count: 'exact', head: true }).in('status', statuses);
-  if (filter.require_phone) q = q.not('phone', 'is', null).neq('phone', '');
-  const { count, error } = await q;
+  if (!filter.require_phone) {
+    const { count, error } = await supabase
+      .from('leads').select('id', { count: 'exact', head: true }).in('status', statuses);
+    if (error) throw error;
+    return count ?? 0;
+  }
+  const { data, error } = await supabase
+    .from('leads').select('phone').in('status', statuses);
   if (error) throw error;
-  return count ?? 0;
+  return (data ?? []).filter(row => typeof row.phone === 'string' && row.phone.trim().length > 0).length;
 }
 
 export async function invokeNurtureDrip(): Promise<number> {

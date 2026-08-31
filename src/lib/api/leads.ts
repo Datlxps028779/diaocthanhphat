@@ -27,37 +27,34 @@ export async function submitLead(lead: { id?: string; full_name: string; phone: 
 
 // Admin/staff tạo lead thủ công (khách gọi điện/sự kiện/giới thiệu — không qua form web).
 // KHÔNG bắn crm-webhook (khỏi spam Zalo NV cho lead tự nhập). Ghi 1 activity 'created'.
-// Gán NV qua bảng lead_assignments: assignee_ids (chọn tay) + creator_id (người tạo, để
-// staff thấy được lead vừa tạo do RLS lọc theo thành viên). Gộp + khử trùng.
+// Gán NV qua bảng lead_assignments: assignee_ids (chọn tay); RPC luôn thêm người
+// đang đăng nhập để staff thấy lead vừa tạo do RLS lọc theo thành viên. Gộp + khử trùng.
 export async function createLead(input: {
   full_name: string; phone: string; area_interest?: string | null; budget?: string | null;
   message?: string | null; status?: Lead['status']; author?: string | null;
   property_id?: string | null; assignee_ids?: string[]; creator_id?: string | null;
 }): Promise<Lead> {
-  const { data, error } = await supabase.from('leads').insert({
-    full_name: input.full_name, phone: input.phone,
-    area_interest: input.area_interest ?? null, budget: input.budget ?? null,
-    message: input.message ?? null,
-    status: input.status ?? 'new', source: 'admin_manual',
-    property_id: input.property_id ?? null,
-  }).select('*, properties(id,title)').single();
+  const memberIds = Array.from(new Set(input.assignee_ids ?? []));
+  const { data, error } = await supabase.rpc('admin_create_lead', {
+    p_full_name: input.full_name,
+    p_phone: input.phone,
+    p_area_interest: input.area_interest ?? null,
+    p_budget: input.budget ?? null,
+    p_message: input.message ?? null,
+    p_status: input.status ?? 'new',
+    p_property_id: input.property_id ?? null,
+    p_assignee_ids: memberIds,
+    p_author: input.author ?? null,
+  });
   if (error) throw error;
-  const lead = data as Lead;
-  const memberIds = Array.from(new Set([...(input.assignee_ids ?? []), ...(input.creator_id ? [input.creator_id] : [])]));
-  if (memberIds.length > 0) {
-    await supabase.from('lead_assignments').upsert(
-      memberIds.map(uid => ({ lead_id: lead.id, user_id: uid, added_by: input.creator_id ?? null })),
-      { onConflict: 'lead_id,user_id', ignoreDuplicates: true },
-    );
-  }
-  await addLeadActivity(lead.id, { kind: 'created', body: 'Tạo khách thủ công', author: input.author ?? null });
-  return lead;
+  return data as Lead;
 }
 
 // ─── Lead activities (nhật ký chăm sóc) ────────────────────────────────────────
 export async function getLeadActivities(leadId: string): Promise<LeadActivity[]> {
-  const { data } = await supabase.from('lead_activities')
+  const { data, error } = await supabase.from('lead_activities')
     .select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
+  if (error) throw error;
   return (data ?? []) as LeadActivity[];
 }
 export async function addLeadActivity(leadId: string, a: { kind: LeadActivity['kind']; body?: string | null; author?: string | null }): Promise<void> {
@@ -69,9 +66,10 @@ export async function addLeadActivity(leadId: string, a: { kind: LeadActivity['k
 // Tải gọn field SLA của các lead chưa kết thúc (won/lost) — cho chuông nhắc ở header.
 // Chỉ 3 cột, lọc bỏ terminal ở DB để không kéo toàn bộ lead lịch sử về.
 export async function getOpenLeadSla(): Promise<{ status: Lead['status']; created_at: string; follow_up_at: string | null; last_activity_at: string | null }[]> {
-  const { data } = await supabase.from('leads')
+  const { data, error } = await supabase.from('leads')
     .select('status, created_at, follow_up_at, last_activity_at')
     .not('status', 'in', '(won,lost)');
+  if (error) throw error;
   return (data ?? []) as { status: Lead['status']; created_at: string; follow_up_at: string | null; last_activity_at: string | null }[];
 }
 
@@ -98,10 +96,11 @@ export async function updateLeadCrm(id: string, patch: { note?: string | null; f
 // nên upsert theo (lead_id,user_id), trùng thì bỏ qua. Trả số cặp gán.
 export async function bulkAssignLeads(assignments: { lead_id: string; user_id: string }[]): Promise<number> {
   if (assignments.length === 0) return 0;
-  const { error } = await supabase.from('lead_assignments')
-    .upsert(assignments, { onConflict: 'lead_id,user_id', ignoreDuplicates: true });
+  const { data, error } = await supabase.from('lead_assignments')
+    .upsert(assignments, { onConflict: 'lead_id,user_id', ignoreDuplicates: true })
+    .select('lead_id, user_id');
   if (error) throw error;
-  return assignments.length;
+  return data?.length ?? 0;
 }
 export async function deleteLead(id: string): Promise<void> {
   const { error } = await supabase.from('leads').delete().eq('id', id);
