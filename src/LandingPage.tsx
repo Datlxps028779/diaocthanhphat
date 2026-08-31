@@ -42,6 +42,7 @@ import { buildNewsImageAlt } from './lib/propertyImages';
 import { dedupeFeaturedSectionProperties } from './lib/featuredSectionDedupe';
 import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
 import { normalizeListingTitle } from './lib/listingTitle';
+import { buildTruthfulHeroSubtitle } from './lib/homeTruthfulCopy';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
@@ -757,9 +758,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
           </h1>
           <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_10px_rgba(0,0,0,0.85)]">
-            {sec('hero')('subtitle', activeListingCount != null
-              ? `${activeListingCount.toLocaleString('vi-VN')} tin đăng nhà đất đang hoạt động tại Bình Dương, Bình Phước, Đồng Nai`
-              : 'Tin đăng nhà đất, căn hộ, đất nền tại Bình Dương, Bình Phước, Đồng Nai')}
+            {buildTruthfulHeroSubtitle(sec('hero')('subtitle', ''), activeListingCount)}
           </p>
 
           {/* Search box */}
