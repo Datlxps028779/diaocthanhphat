@@ -5,10 +5,10 @@ import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react'
 import { type Page } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, detectHandoffTriggers, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
-import { getAdvisorMatches, getAllProperties, type PropertyFilters } from '../lib/api/properties';
+import { getAdvisorMatches, getAdvisorCatalogueMatches, type PropertyFilters } from '../lib/api/properties';
 import { submitLead } from '../lib/api/leads';
 import { getAiChatKnowledge } from '../lib/api/aiChatKnowledge';
-import { askAiChat } from '../lib/api/aiChat';
+import { askAiChat, isSafeCitationUrl } from '../lib/api/aiChat';
 import { inheritFilters, parseSearchIntent } from '../lib/aiSearch';
 import { getSiteSettings } from '../lib/api/siteSettings';
 import { appendPublicChatMessage, getPublicChatMessages, linkChatLead, requestStaffChat, routeChatSession, startChatSession, type PublicChatHandle } from '../lib/api/chatOps';
@@ -268,7 +268,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
       setLastTurn(turn);
       setResults([]);
       const citations = ai.citations
-        .filter(c => c.source_url)
+        .filter(c => isSafeCitationUrl(c.source_url))
         .map(c => ({ title: c.title, source_url: c.source_url }));
       setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label), ...(citations.length ? { citations } : {}) }]);
       await persistOngoingMessage('assistant', turn.reply);
@@ -322,7 +322,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
 
     setLoading(true);
     try {
-      const res = await getAllProperties({ ...turn.filters, keyword: turn.residualKeyword || undefined, sort: 'relevance', page: 1, limit: 4 });
+      const res = await getAdvisorCatalogueMatches({ ...turn.filters, keyword: turn.residualKeyword || undefined, sort: 'relevance', page: 1, limit: 4 });
       if (seq !== requestSeq.current) return;
       const cards = res.data.map(summarizePropertyForAdvisor);
       setResults(cards);

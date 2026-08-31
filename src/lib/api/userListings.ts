@@ -9,7 +9,7 @@ function canonicalListingTitle<T extends { title: string; city?: string | null; 
 }
 
 // ─── User Listings ────────────────────────────────────────────────────────────
-export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
+export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
   const { error } = await supabase.from('user_listings').insert(canonicalListingTitle(listing));
   if (error) throw error;
 }
@@ -36,12 +36,12 @@ export async function getMyListing(id: string): Promise<UserListing | null> {
 // duyệt lại (xoá luôn lý do từ chối cũ). RLS user_listings_update_own giới hạn đúng chủ.
 export async function updateMyListing(
   id: string,
-  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>,
+  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles'>,
 ): Promise<void> {
   const canonical = canonicalListingTitle(listing);
   const { data, error } = await supabase
     .from('user_listings')
-    .update({ ...canonical, status: 'pending', reject_reason: null, expires_at: null })
+    .update({ ...canonical, status: 'pending', reject_reason: null, expires_at: null, ai_seo_draft: null })
     .eq('id', id)
     .select('id');
   if (error) throw error;
@@ -92,16 +92,12 @@ export async function adminUpdatePendingUserListing(
   return data as UserListing;
 }
 
-// RPC return shape. The database locks the listing then inserts its public
-// property and updates lifecycle state in one transaction; the browser never
-// constructs an approval insert itself.
-export interface ApprovedListingProperty {
+interface ApprovedListingProperty {
   property_id: string;
   title: string;
   description: string | null;
   city: string;
   district: string | null;
-  // Database constraint also permits historical can_mua/can_thue values.
   listing_type: string;
   price: number;
   price_unit: string;
@@ -112,9 +108,6 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-// Supabase RPC results are untyped at runtime. Validate the committed database
-// result before passing it to optional AI enrichment so a schema mismatch cannot
-// create a malformed Edge Function request after an otherwise valid approval.
 export function isApprovedListingProperty(value: unknown): value is ApprovedListingProperty {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
@@ -130,40 +123,20 @@ export function isApprovedListingProperty(value: unknown): value is ApprovedList
     && (row.area_sqm === null || (typeof row.area_sqm === 'number' && Number.isFinite(row.area_sqm)));
 }
 
-async function autoTagApprovedProperty(approved: ApprovedListingProperty): Promise<void> {
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) return;
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!token) return;
-
-    await fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({
-        propertyId: approved.property_id,
-        title: approved.title,
-        description: approved.description,
-        city: approved.city,
-        district: approved.district,
-        listingType: approved.listing_type,
-        price: approved.price,
-        priceUnit: approved.price_unit,
-        areaSqm: approved.area_sqm,
-      }),
-    });
-  } catch {
-    // AI is enrichment only. A failed request must never report a committed
-    // approval as failed or make an admin retry the lifecycle transition.
-  }
-}
-
 function hasApprovedPropertyId(value: unknown): value is { property_id: string } {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
   return typeof row.property_id === 'string' && row.property_id.length > 0;
+}
+
+export async function applyUserListingSeoDraft(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_apply_user_listing_ai_seo', { p_listing_id: id });
+  if (error) throw error;
+}
+
+export async function rejectUserListingSeoDraft(id: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_reject_user_listing_ai_seo', { p_listing_id: id });
+  if (error) throw error;
 }
 
 export async function approveUserListing(id: string): Promise<void> {
@@ -175,18 +148,10 @@ export async function approveUserListing(id: string): Promise<void> {
   if (!hasApprovedPropertyId(data)) {
     throw new Error('Duyệt tin không trả về property_id hợp lệ.');
   }
-
-  // The RPC has committed at this point. A malformed optional enrichment payload
-  // must not make the Admin UI treat that successful lifecycle transition as a
-  // failure and retry it; skip autotagging instead.
-  if (isApprovedListingProperty(data)) {
-    void autoTagApprovedProperty(data);
-  } else {
-    console.warn('[api] Approval committed but AI autotag payload was invalid.');
-  }
 }
+
 export async function rejectUserListing(id: string, reason: string): Promise<void> {
-  const { error } = await supabase.from('user_listings').update({ status: 'rejected', reject_reason: reason }).eq('id', id);
+  const { error } = await supabase.from('user_listings').update({ status: 'rejected', reject_reason: reason, ai_seo_draft: null }).eq('id', id);
   if (error) throw error;
 }
 
@@ -214,8 +179,7 @@ export async function adminSetExpiry(id: string, expiresAtISO: string | null): P
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────
-// Duyệt hàng loạt KHÔNG gộp được thành 1 câu: mỗi tin phải insert sang properties
-// + bắn AI autotag, nên lặp approveUserListing và chịu lỗi cục bộ (allSettled).
+// Duyệt hàng loạt vẫn gọi RPC riêng cho từng tin để giữ khóa và lifecycle atomic.
 // Trả số tin duyệt thành công.
 export async function bulkApproveUserListings(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
@@ -230,7 +194,7 @@ export async function bulkRejectUserListings(ids: string[], reason: string): Pro
   if (ids.length === 0) return 0;
   const { error, count } = await supabase
     .from('user_listings')
-    .update({ status: 'rejected', reject_reason: reason }, { count: 'exact' })
+    .update({ status: 'rejected', reject_reason: reason, ai_seo_draft: null }, { count: 'exact' })
     .in('id', ids);
   if (error) throw error;
   return count ?? ids.length;

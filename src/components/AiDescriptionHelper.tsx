@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { generateAIDescription } from '../lib/api';
+import type { AiListingProvenance } from '../lib/aiListingDraft';
 import type { ListingType } from '../lib/supabase';
 
 interface AiDescriptionHelperProps {
@@ -8,12 +9,14 @@ interface AiDescriptionHelperProps {
   listingType: ListingType;
   area: string;
   price: string;
-  onApply: (text: string) => void;
+  onApply: (text: string, provenance: AiListingProvenance | null) => void;
+  onProvenanceChange?: (provenance: AiListingProvenance | null) => void;
 }
 
-export function AiDescriptionHelper({ keywords, listingType, area, price, onApply }: AiDescriptionHelperProps) {
+export function AiDescriptionHelper({ keywords, listingType, area, price, onApply, onProvenanceChange }: AiDescriptionHelperProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState('');
+  const [provenance, setProvenance] = useState<AiListingProvenance | null>(null);
   const [error, setError] = useState('');
 
   const generate = async () => {
@@ -22,8 +25,10 @@ export function AiDescriptionHelper({ keywords, listingType, area, price, onAppl
     setError('');
     setResult('');
     try {
-      const desc = await generateAIDescription({ keywords, listingType, area, price });
-      setResult(desc);
+      const generated = await generateAIDescription({ keywords, listingType, area, price });
+      setResult(generated.description);
+      setProvenance(generated.provenance);
+      onProvenanceChange?.(generated.provenance);
     } catch {
       setError('Không thể tạo mô tả. Vui lòng thử lại.');
     } finally {
@@ -36,7 +41,7 @@ export function AiDescriptionHelper({ keywords, listingType, area, price, onAppl
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-amber-600" />
-          <span className="text-xs font-bold text-amber-800">Trợ lý AI — Viết mô tả tự động</span>
+          <span className="text-xs font-bold text-amber-800">Trợ lý AI — Bản nháp mô tả</span>
         </div>
         <button
           type="button"
@@ -51,7 +56,7 @@ export function AiDescriptionHelper({ keywords, listingType, area, price, onAppl
       </div>
 
       <p className="text-amber-700 text-[11px]">
-        AI sẽ tự động viết mô tả SEO dựa trên tiêu đề và thông tin bạn đã nhập.
+        AI chỉ tạo bản nháp từ các trường bạn đã nhập. Hãy kiểm tra và chỉnh sửa trước khi gửi tin.
       </p>
 
       {error && (
@@ -68,7 +73,7 @@ export function AiDescriptionHelper({ keywords, listingType, area, price, onAppl
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => onApply(result)}
+              onClick={() => onApply(result, provenance)}
               className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
             >
               Dùng mô tả này
@@ -80,6 +85,17 @@ export function AiDescriptionHelper({ keywords, listingType, area, price, onAppl
               className="flex items-center gap-1 border border-amber-300 text-amber-700 text-xs font-medium px-3 py-2 rounded-lg hover:bg-amber-100 transition-colors"
             >
               <RefreshCw className="w-3 h-3" />Tạo lại
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setResult('');
+                setProvenance(null);
+                onProvenanceChange?.(null);
+              }}
+              className="border border-gray-200 text-gray-600 text-xs font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Bỏ bản nháp
             </button>
           </div>
         </div>

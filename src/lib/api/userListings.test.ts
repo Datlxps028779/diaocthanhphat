@@ -8,10 +8,12 @@ const approvalMigration = readFileSync(
   'utf8',
 );
 
-const identityPreservingApprovalMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260903030000_preserve_user_listing_property_identity.sql'),
+const aiListingMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260915000000_ai_listing_drafts.sql'),
   'utf8',
 );
+
+const identityPreservingApprovalMigration = aiListingMigration;
 
 describe('isApprovedListingProperty', () => {
   const approved = {
@@ -71,9 +73,9 @@ describe('identity-preserving user-listing reapproval migration', () => {
   });
 
   it('fails closed for active, dangling, or ambiguously shared property links', () => {
-    expect(identityPreservingApprovalMigration).toContain("IF v_prior_property_active THEN");
+    expect(identityPreservingApprovalMigration).toContain('v_prior_property_found := FOUND;');
     expect(identityPreservingApprovalMigration).toMatch(
-      /IF v_listing\.property_id IS NOT NULL AND NOT v_prior_property_found THEN[\s\S]+RAISE EXCEPTION/s,
+      /IF NOT v_prior_property_found THEN[\s\S]+RAISE EXCEPTION/s,
     );
     expect(identityPreservingApprovalMigration).toMatch(
       /FROM public\.user_listings other_listing[\s\S]+other_listing\.property_id = v_listing\.property_id[\s\S]+other_listing\.id <> v_listing\.id/s,
@@ -109,6 +111,28 @@ describe('identity-preserving user-listing reapproval migration', () => {
     expect(identityPreservingApprovalMigration).toContain(
       'GRANT EXECUTE ON FUNCTION public.approve_user_listing(uuid) TO authenticated;',
     );
+  });
+});
+
+describe('AI Listing draft migration', () => {
+  it('keeps AI SEO output in a pending draft and requires explicit apply or reject', () => {
+    expect(aiListingMigration).toContain('ADD COLUMN IF NOT EXISTS ai_seo_draft jsonb');
+    expect(aiListingMigration).toContain('admin_apply_user_listing_ai_seo');
+    expect(aiListingMigration).toContain('admin_reject_user_listing_ai_seo');
+    expect(aiListingMigration).toContain("IF v_listing.ai_seo_draft IS NOT NULL THEN");
+    expect(aiListingMigration).toContain('Cần áp dụng hoặc bỏ bản nháp SEO AI trước khi duyệt');
+  });
+
+  it('copies approved tags from the user listing and preserves reapproval identity checks', () => {
+    expect(aiListingMigration).toMatch(/tags = v_listing\.tags/);
+    expect(aiListingMigration).toContain('v_prior_property_found := FOUND;');
+    expect(aiListingMigration).toContain('v_property_id := v_listing.property_id;');
+    expect(aiListingMigration).toContain('other_listing.property_id = v_listing.property_id');
+  });
+
+  it('does not update public properties in the AI generation path', () => {
+    const generationSection = aiListingMigration.split('CREATE OR REPLACE FUNCTION public.admin_apply_user_listing_ai_seo')[0];
+    expect(generationSection).not.toContain('UPDATE public.properties');
   });
 });
 

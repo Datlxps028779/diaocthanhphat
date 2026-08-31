@@ -907,7 +907,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'source-review'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'source-review' | 'faq-review'>('all');
   // Danh mục động từ DB (news_categories). Fallback danh sách chuẩn khi chưa nạp/lỗi.
   const [categories, setCategories] = useState<string[]>(CATEGORIES_FALLBACK);
   // Modal "Tạo bài bằng AI"
@@ -957,18 +957,32 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
+  const editorialById = useMemo(
+    () => new Map(articles.map(article => [article.id, evaluateNewsEditorialQuality(article)])),
+    [articles],
+  );
+  const editorialFor = (article: NewsArticle) => editorialById.get(article.id) ?? evaluateNewsEditorialQuality(article);
   const publishedCount = articles.filter(a => a.is_published).length;
   const draftCount = articles.length - publishedCount;
-  const sourceReviewCount = articles.filter(a => a.is_published && !evaluateNewsEditorialQuality(a).canPublish).length;
-  const filtered = articles.filter(a =>
-    statusFilter === 'all'
-      ? true
-      : statusFilter === 'published'
-        ? a.is_published
-        : statusFilter === 'draft'
-          ? !a.is_published
-          : a.is_published && !evaluateNewsEditorialQuality(a).canPublish,
-  );
+  const sourceReviewCount = articles.filter(a => a.is_published && editorialFor(a).citationStatus === 'needs-review').length;
+  const faqReviewCount = articles.filter(a => a.is_published && editorialFor(a).faqStatus === 'needs-review').length;
+  const filtered = articles
+    .filter(a =>
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'published'
+          ? a.is_published
+          : statusFilter === 'draft'
+            ? !a.is_published
+            : statusFilter === 'source-review'
+              ? a.is_published && editorialFor(a).citationStatus === 'needs-review'
+              : a.is_published && editorialFor(a).faqStatus === 'needs-review',
+    )
+    .sort((a, b) => {
+      const aPriority = a.is_published && editorialFor(a).citationStatus === 'needs-review' ? 0 : 1;
+      const bPriority = b.is_published && editorialFor(b).citationStatus === 'needs-review' ? 0 : 1;
+      return aPriority - bPriority;
+    });
   const allIds = filtered.map(a => a.id);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
@@ -976,7 +990,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const selectedIds = () => Array.from(selected);
   const blockedSelectedPublication = () => articles
     .filter(article => selected.has(article.id) && !article.is_published)
-    .find(article => !evaluateNewsEditorialQuality(article).canPublish);
+    .find(article => !editorialFor(article).canPublish);
   const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidateNewsContent>[1]) => {
     try {
       await revalidateNewsContent(action, targets);
@@ -1045,7 +1059,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           <button disabled={bulkBusy} onClick={() => {
             const blocked = blockedSelectedPublication();
             if (blocked) {
-              alert(`Không thể đăng "${blocked.title}": ${evaluateNewsEditorialQuality(blocked).citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
+              alert(`Không thể đăng "${blocked.title}": ${editorialFor(blocked).citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
               return;
             }
             runBulk(
@@ -1085,6 +1099,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           { key: 'published', label: 'Đã đăng', count: publishedCount },
           { key: 'draft', label: 'Nháp', count: draftCount },
           { key: 'source-review', label: 'Thiếu nguồn', count: sourceReviewCount },
+          { key: 'faq-review', label: 'Rà soát FAQ', count: faqReviewCount },
         ] as const).map(f => (
           <button key={f.key} onClick={() => { setStatusFilter(f.key); clearSelection(); }}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium border transition-colors ${
@@ -1137,8 +1152,19 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                             {a.is_published ? 'Đã đăng' : 'Nháp'}
                           </span>
                           {(a.meta_title || a.meta_description || a.schema_markup) && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">SEO</span>}
-                          {!evaluateNewsEditorialQuality(a).canPublish && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-700">Thiếu nguồn</span>}
-                          {evaluateNewsEditorialQuality(a).faqIssues.length > 0 && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">FAQ cần rà soát</span>}
+                          {(() => {
+                            const quality = editorialFor(a);
+                            return (
+                              <>
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] ${quality.citationStatus === 'ready' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                  Nguồn {quality.validCitationCount}/2
+                                </span>
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] ${quality.faqStatus === 'ready' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                  FAQ {quality.validFaqCount}/{quality.faqCount}
+                                </span>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1153,7 +1179,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                       <button onClick={() => setEditing(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={async () => {
                         const nextPublished = !a.is_published;
-                        const editorialQuality = evaluateNewsEditorialQuality(a);
+                        const editorialQuality = editorialFor(a);
                         if (nextPublished && !editorialQuality.canPublish) {
                           alert(`Không thể đăng: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
                           return;
@@ -1185,6 +1211,8 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
               {articles.length === 0 ? 'Chưa có bài viết nào'
                 : statusFilter === 'draft' ? 'Không có bài nháp nào'
                 : statusFilter === 'published' ? 'Không có bài đã đăng nào'
+                : statusFilter === 'source-review' ? 'Không có bài nào thiếu nguồn'
+                : statusFilter === 'faq-review' ? 'Không có bài nào cần rà soát FAQ'
                 : 'Chưa có bài viết nào'}
             </div>
           )}

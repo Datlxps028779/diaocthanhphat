@@ -122,7 +122,7 @@ export function PropertyDiscoveryRail({
                 <span className="absolute left-1.5 top-1.5 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Cho thuê</span>
               )}
             </div>
-            <div className="flex min-w-0 flex-1 flex-col justify-center p-1">
+            <div className={`flex min-w-0 flex-1 flex-col justify-center ${sidebar ? 'p-2' : 'p-3'}`}>
               <h3 className={`mb-1 line-clamp-2 text-gray-900 transition-colors group-hover:text-red-600 ${sidebar ? 'text-sm font-medium leading-snug' : 'cnv-property-title'}`}>{normalizeListingTitle(property.title, [property.city, property.district ?? '']).value}</h3>
               <p className={sidebar ? 'text-sm font-black text-red-600' : 'cnv-property-price text-red-600'}>{formatPropertyPrice(property)}</p>
               <div className="cnv-property-meta mt-1 flex items-center gap-1 text-gray-400">

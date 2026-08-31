@@ -158,7 +158,12 @@ Deno.serve(async (req: Request) => {
       .map((c: { source_id?: unknown }) => ragById.get(String(c?.source_id ?? "")))
       .filter((c: RagMatch | undefined): c is RagMatch => !!c)
       .filter((c: RagMatch, i: number, arr: RagMatch[]) => arr.findIndex(x => x.source_id === c.source_id) === i)
-      .map((c: RagMatch) => ({ source_table: c.source_table, source_id: c.source_id, title: c.title, source_url: c.source_url }));
+      .map((c: RagMatch) => ({
+        source_table: c.source_table,
+        source_id: c.source_id,
+        title: c.title,
+        source_url: isSafeHttpUrl(c.source_url) ? c.source_url : null,
+      }));
 
     return json({
       ok: true,
@@ -170,10 +175,20 @@ Deno.serve(async (req: Request) => {
       insufficient_evidence: parsed.insufficient_evidence === true || rag.length === 0,
       citations,
     });
-  } catch (err) {
-    return json({ ok: false, error: (err as Error).message });
+  } catch {
+    return json({ ok: false, error: "internal_error" });
   }
 });
+
+function isSafeHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 function extractJson(raw: string): Record<string, any> | null {
   const start = raw.indexOf("{");

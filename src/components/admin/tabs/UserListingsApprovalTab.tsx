@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X, Pencil } from 'lucide-react';
+import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X, Pencil, Sparkles } from 'lucide-react';
 import { PostListingPage } from '../../../screens/PostListingPage';
 import type { Page } from '../../../lib/router';
 import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
-import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry } from '../../../lib/api';
+import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
 import { formatPropertyPrice } from '../../../lib/listingPrice';
@@ -25,6 +25,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [editingListing, setEditingListing] = useState<UserListing | null>(null);
+  const [seoProcessingId, setSeoProcessingId] = useState<string | null>(null);
   const historyRequest = useRef(0);
 
   const noOpNavigate = (_page: Page) => {};
@@ -38,6 +39,24 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     setProcessingId(id);
     try { await approveUserListing(id); await load(); onRefreshStats(); }
     catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); }
+  };
+  const handleGenerateSeo = async (id: string) => {
+    setSeoProcessingId(id);
+    try { await generateUserListingSeoDraft(id); await load(); }
+    catch (e) { console.error('[AdminPanel] SEO AI', e); alert('Không tạo được bản nháp SEO AI. Vui lòng thử lại.'); }
+    finally { setSeoProcessingId(null); }
+  };
+  const handleApplySeo = async (id: string) => {
+    setSeoProcessingId(id);
+    try { await applyUserListingSeoDraft(id); await load(); }
+    catch (e) { console.error('[AdminPanel] SEO AI apply', e); alert('Không áp dụng được bản nháp SEO AI. Vui lòng kiểm tra lại.'); }
+    finally { setSeoProcessingId(null); }
+  };
+  const handleRejectSeo = async (id: string) => {
+    setSeoProcessingId(id);
+    try { await rejectUserListingSeoDraft(id); await load(); }
+    catch (e) { console.error('[AdminPanel] SEO AI reject', e); alert('Không bỏ được bản nháp SEO AI. Vui lòng thử lại.'); }
+    finally { setSeoProcessingId(null); }
   };
   const handleReject = async () => {
     if (!rejectModal) return;
@@ -257,6 +276,41 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                       </span>
                     </div>
                   </div>
+                  {listing.status === 'pending' && (
+                    <div className="w-full rounded-xl border border-violet-100 bg-violet-50/60 p-3 lg:max-w-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-xs font-bold text-violet-800"><Sparkles className="h-3.5 w-3.5" /> SEO AI bản nháp</p>
+                        <button
+                          onClick={() => handleGenerateSeo(listing.id)}
+                          disabled={seoProcessingId === listing.id}
+                          data-testid={`generate-seo-${listing.id}`}
+                          className="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                        >{seoProcessingId === listing.id ? 'Đang tạo...' : listing.ai_seo_draft ? 'Tạo lại' : 'Tạo bản nháp'}</button>
+                      </div>
+                      {listing.ai_seo_draft ? (
+                        <div className="mt-2 space-y-2 text-[11px] text-violet-900">
+                          <p className="text-violet-700">Nguồn: {listing.ai_seo_draft.provenance.provider} · {new Date(listing.ai_seo_draft.provenance.generated_at).toLocaleString('vi-VN')}</p>
+                          <p><b>Tags:</b> {listing.ai_seo_draft.tags.join(', ') || '—'}</p>
+                          <p><b>Meta title:</b> {listing.ai_seo_draft.meta_title || '—'}</p>
+                          <p><b>Meta description:</b> {listing.ai_seo_draft.meta_description || '—'}</p>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleApplySeo(listing.id)}
+                              disabled={seoProcessingId === listing.id}
+                              className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >Áp dụng SEO</button>
+                            <button
+                              onClick={() => handleRejectSeo(listing.id)}
+                              disabled={seoProcessingId === listing.id}
+                              className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                            >Bỏ bản nháp</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-[11px] text-violet-700">Tạo bản nháp để xem xét trước khi duyệt. Bản nháp không tự xuất bản.</p>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2 flex-shrink-0 items-stretch">
                     {listing.status === 'pending' && (
                       <>

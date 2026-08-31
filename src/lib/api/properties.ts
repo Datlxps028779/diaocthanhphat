@@ -16,6 +16,19 @@ export interface PropertyFilters {
   page?: number; limit?: number;
 }
 
+export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, areas(id,name,slug), property_types(id,name,slug)';
+
+export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
+  'contact_name',
+  'contact_phone',
+  'contact_zalo',
+  'description',
+  'schema_markup',
+  'focus_keywords',
+  'meta_title',
+  'meta_description',
+] as const;
+
 // Filter nhận từ URL/RSC trước khi ListingsPage bổ sung paging. `typeSlug` chỉ dùng
 // để map taxonomy bất đồng bộ sang typeId, còn các field khác giữ nguyên contract
 // parser ↔ client wrapper ↔ màn danh sách.
@@ -119,8 +132,18 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
 }
 
 interface RankedMatch { id: string; rank: number; total_count: number }
+interface AdvisorMatch {
+  id: string;
+  score: number;
+  intent_score?: number;
+  match_reasons?: unknown;
+  total_count: number;
+}
 
-async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+async function getRankedPropertyMatches(
+  filters: PropertyFilters,
+  propertySelect = '*, areas(id,name,slug), property_types(id,name,slug)',
+): Promise<{ data: Property[]; total: number }> {
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
   const bedrooms = filters.bedrooms && filters.bedrooms !== 'all' ? Number(filters.bedrooms) : undefined;
@@ -151,21 +174,21 @@ async function getRankedPropertyMatches(filters: PropertyFilters): Promise<{ dat
   const ids = rows.map(r => r.id);
   const { data, error: detailError } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(propertySelect)
     .eq('is_active', true)
     .in('id', ids);
   if (detailError) throw new PropertySearchUnavailableError();
-  const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
+  const byId = new Map((data ?? []).map(p => {
+    const property = p as unknown as Property;
+    return [property.id, property];
+  }));
   return { data: ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p)), total: rows[0]?.total_count ?? rows.length };
 }
 
-interface AdvisorMatch {
-  id: string;
-  score: number;
-  intent_score?: number;
-  match_reasons?: unknown;
-  total_count: number;
+export async function getAdvisorCatalogueMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+  return getRankedPropertyMatches(filters, ADVISOR_PROPERTY_SELECT);
 }
+
 export type AdvisorMatchedProperty = Property & {
   matchScore: number;
   matchIntentScore: number;
@@ -202,11 +225,14 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
   const metadata = new Map(rows.map(r => [r.id, mapAdvisorMatchMetadata(r)]));
   const { data, error: detailError } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(ADVISOR_PROPERTY_SELECT)
     .eq('is_active', true)
     .in('id', ids);
   if (detailError) throw detailError;
-  const byId = new Map((data ?? []).map(p => [p.id, p as Property]));
+  const byId = new Map((data ?? []).map(p => {
+    const property = p as unknown as Property;
+    return [property.id, property];
+  }));
   return {
     data: ids
       .map(id => byId.get(id))

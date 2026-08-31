@@ -1,74 +1,91 @@
-BEGIN TRANSACTION READ ONLY;
+-- P8 read-only preflight: inspect citation readiness without changing public.news.
+-- This query does not call or grant access to the publication trigger helper.
 
-WITH citation_rows AS (
+WITH expanded AS (
   SELECT
     n.id,
-    n.slug,
-    n.title,
     n.is_published,
-    n.created_at,
-    n.updated_at,
-    n.views,
-    n.citations,
-    n.faq,
+    jsonb_typeof(n.citations) AS citations_type,
+    entry.item,
+    nullif(btrim(entry.item ->> 'title'), '') AS title,
+    nullif(btrim(entry.item ->> 'url'), '') AS url
+  FROM public.news AS n
+  LEFT JOIN LATERAL jsonb_array_elements(
     CASE
       WHEN jsonb_typeof(n.citations) = 'array' THEN n.citations
       ELSE '[]'::jsonb
-    END AS citation_array
-  FROM public.news n
-), citation_quality AS (
+    END
+  ) AS entry(item) ON true
+), article_stats AS (
   SELECT
-    row.*,
-    COALESCE((
-      SELECT count(*)
-      FROM jsonb_array_elements(row.citation_array) AS entry(item)
+    id,
+    is_published,
+    max(citations_type) AS citations_type,
+    count(item) AS item_count,
+    count(*) FILTER (
       WHERE jsonb_typeof(item) = 'object'
-        AND nullif(btrim(item ->> 'title'), '') IS NOT NULL
-        AND nullif(btrim(item ->> 'url'), '') ~* '^https?://[^[:space:]/]+(?:/[^[:space:]]*)?$'
-    ), 0) AS valid_citation_count,
-    COALESCE((
-      SELECT count(DISTINCT lower(nullif(btrim(item ->> 'url'), '')))
-      FROM jsonb_array_elements(row.citation_array) AS entry(item)
+        AND title IS NOT NULL
+        AND url ~* '^https?://[^[:space:]]+$'
+        AND split_part(split_part(split_part(substring(url from 9), '/', 1), '?', 1), '#', 1) <> ''
+    ) AS valid_count,
+    count(DISTINCT lower(url)) FILTER (
       WHERE jsonb_typeof(item) = 'object'
-        AND nullif(btrim(item ->> 'title'), '') IS NOT NULL
-        AND nullif(btrim(item ->> 'url'), '') ~* '^https?://[^[:space:]/]+(?:/[^[:space:]]*)?$'
-    ), 0) AS unique_citation_url_count,
-    CASE
-      WHEN jsonb_typeof(row.faq) = 'array' THEN jsonb_array_length(row.faq)
-      ELSE 0
-    END AS faq_count
-  FROM citation_rows row
-), classified AS (
-  SELECT *,
-    valid_citation_count >= 2 AND valid_citation_count = unique_citation_url_count AS would_pass_publication_citation_gate
-  FROM citation_quality
+        AND title IS NOT NULL
+        AND url ~* '^https?://[^[:space:]]+$'
+        AND split_part(split_part(split_part(substring(url from 9), '/', 1), '?', 1), '#', 1) <> ''
+    ) AS distinct_valid_count
+  FROM expanded
+  GROUP BY id, is_published
+), evaluated AS (
+  SELECT
+    *,
+    citations_type = 'array'
+      AND item_count >= 2
+      AND valid_count = item_count
+      AND valid_count = distinct_valid_count AS citation_floor_met
+  FROM article_stats
 )
-SELECT jsonb_build_object(
-  'generated_at', now(),
-  'published_summary', jsonb_build_object(
-    'total', count(*) FILTER (WHERE is_published),
-    'citation_gate_pass', count(*) FILTER (WHERE is_published AND would_pass_publication_citation_gate),
-    'citation_gate_fail_legacy', count(*) FILTER (WHERE is_published AND NOT would_pass_publication_citation_gate),
-    'without_faq', count(*) FILTER (WHERE is_published AND faq_count = 0)
-  ),
-  'draft_publication_readiness', jsonb_build_object(
-    'total', count(*) FILTER (WHERE NOT is_published),
-    'would_pass_if_published', count(*) FILTER (WHERE NOT is_published AND would_pass_publication_citation_gate),
-    'would_be_blocked_if_published', count(*) FILTER (WHERE NOT is_published AND NOT would_pass_publication_citation_gate)
-  ),
-  'published_source_review_queue', COALESCE(jsonb_agg(
-    jsonb_build_object(
-      'id', id,
-      'slug', slug,
-      'title', title,
-      'views', views,
-      'updated_at', updated_at,
-      'valid_citation_count', valid_citation_count,
-      'faq_count', faq_count
-    )
-    ORDER BY views DESC NULLS LAST, updated_at DESC NULLS LAST
-  ) FILTER (WHERE is_published AND NOT would_pass_publication_citation_gate), '[]'::jsonb)
-) AS news_publication_citation_preflight
-FROM classified;
+SELECT
+  CASE WHEN is_published THEN 'legacy_public_rows_not_revalidated' ELSE 'draft_transition_candidates' END AS scope,
+  count(*) AS article_count,
+  count(*) FILTER (WHERE citation_floor_met) AS would_pass_new_publication_guard,
+  count(*) FILTER (WHERE NOT citation_floor_met) AS would_fail_new_publication_guard
+FROM evaluated
+GROUP BY is_published
+ORDER BY is_published DESC;
 
-ROLLBACK;
+-- Optional compact totals for reviewers who only need the current legacy/draft split.
+WITH evaluated AS (
+  SELECT
+    n.is_published,
+    jsonb_typeof(n.citations) = 'array'
+      AND stats.item_count >= 2
+      AND stats.valid_count = stats.item_count
+      AND stats.valid_count = stats.distinct_valid_count AS citation_floor_met
+  FROM public.news AS n
+  LEFT JOIN LATERAL (
+    SELECT
+      count(entry.item) AS item_count,
+      count(*) FILTER (
+        WHERE jsonb_typeof(entry.item) = 'object'
+          AND nullif(btrim(entry.item ->> 'title'), '') IS NOT NULL
+          AND nullif(btrim(entry.item ->> 'url'), '') ~* '^https?://[^[:space:]]+$'
+          AND split_part(split_part(split_part(substring(nullif(btrim(entry.item ->> 'url'), '') from 9), '/', 1), '?', 1), '#', 1) <> ''
+      ) AS valid_count,
+      count(DISTINCT lower(nullif(btrim(entry.item ->> 'url'), ''))) FILTER (
+        WHERE jsonb_typeof(entry.item) = 'object'
+          AND nullif(btrim(entry.item ->> 'title'), '') IS NOT NULL
+          AND nullif(btrim(entry.item ->> 'url'), '') ~* '^https?://[^[:space:]]+$'
+          AND split_part(split_part(split_part(substring(nullif(btrim(entry.item ->> 'url'), '') from 9), '/', 1), '?', 1), '#', 1) <> ''
+      ) AS distinct_valid_count
+    FROM jsonb_array_elements(
+      CASE WHEN jsonb_typeof(n.citations) = 'array' THEN n.citations ELSE '[]'::jsonb END
+    ) AS entry(item)
+  ) AS stats ON true
+)
+SELECT
+  count(*) FILTER (WHERE is_published) AS published_legacy_count,
+  count(*) FILTER (WHERE NOT is_published) AS draft_count,
+  count(*) FILTER (WHERE NOT is_published AND citation_floor_met) AS drafts_ready_if_published,
+  count(*) FILTER (WHERE NOT is_published AND NOT citation_floor_met) AS drafts_needing_editorial_sources
+FROM evaluated;

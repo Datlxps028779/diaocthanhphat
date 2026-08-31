@@ -1,4 +1,5 @@
 import { supabase, type Subscriber } from '../supabase';
+import { isAiListingProvenance, type AiListingProvenance } from '../aiListingDraft';
 
 // Lấy Bearer token của session hiện tại để gọi Edge Function yêu cầu admin. Nếu
 // chưa đăng nhập, fallback anon key (function sẽ tự trả 401 khi cần admin).
@@ -92,8 +93,12 @@ async function getDashboardStatsFallback(): Promise<DashboardStats> {
   };
 }
 
-// ─── AI Description ──────────────────────────────────────────────────────────
-export async function generateAIDescription(params: { keywords: string; listingType?: string; area?: string; price?: string }): Promise<string> {
+export interface AIDescriptionResult {
+  description: string;
+  provenance: AiListingProvenance | null;
+}
+
+export async function generateAIDescription(params: { keywords: string; listingType?: string; area?: string; price?: string }): Promise<AIDescriptionResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const response = await fetch(`${supabaseUrl}/functions/v1/ai-description`, {
@@ -102,9 +107,37 @@ export async function generateAIDescription(params: { keywords: string; listingT
     body: JSON.stringify(params),
   });
   if (!response.ok) throw new Error(`AI request failed (${response.status})`);
-  const data = await response.json() as { description?: string; error?: string };
+  const data = await response.json() as { description?: string; provenance?: unknown; error?: string };
   if (!data.description) throw new Error(data.error ?? 'No description returned');
-  return data.description;
+  return {
+    description: data.description,
+    provenance: isAiListingProvenance(data.provenance) ? data.provenance : null,
+  };
+}
+
+export interface AiListingSeoDraftResult {
+  tags: string[];
+  metaTitle: string;
+  metaDescription: string;
+  provenance: AiListingProvenance | null;
+}
+
+export async function generateUserListingSeoDraft(userListingId: string): Promise<AiListingSeoDraftResult> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const token = await authBearer();
+  const response = await fetch(`${supabaseUrl}/functions/v1/ai-autotag`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ userListingId }),
+  });
+  const data = await response.json() as Partial<AiListingSeoDraftResult> & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? `AI SEO request failed (${response.status})`);
+  return {
+    tags: Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+    metaTitle: typeof data.metaTitle === 'string' ? data.metaTitle : '',
+    metaDescription: typeof data.metaDescription === 'string' ? data.metaDescription : '',
+    provenance: isAiListingProvenance(data.provenance) ? data.provenance : null,
+  };
 }
 
 // ─── AI SEO Analysis ──────────────────────────────────────────────────────────

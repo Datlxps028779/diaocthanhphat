@@ -1,4 +1,6 @@
-import { supabase, type PropertyVerificationCase, type PropertyVerificationEvidence, type PropertyVerificationEvent } from '../supabase';
+import { supabase } from '../supabase';
+import type { PropertyVerificationCase, PropertyVerificationEvidence, PropertyVerificationEvent } from '../supabase';
+import { parseAiVerificationRecommendation, type AiVerificationRecommendation } from '../aiVerificationRecommendation';
 
 export const VERIFICATION_EVIDENCE_BUCKET = 'verification-evidence';
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
@@ -117,6 +119,16 @@ export async function decidePropertyVerificationCase(
   }).single();
   if (error) throw error;
   return data as PropertyVerificationCase;
+}
+
+export async function getAiVerificationRecommendation(caseId: string): Promise<AiVerificationRecommendation> {
+  const { data, error } = await supabase.functions.invoke('ai-verification', {
+    body: { caseId },
+  });
+  if (error) throw error;
+  const recommendation = parseAiVerificationRecommendation(data);
+  if (!recommendation) throw new Error('Gợi ý AI trả về dữ liệu không hợp lệ.');
+  return recommendation;
 }
 
 export async function revokePropertyVerificationCase(caseId: string, note: string): Promise<PropertyVerificationCase> {

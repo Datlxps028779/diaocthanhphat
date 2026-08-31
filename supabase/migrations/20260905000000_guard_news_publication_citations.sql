@@ -9,19 +9,23 @@ SET search_path = public, pg_temp
 AS $$
   WITH source_rows AS (
     SELECT
+      item,
       nullif(btrim(item ->> 'title'), '') AS title,
       nullif(btrim(item ->> 'url'), '') AS url
     FROM jsonb_array_elements(
       CASE WHEN jsonb_typeof(p_citations) = 'array' THEN p_citations ELSE '[]'::jsonb END
     ) AS entry(item)
-    WHERE jsonb_typeof(item) = 'object'
   ), valid_rows AS (
     SELECT title, url
     FROM source_rows
-    WHERE title IS NOT NULL
-      AND url ~* '^https?://[^[:space:]/]+(?:/[^[:space:]]*)?$'
+    WHERE jsonb_typeof(item) = 'object'
+      AND title IS NOT NULL
+      AND url ~* '^https?://[^[:space:]]+$'
+      AND split_part(split_part(split_part(substring(url from 9), '/', 1), '?', 1), '#', 1) <> ''
   )
-  SELECT count(*) >= 2
+  SELECT jsonb_typeof(p_citations) = 'array'
+    AND count(*) >= 2
+    AND count(*) = (SELECT count(*) FROM source_rows)
     AND count(DISTINCT lower(url)) = count(*)
   FROM valid_rows;
 $$;

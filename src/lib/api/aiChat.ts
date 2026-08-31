@@ -18,6 +18,16 @@ export interface AiChatResponse {
   citations: AiCitation[];
 }
 
+export function isSafeCitationUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function askAiChat(message: string, history: AdvisorMessage[]): Promise<AiChatResponse | null> {
   const safeHistory = history
     .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -37,7 +47,8 @@ export async function askAiChat(message: string, history: AdvisorMessage[]): Pro
           title: typeof c.title === 'string' ? c.title : '',
           source_url: typeof c.source_url === 'string' ? c.source_url : null,
         }))
-        .filter((c: AiCitation) => c.title.trim() !== '')
+        .filter((c: AiCitation) => c.source_table.trim() !== '' && c.source_id.trim() !== '' && c.title.trim() !== '')
+        .map((c: AiCitation) => ({ ...c, source_url: isSafeCitationUrl(c.source_url) ? c.source_url : null }))
     : [];
   return {
     understood_query: typeof data.understood_query === 'string' ? data.understood_query : '',

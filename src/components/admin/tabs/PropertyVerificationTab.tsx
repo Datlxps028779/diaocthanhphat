@@ -8,6 +8,7 @@ import {
   getPropertyVerificationCases,
   getPropertyVerificationEvidence,
   getPropertyVerificationEvents,
+  getAiVerificationRecommendation,
   openPropertyVerificationCase,
   revokePropertyVerificationCase,
   submitPropertyVerificationCase,
@@ -19,6 +20,7 @@ import {
   PUBLIC_VERIFICATION_REASON_ORDER,
   type PublicVerificationReasonCode,
 } from '../../../lib/propertyVerification';
+import type { AiVerificationRecommendation } from '../../../lib/aiVerificationRecommendation';
 import type {
   PropertyVerificationCase,
   PropertyVerificationEvidence,
@@ -88,6 +90,8 @@ export function PropertyVerificationTab() {
   const [selectedCase, setSelectedCase] = useState<PropertyVerificationCase | null>(null);
   const [evidence, setEvidence] = useState<PropertyVerificationEvidence[]>([]);
   const [events, setEvents] = useState<PropertyVerificationEvent[]>([]);
+  const [aiRecommendation, setAiRecommendation] = useState<AiVerificationRecommendation | null>(null);
+  const [aiRecommendationLoading, setAiRecommendationLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -113,6 +117,7 @@ export function PropertyVerificationTab() {
 
   const loadDetail = useCallback(async (item: PropertyVerificationCase) => {
     setSelectedCase(item);
+    setAiRecommendation(null);
     setDetailLoading(true);
     setError(null);
     try {
@@ -194,6 +199,14 @@ export function PropertyVerificationTab() {
             <div className="flex min-h-72 items-center justify-center px-6 text-center text-sm text-gray-400">Chọn một hồ sơ để xem bằng chứng, trạng thái và lịch sử bất biến.</div>
           ) : detailLoading ? <LoadingBlock /> : (
             <CaseDetail caseItem={selectedCase} evidence={evidence} events={events} busy={busy}
+              aiRecommendation={aiRecommendation}
+              aiRecommendationLoading={aiRecommendationLoading}
+              onGenerateAiRecommendation={async () => {
+                setAiRecommendationLoading(true); setError(null);
+                try { setAiRecommendation(await getAiVerificationRecommendation(selectedCase.id)); }
+                catch (cause) { setError((cause as Error).message || 'Không thể tạo gợi ý hỗ trợ kiểm tra.'); }
+                finally { setAiRecommendationLoading(false); }
+              }}
               onUpload={async (kind, file) => {
                 setBusy(true); setError(null);
                 try { await uploadPropertyVerificationEvidence(selectedCase.id, kind, file); await refreshSelected(selectedCase.id); }
@@ -302,8 +315,11 @@ function ScopeChecklist({ label, values, onToggle, disabledCodes = [] }: { label
   return <fieldset><legend className="mb-2 text-xs font-semibold text-gray-700">{label}</legend><div className="grid gap-2 sm:grid-cols-2">{PUBLIC_VERIFICATION_REASON_ORDER.map(code => <label key={code} className={`flex items-start gap-2 rounded-lg border p-2.5 text-xs ${disabledCodes.includes(code) ? 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-400' : 'cursor-pointer border-gray-200 text-gray-700 hover:border-red-200'}`}><input type="checkbox" disabled={disabledCodes.includes(code)} checked={values.includes(code)} onChange={() => onToggle(code)} className="mt-0.5 accent-red-600" />{PUBLIC_VERIFICATION_REASON_LABELS[code]}</label>)}</div></fieldset>;
 }
 
-function CaseDetail({ caseItem, evidence, events, busy, onUpload, onSubmit, onDecide, onRevoke }: {
+function CaseDetail({ caseItem, evidence, events, busy, aiRecommendation, aiRecommendationLoading, onGenerateAiRecommendation, onUpload, onSubmit, onDecide, onRevoke }: {
   caseItem: PropertyVerificationCase; evidence: PropertyVerificationEvidence[]; events: PropertyVerificationEvent[]; busy: boolean;
+  aiRecommendation: AiVerificationRecommendation | null;
+  aiRecommendationLoading: boolean;
+  onGenerateAiRecommendation: () => Promise<void>;
   onUpload: (kind: PropertyVerificationEvidenceKind, file: File) => Promise<void>;
   onSubmit: () => Promise<void>;
   onDecide: (decision: 'verified' | 'rejected', reasons: string[], verifiedUntil: string | null, note: string) => Promise<void>;
@@ -336,6 +352,14 @@ function CaseDetail({ caseItem, evidence, events, busy, onUpload, onSubmit, onDe
     <div className="space-y-3 px-5 py-4"><h4 className="text-sm font-bold text-gray-800">Phạm vi hồ sơ</h4><ul className="space-y-1.5 text-sm text-gray-600">{caseItem.scope_codes.map(code => <li key={code} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />{PUBLIC_VERIFICATION_REASON_LABELS[code as PublicVerificationReasonCode] ?? code}</li>)}</ul>{caseItem.verified_until && <p className="text-xs text-gray-500">Hiệu lực công khai đến: {formatDate(caseItem.verified_until)}</p>}</div>
 
     <div className="space-y-3 px-5 py-4"><div className="flex items-center gap-2"><FileText className="h-4 w-4 text-gray-500" /><h4 className="text-sm font-bold text-gray-800">Bằng chứng riêng tư ({evidence.length})</h4></div>{evidence.length === 0 ? <p className="text-sm text-gray-400">Chưa có bằng chứng.</p> : <ul className="space-y-2">{evidence.map(item => <li key={item.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs"><span className="min-w-0 truncate font-medium text-gray-700">{item.file_name}</span><span className="ml-3 shrink-0 text-gray-500">{EVIDENCE_KIND_LABELS[item.kind]} · {Math.ceil(item.size_bytes / 1024)} KB</span></li>)}</ul>}{isDraft && <div className="rounded-lg border border-dashed border-gray-300 p-3"><div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={event => setFile(event.target.files?.[0] ?? null)} className="min-w-0 text-xs" /><select value={kind} onChange={event => setKind(event.target.value as PropertyVerificationEvidenceKind)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs">{(Object.keys(EVIDENCE_KIND_LABELS) as PropertyVerificationEvidenceKind[]).map(value => <option key={value} value={value}>{EVIDENCE_KIND_LABELS[value]}</option>)}</select><button type="button" disabled={!file || busy} onClick={() => file && void onUpload(kind, file)} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><Upload className="h-3.5 w-3.5" />Tải lên</button></div><p className="mt-2 text-[11px] text-gray-500">PDF, JPEG, PNG hoặc WebP, tối đa 10MB. Tệp không có URL công khai.</p></div>}</div>
+
+    <div className="space-y-3 bg-slate-50 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h4 className="text-sm font-bold text-gray-800">Gợi ý hỗ trợ kiểm tra (AI)</h4><p className="mt-1 text-xs leading-5 text-gray-500">Chỉ phân tích trạng thái và tham chiếu bằng chứng đã gắn với hồ sơ. Không đọc nội dung tệp và không thay thế quyết định owner MFA.</p></div>
+        <button type="button" disabled={aiRecommendationLoading} onClick={() => void onGenerateAiRecommendation()} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${aiRecommendationLoading ? 'animate-spin' : ''}`} />{aiRecommendationLoading ? 'Đang tạo...' : aiRecommendation ? 'Tạo lại gợi ý' : 'Tạo gợi ý'}</button>
+      </div>
+      {aiRecommendation && <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-gray-700"><p className="font-semibold text-gray-900">{aiRecommendation.summary}</p><p><span className="font-semibold">Mức hỗ trợ:</span> {aiRecommendation.status === 'insufficient_evidence' ? 'Chưa đủ bằng chứng' : aiRecommendation.status === 'needs_more_evidence' ? 'Cần bổ sung bằng chứng' : 'Có thể xem xét thủ công'}</p>{aiRecommendation.missing_scopes.length > 0 && <p><span className="font-semibold">Phạm vi còn thiếu:</span> {aiRecommendation.missing_scopes.join(', ')}</p>}<p className="text-[11px] leading-5 text-amber-700">{aiRecommendation.warnings[0]}</p></div>}
+    </div>
 
     {isDraft && <div className="flex justify-end px-5 py-4"><button type="button" disabled={busy || evidence.length === 0} onClick={() => void onSubmit()} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Send className="h-4 w-4" />Gửi quyết định</button></div>}
 

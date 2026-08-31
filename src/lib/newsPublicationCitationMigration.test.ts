@@ -19,6 +19,8 @@ describe('P8 news publication citation migration contract', () => {
     expect(migration).toContain("jsonb_typeof(p_citations) = 'array'");
     expect(migration).toContain("url ~* '^https?://");
     expect(migration).toContain('count(*) >= 2');
+    expect(migration).toContain('count(*) = (SELECT count(*) FROM source_rows)');
+    expect(migration).toContain("split_part(split_part(split_part(substring(url from 9), '/', 1), '?', 1), '#', 1) <> ''");
     expect(migration).toContain('count(DISTINCT lower(url)) = count(*)');
   });
 

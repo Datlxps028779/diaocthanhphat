@@ -2,89 +2,154 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { clientIp, isRateLimited } from "../_shared/ratelimit.ts";
 import { callClaude } from "../_shared/anthropic.ts";
 
-// Form đăng tin công khai gọi → siết CORS allowlist + rate-limit theo IP để chống
-// spam / đốt ngân sách LLM (không thể bắt đăng nhập vì form mở cho khách).
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const CONTRACT_VERSION = "p10-v1";
+
+type DescriptionInput = {
+  keywords: string;
+  listingType?: string;
+  area?: string;
+  price?: string;
+};
+
+function responseJson(cors: Record<string, string>, body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, ...JSON_HEADERS },
+  });
+}
+
+function boundedOptionalText(value: unknown, maxLength: number): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed && trimmed.length <= maxLength ? trimmed : undefined;
+}
+
+function fingerprint(value: string): string {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function provenance(input: {
+  provider: string;
+  model: string | null;
+  fields: string[];
+  output: string;
+}): Record<string, unknown> {
+  return {
+    kind: "description",
+    status: "draft",
+    provider: input.provider,
+    model: input.model,
+    generated_at: new Date().toISOString(),
+    input_fields: input.fields,
+    contract_version: CONTRACT_VERSION,
+    output_fingerprint: fingerprint(input.output),
+  };
+}
+
+function inputFields(input: DescriptionInput): string[] {
+  return [
+    input.keywords ? "keywords" : "",
+    input.listingType ? "listing_type" : "",
+    input.area ? "area" : "",
+    input.price ? "price" : "",
+  ].filter(Boolean);
+}
+
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req);
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: cors });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: cors });
+  if (req.method !== "POST") return responseJson(cors, { error: "method_not_allowed" }, 405);
 
-  // Gọi LLM tốn tiền → hạn mức chặt: tối đa 6 request/phút mỗi IP.
   if (isRateLimited(`ai-desc:${clientIp(req)}`, 6, 60_000)) {
-    return new Response(
-      JSON.stringify({ error: "Quá nhiều yêu cầu, vui lòng thử lại sau ít phút." }),
-      { status: 429, headers: { ...cors, "Content-Type": "application/json" } },
-    );
+    return responseJson(cors, { error: "rate_limited" }, 429);
   }
 
   try {
-    const { keywords, listingType, area, price } = await req.json();
-    if (!keywords || typeof keywords !== "string" || keywords.length > 500) {
-      return new Response(
-        JSON.stringify({ error: "keywords is required (chuỗi, tối đa 500 ký tự)" }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
-      );
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return responseJson(cors, { error: "invalid_json" }, 400);
     }
+    if (!raw || typeof raw !== "object") return responseJson(cors, { error: "invalid_input" }, 400);
 
-    const apiKey = Deno.env.get("OPENAI_API_KEY") ?? Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) {
-      const fallback = generateFallbackDescription(keywords, listingType, area, price);
-      return new Response(
-        JSON.stringify({ description: fallback }),
-        { headers: { ...cors, "Content-Type": "application/json" } },
-      );
-    }
+    const body = raw as Record<string, unknown>;
+    const keywords = boundedOptionalText(body.keywords, 500);
+    if (!keywords) return responseJson(cors, { error: "keywords_required" }, 400);
 
-    const typeLabel = listingType === "cho_thue" ? "cho thuê" : "bán";
-    const prompt = `Bạn là chuyên gia BĐS Việt Nam. Hãy viết một đoạn mô tả tin đăng BĐS chuyên nghiệp, hấp dẫn, SEO-friendly bằng tiếng Việt cho tin ${typeLabel} tại ${area ?? "Bình Dương"} với từ khóa: "${keywords}". Giá: ${price ?? "thỏa thuận"}. Viết 3-4 câu ngắn gọn, thuyết phục, nêu rõ vị trí, ưu điểm và kêu gọi hành động. KHÔNG thêm tiêu đề.`;
+    const listingTypeValue = boundedOptionalText(body.listingType, 32);
+    const listingType = listingTypeValue === "mua_ban" || listingTypeValue === "cho_thue"
+      ? listingTypeValue
+      : undefined;
+    const input: DescriptionInput = {
+      keywords,
+      listingType,
+      area: boundedOptionalText(body.area, 120),
+      price: boundedOptionalText(body.price, 80),
+    };
+    const fields = inputFields(input);
+
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    const typeLabel = listingType === "cho_thue" ? "cho thuê" : listingType === "mua_ban" ? "mua bán" : "chưa xác định";
+    const prompt = `Bạn là trợ lý soạn bản nháp tin bất động sản bằng tiếng Việt. Chỉ sử dụng đúng dữ kiện được cung cấp trong dữ liệu đầu vào; nếu thiếu dữ kiện thì không được suy đoán. Không khẳng định pháp lý, sổ, quy hoạch, hạ tầng, khoảng cách, tiện ích, lợi nhuận hoặc cam kết giao dịch nếu dữ liệu đầu vào không nêu. Viết 3-4 câu ngắn gọn, không thêm tiêu đề, và ghi rõ đây là nội dung cần người đăng kiểm tra.\n\nTừ khóa/nội dung người đăng cung cấp: "${keywords}"\nLoại tin: ${typeLabel}\nKhu vực: ${input.area ?? "chưa cung cấp"}\nGiá do người đăng nhập: ${input.price ?? "chưa cung cấp"}`;
 
     let description = "";
+    let provider = "deterministic-fallback";
+    let model: string | null = null;
 
-    if (Deno.env.get("ANTHROPIC_API_KEY")) {
-      description = await callClaude({
-        model: Deno.env.get("AI_DESCRIPTION_MODEL") || "claude-haiku-4-5",
-        maxTokens: 300,
-        prompt,
-      });
-    } else if (Deno.env.get("OPENAI_API_KEY")) {
+    if (anthropicKey) {
+      provider = "anthropic";
+      model = Deno.env.get("AI_DESCRIPTION_MODEL") || "claude-haiku-4-5";
+      description = await callClaude({ model, maxTokens: 300, prompt });
+    } else if (openAiKey) {
+      provider = "openai";
+      model = "gpt-3.5-turbo";
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+          "Authorization": `Bearer ${openAiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-3.5-turbo",
+          model,
           max_tokens: 300,
           messages: [{ role: "user", content: prompt }],
         }),
       });
       if (resp.ok) {
         const data = await resp.json();
-        description = data.choices?.[0]?.message?.content ?? "";
+        description = typeof data.choices?.[0]?.message?.content === "string"
+          ? data.choices[0].message.content.trim()
+          : "";
       }
     }
 
     if (!description) {
-      description = generateFallbackDescription(keywords, listingType, area, price);
+      provider = "deterministic-fallback";
+      model = null;
+      description = generateFallbackDescription(input);
     }
 
-    return new Response(
-      JSON.stringify({ description }),
-      { headers: { ...cors, "Content-Type": "application/json" } },
-    );
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: (err as Error).message }),
-      { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
-    );
+    return responseJson(cors, {
+      description,
+      provenance: provenance({ provider, model, fields, output: description }),
+    });
+  } catch {
+    return responseJson(cors, { error: "internal_error" }, 500);
   }
 });
 
-function generateFallbackDescription(keywords: string, listingType?: string, area?: string, price?: string): string {
-  const typeLabel = listingType === "cho_thue" ? "cho thuê" : "bán";
-  const location = area ?? "Bình Dương";
-  const priceStr = price ? `, giá ${price}` : "";
-  return `${keywords.charAt(0).toUpperCase() + keywords.slice(1)} tại ${location}${priceStr}. Vị trí thuận tiện, giao thông kết nối tốt, hạ tầng hoàn chỉnh. Pháp lý rõ ràng, sổ sẵn bàn giao ngay. Liên hệ ngay để nhận thông tin chi tiết và đặt lịch xem bất động sản trực tiếp.`;
+function generateFallbackDescription(input: DescriptionInput): string {
+  const subject = input.keywords.charAt(0).toUpperCase() + input.keywords.slice(1);
+  const location = input.area ? ` tại ${input.area}` : "";
+  const price = input.price ? `, mức giá do người đăng cung cấp là ${input.price}` : "";
+  return `${subject}${location}${price}. Đây là bản nháp dựa trên thông tin đã nhập và cần được kiểm tra, bổ sung trước khi gửi tin. Liên hệ để trao đổi thêm thông tin thực tế và lịch xem bất động sản.`;
 }

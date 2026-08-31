@@ -16,8 +16,12 @@ export interface EditorialIssue {
   message: string;
 }
 
+export type EditorialReviewStatus = 'ready' | 'needs-review';
+
 export interface NewsEditorialQuality {
   canPublish: boolean;
+  citationStatus: EditorialReviewStatus;
+  faqStatus: EditorialReviewStatus;
   citationCount: number;
   validCitationCount: number;
   faqCount: number;
@@ -101,6 +105,8 @@ export function evaluateNewsEditorialQuality(
 
   return {
     canPublish: citationIssues.length === 0,
+    citationStatus: citationIssues.length === 0 ? 'ready' : 'needs-review',
+    faqStatus: faqIssues.length === 0 ? 'ready' : 'needs-review',
     citationCount: citations.length,
     validCitationCount: validCitations.length,
     faqCount: faq.length,

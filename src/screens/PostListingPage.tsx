@@ -33,6 +33,7 @@ import { findExactTaxonomyGeo, validatePointForWard } from '../lib/taxonomyPoint
 import { normalizeListingTitle } from '../lib/listingTitle';
 import { validateListingForm, parseOptionalPositiveDecimal, parseOptionalNonNegativeInteger, plainTextDescription, DESCRIPTION_MIN, LISTING_TITLE_MAX, countListingImages } from '../lib/listingValidation';
 import { clearListingDraft, hasListingDraftContent, readListingDraft, writeListingDraft, type ListingDraft } from '../lib/listingDraft';
+import { fingerprintAiOutput, parseAiListingProvenance, replaceAiListingProvenance, type AiListingProvenance } from '../lib/aiListingDraft';
 
 interface PostListingPageProps {
   onNavigate: (p: Page) => void;
@@ -94,6 +95,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [loadError, setLoadError] = useState('');
   const [titleCorrection, setTitleCorrection] = useState('');
   const [draftCandidate, setDraftCandidate] = useState<ListingDraft<Record<string, unknown>> | null>(null);
+  const [aiListingProvenance, setAiListingProvenance] = useState<AiListingProvenance[]>([]);
   const draftReadyRef = useRef(false);
 
   const [form, setForm] = useState({
@@ -228,6 +230,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         if (!alive) return;
         if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
         setForm(listingToFormState(listing));
+        setAiListingProvenance(parseAiListingProvenance(listing.ai_provenance));
         addressEditedRef.current = Boolean(listing.address?.trim());
       })
       .catch(() => { if (alive) setLoadError('Không tải được tin đăng để sửa.'); })
@@ -339,6 +342,23 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     return { ...f, faq: [...f.faq, ...generated.filter(g => !existing.has(g.question.trim()))] };
   });
 
+  const applyAiDescription = (text: string, provenance: AiListingProvenance | null) => {
+    set('description', text);
+    if (provenance) {
+      setAiListingProvenance(current => replaceAiListingProvenance(current, { ...provenance, status: 'accepted' }));
+    }
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    set('description', value);
+    setAiListingProvenance(current => {
+      const descriptionDraft = current.find(item => item.kind === 'description');
+      if (!descriptionDraft || descriptionDraft.status !== 'accepted') return current;
+      if (fingerprintAiOutput(plainTextDescription(value)) === descriptionDraft.output_fingerprint) return current;
+      return replaceAiListingProvenance(current, { ...descriptionDraft, status: 'edited' });
+    });
+  };
+
   const validateLocation = () => {
     const nextErrors: Record<string, string> = {};
     if (!form.area_id || !areas.some(area => area.id === form.area_id && area.name === form.city)) {
@@ -440,13 +460,14 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         direction: specForm.direction || null,
         contact_name: specForm.contact_name,
         contact_phone: specForm.contact_phone,
+        contact_zalo: null,
         amenities: specForm.amenities.length ? specForm.amenities : null,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         formatted_address: null,
         vr_tour_url: null,
         video_url: specForm.video_url || null,
-        contact_zalo: null,
+        ai_provenance: aiListingProvenance.length ? aiListingProvenance : null,
         faq: (() => {
           const valid = specForm.faq
             .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
@@ -897,7 +918,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 price={isRental(form.listing_type)
                   ? formatListingPrice(parsePriceInput(form.price_per_month), 'triệu/tháng')
                   : formatListingPrice(parsePriceInput(form.price), form.price_unit)}
-                onApply={text => set('description', text)}
+                onApply={applyAiDescription}
               />
 
               <FormField label="Link video thực tế (YouTube hoặc MP4)">
@@ -912,7 +933,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               </FormField>
 
               <FormField label="Mô tả chi tiết" error={errors.description} id="description">
-                <RichTextEditor value={form.description} onChange={html => set('description', html)} enableImage={false}
+                <RichTextEditor value={form.description} onChange={handleDescriptionChange} enableImage={false}
                   placeholder={isRental(form.listing_type)
                     ? 'Mô tả vị trí, nội thất, tiện ích xung quanh, yêu cầu thuê. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'
                     : 'Mô tả vị trí, đặc điểm, tiện ích xung quanh, lý do bán. Dùng thanh công cụ để in đậm, tiêu đề, danh sách, chèn bảng...'} />

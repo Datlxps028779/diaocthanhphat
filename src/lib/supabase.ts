@@ -357,6 +357,9 @@ export type UserListing = {
   amenities: string[] | null; latitude: number | null; longitude: number | null;
   formatted_address: string | null; vr_tour_url: string | null; video_url: string | null;
   contact_zalo: string | null;
+  tags?: string[] | null;
+  ai_provenance?: import('./aiListingDraft').AiListingProvenance[] | null;
+  ai_seo_draft?: import('./aiListingDraft').AiListingSeoDraft | null;
   slug: string | null; meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
   faq: { question: string; answer: string }[] | null;
