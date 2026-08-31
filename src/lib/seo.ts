@@ -8,9 +8,10 @@ import { stripHtml, isHtmlContent } from './markdown';
 import { buildProductPath } from './productPath';
 import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
 import { normalizeListingTitle } from './listingTitle';
+import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
 
 const SITE_URL = getSiteUrl();
-const SITE_NAME = 'BĐS Bình Dương';
+const SITE_NAME = SITE_IDENTITY.name;
 
 // Serialize JSON-LD an toàn cho <script>. JSON.stringify KHÔNG escape '<' '>' '&'
 // nên chuỗi từ dữ liệu người dùng (vd description có "</script><script>...") sẽ
@@ -27,7 +28,7 @@ export function serializeJsonLd(obj: Record<string, unknown>): string {
 // khi giá trị non-empty để tránh schema rỗng bị Google phạt rich result.
 export function buildLocalBusinessJsonLd(settings: Record<string, string>): Record<string, unknown> {
   const get = (k: string) => (settings[k] ?? '').trim();
-  const name = get('site_name') || SITE_NAME;
+  const name = SITE_NAME;
   const email = get('email') || get('email_contact');
   const logo = get('site_logo_url') || get('og_image');
   const sameAs = [
@@ -73,11 +74,12 @@ export const DEFAULT_OG_IMAGE = FALLBACK_PROPERTY_IMAGE;
 
 export function staticPageMetadata(opts: { title: string; description: string; path: string; ogImage?: string }): Metadata {
   const { title, description, path, ogImage } = opts;
-  const ogTtl = ogTitle(title);
+  const normalizedTitle = normalizeSiteBrandText(title);
+  const ogTtl = ogTitle(normalizedTitle);
   const ogDesc = ogDescription(description);
   const images = [{ url: ogImage || DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: ogTtl }];
   return {
-    title,
+    title: normalizedTitle,
     description,
     alternates: { canonical: path },
     openGraph: {
@@ -142,10 +144,10 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const titleSource = [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), listingTitle, priceStr ? `giá ${priceStr}` : '']
     .filter(Boolean).join(' - ');
   const fallbackTitle = clampText(titleSource, 45, 65);
-  const title = p.meta_title?.trim() || fallbackTitle;
+  const title = normalizeSiteBrandText(p.meta_title?.trim() || fallbackTitle);
   // og:title dùng title đầy đủ (không kẹp "…" như thẻ <title> SEO) để share ra FB/Zalo
   // không bị "sót chữ". Ưu tiên meta_title admin nhập, else nguồn title chưa kẹp.
-  const ogTtl = ogTitle(p.meta_title?.trim() || titleSource);
+  const ogTtl = ogTitle(normalizeSiteBrandText(p.meta_title?.trim() || titleSource));
 
   const descParts = [
     `${typeLabel || 'Bất động sản'} ${listingTitle}${location ? ` tại ${location}` : ''}.`,
@@ -295,7 +297,7 @@ function newsKeywordsFallback(a: NewsArticle): string {
 }
 
 export function buildNewsMetadata(a: NewsArticle): Metadata {
-  const title = a.meta_title || a.title;
+  const title = normalizeSiteBrandText(a.meta_title || a.title);
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
   // og:title ưu tiên headline đầy đủ a.title (meta_title đã bị kẹp ~60 ký tự cho SEO

@@ -175,7 +175,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="font-bold text-gray-900 text-base">{navItems.find(n => n.id === tab)?.label}</h1>
-            <p className="text-gray-400 text-xs">BĐS Bình Dương – Hệ thống quản trị</p>
+            <p className="text-gray-400 text-xs">Chợ Nhà Việt – Hệ thống quản trị</p>
           </div>
           <div className="flex items-center gap-3">
             {allowedTabs.includes('leads') && <SlaBell onOpenLeads={() => setTab('leads')} />}

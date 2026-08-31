@@ -1,13 +1,14 @@
 import { supabase, type SiteSetting, type SiteContent, type Banner } from '../supabase';
 import { buildAutoSchema, schemaToJson } from '../seoAuto';
 import { parseSchemaJson } from '../schemaValidation';
+import { SITE_IDENTITY } from '../siteIdentity';
 
 export function buildSiteEntitySchema(settings: Record<string, string>): Record<string, unknown> {
   return buildAutoSchema('home', {
-    title: settings.organization_legal_name || 'BĐS Bình Dương',
-    description: settings.organization_description || 'BĐS Bình Dương',
+    title: SITE_IDENTITY.name,
+    description: settings.organization_description || SITE_IDENTITY.description,
     focus_keywords: settings.knows_about || settings.geo_area_served || '',
-    site_name: settings.organization_legal_name || 'BĐS Bình Dương',
+    site_name: SITE_IDENTITY.name,
     path: '/',
   });
 }

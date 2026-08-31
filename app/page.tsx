@@ -4,10 +4,11 @@ import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { loadRouteSeo } from '@/lib/routeSeo';
 import { serverGetSiteSettings } from '@/lib/supabase-server';
 import { DEFAULT_OG_IMAGE } from '@/lib/seo';
+import { SITE_IDENTITY } from '@/lib/siteIdentity';
 
 const PATH = '/';
 const fallback = {
-  title: 'BĐS Bình Dương – Mua bán, cho thuê bất động sản uy tín',
+  title: `${SITE_IDENTITY.name} – Mua bán, cho thuê bất động sản uy tín`,
   description: 'Cổng thông tin mua bán, cho thuê bất động sản Bình Dương và khu vực lân cận với tin thật, pháp lý minh bạch, tư vấn tận tâm.',
   path: PATH,
   // Schema WebSite (kèm SearchAction) đã phát ở app/layout.tsx với @id #website.

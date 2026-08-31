@@ -1,5 +1,6 @@
 export type AutoSchemaTarget = 'news' | 'property' | 'area' | 'route' | 'home';
 import { parsePriceInput, priceToVnd } from './listingPrice';
+import { SITE_IDENTITY } from './siteIdentity';
 
 export interface AutoSchemaInput {
   title?: string;
@@ -82,7 +83,7 @@ export function buildAutoSchema(
         headline: name,
         description,
         image,
-        author: { '@type': 'Organization', name: compact(input.author) || compact(input.site_name) || 'BĐS Bình Dương' },
+        author: { '@type': 'Organization', name: compact(input.author) || compact(input.site_name) || SITE_IDENTITY.name },
         mainEntityOfPage: path,
         url: path,
       };

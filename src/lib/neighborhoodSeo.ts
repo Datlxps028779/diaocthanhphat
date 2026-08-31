@@ -4,8 +4,9 @@ import { absoluteUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { ogTitle, ogDescription } from './seo';
 import { buildProductPath } from './productPath';
+import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
 
-const SITE_NAME = 'BĐS Bình Dương';
+const SITE_NAME = SITE_IDENTITY.name;
 
 // Ngưỡng index thấp hơn area (khu dân cư nhỏ hơn) nhưng vẫn đủ để tránh thin-page.
 // Khớp ngưỡng sample của price_stats (3) cho nhất quán.
@@ -48,7 +49,7 @@ export function evaluateNeighborhoodSeo(input: NeighborhoodSeoInput): Neighborho
 
 export function buildNeighborhoodMetadata(n: Neighborhood, summary: string, evaluation: NeighborhoodSeoEvaluation): Metadata {
   const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
-  const title = n.meta_title || `Khu dân cư ${n.name} — giá nhà đất & tin đăng`;
+  const title = normalizeSiteBrandText(n.meta_title || `Khu dân cư ${n.name} — giá nhà đất & tin đăng`);
   const description = n.meta_description || fallbackDescription;
   const path = `/khu-dan-cu/${n.slug}`;
   // og:title/description tách khỏi thẻ SEO: dùng nguồn đầy đủ (summary chưa kẹp) để

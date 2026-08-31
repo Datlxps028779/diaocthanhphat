@@ -1,11 +1,12 @@
 import type { MetadataRoute } from 'next';
+import { SITE_IDENTITY } from '@/lib/siteIdentity';
 
 // Web manifest — Next phục vụ tại /manifest.webmanifest. Hỗ trợ mobile SEO,
 // "Thêm vào màn hình chính", và giúp Google hiểu metadata ứng dụng.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'BĐS Bình Dương – Mua Bán Cho Thuê Bất Động Sản',
-    short_name: 'BĐS Bình Dương',
+    name: `${SITE_IDENTITY.name} – Mua Bán Cho Thuê Bất Động Sản`,
+    short_name: SITE_IDENTITY.shortName,
     description: 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
     start_url: '/',
     display: 'standalone',

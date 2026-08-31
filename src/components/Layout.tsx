@@ -533,7 +533,7 @@ export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }
       </div>
       <div className="border-t border-gray-800 py-4 px-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
-          <p className="text-gray-500 text-[11px]">{footer.copyright || '© 2025 BĐS Bình Dương. Tất cả quyền được bảo lưu.'}</p>
+          <p className="text-gray-500 text-[11px]">{footer.copyright || '© 2025 Chợ Nhà Việt. Tất cả quyền được bảo lưu.'}</p>
           {hasRealLicense && <p className="text-gray-600 text-[11px]">{license}</p>}
         </div>
       </div>

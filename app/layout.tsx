@@ -8,7 +8,7 @@ import { Providers } from './providers';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { AnalyticsConsent } from './_components/AnalyticsConsent';
-import { SITE_BRAND_DEFAULTS } from '@/lib/siteBrandDefaults';
+import { SITE_IDENTITY } from '@/lib/siteIdentity';
 
 // Roboto để khớp phong cách chodat.vn. Next 14 chỉ chấp nhận các weight rời của
 // Roboto (100/300/400/500/700/900) — KHÔNG có 600, nên tailwind.config map
@@ -22,7 +22,7 @@ const roboto = Roboto({
 });
 
 const SITE_URL = getSiteUrl();
-const SITE_NAME = SITE_BRAND_DEFAULTS.site_logo_text;
+const SITE_NAME = SITE_IDENTITY.name;
 
 export async function generateMetadata(): Promise<Metadata> {
   // Favicon động: ưu tiên URL admin cấu hình (favicon_url / site_favicon_url),

@@ -5,6 +5,7 @@ import { buildAutoSchema } from './seoAuto';
 import { mergeSchema } from './schemaValidation';
 import { canonicalPath } from './siteUrl';
 import { serverGetSeoRouteOverride } from './supabase-server';
+import { normalizeSiteBrandText } from './siteIdentity';
 
 export interface RouteFallback {
   title: string;
@@ -15,7 +16,7 @@ export interface RouteFallback {
   routeType?: 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage';
 }
 
-const ROUTE_LOCKED_KEYS = ['@context', '@type', '@id', 'url', 'mainEntityOfPage'];
+const ROUTE_LOCKED_KEYS = ['@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage'];
 
 const DYNAMIC_LISTING_QUERY_KEYS = new Set([
   'area', 'type', 'loai', 'district', 'ward', 'legal', 'q', 'sort',
@@ -59,7 +60,7 @@ export function buildRouteMetadata({
 }): Metadata {
   const canonical = resolvedRoutePath(path, override);
   const base = staticPageMetadata({
-    title: override?.meta_title?.trim() || fallback.title,
+    title: normalizeSiteBrandText(override?.meta_title?.trim() || fallback.title),
     description: override?.meta_description?.trim() || fallback.description,
     path: canonical,
     ogImage: fallback.ogImage,
@@ -87,7 +88,7 @@ export function buildRouteJsonLd({
   override: SeoRouteOverride | null;
 }): Record<string, unknown>[] {
   const canonical = resolvedRoutePath(path, override);
-  const title = override?.meta_title?.trim() || fallback.title;
+  const title = normalizeSiteBrandText(override?.meta_title?.trim() || fallback.title);
   const description = override?.meta_description?.trim() || fallback.description;
   const base = buildAutoSchema(
     'route',

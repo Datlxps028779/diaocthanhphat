@@ -32,7 +32,7 @@ const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 
 
 const ROUTE_GUIDE: Record<string, { title: string; description: string; canonical: string; keywords: string; schemaType: string; note: string }> = {
   '/': {
-    title: 'BĐS Bình Dương – Mua bán, cho thuê bất động sản uy tín',
+    title: 'Chợ Nhà Việt – Mua bán, cho thuê bất động sản uy tín',
     description: 'Cổng thông tin mua bán, cho thuê bất động sản Bình Dương và khu vực lân cận với tin thật, pháp lý minh bạch, tư vấn tận tâm.',
     canonical: '/',
     keywords: 'bất động sản Bình Dương, mua bán nhà đất Bình Dương, cho thuê bất động sản',
@@ -80,10 +80,10 @@ const ROUTE_GUIDE: Record<string, { title: string; description: string; canonica
     note: 'Bài viết cần author, ngày cập nhật, ảnh, excerpt và nội dung thật.',
   },
   '/ve-chung-toi': {
-    title: 'Về BĐS Bình Dương – Đơn vị tư vấn bất động sản địa phương',
-    description: 'Tìm hiểu BĐS Bình Dương, định hướng tư vấn bất động sản địa phương, khu vực phục vụ và cam kết minh bạch thông tin.',
+    title: 'Về Chợ Nhà Việt – Đơn vị tư vấn bất động sản địa phương',
+    description: 'Tìm hiểu Chợ Nhà Việt, định hướng tư vấn bất động sản địa phương, khu vực phục vụ và cam kết minh bạch thông tin.',
     canonical: '/ve-chung-toi',
-    keywords: 'BĐS Bình Dương, tư vấn bất động sản Bình Dương, đơn vị nhà đất Bình Dương',
+    keywords: 'Chợ Nhà Việt, tư vấn bất động sản Bình Dương, đơn vị nhà đất Bình Dương',
     schemaType: 'AboutPage hoặc WebPage',
     note: 'Chỉ ghi giấy phép/chứng nhận/kinh nghiệm nếu có thật.',
   },

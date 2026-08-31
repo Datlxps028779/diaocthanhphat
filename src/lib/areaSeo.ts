@@ -6,7 +6,8 @@ import type { FaqItem } from './propertyFaq';
 import { buildPriceAnswer } from './priceStatsFormat';
 import { ogTitle, ogDescription } from './seo';
 import { buildProductPath } from './productPath';
-const SITE_NAME = 'BĐS Bình Dương';
+import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
+const SITE_NAME = SITE_IDENTITY.name;
 
 export const MIN_AREA_LISTINGS_FOR_INDEX = 5;
 
@@ -69,7 +70,7 @@ export function evaluateAreaSeo(input: AreaSeoInput): AreaSeoEvaluation {
 
 export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaSeoEvaluation): Metadata {
   const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
-  const title = area.meta_title || `Bất động sản ${area.name}`;
+  const title = normalizeSiteBrandText(area.meta_title || `Bất động sản ${area.name}`);
   const description = area.meta_description || fallbackDescription;
   const path = `/khu-vuc/${area.slug}`;
   // og:title/description tách khỏi thẻ SEO: dùng nguồn đầy đủ (summary chưa kẹp) để
