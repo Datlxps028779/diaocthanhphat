@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Calculator, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { calculateLoanBreakdown, roundVnd } from '../lib/loanCalculator';
 
 interface LoanCalculatorProps {
   propertyPrice: number;
@@ -15,9 +16,10 @@ const BANK_RATES = [
 ];
 
 function formatVND(n: number): string {
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' tỷ';
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' triệu';
-  return n.toLocaleString('vi-VN') + ' đ';
+  const rounded = roundVnd(n);
+  if (rounded >= 1e9) return (rounded / 1e9).toFixed(2) + ' tỷ';
+  if (rounded >= 1e6) return (rounded / 1e6).toFixed(1) + ' triệu';
+  return rounded.toLocaleString('vi-VN') + ' đ';
 }
 
 export function LoanCalculator({ propertyPrice, priceUnit }: LoanCalculatorProps) {
@@ -27,26 +29,20 @@ export function LoanCalculator({ propertyPrice, priceUnit }: LoanCalculatorProps
   const [selectedBank, setSelectedBank] = useState(0);
 
   const priceInVND = useMemo(() => {
-    if (priceUnit === 'tỷ') return propertyPrice * 1e9;
-    if (priceUnit === 'triệu') return propertyPrice * 1e6;
-    return propertyPrice;
+    if (priceUnit === 'tỷ') return roundVnd(propertyPrice * 1e9);
+    if (priceUnit === 'triệu') return roundVnd(propertyPrice * 1e6);
+    return roundVnd(propertyPrice);
   }, [propertyPrice, priceUnit]);
 
-  const { loanAmount, monthlyPayment, transferFee, registrationFee, totalCost } = useMemo(() => {
-    const loan = priceInVND * (loanPct / 100);
-    const r = BANK_RATES[selectedBank].rate / 100 / 12;
-    const n = years * 12;
-    const monthly = r === 0 ? loan / n : loan * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
-    const transfer = priceInVND * 0.02;
-    const registration = priceInVND * 0.005;
-    return {
-      loanAmount: loan,
-      monthlyPayment: monthly,
-      transferFee: transfer,
-      registrationFee: registration,
-      totalCost: priceInVND + transfer + registration,
-    };
-  }, [priceInVND, loanPct, years, selectedBank]);
+  const { loanAmount, monthlyPayment, transferFee, registrationFee, totalCost } = useMemo(
+    () => calculateLoanBreakdown({
+      priceInVND,
+      loanPct,
+      years,
+      annualRate: BANK_RATES[selectedBank].rate,
+    }),
+    [priceInVND, loanPct, years, selectedBank],
+  );
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
