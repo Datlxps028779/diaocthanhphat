@@ -9,6 +9,7 @@ import { buildProductPath } from './productPath';
 import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
 import { normalizeListingTitle } from './listingTitle';
 import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
+import { clampSeoTitle } from './seoText';
 
 const SITE_URL = getSiteUrl();
 const SITE_NAME = SITE_IDENTITY.name;
@@ -297,7 +298,7 @@ function newsKeywordsFallback(a: NewsArticle): string {
 }
 
 export function buildNewsMetadata(a: NewsArticle): Metadata {
-  const title = normalizeSiteBrandText(a.meta_title || a.title);
+  const title = clampSeoTitle(normalizeSiteBrandText(a.meta_title || a.title));
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
   const path = `/tin-tuc/${a.slug || a.id}`;
   // og:title ưu tiên headline đầy đủ a.title (meta_title đã bị kẹp ~60 ký tự cho SEO

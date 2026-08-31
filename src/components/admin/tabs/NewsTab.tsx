@@ -31,6 +31,7 @@ import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
 import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 import { evaluateNewsEditorialQuality } from '../../../lib/newsEditorialQuality';
+import { clampSeoTitle } from '../../../lib/seoText';
 
 // Fallback tĩnh khi bảng news_categories chưa nạp (dùng danh sách chuẩn 5 nhãn,
 // KHÔNG còn 'Quy hoạch' lệch). Danh mục thật đổ động từ DB qua prop categories.
@@ -388,7 +389,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
-      meta_title: f.meta_title.trim() || (meta.title as string).slice(0, 60),
+      meta_title: f.meta_title.trim() || clampSeoTitle(meta.title as string),
       meta_description: f.meta_description.trim() || (meta.description as string).slice(0, 155),
       focus_keywords: f.focus_keywords.trim() || (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: manualSchemaRef.current ? f.schema_markup : schema,
@@ -400,7 +401,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
-      meta_title: (meta.title as string).slice(0, 60),
+      meta_title: clampSeoTitle(meta.title as string),
       meta_description: (meta.description as string).slice(0, 155),
       focus_keywords: (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: JSON.stringify(buildNewsJsonLd(temp), null, 2),
@@ -432,7 +433,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         excerpt: form.excerpt.trim() || null,
         content: bodyHtml || null,
         is_published: forceDraft ? false : form.is_published,
-        meta_title: form.meta_title.trim() || null,
+        meta_title: form.meta_title.trim() ? clampSeoTitle(form.meta_title) : null,
         meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null,
         schema_markup: schemaState.schema,

@@ -2,6 +2,7 @@ import { sanitizeArticleHtml } from './sanitizeHtml';
 import { validateCoordinatePair } from './locationCoordinates';
 import { normalizeListingTitle } from './listingTitle';
 import { parseOptionalNonNegativeInteger, parseOptionalPositiveDecimal } from './listingValidation';
+import { clampSeoTitle } from './seoText';
 
 // Chuẩn hóa payload từ nguồn ngoài (make.com) trước khi ghi DB. Tách khỏi route để
 // test được không cần network/DB.
@@ -383,7 +384,7 @@ export function normalizeArticlePayload(body: unknown): NormalizeResult<ArticleR
       category: category as string,
       author: author as string,
       image_url: httpUrl(rawImageUrl),
-      meta_title: metaTitle,
+      meta_title: metaTitle ? clampSeoTitle(metaTitle) : null,
       meta_description: metaDescription,
       focus_keywords: focusKeywords,
       external_id: externalId as string,
