@@ -417,7 +417,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               {[
                 { icon: <Shield className="w-6 h-6" />, title: sec('why_us')('f1_title', 'Uy tín – Chuyên nghiệp'), desc: sec('why_us')('f1_desc', 'Hơn 7 năm kinh nghiệm trong lĩnh vực BĐS tại Bình Dương') },
                 { icon: <CheckCircle className="w-6 h-6" />, title: sec('why_us')('f2_title', 'Thông tin minh bạch'), desc: sec('why_us')('f2_desc', 'Mọi thông tin BĐS đều được xác thực và kiểm duyệt kỹ lưỡng') },
-                { icon: <Phone className="w-6 h-6" />, title: supportHours, desc: sec('why_us')('f3_desc', `Đội ngũ hỗ trợ hoạt động ${supportHours.toLocaleLowerCase('vi-VN')}`) },
+                { icon: <Phone className="w-6 h-6" />, title: sec('why_us')('f3_title', supportHours), desc: sec('why_us')('f3_desc', `Đội ngũ hỗ trợ hoạt động ${supportHours.replace(/^Hỗ trợ\s+/i, '')}`) },
                 { icon: <TrendingUp className="w-6 h-6" />, title: sec('why_us')('f4_title', 'Pháp lý an toàn'), desc: sec('why_us')('f4_desc', 'Hỗ trợ đầy đủ thủ tục pháp lý từ A đến Z') },
               ].map((f, i) => (
                 <div key={i} className="text-center">

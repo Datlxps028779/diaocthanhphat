@@ -196,7 +196,7 @@ function SectionEditor({ sectionId, settings, onChange, propertyTypes, districts
         {[
           { n: 1, dt: 'Uy tín – Chuyên nghiệp', dd: 'Hơn 7 năm kinh nghiệm trong lĩnh vực BĐS tại Bình Dương' },
           { n: 2, dt: 'Thông tin minh bạch', dd: 'Mọi thông tin BĐS đều được xác thực và kiểm duyệt kỹ lưỡng' },
-          { n: 3, dt: 'Hỗ trợ 24/7', dd: 'Đội ngũ chuyên gia sẵn sàng tư vấn mọi lúc bạn cần' },
+          { n: 3, dt: 'Hỗ trợ 7:00 – 21:00', dd: 'Đội ngũ chuyên gia sẵn sàng tư vấn trong giờ hỗ trợ đã công bố' },
           { n: 4, dt: 'Pháp lý an toàn', dd: 'Hỗ trợ đầy đủ thủ tục pháp lý từ A đến Z' },
         ].map(f => (
           <div key={f.n} className="border border-gray-200 rounded-lg p-3 space-y-2">
