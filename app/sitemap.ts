@@ -5,6 +5,7 @@ import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
 import { buildProductPath } from '@/lib/productPath';
+import type { Area } from '@/lib/supabase';
 
 // This is the sitemap submitted to Search Console, so it must never emit a preview
 // or deployment origin even when generated during a preview build.
@@ -14,6 +15,30 @@ const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
 // Revalidate mỗi giờ để tin mới xuất hiện mà không cần rebuild.
 export const revalidate = 3600;
+
+type AreaSitemapListing = {
+  id: string;
+  area_id: string | null;
+  district: string | null;
+  property_type_id: string | null;
+  listing_type: ListingType | null;
+};
+
+export function shouldIncludeAreaListingType(
+  area: Pick<Area, 'name' | 'slug' | 'description'>,
+  rows: AreaSitemapListing[],
+  listingType: ListingType,
+): boolean {
+  const typedRows = rows.filter(row => row.listing_type === listingType);
+  const detail = getAreaDetails(area.slug);
+  return evaluateAreaSeo({
+    area,
+    activeListings: typedRows,
+    districts: Array.from(new Set(typedRows.map(row => row.district).filter((value): value is string => !!value))),
+    propertyTypes: Array.from(new Set(typedRows.map(row => row.property_type_id).filter((value): value is string => !!value))),
+    hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
+  }).indexable;
+}
 
 const STATIC: MetadataRoute.Sitemap = [
   { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1.0 },
@@ -68,9 +93,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const [areasRes, areaPropsRes] = await Promise.all([
       sb.from('areas').select('id,name,slug,description,created_at').limit(5000),
-      sb.from('properties').select('id,area_id,district,property_type_id').eq('is_active', true).not('area_id', 'is', null).limit(5000),
+      sb.from('properties').select('id,area_id,district,property_type_id,listing_type').eq('is_active', true).not('area_id', 'is', null).limit(5000),
     ]);
-    const areaProps = (areaPropsRes.data ?? []) as Array<{ id: string; area_id: string | null; district: string | null; property_type_id: string | null }>;
+    const areaProps = (areaPropsRes.data ?? []) as AreaSitemapListing[];
     for (const area of (areasRes.data ?? []) as Array<{ id: string; name: string; slug: string; description: string | null; created_at?: string | null }>) {
       const rows = areaProps.filter(p => p.area_id === area.id);
       const detail = getAreaDetails(area.slug);
@@ -89,10 +114,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           changeFrequency: 'weekly',
           priority: 0.65,
         });
-        // URL listing area-level mới: /mua-ban/{areaSlug}, /cho-thue/{areaSlug}.
-        // Chỉ đưa vào sitemap khi area đã qua quality-gate. District-level hiện noindex
-        // có chủ đích nên không đưa vào sitemap để tránh sitemap chứa URL noindex.
+        // Mỗi URL giao dịch có inventory riêng. Không lấy tổng tin của area để đưa
+        // nhầm route cho thuê vào sitemap khi area chỉ có tin mua bán (hoặc ngược lại).
         for (const listingType of AREA_LISTING_TYPES) {
+          if (!shouldIncludeAreaListingType(area, rows, listingType)) continue;
           entries.push({
             url: `${SITE_URL}${buildAreaListingPath({ listingType, areaSlug: area.slug })}`,
             lastModified,
