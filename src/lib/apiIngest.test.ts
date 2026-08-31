@@ -232,6 +232,45 @@ describe('normalizeArticlePayload', () => {
     });
   });
 
+  it('nhận E-E-A-T metadata và giữ nháp bắt buộc', () => {
+    const r = normalizeArticlePayload({
+      ...valid,
+      author_type: 'Person',
+      author_role: 'Biên tập viên',
+      published_at: '2026-08-31T08:00:00.000Z',
+      as_of_date: '2026-08-30',
+      reviewer_name: 'Người kiểm duyệt',
+      reviewer_role: 'Biên tập trưởng',
+      source_note: 'Đối chiếu nguồn công khai.',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.row).toMatchObject({
+      author_type: 'Person',
+      author_role: 'Biên tập viên',
+      published_at: '2026-08-31T08:00:00.000Z',
+      as_of_date: '2026-08-30',
+      reviewer_name: 'Người kiểm duyệt',
+      reviewer_role: 'Biên tập trưởng',
+      source_note: 'Đối chiếu nguồn công khai.',
+      is_published: false,
+    });
+  });
+
+  it('từ chối author_type và ngày không hợp lệ', () => {
+    const r = normalizeArticlePayload({
+      ...valid,
+      author_type: 'Fake',
+      published_at: 'không phải ngày',
+      as_of_date: '2026-99-99',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join(' ')).toMatch(/author_type/);
+    expect(r.errors.join(' ')).toMatch(/published_at/);
+    expect(r.errors.join(' ')).toMatch(/as_of_date/);
+  });
+
   it('bắt buộc title, content, external_id, category và author', () => {
     const r = normalizeArticlePayload({});
     expect(r.ok).toBe(false);

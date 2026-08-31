@@ -42,6 +42,13 @@ type NewsFormState = SeoFieldsValue & {
   slug: string;
   category: string;
   author: string;
+  author_type: 'Person' | 'Organization';
+  author_role: string;
+  published_at: string;
+  as_of_date: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  source_note: string;
   image_url: string;
   excerpt: string;
   content: string;
@@ -85,6 +92,13 @@ function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now
     image_url: form.image_url.trim() || null,
     category: form.category,
     author: form.author.trim() || 'Ban biên tập',
+    author_type: form.author_type,
+    author_role: form.author_role.trim() || null,
+    published_at: form.published_at || null,
+    as_of_date: form.as_of_date || null,
+    reviewer_name: form.reviewer_name.trim() || null,
+    reviewer_role: form.reviewer_role.trim() || null,
+    source_note: form.source_note.trim() || null,
     is_published: form.is_published,
     views: article?.views ?? 0,
     meta_title: form.meta_title.trim() || null,
@@ -123,6 +137,13 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     slug: article?.slug ?? '',
     category: article?.category ?? 'Thị trường',
     author: article?.author ?? 'Ban biên tập',
+    author_type: article?.author_type === 'Person' ? 'Person' : 'Organization',
+    author_role: article?.author_role ?? '',
+    published_at: article?.published_at ? article.published_at.slice(0, 16) : '',
+    as_of_date: article?.as_of_date ?? '',
+    reviewer_name: article?.reviewer_name ?? '',
+    reviewer_role: article?.reviewer_role ?? '',
+    source_note: article?.source_note ?? '',
     image_url: article?.image_url ?? '',
     excerpt: article?.excerpt ?? '',
     content: rawContent ? (isHtmlContent(rawContent) ? rawContent : markdownToHtml(rawContent)) : '',
@@ -279,7 +300,8 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   const autoSchema = useMemo(
     () => buildNewsJsonLd(formToNewsArticle(form, article, nowRef.current)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [form.title, form.slug, form.excerpt, form.content, form.image_url, form.author, form.category,
+    [form.title, form.slug, form.excerpt, form.content, form.image_url, form.author, form.author_type, form.author_role,
+     form.published_at, form.as_of_date, form.reviewer_name, form.reviewer_role, form.source_note, form.category,
      form.geo_area, form.geo_entity, form.geo_notes, form.faq, form.citations, form.focus_keywords,
      form.meta_title, form.meta_description, article],
   );
@@ -394,7 +416,8 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
       focus_keywords: f.focus_keywords.trim() || (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
       schema_markup: manualSchemaRef.current ? f.schema_markup : schema,
     }));
-  }, [form.title, form.slug, form.category, form.author, form.image_url, form.excerpt, form.content, form.geo_area, form.geo_entity, form.geo_notes, article]);
+  }, [form.title, form.slug, form.category, form.author, form.author_type, form.author_role, form.published_at, form.as_of_date,
+    form.reviewer_name, form.reviewer_role, form.source_note, form.image_url, form.excerpt, form.content, form.geo_area, form.geo_entity, form.geo_notes, article]);
 
   const autoGenerateSeo = () => {
     const temp = formToNewsArticle(form, article, nowRef.current);
@@ -429,6 +452,13 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         slug: form.slug.trim() || newsSlug(form.title),
         category: form.category,
         author: form.author.trim() || 'Ban biên tập',
+        author_type: form.author_type,
+        author_role: form.author_role.trim() || null,
+        published_at: form.published_at || null,
+        as_of_date: form.as_of_date || null,
+        reviewer_name: form.reviewer_name.trim() || null,
+        reviewer_role: form.reviewer_role.trim() || null,
+        source_note: form.source_note.trim() || null,
         image_url: form.image_url.trim() || null,
         excerpt: form.excerpt.trim() || null,
         content: bodyHtml || null,
@@ -503,6 +533,49 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-700">Ảnh đại diện bài viết</label>
               <ImageUrlInput value={form.image_url} onChange={url => set('image_url', url)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="news" isAdmin />
+            </div>
+          </div>
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-600">Thông tin biên tập đã xác minh</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Loại tác giả</label>
+                <select value={form.author_type} onChange={e => set('author_type', e.target.value as 'Person' | 'Organization')}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">
+                  <option value="Organization">Tổ chức / Ban biên tập</option>
+                  <option value="Person">Cá nhân</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Vai trò tác giả</label>
+                <input value={form.author_role} onChange={e => set('author_role', e.target.value)} placeholder="VD: Biên tập viên thị trường"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Ngày xuất bản</label>
+                <input type="datetime-local" value={form.published_at} onChange={e => set('published_at', e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Thông tin tính đến ngày</label>
+                <input type="date" value={form.as_of_date} onChange={e => set('as_of_date', e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Người kiểm duyệt (nếu có)</label>
+                <input value={form.reviewer_name} onChange={e => set('reviewer_name', e.target.value)} placeholder="Chỉ nhập khi có người kiểm duyệt thật"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Vai trò người kiểm duyệt</label>
+                <input value={form.reviewer_role} onChange={e => set('reviewer_role', e.target.value)} placeholder="VD: Luật sư / Biên tập trưởng"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Ghi chú nguồn / biên tập</label>
+                <textarea value={form.source_note} onChange={e => set('source_note', e.target.value)} rows={2} placeholder="Mô tả ngắn nguồn hoặc phạm vi kiểm tra đã thực hiện"
+                  className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              </div>
             </div>
           </div>
           <div>

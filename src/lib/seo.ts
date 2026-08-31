@@ -323,7 +323,7 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
       siteName: SITE_NAME,
       locale: 'vi_VN',
       images: [{ url: ogImage, width: 1200, height: 630, alt: ogTtl }],
-      publishedTime: a.created_at,
+      publishedTime: a.published_at || a.created_at,
     },
     twitter: { card: 'summary_large_image', title: ogTtl, description: ogDesc, images: [ogImage] },
   };
@@ -349,9 +349,13 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
     headline: a.title,
     description: a.excerpt ?? a.meta_description ?? undefined,
     ...(image ? { image } : {}),
-    datePublished: a.created_at,
+    datePublished: a.published_at || a.created_at,
     dateModified: a.updated_at,
-    author: { '@type': 'Organization', name: a.author || SITE_NAME },
+    author: {
+      '@type': a.author_type === 'Person' ? 'Person' : 'Organization',
+      name: a.author || SITE_NAME,
+      ...(a.author_role?.trim() ? { jobTitle: a.author_role.trim() } : {}),
+    },
     publisher: { '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: SITE_NAME },
     mainEntityOfPage: url,
     url,
@@ -362,13 +366,22 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
     ...(a.geo_area ? { articleSection: a.geo_area } : {}),
     ...(geoEntity ? { about: [{ '@type': 'Thing', name: geoEntity }] } : {}),
     ...(geoNotes ? { mentions: [{ '@type': 'Thing', name: geoNotes }] } : {}),
+    ...(a.as_of_date ? { temporalCoverage: a.as_of_date } : {}),
+    ...(a.reviewer_name?.trim() ? {
+      reviewedBy: {
+        '@type': 'Person',
+        name: a.reviewer_name.trim(),
+        ...(a.reviewer_role?.trim() ? { jobTitle: a.reviewer_role.trim() } : {}),
+      },
+    } : {}),
+    ...(a.source_note?.trim() ? { comment: a.source_note.trim() } : {}),
     ...(citations.length ? { citation: citations } : {}),
     speakable: { '@type': 'SpeakableSpecification', cssSelector: ['.article-headline', '.article-excerpt'] },
     contentLocation: { '@type': 'Place', name: geoName },
     spatialCoverage: { '@type': 'Place', name: geoName },
   };
   return mergeSchema(base, a.schema_markup, 'news', [
-    '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'publisher',
+    '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'author', 'publisher',
     'inLanguage', 'articleBody', 'wordCount', 'contentLocation', 'spatialCoverage', 'articleSection', 'about', 'mentions', 'citation',
   ]).schema;
 }

@@ -353,6 +353,12 @@ function ArticleDetail({
   const updatedRaw = (article as any).updated_at;
   const showUpdated = updatedRaw && new Date(updatedRaw).getTime() - new Date(pubRaw).getTime() > 86400000;
   const updatedDate = showUpdated ? formatDate(updatedRaw) : '';
+  const authorName = article.author?.trim();
+  const authorRole = article.author_role?.trim();
+  const asOfDate = article.as_of_date ? formatDate(article.as_of_date) : '';
+  const reviewerName = article.reviewer_name?.trim();
+  const reviewerRole = article.reviewer_role?.trim();
+  const sourceNote = article.source_note?.trim();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -387,6 +393,15 @@ function ArticleDetail({
             <span className="flex items-center gap-1">
               <Calendar className="w-4 h-4" /> {pubDate}
             </span>
+            {authorName && (
+              <span>
+                Tác giả: <strong className="font-semibold text-gray-700">{authorName}</strong>{authorRole ? ` · ${authorRole}` : ''}
+              </span>
+            )}
+            {asOfDate && <span>Thông tin tính đến {asOfDate}</span>}
+            {reviewerName && (
+              <span>Kiểm duyệt: <strong className="font-semibold text-gray-700">{reviewerName}</strong>{reviewerRole ? ` · ${reviewerRole}` : ''}</span>
+            )}
             {updatedDate && (
               <span className="flex items-center gap-1 text-gray-400">
                 Cập nhật {updatedDate}
@@ -452,26 +467,31 @@ function ArticleDetail({
           )}
 
           {/* Nguồn tham khảo — khớp 1:1 với schema citation ở page.tsx (tránh cloaking) */}
-          {citations.length > 0 && (
+          {(sourceNote || citations.length > 0) && (
             <div id="article-sources" className="mt-10 pt-6 border-t border-gray-200">
-              <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
-              <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
-                {citations.map((c, i) => (
-                  <li key={i} className="text-sm text-gray-700 break-words">
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-red-700 underline decoration-red-200 underline-offset-2 hover:text-red-800"
-                    >
-                      {c.title || c.url}
-                    </a>
-                    {c.title && (
-                      <span className="mt-0.5 block break-all text-xs text-gray-500">{c.url}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              {sourceNote && <p className="mb-4 text-sm leading-relaxed text-gray-600">Ghi chú nguồn: {sourceNote}</p>}
+              {citations.length > 0 && (
+                <>
+                  <h2 className="font-bold text-gray-900 text-lg mb-4">Nguồn tham khảo</h2>
+                  <ul className="space-y-2 list-disc pl-5 marker:text-red-500">
+                    {citations.map((c, i) => (
+                      <li key={i} className="text-sm text-gray-700 break-words">
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-red-700 underline decoration-red-200 underline-offset-2 hover:text-red-800"
+                        >
+                          {c.title || c.url}
+                        </a>
+                        {c.title && (
+                          <span className="mt-0.5 block break-all text-xs text-gray-500">{c.url}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           )}
 

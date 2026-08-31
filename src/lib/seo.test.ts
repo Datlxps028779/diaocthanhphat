@@ -251,6 +251,27 @@ describe('buildNewsJsonLd/buildNewsMetadata', () => {
     expect(metadata.title).toBe(full.slice(0, 60));
   });
 
+  it('phát E-E-A-T metadata nhất quán khi field đã được xác minh', () => {
+    const ld = buildNewsJsonLd(news({
+      author: 'Nguyễn Văn A',
+      author_type: 'Person',
+      author_role: 'Biên tập viên thị trường',
+      published_at: '2026-08-31T08:00:00.000Z',
+      as_of_date: '2026-08-30',
+      reviewer_name: 'Trần Văn B',
+      reviewer_role: 'Biên tập trưởng',
+      source_note: 'Đối chiếu theo nguồn công khai.',
+      citations: [{ title: 'Nguồn chính thức', url: 'https://example.com/source' }],
+    }));
+    expect(ld.author).toEqual({ '@type': 'Person', name: 'Nguyễn Văn A', jobTitle: 'Biên tập viên thị trường' });
+    expect(ld.datePublished).toBe('2026-08-31T08:00:00.000Z');
+    expect(ld.temporalCoverage).toBe('2026-08-30');
+    expect(ld.reviewedBy).toEqual({ '@type': 'Person', name: 'Trần Văn B', jobTitle: 'Biên tập trưởng' });
+    expect(ld.comment).toBe('Đối chiếu theo nguồn công khai.');
+    expect(ld.citation).toHaveLength(1);
+    expect(ld.speakable).toBeTruthy();
+  });
+
   it('citations sai kiểu (object/string/null) không làm throw', () => {
     expect(() => buildNewsJsonLd(news({ citations: {} as never }))).not.toThrow();
     expect(() => buildNewsJsonLd(news({ citations: 'x' as never }))).not.toThrow();

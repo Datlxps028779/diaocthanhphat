@@ -284,6 +284,13 @@ export type ChatStaffCapacity = {
 export type NewsArticle = {
   id: string; title: string; slug: string; excerpt: string | null; content: string | null;
   image_url: string | null; category: string; author: string;
+  author_type?: 'Person' | 'Organization' | null;
+  author_role?: string | null;
+  published_at?: string | null;
+  as_of_date?: string | null;
+  reviewer_name?: string | null;
+  reviewer_role?: string | null;
+  source_note?: string | null;
   is_published: boolean; views: number;
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;

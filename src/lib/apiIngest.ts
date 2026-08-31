@@ -70,6 +70,13 @@ export interface ArticleRow {
   excerpt: string | null;
   category: string;
   author: string;
+  author_type?: 'Person' | 'Organization' | null;
+  author_role?: string | null;
+  published_at?: string | null;
+  as_of_date?: string | null;
+  reviewer_name?: string | null;
+  reviewer_role?: string | null;
+  source_note?: string | null;
   image_url: string | null;
   meta_title: string | null;
   meta_description: string | null;
@@ -119,6 +126,32 @@ function articleString(
     return null;
   }
   return value;
+}
+
+function optionalArticleDate(v: unknown, field: string, errors: string[], dateOnly = false): string | null {
+  if (v == null || (typeof v === 'string' && !v.trim())) return null;
+  if (typeof v !== 'string') {
+    errors.push(`${field}: phải là chuỗi ngày hợp lệ.`);
+    return null;
+  }
+  const value = v.trim();
+  const parsed = Date.parse(dateOnly ? `${value}T00:00:00.000Z` : value);
+  const normalizedDate = dateOnly && !Number.isNaN(parsed) ? new Date(parsed).toISOString().slice(0, 10) : '';
+  if (
+    Number.isNaN(parsed)
+    || (dateOnly && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || normalizedDate !== value))
+  ) {
+    errors.push(`${field}: phải là ngày${dateOnly ? ' YYYY-MM-DD' : ' ISO-8601'} hợp lệ.`);
+    return null;
+  }
+  return value;
+}
+
+function articleAuthorType(v: unknown, errors: string[]): 'Person' | 'Organization' {
+  if (v == null || v === '') return 'Organization';
+  if (v === 'Person' || v === 'Organization') return v;
+  errors.push('author_type: chỉ nhận Person hoặc Organization.');
+  return 'Organization';
 }
 
 // Số từ make.com hay về dạng chuỗi ("3.5") vì HTTP module không giữ kiểu.
@@ -335,6 +368,13 @@ export function normalizeArticlePayload(body: unknown): NormalizeResult<ArticleR
   const externalId = articleString(body.external_id, 'external_id', MAX_SHORT, errors);
   const category = articleString(body.category, 'category', 100, errors);
   const author = articleString(body.author, 'author', MAX_SHORT, errors);
+  const authorType = articleAuthorType(body.author_type, errors);
+  const authorRole = articleString(body.author_role, 'author_role', MAX_SHORT, errors);
+  const publishedAt = optionalArticleDate(body.published_at, 'published_at', errors);
+  const asOfDate = optionalArticleDate(body.as_of_date, 'as_of_date', errors, true);
+  const reviewerName = articleString(body.reviewer_name, 'reviewer_name', MAX_SHORT, errors);
+  const reviewerRole = articleString(body.reviewer_role, 'reviewer_role', MAX_SHORT, errors);
+  const sourceNote = articleString(body.source_note, 'source_note', MAX_TEXT, errors);
 
   if (!title && missingArticleString(body.title)) {
     errors.push('title: bắt buộc, phải là chuỗi không rỗng.');
@@ -383,6 +423,13 @@ export function normalizeArticlePayload(body: unknown): NormalizeResult<ArticleR
       excerpt,
       category: category as string,
       author: author as string,
+      author_type: authorType,
+      author_role: authorRole,
+      published_at: publishedAt,
+      as_of_date: asOfDate,
+      reviewer_name: reviewerName,
+      reviewer_role: reviewerRole,
+      source_note: sourceNote,
       image_url: httpUrl(rawImageUrl),
       meta_title: metaTitle ? clampSeoTitle(metaTitle) : null,
       meta_description: metaDescription,
