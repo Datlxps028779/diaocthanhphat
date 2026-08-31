@@ -17,6 +17,25 @@ export interface RouteFallback {
 
 const ROUTE_LOCKED_KEYS = ['@context', '@type', '@id', 'url', 'mainEntityOfPage'];
 
+const DYNAMIC_LISTING_QUERY_KEYS = new Set([
+  'area', 'type', 'loai', 'district', 'ward', 'legal', 'q', 'sort',
+  'minPrice', 'maxPrice', 'minArea', 'maxArea', 'bedrooms', 'direction',
+  'featured', 'hot', 'page', 'locationSource',
+]);
+
+export function hasDynamicListingQuery(
+  searchParams?: Record<string, string | string[] | undefined>,
+): boolean {
+  return Object.entries(searchParams ?? {}).some(([key, value]) => {
+    if (!DYNAMIC_LISTING_QUERY_KEYS.has(key)) return false;
+    return Array.isArray(value) ? value.some(Boolean) : Boolean(value);
+  });
+}
+
+export function noindexDynamicListingMetadata(metadata: Metadata, dynamic: boolean): Metadata {
+  return dynamic ? { ...metadata, robots: { index: false, follow: true } } : metadata;
+}
+
 // Route overrides must remain same-site path aliases. Query/hash canonical URLs split
 // signals and external URLs could make an admin typo point schema/OG off-site.
 export function safeRouteCanonicalPath(overridePath: string | null | undefined, fallbackPath: string): string {

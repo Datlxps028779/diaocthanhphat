@@ -8,6 +8,7 @@ import { PropertyDetailClient } from '../../app/bat-dong-san/[slug]/PropertyDeta
 import { buildProductPath, parseProductCode } from '@/lib/productPath';
 import type { ListingType } from '@/lib/areaPath';
 import type { Property } from '@/lib/supabase';
+import { normalizeListingTitle } from '@/lib/listingTitle';
 
 // Nhánh chi tiết sản phẩm trong cây route khu vực: /{lt}/{areaSlug}/{districtSlug?}/
 // {slug}-pr{code}. Segment không có -pr{số} tiếp tục nhánh listing khu vực.
@@ -53,7 +54,7 @@ export async function renderProductDetail(
   const breadcrumbJsonLd = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán', path: listingHref },
-    { name: property.title, path: canonical },
+    { name: normalizeListingTitle(property.title).value, path: canonical },
   ]);
   const faqItems = property.faq && property.faq.length > 0 ? property.faq : buildPropertyFaq(property);
   const faqJsonLd = buildFaqJsonLd(faqItems);

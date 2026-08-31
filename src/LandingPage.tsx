@@ -14,11 +14,12 @@ import {
   getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
   getPageLayout, buildPropertyPath, getNewsCategories,
-} from './lib/api';
+  getAllProperties,} from './lib/api';
 import { captureSignalFromProperty } from './lib/captureSignal';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from './lib/hooks/useTaxonomy';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT } from './lib/priceRange';
 import { parseSearchIntent } from './lib/aiSearch';
+import { buildHomepageListingTarget } from './lib/listingSearchState';
 import { hasEnoughSignal } from './lib/taste';
 import { useTasteProfile } from './lib/hooks/useTasteProfile';
 import { FAQ_ITEMS } from './lib/faq';
@@ -38,6 +39,7 @@ import { BlurFillImage } from './components/BlurFillImage';
 import { PropertyGallery } from './components/PropertyGallery';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt } from './lib/propertyImages';
+import { dedupeFeaturedSectionProperties } from './lib/featuredSectionDedupe';
 import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
 import { normalizeListingTitle } from './lib/listingTitle';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -108,6 +110,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const [activeNewsTab, setActiveNewsTab] = useState<string>('Tin tức');
 
   const phone = useSetting('phone_hotline', '0901 234 567');
+  const supportHours = useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00');
   const { profile: tasteProfile, ready: tasteProfileReady } = useTasteProfile();
 
   // Taxonomy + dữ liệu trang chủ qua React Query (cache/dedup)
@@ -130,6 +133,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
 
   const { data: featuredSections = [] } = useQuery({ queryKey: qk.featuredSections(), queryFn: getFeaturedSections });
+  const { data: activeListingCount } = useQuery({
+    queryKey: ['active-listing-count'],
+    queryFn: async () => (await getAllProperties({ limit: 1 })).total,
+    staleTime: 60_000,
+  });
 
   // Per-section properties: 1 query mỗi section, chạy khi featuredSections có
   const sectionQueries = useQueries({
@@ -138,9 +146,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       queryFn: () => getPropertiesForSection(s),
     })),
   });
-  const sections = featuredSections
+  const sections = dedupeFeaturedSectionProperties(featuredSections
     .map((section, i) => ({ section, properties: (sectionQueries[i]?.data ?? []) as Property[] }))
-    .filter((r) => r.properties.length > 0);
+    .filter((r) => r.properties.length > 0));
 
   const { data: favIds = [] } = useQuery({ queryKey: qk.favoriteIds(), queryFn: getFavoriteIds });
   const favoriteIds = useMemo(() => new Set(favIds), [favIds]);
@@ -195,17 +203,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       hasArea: !!(searchAreaId || intent.filters.areaId),
       priceIdx: searchPriceIdx,
     });
-    onNavigate({
-      name: 'listings',
-      listingType: inferredListingType ?? activeTab,
-      areaId: searchAreaId || intent.filters.areaId,
-      district: searchDistrict || intent.filters.district,
-      ward: searchWard || intent.filters.ward,
-      typeId: searchTypeId || intent.filters.typeId,
-      keyword: searchKeyword || undefined,
-      minPrice: searchPriceIdx > 0 ? pr?.min : intent.filters.minPrice,
-      maxPrice: searchPriceIdx > 0 ? pr?.max : intent.filters.maxPrice,
-    });
+    onNavigate(buildHomepageListingTarget({
+      activeTab,
+      explicit,
+      intent,
+    }));
   };
 
   const goListings = (opts?: Partial<{ listingType: 'mua_ban' | 'cho_thue'; areaId: string; typeId: string; isFeatured: boolean; isHot: boolean }>) => {
@@ -414,7 +416,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               {[
                 { icon: <Shield className="w-6 h-6" />, title: sec('why_us')('f1_title', 'Uy tín – Chuyên nghiệp'), desc: sec('why_us')('f1_desc', 'Hơn 7 năm kinh nghiệm trong lĩnh vực BĐS tại Bình Dương') },
                 { icon: <CheckCircle className="w-6 h-6" />, title: sec('why_us')('f2_title', 'Thông tin minh bạch'), desc: sec('why_us')('f2_desc', 'Mọi thông tin BĐS đều được xác thực và kiểm duyệt kỹ lưỡng') },
-                { icon: <Phone className="w-6 h-6" />, title: sec('why_us')('f3_title', 'Hỗ trợ 24/7'), desc: sec('why_us')('f3_desc', 'Đội ngũ chuyên gia sẵn sàng tư vấn mọi lúc bạn cần') },
+                { icon: <Phone className="w-6 h-6" />, title: supportHours, desc: sec('why_us')('f3_desc', `Đội ngũ hỗ trợ hoạt động ${supportHours.toLocaleLowerCase('vi-VN')}`) },
                 { icon: <TrendingUp className="w-6 h-6" />, title: sec('why_us')('f4_title', 'Pháp lý an toàn'), desc: sec('why_us')('f4_desc', 'Hỗ trợ đầy đủ thủ tục pháp lý từ A đến Z') },
               ].map((f, i) => (
                 <div key={i} className="text-center">
@@ -631,7 +633,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
                       </span>
                     </button>
-                    {open && <div className="cnv-body-copy px-5 pb-4 text-gray-600">{item.a}</div>}
+                    <div className={`cnv-body-copy px-5 pb-4 text-gray-600 ${open ? 'block' : 'hidden'}`}>{item.a}</div>
                   </div>
                 );
               })}
@@ -666,7 +668,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             {[
               { icon: <Users className="w-5 h-5 text-emerald-600" />, text: sec('social_proof')('item1_text', 'Đăng ký miễn phí') },
               { icon: <Shield className="w-5 h-5 text-blue-600" />, text: sec('social_proof')('item2_text', 'Thông tin được xác thực') },
-              { icon: <Phone className="w-5 h-5 text-orange-600" />, text: sec('social_proof')('item3_text', 'Hỗ trợ 7:00–21:00') },
+              { icon: <Phone className="w-5 h-5 text-orange-600" />, text: supportHours },
               { icon: <CheckCircle className="w-5 h-5 text-red-600" />, text: sec('social_proof')('item4_text', 'Pháp lý rõ ràng') },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
@@ -755,7 +757,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
             {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
           </h1>
           <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_10px_rgba(0,0,0,0.85)]">
-            {sec('hero')('subtitle', 'Hơn 5.000 tin đăng nhà đất, căn hộ, đất nền uy tín tại Bình Dương, Bình Phước, Đồng Nai')}
+            {sec('hero')('subtitle', activeListingCount != null
+              ? `${activeListingCount.toLocaleString('vi-VN')} tin đăng nhà đất đang hoạt động tại Bình Dương, Bình Phước, Đồng Nai`
+              : 'Tin đăng nhà đất, căn hộ, đất nền tại Bình Dương, Bình Phước, Đồng Nai')}
           </p>
 
           {/* Search box */}

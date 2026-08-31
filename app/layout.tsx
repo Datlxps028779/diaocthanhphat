@@ -70,7 +70,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publisher: { '@id': `${SITE_URL}/#organization` },
     potentialAction: {
       '@type': 'SearchAction',
-      target: `${SITE_URL}/danh-sach?q={search_term_string}`,
+      target: `${SITE_URL}/mua-ban?q={search_term_string}`,
       'query-input': 'required name=search_term_string',
     },
   };

@@ -25,7 +25,7 @@ import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
-import { formatListingPrice, formatPriceInput, parsePriceInput } from '../lib/listingPrice';
+import { formatFinancingAmount, formatListingPrice, formatPriceInput, parsePriceInput, subtractListingPriceValues } from '../lib/listingPrice';
 import { PriceField } from '../components/PriceField';
 import { coordinatePairFromUnknown, validateCoordinatePair } from '../lib/locationCoordinates';
 import { pickTaxonomyGeo, taxonomyGeoLabel, isValidTaxonomyCenter } from '../lib/taxonomyGeo';
@@ -705,7 +705,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                       const loan = parsePriceInput(form.loan_support);
                       return price && loan && loan > 0 && loan < price ? (
                         <p className="mt-1 text-xs font-medium text-emerald-600">
-                          Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}
+                          Khách trả trước: {formatFinancingAmount(subtractListingPriceValues(price, loan), form.price_unit)} · Hỗ trợ vay: {formatFinancingAmount(loan, form.price_unit)}
                         </p>
                       ) : null;
                     })()}

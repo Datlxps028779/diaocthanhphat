@@ -67,6 +67,20 @@ export function normalizePublicImageUrl(url: string | null | undefined): string 
   return '';
 }
 
+export function normalizePublicHref(href: string | null | undefined): string {
+  const raw = href?.trim() ?? '';
+  if (!raw || /^(javascript|data|blob):/i.test(raw)) return '';
+  if (/^(mailto|tel):/i.test(raw)) return raw;
+  try {
+    const parsed = new URL(raw, getSiteUrl());
+    if (parsed.origin === getSiteUrl()) return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
+    if (/^https?:$/i.test(parsed.protocol)) return parsed.toString();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 export function canonicalPath(path: string): string {
   if (!path) return '/';
   if (path.startsWith('http://') || path.startsWith('https://')) {

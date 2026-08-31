@@ -54,6 +54,13 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('maxPrice')).toBe('2');
   });
 
+  it('giữ locationSource=inferred như metadata tạm cho lần điều hướng từ semantic search', () => {
+    const href = pageToHref({ name: 'listings', listingType: 'mua_ban', ward: 'An Phú', locationSource: 'inferred' });
+    const params = new URLSearchParams(href.split('?')[1]);
+    expect(params.get('locationSource')).toBe('inferred');
+    expect(parseListingParams(Object.fromEntries(params))).toMatchObject({ locationSource: 'inferred' });
+  });
+
   it('mang minPrice=0 (Dưới X) — không bỏ sót vì 0 là falsy', () => {
     const params = new URLSearchParams(pageToHref({ name: 'listings', minPrice: 0, maxPrice: 0.5 }).split('?')[1]);
     expect(params.get('minPrice')).toBe('0');

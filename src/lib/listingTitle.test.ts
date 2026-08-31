@@ -20,6 +20,7 @@ describe('normalizeListingTitle', () => {
     expect(normalize('  BÁN   NHÀ ,GIÁ TỐT/ BÌNH DƯƠNG  ', ['Bình Dương']))
       .toBe('Bán nhà, giá tốt / Bình Dương');
     expect(normalize('BÁN NHÀ,DĨ AN', ['Dĩ An'])).toBe('Bán nhà, Dĩ An');
+    expect(normalize('BÁN DÃY TRỌ GIÁ 5, 5 TỶ')).toBe('Bán dãy trọ giá 5,5 tỷ');
     expect(normalize('BÁN NHÀ!!! GIÁ TỐT')).toBe('Bán nhà! giá tốt');
   });
 

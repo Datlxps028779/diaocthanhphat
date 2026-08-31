@@ -7,6 +7,7 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area, type District, type PropertyType } from '../lib/supabase';
 import { districtDisplaySlug } from '../lib/areaPath';
+import { normalizePublicHref } from '../lib/siteUrl';
 import { useContent, useSetting, useMenu } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -97,10 +98,21 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
         <nav className="hidden xl:flex items-center gap-1 flex-1 justify-center">
           {navItems.map(item => item.children ? (
             <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
-              <button type="button" onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
-                className={`cnv-nav-type px-3 py-2 rounded-md transition-colors whitespace-nowrap flex items-center gap-1 ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
-                {item.label}<ChevronDown className="w-3.5 h-3.5 opacity-60" />
-              </button>
+              <div className="flex items-center rounded-md">
+                {item.page || item.href ? (
+                  <Link href={hrefFor(item)} onClick={closeMenus}
+                    className={`cnv-nav-type px-3 py-2 rounded-l-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+                    {item.label}
+                  </Link>
+                ) : (
+                  <span className={`cnv-nav-type px-3 py-2 whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700'}`}>{item.label}</span>
+                )}
+                <button type="button" aria-label={`Mở menu ${item.label}`} aria-expanded={desktopMenuOpen === item.key}
+                  onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
+                  className={`px-2 py-2 rounded-r-md transition-colors ${isActive(item) ? 'text-red-600 bg-red-50' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+                  <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                </button>
+              </div>
               {desktopMenuOpen === item.key && (
                 <div className="absolute left-0 top-full pt-2 z-50">
                   <div className="w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-2 max-h-[70vh] overflow-y-auto">
@@ -198,10 +210,21 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
         <nav id="mobile-navigation" aria-label="Điều hướng di động" className="xl:hidden max-h-[calc(100vh-52px)] overflow-y-auto bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
           {navItems.map(item => item.children ? (
             <div key={item.key}>
-              <button type="button" onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
-                className={`cnv-nav-type flex w-full items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
-                <span>{item.label}</span><ChevronDown className={`w-4 h-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
-              </button>
+              <div className="flex items-center gap-1">
+                {item.page || item.href ? (
+                  <Link href={hrefFor(item)} onClick={closeMenus}
+                    className={`cnv-nav-type flex-1 px-3 py-2.5 rounded-lg transition-colors ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-red-50'}`}>
+                    {item.label}
+                  </Link>
+                ) : (
+                  <span className={`cnv-nav-type flex-1 px-3 py-2.5 rounded-lg ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700'}`}>{item.label}</span>
+                )}
+                <button type="button" aria-label={`Mở menu ${item.label}`} aria-expanded={mobileSubmenuOpen === item.key}
+                  onClick={() => setMobileSubmenuOpen(mobileSubmenuOpen === item.key ? null : item.key)}
+                  className="rounded-lg px-3 py-2.5 text-gray-600 hover:bg-red-50 hover:text-red-600">
+                  <ChevronDown className={`w-4 h-4 transition-transform ${mobileSubmenuOpen === item.key ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
               {mobileSubmenuOpen === item.key && (
                 <div className="ml-3 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
                   {item.children.map(child => child.children ? (
@@ -343,7 +366,8 @@ export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }
       const cleaned = parsed
         .filter((x): x is { label: string; href: string } =>
           x && typeof x.label === 'string' && typeof x.href === 'string' && x.label.trim() !== '' && x.href.trim() !== '')
-        .map(x => ({ label: x.label.trim(), href: x.href.trim() }));
+        .map(x => ({ label: x.label.trim(), href: normalizePublicHref(x.href) }))
+        .filter(x => x.href);
       return cleaned.length > 0 ? cleaned : fallbackLinks;
     } catch {
       return fallbackLinks;

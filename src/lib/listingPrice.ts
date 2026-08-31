@@ -56,10 +56,22 @@ export function priceInputFromNumber(value: number | null | undefined): string {
   return value && Number.isFinite(value) && value > 0 ? formatPriceInput(String(value)) : '';
 }
 
+export function subtractListingPriceValues(left: number, right: number): number {
+  const scale = 1_000_000;
+  return (Math.round(left * scale) - Math.round(right * scale)) / scale;
+}
+
 export function formatListingPrice(value: number | null | undefined, unit: string, suffix = ''): string {
   if (!value || !Number.isFinite(value)) return '';
   return `${formatPriceInput(String(value))} ${unit}${suffix}`.trim();
 }
+
+export function formatFinancingAmount(value: number | null | undefined, unit: string): string {
+  if (!value || !Number.isFinite(value) || value <= 0) return '';
+  if (unit === 'tỷ' && value < 1) return `${Math.round(value * 1000)} triệu`;
+  return formatListingPrice(value, unit);
+}
+
 
 function isRental(source: ListingPriceSource): boolean {
   return source.listing_type === 'cho_thue' || (source.price_unit ?? '').toLocaleLowerCase('vi-VN').includes('tháng');
@@ -105,6 +117,6 @@ export function formatCompactPropertyPrice(source: ListingPriceSource): string {
 export function priceToVnd(source: ListingPriceSource): number | null {
   const effective = getEffectiveListingPrice(source);
   if (effective.value == null || effective.unit == null) return null;
-  if (effective.unit === 'tỷ') return effective.value * 1_000_000_000;
-  return effective.value * 1_000_000;
+  const multiplier = effective.unit === 'tỷ' ? 1_000_000_000 : 1_000_000;
+  return Math.round(effective.value * multiplier);
 }

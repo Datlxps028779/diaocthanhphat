@@ -7,7 +7,6 @@ import { PriceStatsBlock } from '@/components/PriceStatsBlock';
 import { WardPriceBreakdown } from '@/components/WardPriceBreakdown';
 import { buildBreadcrumbJsonLd } from '@/lib/seo';
 import { buildPriceAnswer } from '@/lib/priceStatsFormat';
-import { buildFaqJsonLd } from '@/lib/propertyFaq';
 import {
   serverGetAreaBySlug,
   serverGetAreaListings,
@@ -19,13 +18,13 @@ import {
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
-  buildAreaFaq,
   buildAreaMetadata,
   evaluateAreaSeo,
   getAreaDetails,
 } from '@/lib/areaSeo';
 import { parseAreaListingPath, resolveAreaPath, buildAreaListingPath, listingTypeToSlug, type ListingType } from '@/lib/areaPath';
 import { parseListingParams } from '@/lib/router';
+import { hasDynamicListingQuery } from '@/lib/routeSeo';
 import { detectProductCode, renderProductDetail, productMetadataFromRest } from '@/lib/productDetailPage';
 
 // Nhãn giao dịch hiển thị + trong tiêu đề SEO. Khác nhau theo path /mua-ban vs /cho-thue.
@@ -98,13 +97,22 @@ async function metadataFromParams(listingSlug: string, rest: string[] | undefine
 
 export function areaListingMetadataFactory(listingType: ListingType) {
   const listingSlug = listingTypeToSlug(listingType);
-  return async ({ params }: { params: { areaSlug: string; rest?: string[] } }) => {
+  return async ({
+    params,
+    searchParams,
+  }: {
+    params: { areaSlug: string; rest?: string[] };
+    searchParams?: Record<string, string | string[] | undefined>;
+  }) => {
     const rest = [params.areaSlug, ...(params.rest ?? [])];
     // Segment cuối khớp -pr{số} → metadata chi tiết sản phẩm (redirect/notFound xử lý
     // TẠI ĐÂY vì chạy trước khi stream shell — xem ghi chú productMetadataFromRest).
     const productMeta = await productMetadataFromRest(listingType, rest);
     if (productMeta) return productMeta;
-    return metadataFromParams(listingSlug, rest);
+    const metadata = await metadataFromParams(listingSlug, rest);
+    return hasDynamicListingQuery(searchParams)
+      ? { ...metadata, robots: { index: false, follow: true } }
+      : metadata;
   };
 }
 
@@ -193,15 +201,14 @@ export async function renderAreaListingPage(
   }
   const data = await loadAreaListing(listingSlug, rest);
   if (!data) notFound();
-  const { area, district, listings, stats, detail, summary, priceStats, parts, path } = data;
+  const { area, district, listings, stats, parts, path } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
 
   // Filter phụ (giá/loại/phòng/hướng…) từ query → seed lại khi F5/share link. area &
   // district lấy từ PATH nên loại khỏi query (path thắng), tránh ghi đè khu vực.
   const { areaId: _qArea, district: _qDistrict, ...extraFilters } = parseListingParams(searchParams);
+  const dynamicQuery = hasDynamicListingQuery(searchParams);
 
-  const routePriceStats = priceStats.filter(stat => stat.listing_type === parts.listingType);
-  const faq = buildAreaFaq(area, { activeCount: stats.activeCount, priceStats: district ? [] : routePriceStats, detail, summary });
   const breadcrumb = buildBreadcrumbJsonLd([
     { name: 'Trang chủ', path: '/' },
     { name: `Bất động sản ${LISTING_LABEL[parts.listingType]}`, path: `/${listingSlug}` },
@@ -213,11 +220,10 @@ export async function renderAreaListingPage(
         name: `Bất động sản ${LISTING_LABEL[parts.listingType]} ${scopeName}`,
       })
     : null;
-  const faqLd = faq.length > 0 ? buildFaqJsonLd(faq) : null;
 
   return (
     <>
-      <JsonLdScripts schemas={[breadcrumb, collection, faqLd]} />
+      <JsonLdScripts schemas={dynamicQuery ? [breadcrumb] : [breadcrumb, collection]} />
       <AreaListingClient
         listingType={parts.listingType}
         filters={{ ...extraFilters, areaId: area.id, district: district?.name }}

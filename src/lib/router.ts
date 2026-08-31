@@ -17,6 +17,7 @@ export type Page =
       name: 'listings';
       listingType?: 'mua_ban' | 'cho_thue';
       areaId?: string; typeId?: string; district?: string; ward?: string; keyword?: string;
+      locationSource?: 'explicit' | 'inferred';
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
       isFeatured?: boolean; isHot?: boolean; sort?: string; page?: number;
@@ -80,6 +81,8 @@ export function parseListingParams(sp: RawSearchParams): ListingInitialFilters {
   if (ward) out.ward = ward;
   if (legal) out.legal = legal;
   if (keyword) out.keyword = keyword;
+  const locationSource = first(sp?.locationSource);
+  if (locationSource === 'inferred' || locationSource === 'explicit') out.locationSource = locationSource;
   if (sort && allowedSorts.includes(sort as PropertySort)) out.sort = sort as PropertySort;
   if (minPrice != null) out.minPrice = minPrice;
   if (maxPrice != null) out.maxPrice = maxPrice;
@@ -154,6 +157,7 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
       }
       if (page.district && !districtOnPath) q.set('district', page.district);
       if (page.ward) q.set('ward', page.ward);
+      if (page.locationSource === 'inferred') q.set('locationSource', 'inferred');
       if (page.legal) q.set('legal', page.legal);
       if (page.keyword) q.set('q', page.keyword);
       if (page.sort) q.set('sort', page.sort);

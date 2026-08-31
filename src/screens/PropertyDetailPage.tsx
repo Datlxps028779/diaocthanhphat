@@ -32,13 +32,14 @@ import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { formatUpdateDate } from '../lib/priceStatsFormat';
-import { formatPropertyPrice, formatListingPrice } from '../lib/listingPrice';
+import { formatPropertyPrice, formatFinancingAmount, subtractListingPriceValues } from '../lib/listingPrice';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { getProductSuggestions } from '../lib/productSuggestions';
+import { normalizeListingTitle } from '../lib/listingTitle';
 import { buildSimilarFilters } from '../lib/similarFilters';
 import { RichVideo } from '../components/RichVideo';
 import { ReadableContent } from '../components/ReadableContent';
@@ -80,6 +81,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   // Preview đọc thẳng từ initialData (bỏ qua cache dùng chung key rỗng để mỗi lần
   // xem trước luôn phản ánh đúng form hiện tại); không loading.
   const property = preview ? (initialData ?? null) : queryProperty;
+  const listingTitle = property ? normalizeListingTitle(property.title).value : '';
   const loading = preview ? false : loadingQuery;
 
   // Khu dân cư của tin (nếu có) → link tới Entity Page (internal link mục 8 doc).
@@ -427,8 +429,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
             {/* Title & price */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <div className="mb-2"><VerifiedBadge property={property} size="md" /></div>
-              <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{property.title}</h1>
-              <DetailShareButtons title={property.title} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
+              <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{listingTitle}</h1>
+              <DetailShareButtons title={listingTitle} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
               <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <span>{[property.address, property.district, property.city].filter(Boolean).join(', ')}</span>
@@ -452,10 +454,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   {property.listing_type !== 'cho_thue' && property.loan_support != null && property.loan_support > 0 && property.loan_support < property.price && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                        Trả trước: {formatListingPrice(property.price - property.loan_support, property.price_unit)}
+                        Trả trước: {formatFinancingAmount(subtractListingPriceValues(property.price, property.loan_support), property.price_unit)}
                       </span>
                       <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                        Chủ hỗ trợ vay: {formatListingPrice(property.loan_support, property.price_unit)}
+                        Chủ hỗ trợ vay: {formatFinancingAmount(property.loan_support, property.price_unit)}
                       </span>
                     </div>
                   )}

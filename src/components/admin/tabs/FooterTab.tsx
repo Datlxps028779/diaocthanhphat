@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, CheckCircle, ExternalLink, Plus, Save, Trash2 } from 'lucide-react';
 import type { SiteContent, SiteSetting } from '../../../lib/supabase';
 import { adminGetAllSiteContent, adminGetAllSiteSettings, updateSiteContent, updateSiteSetting, upsertSiteSetting } from '../../../lib/api';
+import { normalizePublicHref } from '../../../lib/siteUrl';
 
 type QuickLink = { label: string; href: string };
 
@@ -152,7 +153,10 @@ export function FooterTab() {
         label: 'Liên kết nhanh footer',
         group_name: 'footer',
         type: 'textarea',
-        value: JSON.stringify(quickLinks.filter(l => l.label.trim() && l.href.trim()), null, 2),
+        value: JSON.stringify(quickLinks.map(link => ({
+          label: link.label.trim(),
+          href: normalizePublicHref(link.href),
+        })).filter(l => l.label && l.href), null, 2),
       });
       markSaved('footer_quick_links');
     } finally {

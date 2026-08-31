@@ -22,6 +22,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const [sent, setSent] = useState(false);
   const [leadError, setLeadError] = useState('');
   const sitePhone = useSetting('phone_hotline', '');
+  const supportHours = useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00');
   const siteEmail = useSetting('email', '');
   const siteAddress = useSetting('address', '');
 
@@ -224,7 +225,7 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
           </div>
           <div className="space-y-4">
             {[
-              { icon: <Phone className="w-5 h-5 text-amber-500" />, label: 'Hotline', value: sitePhone, sub: 'Hỗ trợ 7:00 – 21:00 hàng ngày' },
+              { icon: <Phone className="w-5 h-5 text-amber-500" />, label: 'Hotline', value: sitePhone, sub: `${supportHours} hàng ngày` },
               { icon: <Mail className="w-5 h-5 text-amber-500" />, label: 'Email', value: siteEmail, sub: 'Phản hồi trong vòng 2 giờ' },
               { icon: <MapPin className="w-5 h-5 text-amber-500" />, label: 'Văn phòng chính', value: siteAddress, sub: '' },
             ].map(item => (

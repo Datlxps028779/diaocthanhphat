@@ -21,6 +21,7 @@ export interface PropertyFilters {
 // parser ↔ client wrapper ↔ màn danh sách.
 export type ListingInitialFilters = Omit<PropertyFilters, 'loan' | 'limit'> & {
   typeSlug?: string;
+  locationSource?: 'explicit' | 'inferred';
 };
 
 export class PropertySearchUnavailableError extends Error {

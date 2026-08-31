@@ -12,6 +12,11 @@ describe('buildListingResultLabel', () => {
     })).toBe('Đất nền bán An Phú');
   });
 
+  it('uses the residual keyword when no location is active', () => {
+    expect(buildListingResultLabel({ listingType: 'mua_ban', keyword: 'Minh Hưng' }))
+      .toBe('bất động sản bán Minh Hưng');
+  });
+
   it('falls back to the generic subject when no decision filters are active', () => {
     expect(buildListingResultLabel({ listingType: '' })).toBe('bất động sản');
   });

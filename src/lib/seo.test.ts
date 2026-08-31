@@ -147,9 +147,20 @@ describe('buildPropertyJsonLd', () => {
     expect(ld.name).toBe('Nhà phố đẹp');
     expect(ld.url).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep`);
     expect(ld['@id']).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep#realestatelisting`);
-    expect((ld.offers as Record<string, unknown>).price).toBe(3);
+    expect((ld.offers as Record<string, unknown>).price).toBe(3_000_000_000);
     expect((ld.floorSize as Record<string, unknown>).value).toBe(80);
     expect((ld.address as Record<string, unknown>).addressLocality).toBe('Thủ Dầu Một');
+  });
+
+  it('converts rental monthly price to absolute VND', () => {
+    const ld = buildPropertyJsonLd(property({
+      listing_type: 'cho_thue',
+      price: 0,
+      price_unit: 'triệu/tháng',
+      price_per_month: 12.5,
+    }));
+    expect((ld.offers as Record<string, unknown>).price).toBe(12_500_000);
+    expect((ld.offers as Record<string, unknown>).priceCurrency).toBe('VND');
   });
 
   it('image là mảng gallery ảnh thật (không có ảnh fallback)', () => {

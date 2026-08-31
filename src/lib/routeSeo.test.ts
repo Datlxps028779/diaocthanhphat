@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRouteMetadata, buildRouteJsonLd, safeRouteCanonicalPath, type RouteFallback } from './routeSeo';
+import { buildRouteMetadata, buildRouteJsonLd, hasDynamicListingQuery, noindexDynamicListingMetadata, safeRouteCanonicalPath, type RouteFallback } from './routeSeo';
 import type { SeoRouteOverride } from './supabase';
 
 function fallback(overrides: Partial<RouteFallback> = {}): RouteFallback {
@@ -73,6 +73,20 @@ describe('buildRouteMetadata', () => {
     for (const candidate of ['mua-ban-chinh', '//evil.example/path', '/mua-ban?utm_source=x', '/mua-ban#faq', 'https://evil.example/path']) {
       expect(safeRouteCanonicalPath(candidate, '/mua-ban')).toBe('/mua-ban');
     }
+  });
+
+  it('detects dynamic listing query keys but ignores unrelated tracking params', () => {
+    expect(hasDynamicListingQuery({ q: 'Minh Hưng' })).toBe(true);
+    expect(hasDynamicListingQuery({ ward: 'An Phú', page: '2' })).toBe(true);
+    expect(hasDynamicListingQuery({ utm_source: 'newsletter' })).toBe(false);
+    expect(hasDynamicListingQuery({ q: '' })).toBe(false);
+  });
+
+  it('forces dynamic listing variants to noindex while keeping links crawlable', () => {
+    const metadata = buildRouteMetadata({ path: '/mua-ban', fallback: fallback(), override: null });
+    const dynamic = noindexDynamicListingMetadata(metadata, true);
+    expect((dynamic.robots as { index?: boolean })?.index).toBe(false);
+    expect((dynamic.robots as { follow?: boolean })?.follow).toBe(true);
   });
 });
 

@@ -41,8 +41,9 @@ export async function getPropertiesForSection(section: FeaturedSection): Promise
   if (section.filter_is_hot) q = q.eq('is_hot', true);
   if (section.filter_is_featured) q = q.eq('is_featured', true);
 
-  if (section.auto_sort === 'price_asc') q = q.order('price', { ascending: true });
-  else if (section.auto_sort === 'price_desc') q = q.order('price', { ascending: false });
+  const priceColumn = section.filter_listing_type === 'cho_thue' ? 'price_per_month' : 'price';
+  if (section.auto_sort === 'price_asc') q = q.order(priceColumn, { ascending: true });
+  else if (section.auto_sort === 'price_desc') q = q.order(priceColumn, { ascending: false });
   else if (section.auto_sort === 'views') q = q.order('views', { ascending: false });
   else q = q.order('created_at', { ascending: false });
 

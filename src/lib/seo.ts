@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
 import { buildSeoImageGallery, FALLBACK_PROPERTY_IMAGE, normalizeSeoImageUrl } from './propertyImages';
-import { formatPropertyPrice as formatListingPropertyPrice } from './listingPrice';
+import { formatPropertyPrice as formatListingPropertyPrice, priceToVnd } from './listingPrice';
 import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
 import { mergeSchema } from './schemaValidation';
 import { stripHtml, isHtmlContent } from './markdown';
 import { buildProductPath } from './productPath';
 import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
+import { normalizeListingTitle } from './listingTitle';
 
 const SITE_URL = getSiteUrl();
 const SITE_NAME = 'BĐS Bình Dương';
@@ -132,12 +133,13 @@ function formatPropertyPrice(p: Property): string {
 // nhập tay, fallback tự sinh deterministic từ dữ liệu thật (loại BĐS + địa danh +
 // giá + diện tích), kẹp đúng độ dài SEO để tránh thin/duplicate giữa các tin.
 export function buildPropertyMetadata(p: Property): Metadata {
+  const listingTitle = normalizeListingTitle(p.title).value;
   const priceStr = formatPropertyPrice(p);
   const typeLabel = p.property_types?.name?.trim() || '';
   const location = [p.district?.trim(), p.city?.trim() || 'Bình Dương'].filter(Boolean).join(', ');
   const listingVerb = p.listing_type === 'cho_thue' ? 'Cho thuê' : 'Bán';
 
-  const titleSource = [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), p.title, priceStr ? `giá ${priceStr}` : '']
+  const titleSource = [`${listingVerb} ${typeLabel || 'bất động sản'}`.trim(), listingTitle, priceStr ? `giá ${priceStr}` : '']
     .filter(Boolean).join(' - ');
   const fallbackTitle = clampText(titleSource, 45, 65);
   const title = p.meta_title?.trim() || fallbackTitle;
@@ -146,7 +148,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const ogTtl = ogTitle(p.meta_title?.trim() || titleSource);
 
   const descParts = [
-    `${typeLabel || 'Bất động sản'} ${p.title}${location ? ` tại ${location}` : ''}.`,
+    `${typeLabel || 'Bất động sản'} ${listingTitle}${location ? ` tại ${location}` : ''}.`,
     p.area_sqm ? `Diện tích ${p.area_sqm}m².` : '',
     p.bedrooms ? `${p.bedrooms} phòng ngủ.` : '',
     priceStr ? `Giá ${priceStr}.` : '',
@@ -162,7 +164,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
   const ogDesc = ogDescription(p.meta_description?.trim() || plainDesc || descParts);
 
   const keywords = p.focus_keywords?.trim()
-    || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', p.title]
+    || [typeLabel || 'bất động sản', p.district?.trim(), p.city?.trim() || 'Bình Dương', listingTitle]
       .filter(Boolean).join(', ');
   const path = buildProductPath(p);
   // OG image: luôn có ảnh (fallback khi tin thiếu ảnh) + ép URL tuyệt đối. Zalo/FB
@@ -191,6 +193,7 @@ export function buildPropertyMetadata(p: Property): Metadata {
 // JSON-LD RealEstateListing. Ưu tiên schema_markup nhập tay trong admin; nếu không
 // có thì tự dựng. Render trong page.tsx qua <script type="application/ld+json">.
 export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
+  const listingTitle = normalizeListingTitle(p.title).value;
   const url = absoluteUrl(buildProductPath(p));
   const gallery = buildSeoImageGallery(p.image_url, p.images);
   const video = buildPropertyVideoObject(p);
@@ -199,11 +202,12 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   const placeParts = [p.ward, p.district, p.city].map(s => s?.trim()).filter(Boolean) as string[];
   const geoName = placeParts.join(', ');
   const localityEntity = (p.district?.trim() || p.ward?.trim() || '');
+  const vndPrice = priceToVnd(p);
   const base: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
     '@id': `${url}#realestatelisting`,
-    name: p.title,
+    name: listingTitle,
     description: p.description ? (isHtmlContent(p.description) ? stripHtml(p.description) : p.description) : undefined,
     url,
     mainEntityOfPage: url,
@@ -211,10 +215,10 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     dateModified: p.updated_at,
     ...(gallery.length > 0 ? { image: gallery } : {}),
     ...(p.bedrooms != null ? { numberOfRooms: p.bedrooms } : {}),
-    ...(p.price ? {
+    ...(vndPrice != null ? {
       offers: {
         '@type': 'Offer',
-        price: p.listing_type === 'cho_thue' && p.price_per_month ? p.price_per_month : p.price,
+        price: vndPrice,
         priceCurrency: 'VND',
         availability: 'https://schema.org/InStock',
       },

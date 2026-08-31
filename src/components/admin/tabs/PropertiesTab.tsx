@@ -29,7 +29,7 @@ import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } fro
 import { useTaxonomyGeo } from '../../../lib/hooks/useTaxonomy';
 import { pickTaxonomyGeo, taxonomyGeoLabel } from '../../../lib/taxonomyGeo';
 import { findExactTaxonomyGeo, validatePointForWard } from '../../../lib/taxonomyPoint';
-import { formatListingPrice, formatPriceInput, parsePriceInput, priceInputFromNumber } from '../../../lib/listingPrice';
+import { formatFinancingAmount, formatPriceInput, parsePriceInput, priceInputFromNumber, subtractListingPriceValues } from '../../../lib/listingPrice';
 import { ListingPrice } from '../../ListingPrice';
 import { normalizeListingTitle } from '../../../lib/listingTitle';
 import { PriceField } from '../../PriceField';
@@ -1003,7 +1003,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                   const price = parsePriceInput(form.price);
                   const loan = parsePriceInput(form.loan_support);
                   return price && loan && loan > 0 && loan < price ? (
-                    <p className="mt-1 text-xs font-medium text-emerald-600">Khách trả trước: {formatListingPrice(price - loan, form.price_unit)} · Hỗ trợ vay: {formatListingPrice(loan, form.price_unit)}</p>
+                    <p className="mt-1 text-xs font-medium text-emerald-600">Khách trả trước: {formatFinancingAmount(subtractListingPriceValues(price, loan), form.price_unit)} · Hỗ trợ vay: {formatFinancingAmount(loan, form.price_unit)}</p>
                   ) : null;
                 })()}
               </div>

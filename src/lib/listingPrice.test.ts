@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatListingPrice, formatPriceInput, formatPropertyPrice, getEffectiveListingPrice, normalizePriceInput, parsePriceInput, priceInputFromNumber, priceToVnd } from './listingPrice';
+import { formatFinancingAmount, formatListingPrice, formatPriceInput, formatPropertyPrice, getEffectiveListingPrice, normalizePriceInput, parsePriceInput, priceInputFromNumber, priceToVnd, subtractListingPriceValues } from './listingPrice';
 
 describe('listing price input', () => {
   it('groups digits while retaining a decimal value', () => {
@@ -35,6 +35,18 @@ describe('listing price input', () => {
     expect(parsePriceInput('')).toBeNull();
     expect(parsePriceInput('0')).toBeNull();
     expect(parsePriceInput('1.')).toBeNull();
+  });
+
+  it('subtracts decimal listing prices without binary floating artifacts', () => {
+    expect(subtractListingPriceValues(1.1, 0.77)).toBe(0.33);
+    expect(formatListingPrice(subtractListingPriceValues(1.1, 0.77), 'tỷ')).toBe('0.33 tỷ');
+  });
+
+  it('hiển thị khoản vay dưới một tỷ bằng triệu cho trực quan', () => {
+    expect(formatFinancingAmount(0.7, 'tỷ')).toBe('700 triệu');
+    expect(formatFinancingAmount(subtractListingPriceValues(1.1, 0.7), 'tỷ')).toBe('400 triệu');
+    expect(formatFinancingAmount(1.1, 'tỷ')).toBe('1.1 tỷ');
+    expect(formatFinancingAmount(700, 'triệu')).toBe('700 triệu');
   });
 
   it('round-trips persisted numeric values and preserves the selected unit in display', () => {

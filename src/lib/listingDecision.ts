@@ -6,13 +6,14 @@ export function buildListingResultLabel(input: {
   areaName?: string | null;
   district?: string | null;
   ward?: string | null;
+  keyword?: string | null;
 }): string {
   const transaction = input.listingType === 'mua_ban'
     ? 'bán'
     : input.listingType === 'cho_thue'
       ? 'cho thuê'
       : '';
-  const location = input.ward || input.district || input.areaName || '';
+  const location = input.ward || input.district || input.areaName || input.keyword?.trim() || '';
   const subject = input.propertyTypeName?.trim() || 'bất động sản';
 
   return [subject, transaction, location].filter(Boolean).join(' ');

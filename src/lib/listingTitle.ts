@@ -157,6 +157,7 @@ export function normalizeListingTitle(
     .replace(/\s*\/\s*/g, ' / ')
     .replace(/(?:\s+[–—-]\s*|\s*[–—-]\s+)/g, ' - ')
     .replace(/([!?.,])\1+/g, '$1')
+    .replace(/(\d),\s+(\d)/g, '$1,$2')
     .replace(/\s+/g, ' ')
     .trim();
   value = record(corrections, 'punctuation', value, punctuation);
@@ -170,6 +171,7 @@ export function normalizeListingTitle(
   const finalPunctuation = restored
     .replace(/\s+([,.;:!?])/g, '$1')
     .replace(/([,;:!?])(?=[\p{L}\p{N}])/gu, '$1 ')
+    .replace(/(\d),\s+(\d)/g, '$1,$2')
     .replace(/\s+/g, ' ')
     .trim();
   value = record(corrections, 'protected-token', value, finalPunctuation);

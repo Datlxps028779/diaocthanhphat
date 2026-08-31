@@ -335,6 +335,7 @@ function ArticleDetail({
   const { sidebarRelated, sidebarPopular, continuation, mobileContinuation } = discovery;
   const relatedHref = (item: NewsArticle | NewsListItem) => articleHref(item);
   const phone = useSetting('phone_hotline', '0901 234 567');
+  const supportHours = useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00');
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&w=1200';
@@ -572,7 +573,7 @@ function ArticleDetail({
           {/* CTA Banner */}
           <div className="mt-10 bg-gradient-to-r from-red-700 to-red-500 rounded-2xl p-6 text-white text-center">
             <h3 className="text-lg font-bold mb-2">Bạn cần tư vấn về bất động sản?</h3>
-            <p className="text-red-100 text-sm mb-4">Đội ngũ chuyên gia sẵn sàng hỗ trợ bạn 24/7</p>
+            <p className="text-red-100 text-sm mb-4">Đội ngũ chuyên gia sẵn sàng hỗ trợ bạn {supportHours.replace(/^Hỗ trợ\s+/i, '')}</p>
             <a
               href={`tel:${phone.replace(/\s/g, '')}`}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-red-600 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors"

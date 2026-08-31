@@ -38,6 +38,7 @@ import { PropertyGallery } from '../components/PropertyGallery';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
 import { normalizeListingTitle } from '../lib/listingTitle';
+import { shouldClearInferredLocation } from '../lib/listingSearchState';
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
   // Dữ liệu SSR seed sẵn cho view mà server thực sự đã truy vấn. Scope tách riêng
@@ -86,6 +87,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const [listingType, setListingType] = useState<ListingTypeKey>((initialFilters?.listingType ?? '') as ListingTypeKey);
   const [keyword, setKeyword] = useState(initialFilters?.keyword ?? '');
   const [debouncedKeyword, setDebouncedKeyword] = useState(keyword);
+  const initialKeywordRef = useRef(keyword);
+  const inferredLocationRef = useRef(initialFilters?.locationSource === 'inferred');
   const [areaId, setAreaId] = useState(initialFilters?.areaId ?? '');
   const [typeId, setTypeId] = useState(initialFilters?.typeId ?? '');
   const [priceIdx, setPriceIdx] = useState(() =>
@@ -122,6 +125,21 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       keywordSettled.current = true;
     }, 300);
     return () => clearTimeout(t);
+  }, [keyword]);
+
+  // Homepage có thể suy ra khu vực từ từ khóa. Khi người dùng sửa từ khóa,
+  // xóa location suy ra để không biến truy vấn mới thành phép AND với khu vực cũ.
+  useEffect(() => {
+    if (!shouldClearInferredLocation({
+      locationSource: inferredLocationRef.current ? 'inferred' : undefined,
+      initialKeyword: initialKeywordRef.current,
+      nextKeyword: keyword,
+    })) return;
+    inferredLocationRef.current = false;
+    setAreaId('');
+    setDistrict('');
+    setWard('');
+    setPage(1);
   }, [keyword]);
 
   // Taxonomy + districts qua React Query (dedup/cache). Reset district tách riêng.
@@ -313,6 +331,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       typeId: typeId || undefined,
       district: district || undefined,
       ward: ward || undefined,
+      locationSource: inferredLocationRef.current ? 'inferred' : undefined,
       keyword: debouncedKeyword.trim() || undefined,
       minPrice: priceIdx > 0 ? pr.min : undefined,
       maxPrice: priceIdx > 0 ? pr.max : undefined,
@@ -371,6 +390,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   }, [listingType]);
 
   const resetFilters = () => {
+    inferredLocationRef.current = false;
     setKeyword(''); setAreaId(''); setTypeId(''); setDistrict(''); setWard('');
     setPriceIdx(0); setAreaIdx(0); setBedrooms('');
     setDirection(''); setLegal(''); setIsFeatured(false); setIsHot(false); setPage(1);
@@ -387,6 +407,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     areaName: selectedArea?.name,
     district,
     ward,
+    keyword: searchIntent.residualKeyword,
   });
 
   const totalPages = Math.ceil(total / PER_PAGE);
@@ -410,6 +431,10 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     });
   };
   const setFilter = (fn: () => void) => { fn(); setPage(1); };
+  const setLocationFilter = (fn: () => void) => {
+    inferredLocationRef.current = false;
+    setFilter(fn);
+  };
 
   const pageTitle = isFeatured ? 'BĐS Nổi bật'
     : isHot ? 'BĐS HOT'
@@ -423,12 +448,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     const typeName = typeId ? types.find(item => item.id === typeId)?.name : '';
     const areaName = areaId ? areas.find(item => item.id === areaId)?.name : '';
     const place = [ward, district, areaName].filter(Boolean).join(', ');
+    const residualKeyword = searchIntent.residualKeyword.trim();
     const base = isFeatured ? 'Bất động sản nổi bật'
       : isHot ? 'Bất động sản HOT'
       : listingType === 'mua_ban' ? `${typeName || 'Nhà đất'} bán`
       : listingType === 'cho_thue' ? `${typeName || 'Nhà đất'} cho thuê`
       : typeName || 'Bất động sản';
-    return place ? `${base} tại ${place}` : base;
+    const context = place ? `${base} tại ${place}` : base;
+    return residualKeyword ? `${context} theo từ khóa “${residualKeyword}”` : context;
   })();
 
   const FilterPanel = () => (
@@ -437,12 +464,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       <div>
         <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Khu vực</label>
         <div className="flex flex-wrap gap-1.5">
-          <button onClick={() => setFilter(() => setAreaId(''))}
+          <button onClick={() => setLocationFilter(() => setAreaId(''))}
             className={`px-3 py-1 text-xs rounded-full border transition-colors ${!areaId ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:border-red-400'}`}>
             Tất cả
           </button>
           {areas.map(a => (
-            <button key={a.id} onClick={() => setFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
+            <button key={a.id} onClick={() => setLocationFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
               className={`px-3 py-1 text-xs rounded-full border transition-colors ${areaId === a.id ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:border-red-400'}`}>
               {a.name}
             </button>
@@ -455,7 +482,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         <div>
           <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Quận/Huyện</label>
           <div className="relative">
-            <select value={district} onChange={e => setFilter(() => setDistrict(e.target.value))}
+            <select value={district} onChange={e => setLocationFilter(() => setDistrict(e.target.value))}
               className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
               <option value="">Tất cả quận/huyện</option>
               {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -470,7 +497,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         <div>
           <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Phường/Xã</label>
           <div className="relative">
-            <select value={ward} onChange={e => setFilter(() => setWard(e.target.value))}
+            <select value={ward} onChange={e => setLocationFilter(() => setWard(e.target.value))}
               className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
               <option value="">Tất cả phường/xã</option>
               {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
@@ -592,12 +619,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
 
           {/* Area quick tabs */}
           <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-            <button onClick={() => setFilter(() => setAreaId(''))}
+            <button onClick={() => setLocationFilter(() => setAreaId(''))}
               className={`px-3 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 transition-colors ${!areaId ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               Tất cả khu vực
             </button>
             {areas.map(a => (
-              <button key={a.id} onClick={() => setFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
+              <button key={a.id} onClick={() => setLocationFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 transition-colors ${areaId === a.id ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 {a.name}
               </button>
@@ -605,9 +632,15 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <p className="text-gray-500 text-xs">
-              Tìm thấy <strong className="text-gray-800">{total.toLocaleString('vi-VN')}</strong> {resultSummary}
-              {total > properties.length && properties.length > 0 && ` · Đang hiển thị ${properties.length}`}
+            <p className="text-gray-500 text-xs" aria-live="polite">
+              {loading ? (
+                'Đang cập nhật kết quả...'
+              ) : (
+                <>
+                  Tìm thấy <strong className="text-gray-800">{total.toLocaleString('vi-VN')}</strong> {resultSummary}
+                  {total > properties.length && properties.length > 0 && ` · Đang hiển thị ${properties.length}`}
+                </>
+              )}
             </p>
             <div className="flex items-center gap-2 flex-1 max-w-md">
               <div className="relative flex-1">
@@ -724,10 +757,10 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   </span>
                 )}
                 {areaId && selectedArea && (
-                  <FilterChip label={`📍 ${selectedArea.name}`} onRemove={() => setFilter(() => setAreaId(''))} />
+                  <FilterChip label={`📍 ${selectedArea.name}`} onRemove={() => setLocationFilter(() => setAreaId(''))} />
                 )}
-                {district && <FilterChip label={district} onRemove={() => setFilter(() => setDistrict(''))} />}
-                {ward && <FilterChip label={ward} onRemove={() => setFilter(() => setWard(''))} />}
+                {district && <FilterChip label={district} onRemove={() => setLocationFilter(() => setDistrict(''))} />}
+                {ward && <FilterChip label={ward} onRemove={() => setLocationFilter(() => setWard(''))} />}
                 {typeId && types.find(t => t.id === typeId) && (
                   <FilterChip label={types.find(t => t.id === typeId)!.name} onRemove={() => setFilter(() => setTypeId(''))} />
                 )}
