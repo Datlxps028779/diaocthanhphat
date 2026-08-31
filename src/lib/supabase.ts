@@ -340,6 +340,21 @@ export type Profile = {
   id: string; display_name: string | null; phone: string | null;
   avatar_url: string | null; role: 'user' | 'staff' | 'admin'; created_at: string; updated_at: string;
 };
+export type AgentProfileStatus = 'draft' | 'published' | 'disabled';
+export type AgentProfile = {
+  id: string;
+  user_id: string;
+  slug: string;
+  display_name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  public_phone: string | null;
+  public_zalo: string | null;
+  status: AgentProfileStatus;
+  created_at: string;
+  updated_at: string;
+};
+export type PublicPropertyAgent = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>;
 export type UserListing = {
   id: string; user_id: string; status: 'pending' | 'approved' | 'rejected' | 'expired';
   reject_reason: string | null; expires_at: string | null;

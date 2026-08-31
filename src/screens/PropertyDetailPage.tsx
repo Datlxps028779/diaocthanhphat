@@ -10,7 +10,7 @@ import {
   Navigation, ExternalLink, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getPropertyByIdOrSlug, getRelatedProperties, getPublicPropertyAgent, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
@@ -83,6 +83,12 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const property = preview ? (initialData ?? null) : queryProperty;
   const listingTitle = property ? normalizeListingTitle(property.title).value : '';
   const loading = preview ? false : loadingQuery;
+  const { data: publicAgent = null } = useQuery({
+    queryKey: ['public-property-agent', property?.id],
+    queryFn: () => getPublicPropertyAgent(property!.id),
+    enabled: !!property?.id && !preview,
+    retry: false,
+  });
 
   // Khu dân cư của tin (nếu có) → link tới Entity Page (internal link mục 8 doc).
   const { data: allNeighborhoods = [] } = useNeighborhoods();
@@ -279,7 +285,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const modifiedDate = formatUpdateDate(property.updated_at);
   const showModified = modifiedDate && modifiedDate !== postedDate;
 
-  const contactPhone = property.contact_phone ?? sitePhone;
+  const contactPhone = publicAgent?.public_phone ?? property.contact_phone ?? sitePhone;
   const hasCoords = property.latitude && property.longitude;
   const gmapsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${property.latitude},${property.longitude}`
@@ -704,19 +710,32 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               {/* Agent */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-red-600 font-black text-lg">
-                      {(property.contact_name ?? 'NV').charAt(0)}
-                    </span>
-                  </div>
+                  {publicAgent?.avatar_url ? (
+                    <SafeImage
+                      src={publicAgent.avatar_url}
+                      alt={publicAgent.display_name}
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-red-600 font-black text-lg">
+                        {(publicAgent?.display_name ?? property.contact_name ?? 'NV').charAt(0)}
+                      </span>
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <p className="font-bold text-gray-900 text-sm flex items-center gap-1">
-                      {property.contact_name ?? 'Nhân viên tư vấn'}
+                      {publicAgent?.display_name ?? property.contact_name ?? 'Nhân viên tư vấn'}
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                     </p>
-                    <p className="text-gray-500 text-xs">Tư vấn bất động sản</p>
+                    <p className="text-gray-500 text-xs">{publicAgent ? 'Người đăng tin' : 'Tư vấn bất động sản'}</p>
                   </div>
                 </div>
+                {publicAgent?.bio && (
+                  <p className="mt-3 text-xs leading-relaxed text-gray-600 line-clamp-3">{publicAgent.bio}</p>
+                )}
                 <div className="mt-3 flex items-center gap-2 text-[11px] text-gray-500">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-500" />Mục tiêu phản hồi {responseTime}</span>
                   {property.legal_status && <>

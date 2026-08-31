@@ -23,6 +23,7 @@ export * from './api/priceStats';
 export * from './api/menu';
 export * from './api/aiRag';
 export * from './api/adminDocs';
+export * from './api/agentProfiles';
 export * from './api/imageMaintenance';
 export * from './api/contentRevalidation';
 export * from './api/propertyVerification';

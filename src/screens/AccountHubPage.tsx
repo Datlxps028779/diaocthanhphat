@@ -8,9 +8,10 @@ import { MyListingsPage } from './MyListingsPage';
 import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
-  getProfile, updateProfile,
+  getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile,
 } from '../lib/api';
-import { type UserMedia, type Profile } from '../lib/supabase';
+import { type UserMedia, type Profile, type AgentProfileStatus } from '../lib/supabase';
+import { buildUniqueSlug } from '../lib/slug';
 
 export type AccountHubTab = 'listings' | 'media' | 'favorites' | 'profile';
 
@@ -176,58 +177,139 @@ function ProfileTab() {
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [agentSlug, setAgentSlug] = useState<string | null>(null);
+  const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
+  const [agentBio, setAgentBio] = useState<string | null>(null);
+  const [agentPhone, setAgentPhone] = useState<string | null>(null);
+  const [agentZalo, setAgentZalo] = useState<string | null>(null);
+  const [agentStatus, setAgentStatus] = useState<AgentProfileStatus | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  const { data: profile, isLoading } = useQuery<Profile | null>({
+  const { data: profile, isLoading: profileLoading } = useQuery<Profile | null>({
     queryKey: ['myProfile'],
     queryFn: getProfile,
   });
+  const { data: agentProfile, isLoading: agentLoading } = useQuery({
+    queryKey: ['myAgentProfile'],
+    queryFn: getMyAgentProfile,
+  });
 
-  // Giá trị hiển thị: state nếu user đã gõ, ngược lại lấy từ profile đã tải.
   const nameVal = displayName ?? profile?.display_name ?? '';
   const phoneVal = phone ?? profile?.phone ?? '';
+  const agentNameVal = agentDisplayName ?? agentProfile?.display_name ?? nameVal;
+  const agentBioVal = agentBio ?? agentProfile?.bio ?? '';
+  const agentPhoneVal = agentPhone ?? agentProfile?.public_phone ?? phoneVal;
+  const agentZaloVal = agentZalo ?? agentProfile?.public_zalo ?? '';
+  const agentStatusVal = agentStatus ?? agentProfile?.status ?? 'draft';
+  const agentSlugVal = agentSlug ?? agentProfile?.slug ?? '';
 
   const saveMutation = useMutation({
-    mutationFn: () => updateProfile({ display_name: nameVal, phone: phoneVal }),
+    mutationFn: () => saveMyProfileAndAgentProfile({
+      display_name: nameVal,
+      phone: phoneVal,
+      slug: agentSlugVal || buildUniqueSlug(agentNameVal || 'nguoi-dang-tin'),
+      agent_display_name: agentNameVal,
+      bio: agentBioVal,
+      public_phone: agentPhoneVal,
+      public_zalo: agentZaloVal,
+      status: agentStatusVal,
+    }),
     onSuccess: () => {
       setSaved(true);
       setError('');
       queryClient.invalidateQueries({ queryKey: ['myProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['myAgentProfile'] });
       setTimeout(() => setSaved(false), 2000);
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Không lưu được hồ sơ.'),
   });
 
-  if (isLoading) {
+  if (profileLoading || agentLoading) {
     return <div className="bg-white rounded-2xl border border-gray-100 h-64 animate-pulse" />;
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-6 max-w-lg">
-      <h3 className="font-bold text-gray-900 mb-4">Thông tin cá nhân</h3>
-      <div className="space-y-4">
-        <div>
-          <label className="text-gray-600 text-sm font-medium block mb-1.5">Họ và tên</label>
-          <input value={nameVal} onChange={e => { setDisplayName(e.target.value); setSaved(false); }}
-            placeholder="Nguyễn Văn A"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+    <div className="space-y-5 max-w-2xl">
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <h3 className="font-bold text-gray-900 mb-4">Thông tin cá nhân</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="text-gray-600 text-sm font-medium block mb-1.5">Họ và tên</label>
+            <input value={nameVal} onChange={e => { setDisplayName(e.target.value); setSaved(false); }}
+              placeholder="Nguyễn Văn A"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <div>
+            <label className="text-gray-600 text-sm font-medium block mb-1.5">Số điện thoại</label>
+            <input type="tel" value={phoneVal} onChange={e => { setPhone(e.target.value); setSaved(false); }}
+              placeholder="0901 234 567"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
         </div>
-        <div>
-          <label className="text-gray-600 text-sm font-medium block mb-1.5">Số điện thoại</label>
-          <input type="tel" value={phoneVal} onChange={e => { setPhone(e.target.value); setSaved(false); }}
-            placeholder="0901 234 567"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-        </div>
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5">{error}</div>
-        )}
-        <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
-          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-colors disabled:opacity-60">
-          <Save className="w-4 h-4" />
-          {saveMutation.isPending ? 'Đang lưu...' : saved ? 'Đã lưu ✓' : 'Lưu thay đổi'}
-        </button>
       </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <div className="flex items-start justify-between gap-4 mb-2">
+          <div>
+            <h3 className="font-bold text-gray-900">Hồ sơ người đăng công khai</h3>
+            <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+              Tùy chọn hiển thị trên các tin đăng đã được duyệt của bạn. Hồ sơ này tách biệt với quyền nhân viên quản trị.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={agentStatusVal === 'published'}
+              onChange={e => { setAgentStatus(e.target.checked ? 'published' : 'draft'); setSaved(false); }}
+              className="h-4 w-4 accent-red-600"
+            />
+            Công khai
+          </label>
+        </div>
+        <div className="space-y-4 mt-5">
+          <div>
+            <label className="text-gray-600 text-sm font-medium block mb-1.5">Tên hiển thị công khai</label>
+            <input value={agentNameVal} onChange={e => { setAgentDisplayName(e.target.value); setSaved(false); }}
+              placeholder="Tên tư vấn viên"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <div>
+            <label className="text-gray-600 text-sm font-medium block mb-1.5">Slug hồ sơ</label>
+            <input value={agentSlugVal} onChange={e => { setAgentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')); setSaved(false); }}
+              placeholder="ten-tu-van-vien"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            <p className="text-gray-400 text-[11px] mt-1">Chỉ dùng chữ thường, số và dấu gạch ngang.</p>
+          </div>
+          <div>
+            <label className="text-gray-600 text-sm font-medium block mb-1.5">Giới thiệu ngắn</label>
+            <textarea value={agentBioVal} onChange={e => { setAgentBio(e.target.value); setSaved(false); }}
+              maxLength={2000} rows={4} placeholder="Kinh nghiệm hoặc khu vực bạn tư vấn..."
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-red-400" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-600 text-sm font-medium block mb-1.5">Số điện thoại công khai</label>
+              <input type="tel" value={agentPhoneVal} onChange={e => { setAgentPhone(e.target.value); setSaved(false); }}
+                placeholder="Để trống dùng số cá nhân"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+            <div>
+              <label className="text-gray-600 text-sm font-medium block mb-1.5">Zalo công khai</label>
+              <input value={agentZaloVal} onChange={e => { setAgentZalo(e.target.value); setSaved(false); }}
+                placeholder="Số hoặc tên Zalo"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5">{error}</div>}
+      <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
+        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-colors disabled:opacity-60">
+        <Save className="w-4 h-4" />
+        {saveMutation.isPending ? 'Đang lưu...' : saved ? 'Đã lưu ✓' : 'Lưu thay đổi'}
+      </button>
     </div>
   );
 }
