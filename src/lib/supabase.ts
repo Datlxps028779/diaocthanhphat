@@ -355,6 +355,11 @@ export type AgentProfile = {
   updated_at: string;
 };
 export type PublicPropertyAgent = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>;
+export type PublicAgentProfile = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo' | 'updated_at'>;
+export type PublicAgentListing = Pick<Property, 'id' | 'title' | 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type' | 'area_sqm' | 'city' | 'district' | 'legal_status' | 'image_url' | 'images' | 'slug' | 'neighborhood_slug' | 'created_at' | 'updated_at'> & {
+  public_code: number | null;
+  area_slug: string | null;
+};
 export type UserListing = {
   id: string; user_id: string; status: 'pending' | 'approved' | 'rejected' | 'expired';
   reject_reason: string | null; expires_at: string | null;

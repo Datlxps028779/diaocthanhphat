@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache';
-import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow } from './supabase';
+import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow, PublicAgentProfile, PublicAgentListing } from './supabase';
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
@@ -15,6 +15,36 @@ function serverClient(): SupabaseClient {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+export async function serverGetPublicAgentProfile(slug: string): Promise<PublicAgentProfile | null> {
+  try {
+    const { data, error } = await serverClient().rpc('public_get_agent_profile', { p_slug: slug });
+    if (error) return null;
+    return (data ?? null) as PublicAgentProfile | null;
+  } catch {
+    return null;
+  }
+}
+
+export async function serverGetPublicAgentProfileListings(slug: string): Promise<PublicAgentListing[]> {
+  try {
+    const { data, error } = await serverClient().rpc('public_get_agent_profile_listings', { p_slug: slug });
+    if (error || !Array.isArray(data)) return [];
+    return data as PublicAgentListing[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetIndexableAgentProfiles(): Promise<Array<{ slug: string; updated_at: string }>> {
+  try {
+    const { data, error } = await serverClient().rpc('public_list_indexable_agent_profiles');
+    if (error || !Array.isArray(data)) return [];
+    return data as Array<{ slug: string; updated_at: string }>;
+  } catch {
+    return [];
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

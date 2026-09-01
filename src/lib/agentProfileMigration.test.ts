@@ -17,6 +17,11 @@ const minimumPrivilegesMigration = readFileSync(
   'utf8',
 );
 
+const publicReadMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260901000000_public_agent_profile_read.sql'),
+  'utf8',
+);
+
 describe('agent profile migration', () => {
   it('keeps public identity separate from internal roles and supports explicit states', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.agent_profiles');
@@ -49,6 +54,19 @@ describe('agent profile migration', () => {
   it('removes excess authenticated table privileges', () => {
     expect(minimumPrivilegesMigration).toContain('REVOKE ALL ON TABLE public.agent_profiles FROM PUBLIC, anon, authenticated');
     expect(minimumPrivilegesMigration).toContain('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.agent_profiles TO authenticated');
+  });
+
+  it('exposes only gated public profile and listing RPCs', () => {
+    expect(publicReadMigration).toContain('CREATE OR REPLACE FUNCTION public.public_get_agent_profile(p_slug text)');
+    expect(publicReadMigration).toContain("ap.status = 'published'");
+    expect(publicReadMigration).toContain("ul.status = 'approved'");
+    expect(publicReadMigration).toContain('pr.is_active = true');
+    expect(publicReadMigration).toContain('CREATE OR REPLACE FUNCTION public.public_list_indexable_agent_profiles()');
+    expect(publicReadMigration).toContain('REVOKE ALL ON FUNCTION public.public_get_agent_profile(text) FROM PUBLIC, anon, authenticated');
+    expect(publicReadMigration).toContain('GRANT EXECUTE ON FUNCTION public.public_get_agent_profile(text) TO anon, authenticated');
+    expect(publicReadMigration).not.toContain("'user_id'");
+    expect(publicReadMigration).not.toContain("'email'");
+    expect(publicReadMigration).not.toContain("'role'");
   });
 
   it('protects owner mutations and keeps the combined save atomic', () => {

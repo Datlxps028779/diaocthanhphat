@@ -175,6 +175,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
+    const agentProfiles = await sb.rpc('public_list_indexable_agent_profiles');
+    for (const profile of (agentProfiles.data ?? []) as Array<{ slug: string; updated_at?: string | null }>) {
+      if (!profile.slug?.trim()) continue;
+      entries.push({
+        url: `${SITE_URL}/nguoi-dang-tin/${encodeURIComponent(profile.slug)}`,
+        lastModified: profile.updated_at ? new Date(profile.updated_at) : undefined,
+        changeFrequency: 'weekly',
+        priority: 0.55,
+      });
+    }
+
     const pages = await sb.from('managed_pages').select('slug,updated_at').eq('is_active', true).eq('is_system', false).limit(5000);
     for (const page of (pages.data ?? []) as Array<{ slug: string; updated_at?: string | null }>) {
       entries.push({
