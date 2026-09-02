@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCopyOnWritePath, replaceArrayReferences } from './imageMaintenance';
+import { buildCopyOnWritePath, replaceArrayReferences, toPostgresTextArrayLiteral } from './imageMaintenance';
 
 describe('buildCopyOnWritePath', () => {
   it('tạo object JPEG mới cùng thư mục, không ghi đè path cũ', () => {
@@ -15,6 +15,22 @@ describe('buildCopyOnWritePath', () => {
   it('lọc ký tự lạ khỏi suffix để không tạo path nguy hiểm', () => {
     expect(buildCopyOnWritePath('banner.jpg', 'image/jpeg', '../release 01'))
       .toBe('banner-optimized-release01.jpg');
+  });
+});
+
+describe('toPostgresTextArrayLiteral', () => {
+  it('tạo literal hợp lệ cho danh sách URL', () => {
+    expect(toPostgresTextArrayLiteral(['https://example.com/a.jpg', 'https://example.com/b.jpg']))
+      .toBe('{"https://example.com/a.jpg","https://example.com/b.jpg"}');
+  });
+
+  it('escape ký tự đặc biệt và giữ NULL', () => {
+    expect(toPostgresTextArrayLiteral(['a,b', 'a"b', 'a\\b', null]))
+      .toBe('{"a,b","a\\"b","a\\\\b",NULL}');
+  });
+
+  it('tạo literal rỗng', () => {
+    expect(toPostgresTextArrayLiteral([])).toBe('{}');
   });
 });
 

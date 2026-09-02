@@ -13,7 +13,8 @@ const executablePath = process.env.PW_CHROMIUM || '/Applications/Google Chrome.a
 
 function ignoredConsoleError(text, location) {
   if (location.includes('/_vercel/insights/') || location.includes('/_vercel/speed-insights/')) return true;
-  if (text.includes('/_vercel/insights/') || text.includes('/_vercel/speed-insights/')) return true;
+  if (location.includes('tile.openstreetmap.org/')) return true;
+  if (text.includes('tile.openstreetmap.org/')) return true;
   return text.includes('Failed to fetch RSC payload') && text.includes('Falling back to browser navigation');
 }
 

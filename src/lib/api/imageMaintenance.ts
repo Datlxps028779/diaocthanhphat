@@ -83,6 +83,14 @@ export interface CompressResult {
   reason?: string;
 }
 
+export function toPostgresTextArrayLiteral(values: unknown[]): string {
+  return `{${values.map(value => {
+    if (value === null) return 'NULL';
+    const text = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `"${text}"`;
+  }).join(',')}}`;
+}
+
 export function buildCopyOnWritePath(path: string, mime: string, suffix: string): string {
   const slash = path.lastIndexOf('/');
   const folder = slash >= 0 ? path.slice(0, slash + 1) : '';
@@ -148,7 +156,7 @@ async function updateReferenceGroup(
       .from(first.table)
       .update({ [first.column]: next }, { count: 'exact' })
       .eq('id', first.rowId)
-      .eq(first.column, current);
+      .eq(first.column, toPostgresTextArrayLiteral(current));
     if (updateError) throw updateError;
     if (count) return changed;
   }
