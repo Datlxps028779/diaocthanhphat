@@ -1,20 +1,22 @@
 'use client';
+import dynamic from 'next/dynamic';
 import { SiteChrome } from '@/components/SiteChrome';
 import { useNavigate } from '@/lib/useNavigate';
-import { ListingsPage } from '@/screens/ListingsPage';
-import { ProjectsPage } from '@/screens/ProjectsPage';
-import { InvestPage } from '@/screens/InvestPage';
-import { RegionsPage } from '@/screens/RegionsPage';
-import { NewsPage } from '@/screens/NewsPage';
-import { AboutPage } from '@/screens/AboutPage';
-import { ValuationPage } from '@/screens/ValuationPage';
-import { ComparePage } from '@/screens/ComparePage';
-import { PostListingPage } from '@/screens/PostListingPage';
-import { AccountHubPage } from '@/screens/AccountHubPage';
-import { StaticPageScreen } from '@/screens/StaticPageScreen';
 import type { ReactNode } from 'react';
 import type { ListingInitialFilters } from '@/lib/api/properties';
 import type { Property, NewsPageResult, ManagedPage, PageBlock } from '@/lib/supabase';
+
+const ListingsPage = dynamic(() => import('@/screens/ListingsPage').then(m => m.ListingsPage));
+const ProjectsPage = dynamic(() => import('@/screens/ProjectsPage').then(m => m.ProjectsPage));
+const InvestPage = dynamic(() => import('@/screens/InvestPage').then(m => m.InvestPage));
+const RegionsPage = dynamic(() => import('@/screens/RegionsPage').then(m => m.RegionsPage));
+const NewsPage = dynamic(() => import('@/screens/NewsPage').then(m => m.NewsPage));
+const AboutPage = dynamic(() => import('@/screens/AboutPage').then(m => m.AboutPage));
+const ValuationPage = dynamic(() => import('@/screens/ValuationPage').then(m => m.ValuationPage));
+const ComparePage = dynamic(() => import('@/screens/ComparePage').then(m => m.ComparePage));
+const PostListingPage = dynamic(() => import('@/screens/PostListingPage').then(m => m.PostListingPage));
+const AccountHubPage = dynamic(() => import('@/screens/AccountHubPage').then(m => m.AccountHubPage));
+const StaticPageScreen = dynamic(() => import('@/screens/StaticPageScreen').then(m => m.StaticPageScreen));
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';

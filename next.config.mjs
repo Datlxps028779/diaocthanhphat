@@ -25,6 +25,19 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.supabase.co' },
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
   // Đường dẫn quen thuộc mà khách hay gõ thẳng/link ngoài trỏ tới, nhưng nội dung
   // thật nằm trong trang CMS. Redirect tĩnh ở đây rẻ hơn middleware (không cần
   // truy vấn DB) và trả 308 để Google dồn tín hiệu về URL chuẩn.

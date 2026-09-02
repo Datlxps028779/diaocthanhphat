@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude \".claude/**\"",
     "test:watch": "vitest",
+    "e2e:smoke": "node scripts/p16-smoke.cjs",
     "fix:focus-keywords": "node scripts/fix-focus-keywords.js",
     "migrate": "node scripts/fix-focus-keywords.js"
   },
