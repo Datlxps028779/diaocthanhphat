@@ -19,14 +19,21 @@
 --   RPC chưa tồn tại → không sập admin khi lệch nhịp.
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION get_dashboard_stats()
+CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
 RETURNS jsonb
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
-  WITH bounds AS (
+BEGIN
+  IF NOT public.is_admin_or_staff() THEN
+    RAISE EXCEPTION 'Không có quyền xem thống kê quản trị'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN (
+    WITH bounds AS (
     SELECT
       date_trunc('month', now())                          AS start_this_month,
       date_trunc('month', now()) - interval '1 month'      AS start_last_month,
@@ -42,7 +49,7 @@ AS $$
       count(*) FILTER (WHERE is_active AND listing_type = 'cho_thue') AS rent,
       count(*) FILTER (WHERE created_at >= (SELECT start_this_month FROM bounds)) AS this_month,
       COALESCE(sum(views) FILTER (WHERE is_active), 0)              AS total_views
-    FROM properties
+    FROM public.properties
   ),
   lead AS (
     SELECT
@@ -53,13 +60,13 @@ AS $$
         WHERE created_at >= (SELECT start_last_month FROM bounds)
           AND created_at <= (SELECT end_last_month  FROM bounds)
       )                                           AS last_month
-    FROM leads
+    FROM public.leads
   ),
   pending AS (
-    SELECT count(*) AS c FROM user_listings WHERE status = 'pending'
+    SELECT count(*) AS c FROM public.user_listings WHERE status = 'pending'
   ),
   news_pub AS (
-    SELECT count(*) AS c FROM news WHERE is_published = true
+    SELECT count(*) AS c FROM public.news WHERE is_published = true
   )
   SELECT jsonb_build_object(
     'totalProperties',    prop.total,
@@ -82,10 +89,15 @@ AS $$
     'pendingListings',    pending.c,
     'totalNews',          news_pub.c
   )
-  FROM prop, lead, pending, news_pub;
+    FROM prop, lead, pending, news_pub
+  );
+END;
 $$;
 
-GRANT EXECUTE ON FUNCTION get_dashboard_stats() TO authenticated;
+REVOKE ALL ON FUNCTION public.get_dashboard_stats() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_dashboard_stats() TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
 
 -- ─── Test nhanh sau khi áp (chạy riêng trong SQL Editor) ────────────────────
 -- select get_dashboard_stats();
