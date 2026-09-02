@@ -42,4 +42,21 @@ export async function requireOwner(req: NextRequest): Promise<OwnerAuthResult> {
   return { ok: true, token, userId: user.id };
 }
 
+type TeamAuthResult =
+  | { ok: true; token: string; userId: string }
+  | { ok: false; status: number; msg: string };
+
+export async function requireAdminOrStaff(req: NextRequest): Promise<TeamAuthResult> {
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  if (!token) return { ok: false, status: 401, msg: 'Chưa đăng nhập.' };
+  const client = callerClient(token);
+  const { data: { user }, error } = await client.auth.getUser();
+  if (error || !user) return { ok: false, status: 401, msg: 'Phiên đăng nhập không hợp lệ.' };
+  const { data: team, error: teamError } = await client.rpc('is_admin_or_staff');
+  if (teamError || team !== true) {
+    return { ok: false, status: 403, msg: 'Tài khoản không có quyền truy cập.' };
+  }
+  return { ok: true, token, userId: user.id };
+}
+
 export const requireAdmin = requireOwner;

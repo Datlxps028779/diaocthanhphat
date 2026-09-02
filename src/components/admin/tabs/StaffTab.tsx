@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UserCog, UserPlus, RefreshCw, AlertTriangle, Ban, CheckCircle2, Mail, Phone, Shield, X, Search } from 'lucide-react';
-import { getAdminUsers, setUserRole, banUser, unbanUser, createStaff, type AdminUserRow } from '../../../lib/api';
+import { getAdminUsers, getCustomerStaff, upsertStaffCustomerSettings, setUserRole, banUser, unbanUser, createStaff, type AdminUserRow } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // Nhãn + màu badge cho role đội ngũ.
@@ -10,6 +10,8 @@ const ROLE_META: Record<string, { label: string; badge: string }> = {
   user: { label: 'Người dùng', badge: 'bg-gray-100 text-gray-600' },
 };
 const roleMeta = (r: string) => ROLE_META[r] ?? ROLE_META.user;
+
+type CustomerStaffSetting = { is_available: boolean; max_active_customers: number };
 
 // Tab Nhân viên (chỉ owner). Quản lý tài khoản staff bằng email/mật khẩu, nâng người
 // dùng đã đăng ký lên staff, đổi quyền và khóa/mở khóa. Owner không cấp được quyền admin.
@@ -22,12 +24,18 @@ export function StaffTab() {
   const [confirm, setConfirm] = useState<{ msg: string; run: () => Promise<void> } | null>(null);
   const [creating, setCreating] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [customerSettings, setCustomerSettings] = useState<Record<string, CustomerStaffSetting>>({});
+  const [settingsBusy, setSettingsBusy] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const { users, serviceRole } = await getAdminUsers();
+      const [{ users, serviceRole }, staffResult] = await Promise.all([getAdminUsers(), getCustomerStaff()]);
       setAll(users); setServiceRole(serviceRole);
+      setCustomerSettings(Object.fromEntries(staffResult.staff.map(person => [person.id, {
+        is_available: person.is_available,
+        max_active_customers: person.max_active_customers,
+      }])));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không tải được danh sách.');
     } finally { setLoading(false); }
@@ -41,6 +49,27 @@ export function StaffTab() {
     try { await fn(); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Thao tác thất bại.'); }
     finally { setBusy(null); }
+  };
+
+  const updateCustomerSetting = async (userId: string, patch: Partial<CustomerStaffSetting>) => {
+    const current = customerSettings[userId] ?? { is_available: true, max_active_customers: 50 };
+    const next = { ...current, ...patch };
+    if (!Number.isInteger(next.max_active_customers) || next.max_active_customers < 1 || next.max_active_customers > 10000) {
+      setError('Sức chứa customer phải là số nguyên từ 1 đến 10.000.');
+      return;
+    }
+    setCustomerSettings(prev => ({ ...prev, [userId]: next }));
+    setSettingsBusy(userId); setError('');
+    try {
+      await upsertStaffCustomerSettings({
+        staffUserId: userId,
+        isAvailable: next.is_available,
+        maxActiveCustomers: next.max_active_customers,
+      });
+    } catch (e) {
+      setCustomerSettings(prev => ({ ...prev, [userId]: current }));
+      setError(e instanceof Error ? e.message : 'Không lưu được cấu hình customer.');
+    } finally { setSettingsBusy(null); }
   };
 
   const handleSetRole = (u: AdminUserRow, next: 'user' | 'staff') => {
@@ -108,6 +137,7 @@ export function StaffTab() {
                 <th className="text-left font-semibold px-4 py-3">Nhân viên</th>
                 <th className="text-left font-semibold px-4 py-3 hidden md:table-cell">Liên hệ</th>
                 <th className="text-left font-semibold px-4 py-3">Quyền</th>
+                <th className="text-left font-semibold px-4 py-3">Chăm sóc customer</th>
                 <th className="text-right font-semibold px-4 py-3">Hành động</th>
               </tr>
             </thead>
@@ -126,6 +156,30 @@ export function StaffTab() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${roleMeta(u.role).badge}`}>{roleMeta(u.role).label}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const setting = customerSettings[u.id] ?? { is_available: true, max_active_customers: 50 };
+                      const settingBusy = settingsBusy === u.id;
+                      return (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+                            <input type="checkbox" checked={setting.is_available} disabled={settingBusy}
+                              onChange={e => void updateCustomerSetting(u.id, { is_available: e.target.checked })}
+                              className="h-4 w-4 accent-red-600" />
+                            Sẵn sàng
+                          </label>
+                          <label className="inline-flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
+                            Tối đa
+                            <input type="number" min={1} max={10000} step={1} value={setting.max_active_customers} disabled={settingBusy}
+                              onChange={e => setCustomerSettings(prev => ({ ...prev, [u.id]: { ...setting, max_active_customers: Number(e.target.value) } }))}
+                              onBlur={e => void updateCustomerSetting(u.id, { max_active_customers: Number(e.target.value) })}
+                              className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center disabled:opacity-50" />
+                          </label>
+                          {settingBusy && <RefreshCw className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

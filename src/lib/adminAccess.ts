@@ -14,7 +14,7 @@ export const ALL_TABS: AdminTab[] = [
 ];
 
 // Tab staff được thấy: chăm sóc khách + duyệt tin đăng.
-export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'user-listings'];
+export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'user-listings', 'users'];
 
 export function canAccessPanel(role: Role | null | undefined): boolean {
   return role === 'admin' || role === 'staff';

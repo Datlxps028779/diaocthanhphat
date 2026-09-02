@@ -25,13 +25,13 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
       expect(tabs.length).toBeGreaterThanOrEqual(19);
     });
 
-    it('staff thấy CRM khách hàng + phiên chat + duyệt tin đăng', () => {
-      expect(visibleTabs('staff')).toEqual(['leads', 'chat-sessions', 'user-listings']);
+    it('staff thấy CRM khách hàng + phiên chat + duyệt tin đăng + customer workspace', () => {
+      expect(visibleTabs('staff')).toEqual(['leads', 'chat-sessions', 'user-listings', 'users']);
     });
 
     it('staff KHÔNG thấy khu nhạy cảm', () => {
       const tabs = visibleTabs('staff');
-      for (const forbidden of ['users', 'settings', 'cms', 'backup', 'dashboard', 'properties', 'property-verification', 'news', 'projects', 'nurture']) {
+      for (const forbidden of ['settings', 'cms', 'backup', 'dashboard', 'properties', 'property-verification', 'news', 'projects', 'nurture']) {
         expect(tabs).not.toContain(forbidden);
       }
     });
@@ -42,7 +42,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
     });
 
     it('STAFF_TABS khớp tập tab staff', () => {
-      expect(STAFF_TABS).toEqual(['leads', 'chat-sessions', 'user-listings']);
+      expect(STAFF_TABS).toEqual(['leads', 'chat-sessions', 'user-listings', 'users']);
     });
   });
 

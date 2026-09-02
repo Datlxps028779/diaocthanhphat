@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save } from 'lucide-react';
+import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, ClipboardList, Search, Headset, AlertTriangle } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { MyListingsPage } from './MyListingsPage';
@@ -9,6 +9,7 @@ import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
   getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile,
+  getMyAccountSummary,
 } from '../lib/api';
 import { type UserMedia, type Profile, type AgentProfileStatus } from '../lib/supabase';
 import { buildUniqueSlug } from '../lib/slug';
@@ -62,6 +63,7 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
           ]} />
           <h1 className="font-black text-xl text-gray-900">Tài khoản của tôi</h1>
           <p className="text-gray-500 text-xs mt-0.5">Quản lý tin đăng, kho ảnh, BĐS yêu thích và hồ sơ</p>
+          <AccountSummary />
         </div>
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex gap-1 overflow-x-auto">
@@ -85,7 +87,32 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
   );
 }
 
-// ─── Kho ảnh ──────────────────────────────────────────────────────────────────
+// ─── Tổng quan ────────────────────────────────────────────────────────────────
+function AccountSummary() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['myAccountSummary'],
+    queryFn: getMyAccountSummary,
+  });
+
+  if (isLoading) {
+    return <div className="grid sm:grid-cols-3 gap-2 mt-4"><div className="h-16 bg-gray-100 rounded-xl animate-pulse" /><div className="h-16 bg-gray-100 rounded-xl animate-pulse" /><div className="h-16 bg-gray-100 rounded-xl animate-pulse" /></div>;
+  }
+  if (isError || !data) {
+    return <div className="mt-4 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2"><AlertTriangle className="w-4 h-4" />Không tải được tổng quan tài khoản. Hãy thử làm mới trang.</div>;
+  }
+
+  const listingTotal = Object.values(data.listingCounts).reduce((sum, count) => sum + count, 0);
+  const approved = data.listingCounts.approved ?? 0;
+  const supportName = data.support[0]?.staff_display_name;
+  return (
+    <div className="grid sm:grid-cols-3 gap-2 mt-4">
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-red-500" /><div><div className="text-[11px] text-gray-500">Tin đăng</div><div className="font-bold text-gray-900 text-sm">{listingTotal} <span className="font-normal text-gray-400">({approved} đã duyệt)</span></div></div></div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 flex items-center gap-2"><Search className="w-4 h-4 text-red-500" /><div><div className="text-[11px] text-gray-500">Tìm kiếm đã lưu</div><div className="font-bold text-gray-900 text-sm">{data.savedSearchCount}</div></div></div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 flex items-center gap-2"><Headset className="w-4 h-4 text-red-500" /><div><div className="text-[11px] text-gray-500">Hỗ trợ tài khoản</div><div className="font-bold text-gray-900 text-sm">{supportName || (data.supportAvailable ? 'Chưa phân công' : 'Đang kích hoạt')}</div></div></div>
+    </div>
+  );
+}
+
 function MediaTab() {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
