@@ -228,9 +228,9 @@ function CustomerDetailView({ customerId, staff, canManageAssignments, onBack, o
       <div className="grid lg:grid-cols-3 gap-5 mb-5">
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><Tag className="w-4 h-4 text-red-500" /> Trạng thái & tags</h3>
-          <select value={status} onChange={e => setStatus(e.target.value as CustomerStatus)} disabled={!canManageAssignments || busy} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white mb-2"><option value="new">Mới</option><option value="active">Đang chăm sóc</option><option value="qualified">Đủ điều kiện</option><option value="inactive">Không hoạt động</option><option value="blocked">Đã chặn</option></select>
-          <input value={tags} onChange={e => setTags(e.target.value)} disabled={!canManageAssignments || busy} placeholder="buyer, vay-ngan-hang" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2" />
-          {canManageAssignments && <button disabled={busy} onClick={() => void saveStatusTags()} className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-semibold disabled:opacity-50">Lưu customer</button>}
+          <select value={status} onChange={e => setStatus(e.target.value as CustomerStatus)} disabled={busy} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white mb-2"><option value="new">Mới</option><option value="active">Đang chăm sóc</option><option value="qualified">Đủ điều kiện</option><option value="inactive">Không hoạt động</option><option value="blocked">Đã chặn</option></select>
+          <input value={tags} onChange={e => setTags(e.target.value)} disabled={busy} placeholder="buyer, vay-ngan-hang" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2" />
+          <button disabled={busy} onClick={() => void saveStatusTags()} className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-semibold disabled:opacity-50">Lưu customer</button>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 p-5 lg:col-span-2">
