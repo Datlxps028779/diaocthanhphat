@@ -6,17 +6,21 @@ import type { ReactNode } from 'react';
 import type { ListingInitialFilters } from '@/lib/api/properties';
 import type { Property, NewsPageResult, ManagedPage, PageBlock } from '@/lib/supabase';
 
-const ListingsPage = dynamic(() => import('@/screens/ListingsPage').then(m => m.ListingsPage));
-const ProjectsPage = dynamic(() => import('@/screens/ProjectsPage').then(m => m.ProjectsPage));
-const InvestPage = dynamic(() => import('@/screens/InvestPage').then(m => m.InvestPage));
-const RegionsPage = dynamic(() => import('@/screens/RegionsPage').then(m => m.RegionsPage));
-const NewsPage = dynamic(() => import('@/screens/NewsPage').then(m => m.NewsPage));
-const AboutPage = dynamic(() => import('@/screens/AboutPage').then(m => m.AboutPage));
-const ValuationPage = dynamic(() => import('@/screens/ValuationPage').then(m => m.ValuationPage));
-const ComparePage = dynamic(() => import('@/screens/ComparePage').then(m => m.ComparePage));
-const PostListingPage = dynamic(() => import('@/screens/PostListingPage').then(m => m.PostListingPage));
-const AccountHubPage = dynamic(() => import('@/screens/AccountHubPage').then(m => m.AccountHubPage));
-const StaticPageScreen = dynamic(() => import('@/screens/StaticPageScreen').then(m => m.StaticPageScreen));
+function ScreenLoading() {
+  return <div className="min-h-screen bg-gray-50" aria-hidden="true" />;
+}
+
+const ListingsPage = dynamic(() => import('@/screens/ListingsPage').then(m => m.ListingsPage), { loading: ScreenLoading });
+const ProjectsPage = dynamic(() => import('@/screens/ProjectsPage').then(m => m.ProjectsPage), { loading: ScreenLoading });
+const InvestPage = dynamic(() => import('@/screens/InvestPage').then(m => m.InvestPage), { loading: ScreenLoading });
+const RegionsPage = dynamic(() => import('@/screens/RegionsPage').then(m => m.RegionsPage), { loading: ScreenLoading });
+const NewsPage = dynamic(() => import('@/screens/NewsPage').then(m => m.NewsPage), { loading: ScreenLoading });
+const AboutPage = dynamic(() => import('@/screens/AboutPage').then(m => m.AboutPage), { loading: ScreenLoading });
+const ValuationPage = dynamic(() => import('@/screens/ValuationPage').then(m => m.ValuationPage), { loading: ScreenLoading });
+const ComparePage = dynamic(() => import('@/screens/ComparePage').then(m => m.ComparePage), { loading: ScreenLoading });
+const PostListingPage = dynamic(() => import('@/screens/PostListingPage').then(m => m.PostListingPage), { loading: ScreenLoading });
+const AccountHubPage = dynamic(() => import('@/screens/AccountHubPage').then(m => m.AccountHubPage), { loading: ScreenLoading });
+const StaticPageScreen = dynamic(() => import('@/screens/StaticPageScreen').then(m => m.StaticPageScreen), { loading: ScreenLoading });
 
 export function ListingsClient({ listingType, filters, initialData }: {
   listingType?: 'mua_ban' | 'cho_thue';
