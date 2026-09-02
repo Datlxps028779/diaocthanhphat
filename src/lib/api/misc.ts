@@ -41,6 +41,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   if (!error && data) {
     return { ...EMPTY_STATS, ...(data as Partial<DashboardStats>) };
   }
+  if (error?.code === '42501') throw error;
   return getDashboardStatsFallback();
 }
 

@@ -22,6 +22,11 @@ const publicReadMigration = readFileSync(
   'utf8',
 );
 
+const queryIndexMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260922020000_agent_profile_query_index.sql'),
+  'utf8',
+);
+
 describe('agent profile migration', () => {
   it('keeps public identity separate from internal roles and supports explicit states', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.agent_profiles');
@@ -61,12 +66,16 @@ describe('agent profile migration', () => {
     expect(publicReadMigration).toContain("ap.status = 'published'");
     expect(publicReadMigration).toContain("ul.status = 'approved'");
     expect(publicReadMigration).toContain('pr.is_active = true');
+    expect(publicReadMigration).toContain('LIMIT 100');
+    expect(publicReadMigration).not.toContain("'images'");
     expect(publicReadMigration).toContain('CREATE OR REPLACE FUNCTION public.public_list_indexable_agent_profiles()');
     expect(publicReadMigration).toContain('REVOKE ALL ON FUNCTION public.public_get_agent_profile(text) FROM PUBLIC, anon, authenticated');
     expect(publicReadMigration).toContain('GRANT EXECUTE ON FUNCTION public.public_get_agent_profile(text) TO anon, authenticated');
     expect(publicReadMigration).not.toContain("'user_id'");
     expect(publicReadMigration).not.toContain("'email'");
     expect(publicReadMigration).not.toContain("'role'");
+    expect(queryIndexMigration).toContain('user_listings_public_agent_idx');
+    expect(queryIndexMigration).toContain("WHERE status = 'approved'");
   });
 
   it('protects owner mutations and keeps the combined save atomic', () => {

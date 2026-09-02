@@ -10,6 +10,18 @@ const identityMigration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260920000000_user_customer_identity_links.sql'),
   'utf8',
 );
+const listingScopeMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260921000000_user_customer_listing_scope.sql'),
+  'utf8',
+);
+const dashboardHardeningMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260922000000_dashboard_stats_rpc_hardening.sql'),
+  'utf8',
+);
+const agentSaveHardeningMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260922010000_agent_profile_save_hardening.sql'),
+  'utf8',
+);
 
 describe('P12 user/customer foundation migration contract', () => {
   it('creates separate customer, activity, assignment, and staff settings tables', () => {
@@ -94,13 +106,18 @@ describe('P12 user/customer foundation migration contract', () => {
     expect(identityMigration).toContain("key NOT IN ('status', 'note', 'follow_up_at', 'property_id')");
     expect(identityMigration).toContain('AND (public.is_admin() OR public.is_lead_member(id))');
 
-    const listingScopeMigration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/20260921000000_user_customer_listing_scope.sql'),
-      'utf8',
-    );
     expect(listingScopeMigration).toContain('FUNCTION public.assert_user_listing_mutation_scope()');
     expect(listingScopeMigration).toContain('NEW.user_id IS DISTINCT FROM OLD.user_id');
     expect(listingScopeMigration).toContain('public.is_customer_member(OLD.user_id)');
     expect(listingScopeMigration).toContain('trg_user_listing_mutation_scope');
+  });
+
+  it('hardens dashboard authorization and preserves custom agent avatars', () => {
+    expect(dashboardHardeningMigration).toContain('IF NOT public.is_admin_or_staff()');
+    expect(dashboardHardeningMigration).toContain('REVOKE ALL ON FUNCTION public.get_dashboard_stats() FROM PUBLIC, anon, authenticated;');
+    expect(dashboardHardeningMigration).toContain('GRANT EXECUTE ON FUNCTION public.get_dashboard_stats() TO authenticated;');
+    expect(agentSaveHardeningMigration).toContain('(SELECT NULLIF(btrim(avatar_url), \'\') FROM public.profiles WHERE id = v_actor)');
+    expect(agentSaveHardeningMigration).toContain('public_zalo = EXCLUDED.public_zalo');
+    expect(agentSaveHardeningMigration).not.toContain('avatar_url = EXCLUDED.avatar_url');
   });
 });

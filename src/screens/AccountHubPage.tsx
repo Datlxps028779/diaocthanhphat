@@ -8,7 +8,7 @@ import { MyListingsPage } from './MyListingsPage';
 import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
-  getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile,
+  getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile, updateProfile,
   getMyAccountSummary,
 } from '../lib/api';
 import { type UserMedia, type Profile, type AgentProfileStatus } from '../lib/supabase';
@@ -213,11 +213,11 @@ function ProfileTab() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  const { data: profile, isLoading: profileLoading } = useQuery<Profile | null>({
+  const { data: profile, isLoading: profileLoading, isError: profileError } = useQuery<Profile | null>({
     queryKey: ['myProfile'],
     queryFn: getProfile,
   });
-  const { data: agentProfile, isLoading: agentLoading } = useQuery({
+  const { data: agentProfile, isLoading: agentLoading, isError: agentError } = useQuery({
     queryKey: ['myAgentProfile'],
     queryFn: getMyAgentProfile,
   });
@@ -226,22 +226,40 @@ function ProfileTab() {
   const phoneVal = phone ?? profile?.phone ?? '';
   const agentNameVal = agentDisplayName ?? agentProfile?.display_name ?? nameVal;
   const agentBioVal = agentBio ?? agentProfile?.bio ?? '';
-  const agentPhoneVal = agentPhone ?? agentProfile?.public_phone ?? phoneVal;
+  const agentPhoneVal = agentPhone ?? agentProfile?.public_phone ?? '';
   const agentZaloVal = agentZalo ?? agentProfile?.public_zalo ?? '';
   const agentStatusVal = agentStatus ?? agentProfile?.status ?? 'draft';
   const agentSlugVal = agentSlug ?? agentProfile?.slug ?? '';
+  const wantsAgentProfile = Boolean(
+    agentProfile
+      || agentDisplayName?.trim()
+      || agentBio?.trim()
+      || agentSlug?.trim()
+      || agentPhone?.trim()
+      || agentZalo?.trim()
+      || agentStatus !== null,
+  );
 
   const saveMutation = useMutation({
-    mutationFn: () => saveMyProfileAndAgentProfile({
-      display_name: nameVal,
-      phone: phoneVal,
-      slug: agentSlugVal || buildUniqueSlug(agentNameVal || 'nguoi-dang-tin'),
-      agent_display_name: agentNameVal,
-      bio: agentBioVal,
-      public_phone: agentPhoneVal,
-      public_zalo: agentZaloVal,
-      status: agentStatusVal,
-    }),
+    mutationFn: async () => {
+      if (!wantsAgentProfile) {
+        await updateProfile({ display_name: nameVal, phone: phoneVal });
+        return null;
+      }
+      if (!agentNameVal.trim()) {
+        throw new Error('Hãy nhập tên hiển thị công khai trước khi lưu hồ sơ người đăng tin.');
+      }
+      return saveMyProfileAndAgentProfile({
+        display_name: nameVal,
+        phone: phoneVal,
+        slug: agentSlugVal || buildUniqueSlug(agentNameVal || 'nguoi-dang-tin'),
+        agent_display_name: agentNameVal,
+        bio: agentBioVal,
+        public_phone: agentPhone ?? agentProfile?.public_phone ?? null,
+        public_zalo: agentZaloVal,
+        status: agentStatusVal,
+      });
+    },
     onSuccess: () => {
       setSaved(true);
       setError('');
@@ -254,6 +272,9 @@ function ProfileTab() {
 
   if (profileLoading || agentLoading) {
     return <div className="bg-white rounded-2xl border border-gray-100 h-64 animate-pulse" />;
+  }
+  if (profileError || agentError) {
+    return <div className="bg-amber-50 border border-amber-100 text-amber-800 rounded-2xl p-5 text-sm">Không tải được hồ sơ. Hãy thử làm mới trang.</div>;
   }
 
   return (
@@ -303,7 +324,7 @@ function ProfileTab() {
           </div>
           <div>
             <label className="text-gray-600 text-sm font-medium block mb-1.5">Slug hồ sơ</label>
-            <input value={agentSlugVal} onChange={e => { setAgentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')); setSaved(false); }}
+            <input value={agentSlugVal} onChange={e => { setAgentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '')); setSaved(false); }}
               placeholder="ten-tu-van-vien"
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
             <p className="text-gray-400 text-[11px] mt-1">Chỉ dùng chữ thường, số và dấu gạch ngang.</p>
