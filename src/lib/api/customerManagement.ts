@@ -42,6 +42,36 @@ export interface CustomerDetail extends CustomerListRow {
   assignments: CustomerAssignment[];
   listings: Array<Record<string, unknown>>;
   media: Array<Record<string, unknown>>;
+  linkedLeads: CustomerLinkedLead[];
+  linkedChats: CustomerLinkedChat[];
+}
+
+export interface CustomerLinkedLead {
+  id: string;
+  full_name: string;
+  phone: string;
+  status: string;
+  source: string | null;
+  property_id: string | null;
+  created_at: string;
+}
+
+export interface CustomerLinkedChat {
+  id: string;
+  status: string;
+  visitor_name: string | null;
+  need_summary: string | null;
+  lead_id: string | null;
+  property_id: string | null;
+  admin_attention: boolean;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+}
+
+export interface CustomerLinkOptions {
+  leads: Array<CustomerLinkedLead & { user_id: string | null }>;
+  chats: Array<CustomerLinkedChat & { user_id: string | null }>;
 }
 
 export interface CustomerListResult {
@@ -89,6 +119,27 @@ export async function getCustomerStaff(): Promise<{ staff: Array<{ id: string; d
 export async function getCustomerDetail(userId: string): Promise<CustomerDetail> {
   const res = await fetch(`/api/admin/customers?userId=${encodeURIComponent(userId)}`, { headers: await authHeader() });
   return parseResponse<CustomerDetail>(res);
+}
+
+export async function getCustomerLinkCandidates(): Promise<CustomerLinkOptions> {
+  const res = await fetch('/api/admin/customers?linkCandidates=1', { headers: await authHeader() });
+  return parseResponse<CustomerLinkOptions>(res);
+}
+
+export function linkCustomerLead(userId: string, leadId: string): Promise<void> {
+  return postCustomerAction({ action: 'link_lead', userId, leadId });
+}
+
+export function unlinkCustomerLead(userId: string, leadId: string): Promise<void> {
+  return postCustomerAction({ action: 'unlink_lead', userId, leadId });
+}
+
+export function linkCustomerChat(userId: string, sessionId: string): Promise<void> {
+  return postCustomerAction({ action: 'link_chat', userId, sessionId });
+}
+
+export function unlinkCustomerChat(userId: string, sessionId: string): Promise<void> {
+  return postCustomerAction({ action: 'unlink_chat', userId, sessionId });
 }
 
 async function postCustomerAction(body: Record<string, unknown>): Promise<void> {

@@ -4,11 +4,13 @@ import { assigneesOf, type TeamMember } from '../leadAssignment';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string; follow_up_at?: string }): Promise<string | undefined> {
+  const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase.from('leads').insert({
     ...(lead.id ? { id: lead.id } : {}),
     full_name: lead.full_name, phone: lead.phone,
     area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
     source: lead.source ?? null, budget: lead.budget ?? null, follow_up_at: lead.follow_up_at ?? null,
+    user_id: user?.id ?? null,
   });
   if (error) throw error;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -82,13 +84,19 @@ export async function getLeads(status?: string): Promise<Lead[]> {
   return (data ?? []) as Lead[];
 }
 export async function updateLeadStatus(id: string, status: Lead['status']): Promise<void> {
-  const { error } = await supabase.from('leads').update({ status }).eq('id', id);
+  const { error } = await supabase.rpc('admin_update_lead_crm', {
+    p_lead_id: id,
+    p_patch: { status },
+  });
   if (error) throw error;
 }
 // CRM: cập nhật ghi chú nội bộ + hẹn gọi lại + BĐS quan tâm. Gán NV nay tách sang
 // lead_assignments (addAssignee/removeAssignee) — không còn qua patch này.
 export async function updateLeadCrm(id: string, patch: { note?: string | null; follow_up_at?: string | null; property_id?: string | null }): Promise<void> {
-  const { error } = await supabase.from('leads').update(patch).eq('id', id);
+  const { error } = await supabase.rpc('admin_update_lead_crm', {
+    p_lead_id: id,
+    p_patch: patch,
+  });
   if (error) throw error;
 }
 
@@ -128,12 +136,12 @@ export function leadsToCsv(leads: Lead[], roster: TeamMember[] = []): string {
 // Đổi trạng thái/xóa nhiều lead trong 1 câu (.in). Trả số dòng ảnh hưởng.
 export async function bulkUpdateLeadStatus(ids: string[], status: Lead['status']): Promise<number> {
   if (ids.length === 0) return 0;
-  const { error, count } = await supabase
-    .from('leads')
-    .update({ status }, { count: 'exact' })
-    .in('id', ids);
+  const { data, error } = await supabase.rpc('admin_bulk_update_lead_status', {
+    p_lead_ids: ids,
+    p_status: status,
+  });
   if (error) throw error;
-  return count ?? ids.length;
+  return Number(data ?? 0);
 }
 
 export async function bulkDeleteLeads(ids: string[]): Promise<number> {

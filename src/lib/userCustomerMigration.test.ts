@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260919000000_user_customer_foundation.sql'),
   'utf8',
 );
+const identityMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260920000000_user_customer_identity_links.sql'),
+  'utf8',
+);
 
 describe('P12 user/customer foundation migration contract', () => {
   it('creates separate customer, activity, assignment, and staff settings tables', () => {
@@ -60,5 +64,43 @@ describe('P12 user/customer foundation migration contract', () => {
     expect(migration).toContain('ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS user_id uuid');
     expect(migration).toContain('AND user_id IS NULL');
     expect(migration).toContain('AND (public.is_admin() OR user_id IS NULL)');
+  });
+
+  it('defines explicit admin-only identity links and assignment-scoped projections', () => {
+    for (const fn of [
+      'get_customer_linked_leads',
+      'get_customer_linked_chats',
+      'admin_link_customer_lead',
+      'admin_unlink_customer_lead',
+      'admin_link_customer_chat',
+      'admin_unlink_customer_chat',
+    ]) {
+      expect(identityMigration).toContain(`FUNCTION public.${fn}`);
+    }
+    expect(identityMigration).toContain("GRANT EXECUTE ON FUNCTION public.admin_link_customer_lead(uuid, uuid) TO authenticated;");
+    expect(identityMigration).toContain("GRANT EXECUTE ON FUNCTION public.admin_link_customer_chat(uuid, uuid) TO authenticated;");
+    expect(identityMigration).toContain("IF auth.uid() IS NULL OR NOT public.is_admin()");
+    expect(identityMigration).toContain("'entity_type', 'lead'");
+    expect(identityMigration).toContain("'entity_type', 'chat_session'");
+    expect(identityMigration).toContain('FUNCTION public.is_user_customer_account(uuid)');
+    expect(identityMigration).toContain('AND public.is_user_customer_account(user_id)');
+    expect(identityMigration).toContain("AND p.role = 'user'");
+    expect(identityMigration).not.toContain('regexp_replace(phone');
+  });
+
+  it('uses scoped lead CRM RPCs and enforces listing mutation scope', () => {
+    expect(identityMigration).toContain('FUNCTION public.admin_update_lead_crm(uuid, jsonb)');
+    expect(identityMigration).toContain('FUNCTION public.admin_bulk_update_lead_status(uuid[], text)');
+    expect(identityMigration).toContain("key NOT IN ('status', 'note', 'follow_up_at', 'property_id')");
+    expect(identityMigration).toContain('AND (public.is_admin() OR public.is_lead_member(id))');
+
+    const listingScopeMigration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/20260921000000_user_customer_listing_scope.sql'),
+      'utf8',
+    );
+    expect(listingScopeMigration).toContain('FUNCTION public.assert_user_listing_mutation_scope()');
+    expect(listingScopeMigration).toContain('NEW.user_id IS DISTINCT FROM OLD.user_id');
+    expect(listingScopeMigration).toContain('public.is_customer_member(OLD.user_id)');
+    expect(listingScopeMigration).toContain('trg_user_listing_mutation_scope');
   });
 });

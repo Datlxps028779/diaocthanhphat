@@ -6,14 +6,20 @@ import {
   assignCustomerPrimary,
   endCustomerAssignment,
   getCustomerDetail,
+  getCustomerLinkCandidates,
   getCustomerStaff,
   getCustomerWorkspace,
+  linkCustomerChat,
+  linkCustomerLead,
+  unlinkCustomerChat,
+  unlinkCustomerLead,
   updateCustomerStatusTags,
   approveUserListing,
   deleteMyListing,
   deleteUserMedia,
   rejectUserListing,
   type CustomerDetail,
+  type CustomerLinkOptions,
   type CustomerListRow,
   type CustomerStatus,
 } from '../../../lib/api';
@@ -162,12 +168,20 @@ function CustomerDetailView({ customerId, staff, canManageAssignments, onBack, o
   const [confirm, setConfirm] = useState<{ message: string; run: () => Promise<void> } | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [linkOptions, setLinkOptions] = useState<CustomerLinkOptions>({ leads: [], chats: [] });
+  const [linkLeadId, setLinkLeadId] = useState('');
+  const [linkChatId, setLinkChatId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const detail = await getCustomerDetail(customerId);
+      const [detail, options] = await Promise.all([
+        getCustomerDetail(customerId),
+        canManageAssignments ? getCustomerLinkCandidates() : Promise.resolve({ leads: [], chats: [] }),
+      ]);
       setCustomer(detail);
+      setLinkOptions(options);
       setStatus(detail.status);
       setTags(detail.tags.join(', '));
       setPrimaryStaffId(detail.assignments.find(a => a.assignment_kind === 'primary' && !a.ended_at)?.staff_user_id ?? '');
@@ -176,7 +190,7 @@ function CustomerDetailView({ customerId, staff, canManageAssignments, onBack, o
     } finally {
       setLoading(false);
     }
-  }, [customerId]);
+  }, [canManageAssignments, customerId]);
   useEffect(() => { void load(); }, [load]);
 
   const run = async (action: () => Promise<void>) => {
@@ -194,6 +208,10 @@ function CustomerDetailView({ customerId, staff, canManageAssignments, onBack, o
   };
   const assignPrimary = () => primaryStaffId ? run(() => assignCustomerPrimary(customerId, primaryStaffId)) : Promise.resolve();
   const addCoAssignee = () => coAssigneeId ? run(() => addCustomerCoAssignee(customerId, coAssigneeId)) : Promise.resolve();
+  const linkLead = () => linkLeadId ? run(() => linkCustomerLead(customerId, linkLeadId)) : Promise.resolve();
+  const linkChat = () => linkChatId ? run(() => linkCustomerChat(customerId, linkChatId)) : Promise.resolve();
+  const unlinkLead = (leadId: string) => run(() => unlinkCustomerLead(customerId, leadId));
+  const unlinkChat = (sessionId: string) => run(() => unlinkCustomerChat(customerId, sessionId));
 
   const doReject = async () => {
     if (!rejectId) return;
@@ -244,14 +262,38 @@ function CustomerDetailView({ customerId, staff, canManageAssignments, onBack, o
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
+        <h3 className="font-bold text-gray-900 mb-3">Liên kết CRM</h3>
+        {canManageAssignments && <div className="grid sm:grid-cols-2 gap-2 mb-4">
+          <div className="flex gap-2">
+            <select value={linkLeadId} onChange={e => setLinkLeadId(e.target.value)} disabled={busy} className="min-w-0 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
+              <option value="">Chọn lead để liên kết</option>
+              {linkOptions.leads.filter(lead => !lead.user_id || lead.user_id === customer.user_id).map(lead => <option key={lead.id} value={lead.id}>{lead.full_name} · {lead.phone}</option>)}
+            </select>
+            <button disabled={busy || !linkLeadId} onClick={() => void linkLead()} className="px-3 rounded-xl bg-gray-800 text-white text-sm disabled:opacity-40">Liên kết</button>
+          </div>
+          <div className="flex gap-2">
+            <select value={linkChatId} onChange={e => setLinkChatId(e.target.value)} disabled={busy} className="min-w-0 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
+              <option value="">Chọn phiên chat để liên kết</option>
+              {linkOptions.chats.filter(chat => !chat.user_id || chat.user_id === customer.user_id).map(chat => <option key={chat.id} value={chat.id}>{chat.visitor_name || 'Khách AI Advisor'} · {new Date(chat.created_at).toLocaleDateString('vi-VN')}</option>)}
+            </select>
+            <button disabled={busy || !linkChatId} onClick={() => void linkChat()} className="px-3 rounded-xl bg-gray-800 text-white text-sm disabled:opacity-40">Liên kết</button>
+          </div>
+        </div>}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div><div className="text-xs font-semibold text-gray-500 mb-2">Leads ({customer.linkedLeads.length})</div><div className="space-y-2">{customer.linkedLeads.map(lead => <div key={lead.id} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"><div className="min-w-0"><div className="font-medium truncate">{lead.full_name}</div><div className="text-xs text-gray-400">{lead.status} · {lead.source || 'Không rõ nguồn'}</div></div>{canManageAssignments && <button onClick={() => void unlinkLead(lead.id)} disabled={busy} className="text-xs text-red-600 disabled:opacity-40">Bỏ liên kết</button>}</div>)}{customer.linkedLeads.length === 0 && <p className="text-sm text-gray-400">Chưa có lead liên kết.</p>}</div></div>
+          <div><div className="text-xs font-semibold text-gray-500 mb-2">Phiên chat ({customer.linkedChats.length})</div><div className="space-y-2">{customer.linkedChats.map(chat => <div key={chat.id} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"><div className="min-w-0"><div className="font-medium truncate">{chat.visitor_name || 'Khách AI Advisor'}</div><div className="text-xs text-gray-400">{chat.status} · {new Date(chat.last_message_at).toLocaleString('vi-VN')}</div></div>{canManageAssignments && <button onClick={() => void unlinkChat(chat.id)} disabled={busy} className="text-xs text-red-600 disabled:opacity-40">Bỏ liên kết</button>}</div>)}{customer.linkedChats.length === 0 && <p className="text-sm text-gray-400">Chưa có phiên chat liên kết.</p>}</div></div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
         <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><MessageSquare className="w-4 h-4 text-red-500" /> Ghi chú nội bộ</h3>
         <div className="flex gap-2"><textarea value={note} onChange={e => setNote(e.target.value)} disabled={busy} rows={2} placeholder="Ghi chú chỉ dành cho đội ngũ phụ trách..." className="min-w-0 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none" /><button disabled={busy || !note.trim()} onClick={() => void saveNote()} className="self-end bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-40">Thêm note</button></div>
         <div className="space-y-2 mt-4">{customer.activities.map(activity => <div key={activity.id} className="border-l-2 border-red-100 pl-3"><div className="text-xs text-gray-400">{new Date(activity.created_at).toLocaleString('vi-VN')} · {activity.kind}</div><div className="text-sm text-gray-700">{activity.body}</div></div>)}{customer.activities.length === 0 && <p className="text-sm text-gray-400">Chưa có hoạt động nội bộ.</p>}</div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-5">
-        <div className="bg-white rounded-2xl border border-gray-100 p-5"><h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><Building2 className="w-4 h-4 text-red-500" /> Tin đăng ({customer.listings.length})</h3><div className="space-y-2 max-h-96 overflow-auto">{customer.listings.map(listing => { const id = String(listing.id); const listingStatus = String(listing.status ?? ''); const title = String(listing.title ?? 'Tin đăng'); return <div key={id} className="border-b border-gray-50 pb-2"><div className="flex items-center justify-between gap-2 text-sm"><span className="truncate">{title}</span><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{LISTING_STATUS[listingStatus] ?? listingStatus}</span></div>{listingStatus === 'pending' && <div className="flex gap-2 mt-1.5"><button disabled={busy} onClick={() => void run(() => approveUserListing(id))} className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg"><Check className="w-3 h-3 inline" /> Duyệt</button><button disabled={busy} onClick={() => { setRejectId(id); setRejectReason(''); }} className="text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded-lg"><X className="w-3 h-3 inline" /> Từ chối</button></div>}<button disabled={busy} onClick={() => setConfirm({ message: `Xóa tin "${title}"? Không thể hoàn tác.`, run: () => run(() => deleteMyListing(id)) })} className="text-[11px] text-red-600 mt-1"><Trash2 className="w-3 h-3 inline" /> Xóa</button></div>; })}{customer.listings.length === 0 && <p className="text-sm text-gray-400">Chưa có tin đăng.</p>}</div></div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5"><h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><ImageIcon className="w-4 h-4 text-red-500" /> Kho ảnh ({customer.media.length})</h3><div className="grid grid-cols-3 gap-2 max-h-96 overflow-auto">{customer.media.map(media => { const id = String(media.id); const url = String(media.url ?? ''); return <div key={id} className="relative group"><img src={url} alt={String(media.filename ?? 'Ảnh')} loading="lazy" className="w-full aspect-square object-cover rounded-lg border border-gray-100" /><button disabled={busy} onClick={() => setConfirm({ message: 'Xóa ảnh này khỏi kho?', run: () => run(() => deleteUserMedia(id)) })} className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 className="w-3 h-3 text-red-500" /></button></div>; })}{customer.media.length === 0 && <p className="text-sm text-gray-400 col-span-3">Chưa có ảnh.</p>}</div></div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5"><h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><Building2 className="w-4 h-4 text-red-500" /> Tin đăng ({customer.listings.length})</h3><div className="space-y-2 max-h-96 overflow-auto">{customer.listings.map(listing => { const id = String(listing.id); const listingStatus = String(listing.status ?? ''); const title = String(listing.title ?? 'Tin đăng'); return <div key={id} className="border-b border-gray-50 pb-2"><div className="flex items-center justify-between gap-2 text-sm"><span className="truncate">{title}</span><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{LISTING_STATUS[listingStatus] ?? listingStatus}</span></div>{listingStatus === 'pending' && <div className="flex gap-2 mt-1.5"><button disabled={busy} onClick={() => void run(() => approveUserListing(id))} className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg"><Check className="w-3 h-3 inline" /> Duyệt</button><button disabled={busy} onClick={() => { setRejectId(id); setRejectReason(''); }} className="text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded-lg"><X className="w-3 h-3 inline" /> Từ chối</button></div>}{canManageAssignments && <button disabled={busy} onClick={() => setConfirm({ message: `Xóa tin "${title}"? Không thể hoàn tác.`, run: () => run(() => deleteMyListing(id)) })} className="text-[11px] text-red-600 mt-1"><Trash2 className="w-3 h-3 inline" /> Xóa</button>}</div>; })}{customer.listings.length === 0 && <p className="text-sm text-gray-400">Chưa có tin đăng.</p>}</div></div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-5"><h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><ImageIcon className="w-4 h-4 text-red-500" /> Kho ảnh ({customer.media.length})</h3><div className="grid grid-cols-3 gap-2 max-h-96 overflow-auto">{customer.media.map(media => { const id = String(media.id); const url = String(media.url ?? ''); return <div key={id} className="relative group"><img src={url} alt={String(media.filename ?? 'Ảnh')} loading="lazy" className="w-full aspect-square object-cover rounded-lg border border-gray-100" />{canManageAssignments && <button disabled={busy} onClick={() => setConfirm({ message: 'Xóa ảnh này khỏi kho?', run: () => run(() => deleteUserMedia(id)) })} className="absolute top-1 right-1 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100"><Trash2 className="w-3 h-3 text-red-500" /></button>}</div>; })}{customer.media.length === 0 && <p className="text-sm text-gray-400 col-span-3">Chưa có ảnh.</p>}</div></div>
       </div>
 
       {confirm && <ConfirmDialog message={confirm.message} onConfirm={() => { const runConfirm = confirm.run; setConfirm(null); void runConfirm(); }} onCancel={() => setConfirm(null)} />}

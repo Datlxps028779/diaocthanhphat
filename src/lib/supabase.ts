@@ -210,6 +210,7 @@ export type Lead = {
   follow_up_at: string | null;
   last_activity_at: string | null;
   zalo_user_id: string | null;
+  user_id?: string | null;
   properties?: Pick<Property, 'id' | 'title'> | null;
   lead_assignments?: { user_id: string }[];   // NV cùng phụ trách (nested select)
 };
@@ -258,6 +259,7 @@ export type ChatMessageSender = 'visitor' | 'assistant' | 'staff' | 'system';
 
 export type ChatSession = {
   id: string; visitor_token: string; source: string; status: ChatSessionStatus;
+  user_id?: string | null;
   lead_id: string | null; property_id: string | null;
   visitor_name: string | null; visitor_phone: string | null; need_summary: string | null;
   last_message: string | null; admin_attention: boolean;

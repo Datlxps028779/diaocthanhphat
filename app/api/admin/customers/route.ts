@@ -12,7 +12,7 @@ type CustomerRecord = {
   updated_at: string;
   created_at: string;
 };
-type Profile = { id: string; display_name: string | null; phone: string | null; created_at: string };
+type Profile = { id: string; role: 'user' | 'staff' | 'admin'; display_name: string | null; phone: string | null; created_at: string };
 type Assignment = {
   id: string;
   user_id: string;
@@ -21,6 +21,27 @@ type Assignment = {
   assigned_by: string | null;
   started_at: string;
   ended_at: string | null;
+};
+type LinkedLead = {
+  id: string;
+  full_name: string;
+  phone: string;
+  status: string;
+  source: string | null;
+  property_id: string | null;
+  created_at: string;
+};
+type LinkedChat = {
+  id: string;
+  status: string;
+  visitor_name: string | null;
+  need_summary: string | null;
+  lead_id: string | null;
+  property_id: string | null;
+  admin_attention: boolean;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
 };
 
 function jsonError(message: string, status = 400) {
@@ -36,7 +57,7 @@ async function loadProfiles(client: ReturnType<typeof callerClient>, ids: string
   if (ids.length === 0) return [] as Profile[];
   const { data, error } = await client
     .from('profiles')
-    .select('id, display_name, phone, created_at')
+    .select('id, role, display_name, phone, created_at')
     .in('id', ids);
   if (error) throw error;
   return (data ?? []) as Profile[];
@@ -51,7 +72,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
     const [{ data, error }, { data: settings, error: settingsError }] = await Promise.all([
       client
         .from('profiles')
-        .select('id, display_name, phone, created_at')
+        .select('id, role, display_name, phone, created_at')
         .eq('role', 'staff')
         .order('created_at', { ascending: true }),
       client.from('staff_customer_settings').select('user_id, is_available, max_active_customers'),
@@ -69,20 +90,34 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
     });
   }
 
+  if (url.searchParams.get('linkCandidates') === '1') {
+    if (!canManageAssignments) return jsonError('Chỉ admin được xem danh sách liên kết.', 403);
+    const [{ data: leads, error: leadsError }, { data: chats, error: chatsError }] = await Promise.all([
+      client.from('leads').select('id, full_name, phone, status, source, property_id, created_at, user_id').order('created_at', { ascending: false }).limit(200),
+      client.from('chat_sessions').select('id, status, visitor_name, need_summary, lead_id, property_id, admin_attention, created_at, updated_at, last_message_at, user_id').order('last_message_at', { ascending: false }).limit(200),
+    ]);
+    if (leadsError) return jsonError(leadsError.message, 500);
+    if (chatsError) return jsonError(chatsError.message, 500);
+    return NextResponse.json({ leads: leads ?? [], chats: chats ?? [] });
+  }
+
   const userId = url.searchParams.get('userId');
 
   if (userId) {
-    const [{ data: record, error: recordError }, { data: profile, error: profileError }, { data: assignments, error: assignmentError }, { data: activities, error: activityError }, { data: listings, error: listingError }, { data: media, error: mediaError }] = await Promise.all([
+    const [{ data: record, error: recordError }, { data: profile, error: profileError }, { data: assignments, error: assignmentError }, { data: activities, error: activityError }, { data: listings, error: listingError }, { data: media, error: mediaError }, { data: linkedLeads, error: linkedLeadsError }, { data: linkedChats, error: linkedChatsError }] = await Promise.all([
       client.from('user_customer_records').select('*').eq('user_id', userId).maybeSingle(),
       client.from('profiles').select('id, display_name, phone, created_at').eq('id', userId).maybeSingle(),
       client.from('user_customer_assignments').select('*').eq('user_id', userId).order('started_at', { ascending: false }),
       client.from('user_customer_activities').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100),
       client.from('user_listings').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
       client.from('user_media').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+      client.rpc('get_customer_linked_leads', { p_user_id: userId }),
+      client.rpc('get_customer_linked_chats', { p_user_id: userId }),
     ]);
-    const errors = [recordError, profileError, assignmentError, activityError, listingError, mediaError].filter(Boolean);
+    const errors = [recordError, profileError, assignmentError, activityError, listingError, mediaError, linkedLeadsError, linkedChatsError].filter(Boolean);
     if (errors.length > 0) return jsonError(errors[0]!.message, 500);
     if (!record) return jsonError('Không tìm thấy customer.', 404);
+    if ((profile as Profile | null)?.role !== 'user') return jsonError('Tài khoản không còn là customer.', 404);
 
     const assignmentRows = (assignments ?? []) as Assignment[];
     let staffProfiles: Profile[] = [];
@@ -107,6 +142,8 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
       activities: activities ?? [],
       listings: listings ?? [],
       media: media ?? [],
+      linkedLeads: (linkedLeads ?? []) as LinkedLead[],
+      linkedChats: (linkedChats ?? []) as LinkedChat[],
     });
   }
 
@@ -144,6 +181,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
   const filtered = recordRows.filter(record => {
     const profile = profileById.get(record.user_id);
     const active = activeByUser.get(record.user_id) ?? [];
+    if (profile?.role !== 'user') return false;
     if (status && status !== 'all' && record.status !== status) return false;
     if (staffId && !active.some(assignment => assignment.staff_user_id === staffId)) return false;
     if (assignmentFilter === 'assigned' && active.length === 0) return false;
@@ -231,6 +269,26 @@ export async function POST(req: NextRequest) {
       if (typeof body.staffUserId !== 'string' || typeof body.isAvailable !== 'boolean' || typeof body.maxActiveCustomers !== 'number') return jsonError('Cấu hình nhân viên không hợp lệ.');
       rpcName = 'admin_upsert_staff_customer_settings';
       args = { p_staff_user_id: body.staffUserId, p_is_available: body.isAvailable, p_max_active_customers: body.maxActiveCustomers };
+      break;
+    case 'link_lead':
+      if (typeof body.userId !== 'string' || typeof body.leadId !== 'string') return jsonError('Thiếu customer hoặc lead.');
+      rpcName = 'admin_link_customer_lead';
+      args = { p_user_id: body.userId, p_lead_id: body.leadId };
+      break;
+    case 'unlink_lead':
+      if (typeof body.userId !== 'string' || typeof body.leadId !== 'string') return jsonError('Thiếu customer hoặc lead.');
+      rpcName = 'admin_unlink_customer_lead';
+      args = { p_user_id: body.userId, p_lead_id: body.leadId };
+      break;
+    case 'link_chat':
+      if (typeof body.userId !== 'string' || typeof body.sessionId !== 'string') return jsonError('Thiếu customer hoặc phiên chat.');
+      rpcName = 'admin_link_customer_chat';
+      args = { p_user_id: body.userId, p_session_id: body.sessionId };
+      break;
+    case 'unlink_chat':
+      if (typeof body.userId !== 'string' || typeof body.sessionId !== 'string') return jsonError('Thiếu customer hoặc phiên chat.');
+      rpcName = 'admin_unlink_customer_chat';
+      args = { p_user_id: body.userId, p_session_id: body.sessionId };
       break;
     default:
       return jsonError('Thao tác customer không hợp lệ.');
