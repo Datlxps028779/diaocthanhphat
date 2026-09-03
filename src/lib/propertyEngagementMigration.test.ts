@@ -11,6 +11,14 @@ const dryRun = readFileSync(
   'utf8',
 );
 const propertiesApi = readFileSync(resolve(process.cwd(), 'src/lib/api/properties.ts'), 'utf8');
+const staffAdvisorMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260927000000_public_property_staff_advisor.sql'),
+  'utf8',
+);
+const propertyDetailPage = readFileSync(
+  resolve(process.cwd(), 'src/screens/PropertyDetailPage.tsx'),
+  'utf8',
+);
 
 describe('property engagement migration', () => {
   it('creates a deduplicated, private reveal event table', () => {
@@ -44,6 +52,15 @@ describe('property engagement migration', () => {
     expect(migration).not.toContain('RETURN QUERY SELECT v_phone');
   });
 
+  it('keeps staff advisor identity separate from user poster profiles', () => {
+    expect(staffAdvisorMigration).toContain("owner_profile.role = 'user'");
+    expect(staffAdvisorMigration).toContain("owner_profile.role = 'staff'");
+    expect(staffAdvisorMigration).toContain('NULL::text AS slug');
+    expect(staffAdvisorMigration).toContain('NULL::text AS public_phone');
+    expect(staffAdvisorMigration).toContain('NULL::text AS public_zalo');
+    expect(staffAdvisorMigration).not.toContain('owner_profile.phone');
+    expect(staffAdvisorMigration).not.toContain('owner_profile.email');
+  });
   it('uses explicit public projections and no client counter fallback', () => {
     const publicProjection = propertiesApi.match(/export const PUBLIC_PROPERTY_SELECT = '([^']+)'/)?.[1] ?? '';
     expect(publicProjection).not.toContain('contact_name');
@@ -51,6 +68,12 @@ describe('property engagement migration', () => {
     expect(publicProjection).not.toContain('contact_zalo');
     expect(propertiesApi).not.toContain(".update({ views: (data?.views ?? 0) + 1 })");
     expect(propertiesApi).toContain('public_reveal_property_phone');
+  });
+
+  it('keeps staff identity visible without creating a user-profile link', () => {
+    expect(propertyDetailPage).toContain("publicAgent?.slug ? agentProfilePath(publicAgent.slug) : null");
+    expect(propertyDetailPage).toContain("publicAgent ? 'Nhân viên tư vấn' : 'Tư vấn bất động sản'");
+    expect(propertyDetailPage).toContain('Xem hồ sơ người đăng');
   });
 
   it('keeps the preflight read-only and checks grants and duplicate groups', () => {

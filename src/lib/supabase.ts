@@ -366,7 +366,10 @@ export type AgentProfile = {
   created_at: string;
   updated_at: string;
 };
-export type PublicPropertyAgent = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>;
+export type PublicPropertyAgent = Omit<Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>, 'id' | 'slug'> & {
+  id: string | null;
+  slug: string | null;
+};
 export type PublicAgentProfile = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo' | 'updated_at'> & {
   account_created_at: string;
   last_login_at: string | null;

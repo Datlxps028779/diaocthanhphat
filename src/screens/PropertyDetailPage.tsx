@@ -754,7 +754,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     ) : (
                       <p className="whitespace-normal break-words font-bold text-sm text-gray-900">{publicAgentName}</p>
                     )}
-                    <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : 'Tư vấn bất động sản'}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : publicAgent ? 'Nhân viên tư vấn' : 'Tư vấn bất động sản'}</p>
                   </div>
                 </div>
                 {publicAgent?.bio && (
