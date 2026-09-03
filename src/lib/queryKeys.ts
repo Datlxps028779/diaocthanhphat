@@ -36,6 +36,7 @@ export const qk = {
   favoriteIds: () => ['favoriteIds'] as const,
   userFavorites: () => ['userFavorites'] as const,
   myListings: () => ['myListings'] as const,
+  myPropertyEngagement: () => ['myPropertyEngagement'] as const,
   testimonials: () => ['testimonials'] as const,
 
   // Projects

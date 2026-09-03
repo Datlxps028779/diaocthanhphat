@@ -27,6 +27,7 @@ export async function saveMyAgentProfile(input: SaveAgentProfileInput): Promise<
     p_bio: input.bio ?? null,
     p_avatar_url: input.avatar_url ?? null,
     p_public_zalo: input.public_zalo ?? null,
+    p_status: 'published',
   });
   if (error) throw error;
   return data as AgentProfile;
@@ -47,6 +48,7 @@ export async function saveMyProfileAndAgentProfile(input: {
     p_agent_display_name: input.agent_display_name,
     p_bio: input.bio ?? null,
     p_public_zalo: input.public_zalo ?? null,
+    p_status: 'published',
   });
   if (error) throw error;
   return data as AgentProfile;

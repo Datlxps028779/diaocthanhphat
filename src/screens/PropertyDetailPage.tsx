@@ -21,6 +21,7 @@ import { type Page, pageToHref } from '../lib/router';
 import { useAreas, useDistricts, useNeighborhoods, usePropertyTypes } from '../lib/hooks/useTaxonomy';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
+import { PhoneRevealModal } from '../components/PhoneRevealModal';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { NearbyPoi } from '../components/NearbyPoi';
 import { buildTrustSignals, type TrustIcon } from '../lib/trustSignals';
@@ -68,7 +69,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const [callbackForm, setCallbackForm] = useState<{ name: string; phone: string; timePreset: CallbackTimePreset; customTime: string; note: string }>({ name: '', phone: '', timePreset: 'asap', customTime: '', note: '' });
   const [callbackSent, setCallbackSent] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
-  const sitePhone = useSetting('phone_hotline', '0901234567');
+  const [phoneRevealOpen, setPhoneRevealOpen] = useState(false);
+  const [revealedPhone, setRevealedPhone] = useState<string | null>(null);
   const responseTime = useSetting('lead_response_time', '30 phút');
 
   // initialData từ server (RSC prefetch) → crawler & first paint có ngay dữ liệu,
@@ -235,8 +237,20 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
 
   const revealPhone = () => {
     if (!canUseDetailInteraction(preview, 'phone_reveal')) return;
+    setPhoneRevealOpen(true);
+  };
+
+  const handlePhoneRevealed = (result: { revealed_phone: string; recorded: boolean }) => {
+    setRevealedPhone(result.revealed_phone);
     setPhoneRevealed(true);
-    track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' });
+    setPhoneRevealOpen(false);
+    if (result.recorded) {
+      track(EVENTS.PHONE_REVEAL, {
+        listingId: property?.id ?? '',
+        source: 'property_detail',
+        recorded: true,
+      });
+    }
   };
 
   const callbackFeedback = leadActionFeedback(
@@ -286,7 +300,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const modifiedDate = formatUpdateDate(property.updated_at);
   const showModified = modifiedDate && modifiedDate !== postedDate;
 
-  const contactPhone = publicAgent?.public_phone ?? property.contact_phone ?? sitePhone;
+  const contactPhone = revealedPhone ?? '';
   const publicAgentProfileHref = publicAgent?.slug ? agentProfilePath(publicAgent.slug) : null;
   const publicAgentName = publicAgent?.display_name ?? property.contact_name ?? 'Nhân viên tư vấn';
   const publicAgentVisual = publicAgent?.avatar_url ? (
@@ -734,11 +748,11 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                   <div className="min-w-0 flex-1">
                     {publicAgentProfileHref ? (
                       <Link href={publicAgentProfileHref} className="group inline-flex max-w-full items-center gap-1 rounded-md font-bold text-sm text-gray-900 transition-colors hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
-                        <span className="truncate">{publicAgentName}</span>
+                        <span className="whitespace-normal break-words">{publicAgentName}</span>
                         <ChevronRight className="h-4 w-4 flex-shrink-0 text-red-500 transition-transform group-hover:translate-x-0.5" />
                       </Link>
                     ) : (
-                      <p className="truncate font-bold text-sm text-gray-900">{publicAgentName}</p>
+                      <p className="whitespace-normal break-words font-bold text-sm text-gray-900">{publicAgentName}</p>
                     )}
                     <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : 'Tư vấn bất động sản'}</p>
                   </div>
@@ -764,7 +778,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                     <Phone className="h-3.5 w-3.5" />{contactPhone}
                   </a>
                 ) : (
-                  <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
+                  <button onClick={revealPhone}
                     className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
                     <Phone className="h-3.5 w-3.5" />Bấm để hiện số
                   </button>
@@ -887,6 +901,12 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
           </div>
         )}
       </div>
+
+      <PhoneRevealModal
+        property={phoneRevealOpen ? property : null}
+        onClose={() => setPhoneRevealOpen(false)}
+        onRevealed={handlePhoneRevealed}
+      />
 
       <ContactModal
         property={showContact ? property : null}

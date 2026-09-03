@@ -1,9 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw, Pencil, CalendarClock } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Trash2, Plus, AlertCircle, Building2, RefreshCw, Pencil, CalendarClock, Eye, PhoneCall } from 'lucide-react';
 import { type UserListing } from '../lib/supabase';
-import { getMyListings, deleteMyListing, submitUserListing, renewMyListing } from '../lib/api';
+import { getMyListings, deleteMyListing, submitUserListing, renewMyListing, getMyPropertyEngagement } from '../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../lib/listingExpiry';
 import { qk } from '../lib/queryKeys';
 import { type Page, scrollTop } from '../lib/router';
@@ -33,6 +33,11 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
     queryKey: qk.myListings(),
     queryFn: getMyListings,
   });
+  const { data: engagement = [] } = useQuery({
+    queryKey: qk.myPropertyEngagement(),
+    queryFn: getMyPropertyEngagement,
+  });
+  const engagementByProperty = new Map(engagement.map(item => [item.property_id, item]));
 
   const filtered = tab === 'all' ? listings : listings.filter(l => l.status === tab);
 
@@ -202,6 +207,26 @@ export function MyListingsPage({ onNavigate, embedded }: MyListingsPageProps) {
                           );
                         })()}
                       </div>
+                      {listing.status === 'approved' && (() => {
+                        const stats = listing.property_id ? engagementByProperty.get(listing.property_id) : undefined;
+                        if (!stats) return null;
+                        return (
+                          <div className="mt-3 grid max-w-xl grid-cols-3 gap-2" aria-label="Thống kê tương tác tin đăng">
+                            <div className="rounded-lg bg-blue-50 px-2.5 py-2">
+                              <div className="flex items-center gap-1 text-[11px] font-medium text-blue-700"><Eye className="h-3.5 w-3.5" />Lượt xem</div>
+                              <p className="mt-0.5 text-sm font-black text-blue-900">{stats.views.toLocaleString('vi-VN')}</p>
+                            </div>
+                            <div className="rounded-lg bg-red-50 px-2.5 py-2">
+                              <div className="flex items-center gap-1 text-[11px] font-medium text-red-700"><PhoneCall className="h-3.5 w-3.5" />Click hiện số</div>
+                              <p className="mt-0.5 text-sm font-black text-red-900">{stats.phone_reveals.toLocaleString('vi-VN')}</p>
+                            </div>
+                            <div className="rounded-lg bg-emerald-50 px-2.5 py-2">
+                              <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><CheckCircle className="h-3.5 w-3.5" />Lead hiện số</div>
+                              <p className="mt-0.5 text-sm font-black text-emerald-900">{stats.phone_leads.toLocaleString('vi-VN')}</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {listing.status === 'rejected' && listing.reject_reason && (
                         <div className="mt-2 bg-red-50 border border-red-100 text-red-700 text-xs rounded-lg px-3 py-2 flex items-start gap-1.5">
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />

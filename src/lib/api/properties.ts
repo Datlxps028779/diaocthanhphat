@@ -1,4 +1,4 @@
-import { supabase, type ListingType, type Property } from '../supabase';
+import { supabase, type ListingType, type Property, type PropertyEngagement, type PropertyPhoneRevealResult } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
@@ -16,7 +16,9 @@ export interface PropertyFilters {
   page?: number; limit?: number;
 }
 
-export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, areas(id,name,slug), property_types(id,name,slug)';
+export const PUBLIC_PROPERTY_SELECT = 'id, title, description, price, price_unit, price_label, price_per_month, loan_support, listing_type, area_sqm, address, city, district, ward, area_id, district_id, ward_id, property_type_id, neighborhood_slug, image_url, images, badge, badge_color, legal_status, is_featured, is_hot, is_active, is_verified, views, bedrooms, bathrooms, floor_count, floor_number, direction, road_width, frontage, amenities, latitude, longitude, formatted_address, vr_tour_url, video_url, tags, meta_title, meta_description, focus_keywords, schema_markup, slug, public_code, faq, created_at, updated_at, areas(id,name,slug), property_types(id,name,slug)';
+
+export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, views, areas(id,name,slug), property_types(id,name,slug)';
 
 export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
   'contact_name',
@@ -95,7 +97,7 @@ function buildPropertyQuery(filters?: PropertyFilters) {
   let q = applyPublicPropertyFilters(
     supabase
       .from('properties')
-      .select('*, areas(id,name,slug), property_types(id,name,slug)', { count: 'exact' })
+      .select(PUBLIC_PROPERTY_SELECT, { count: 'exact' })
       .eq('is_active', true),
     filters,
   );
@@ -142,7 +144,7 @@ interface AdvisorMatch {
 
 async function getRankedPropertyMatches(
   filters: PropertyFilters,
-  propertySelect = '*, areas(id,name,slug), property_types(id,name,slug)',
+  propertySelect = PUBLIC_PROPERTY_SELECT,
 ): Promise<{ data: Property[]; total: number }> {
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
@@ -293,28 +295,28 @@ export async function getPropertyOptions(limit = 300): Promise<
 export async function getFeaturedProperties(): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_featured', true)
     .order('created_at', { ascending: false }).limit(12);
-  return (data ?? []) as Property[];
+  return (data ?? []) as unknown as Property[];
 }
 
 export async function getHotProperties(): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_hot', true)
     .order('views', { ascending: false }).limit(8);
-  return (data ?? []) as Property[];
+  return (data ?? []) as unknown as Property[];
 }
 
 export async function getRecentProperties(limit = 8): Promise<Property[]> {
   const { data } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true)
     .order('created_at', { ascending: false }).limit(limit);
-  return (data ?? []) as Property[];
+  return (data ?? []) as unknown as Property[];
 }
 
 export async function getPropertyById(id: string): Promise<Property | null> {
@@ -322,7 +324,7 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   // và bắn 1 lần khi mount ở tầng UI, để không phụ thuộc cache/refetch của React Query.
   const { data } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(PUBLIC_PROPERTY_SELECT)
     .eq('id', id)
     .eq('is_active', true)
     .maybeSingle();
@@ -336,29 +338,69 @@ export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property 
   const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
   const { data } = await supabase
     .from('properties')
-    .select('*, areas(id,name,slug), property_types(id,name,slug)')
+    .select(PUBLIC_PROPERTY_SELECT)
     .eq(col, idOrSlug)
     .eq('is_active', true)
     .maybeSingle();
   return data as Property | null;
 }
 
-// Tăng view atomic (col = col + 1) tránh race. Fallback read-modify-write nếu RPC
-// chưa có trên DB. Gọi 1 lần mỗi lượt xem trang (xem PropertyDetailPage).
 export async function incrementPropertyView(id: string): Promise<void> {
-  const { error: rpcErr } = await supabase.rpc('increment_property_views', { row_id: id });
-  if (rpcErr) {
-    const { data } = await supabase.from('properties').select('views').eq('id', id).maybeSingle();
-    await supabase.from('properties').update({ views: (data?.views ?? 0) + 1 }).eq('id', id);
+  const { error } = await supabase.rpc('increment_property_views', { row_id: id });
+  if (error) throw error;
+}
+
+function getPhoneRevealSessionKey(): string {
+  const storageKey = 'property-phone-reveal-session';
+  try {
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    sessionStorage.setItem(storageKey, created);
+    return created;
+  } catch {
+    return crypto.randomUUID();
   }
 }
+
+export async function revealPropertyPhone(
+  propertyId: string,
+  visitorPhone: string,
+  visitorName?: string,
+): Promise<PropertyPhoneRevealResult> {
+  const { data, error } = await supabase.rpc('public_reveal_property_phone', {
+    p_property_id: propertyId,
+    p_visitor_phone: visitorPhone,
+    p_visitor_name: visitorName ?? null,
+    p_session_key: getPhoneRevealSessionKey(),
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.revealed_phone) throw new Error('Không nhận được số điện thoại từ hệ thống.');
+  return row as PropertyPhoneRevealResult;
+}
+
+export async function getMyPropertyEngagement(): Promise<PropertyEngagement[]> {
+  const { data, error } = await supabase.rpc('get_my_property_engagement');
+  if (error) throw error;
+  return (data ?? []) as PropertyEngagement[];
+}
+
+export async function adminGetPropertyEngagement(propertyIds?: string[]): Promise<PropertyEngagement[]> {
+  const { data, error } = await supabase.rpc('admin_get_property_engagement', {
+    p_property_ids: propertyIds?.length ? propertyIds : null,
+  });
+  if (error) throw error;
+  return (data ?? []) as PropertyEngagement[];
+}
+
 
 // Lấy các tầng liên quan riêng trước khi xếp hạng, để cửa sổ "mới nhất toàn kho"
 // không làm rơi tin cũ hơn nhưng cùng quận/loại. Mỗi query vẫn bị chặn payload;
 // rankRelatedProperties là nguồn chân lý cuối cùng cho thứ tự hiển thị.
 export async function getRelatedProperties(property: Property, limit = 6): Promise<RelatedProperty[]> {
   const candidateLimit = Math.max(24, Math.min(60, limit * 8));
-  const select = '*, areas(id,name,slug), property_types(id,name,slug)';
+  const select = PUBLIC_PROPERTY_SELECT;
   const baseQuery = () => supabase
     .from('properties')
     .select(select)

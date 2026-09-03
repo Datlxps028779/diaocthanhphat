@@ -42,6 +42,16 @@ export type NewsCategoryRow = {
   created_at: string; updated_at: string;
 };
 export type ListingType = 'mua_ban' | 'cho_thue';
+export type PropertyPhoneRevealResult = {
+  revealed_phone: string;
+  recorded: boolean;
+};
+export type PropertyEngagement = {
+  property_id: string;
+  views: number;
+  phone_reveals: number;
+  phone_leads: number;
+};
 export type Property = {
   id: string; title: string; description: string | null;
   price: number; price_unit: string; price_label: string | null;

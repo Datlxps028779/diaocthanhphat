@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, Wand2, Code2 } from 'lucide-react';
+import { X, Eye, Plus, Edit2, Trash2, CheckCircle, XCircle, MapPin, Search, Zap, Flame, Star, Wand2, Code2, PhoneCall } from 'lucide-react';
 import type { District, Ward, Property, Area, PropertyType, Neighborhood } from '../../../lib/supabase';
 import { normalizePublicVerificationSummary } from '../../../lib/propertyVerification';
 import {
   adminGetPropertiesPage, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
   getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties,
+  adminGetPropertyEngagement,
   propertyRevalidationSnapshot, revalidatePropertyContent, type AdminPropertyFilters,
 } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
@@ -37,6 +38,7 @@ import { PriceField } from '../../PriceField';
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [engagementByProperty, setEngagementByProperty] = useState<Map<string, { phone_reveals: number; phone_leads: number }>>(new Map());
   const [areas, setAreas] = useState<Area[]>([]);
   const [types, setTypes] = useState<PropertyType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +65,17 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
       const [pageResult, a, t] = await Promise.all([
         adminGetPropertiesPage(activeFilters), getAreas(), getPropertyTypes(),
       ]);
+      let engagement = [] as Awaited<ReturnType<typeof adminGetPropertyEngagement>>;
+      if (pageResult.data.length > 0) {
+        try {
+          engagement = await adminGetPropertyEngagement(pageResult.data.map(property => property.id));
+        } catch (error) {
+          console.error('[AdminPanel] Không tải được thống kê tương tác BĐS:', error);
+        }
+      }
       if (requestId !== loadRequestRef.current) return;
       setProperties(pageResult.data); setTotal(pageResult.total); setAreas(a); setTypes(t);
+      setEngagementByProperty(new Map(engagement.map(item => [item.property_id, item])));
     } catch (error) {
       if (requestId !== loadRequestRef.current) return;
       console.error('[AdminPanel] Không tải được danh mục BĐS:', error);
@@ -316,6 +327,8 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Giá</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden sm:table-cell">Trạng thái</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden lg:table-cell">Lượt xem</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden xl:table-cell">Click hiện số</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600 uppercase hidden xl:table-cell">Lead hiện số</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Thao tác</th>
                 </tr>
               </thead>
@@ -371,6 +384,12 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                     </td>
                     <td className="px-4 py-3 text-center text-gray-500 text-xs hidden lg:table-cell">
                       <span className="flex items-center justify-center gap-1"><Eye className="w-3 h-3" />{p.views}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-500 text-xs hidden xl:table-cell">
+                      <span className="flex items-center justify-center gap-1"><PhoneCall className="w-3 h-3 text-red-500" />{engagementByProperty.get(p.id)?.phone_reveals ?? 0}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-500 text-xs hidden xl:table-cell">
+                      <span className="flex items-center justify-center gap-1"><CheckCircle className="w-3 h-3 text-emerald-500" />{engagementByProperty.get(p.id)?.phone_leads ?? 0}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
