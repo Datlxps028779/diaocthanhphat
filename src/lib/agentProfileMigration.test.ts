@@ -27,6 +27,11 @@ const queryIndexMigration = readFileSync(
   'utf8',
 );
 
+const defaultPublicMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260923000000_agent_profiles_default_public.sql'),
+  'utf8',
+);
+
 describe('agent profile migration', () => {
   it('keeps public identity separate from internal roles and supports explicit states', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.agent_profiles');
@@ -85,5 +90,21 @@ describe('agent profile migration', () => {
     expect(migration).toContain('UPDATE public.profiles');
     expect(migration).toContain('ON CONFLICT (user_id) DO UPDATE SET');
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.save_my_profile_and_agent_profile');
+  });
+
+  it('provisions every registered user publicly without linking legacy properties', () => {
+    expect(defaultPublicMigration).toContain('trg_profiles_provision_agent_profile');
+    expect(defaultPublicMigration).toContain("'published'");
+    expect(defaultPublicMigration).toContain('substr(md5(NEW.id::text), 1, 16)');
+    expect(defaultPublicMigration).toContain('WHERE p.role = \'user\'');
+    expect(defaultPublicMigration).toContain('ON CONFLICT DO NOTHING');
+    expect(defaultPublicMigration).toContain('public_phone = COALESCE');
+    expect(defaultPublicMigration).not.toContain('contact_phone');
+    expect(defaultPublicMigration).not.toContain('contact_name');
+  });
+
+  it('does not accept client status as a visibility decision', () => {
+    expect(defaultPublicMigration).toContain("status = CASE WHEN agent_profiles.status = 'disabled' THEN 'disabled' ELSE 'published' END");
+    expect(defaultPublicMigration).toContain("p_status text DEFAULT 'published'");
   });
 });

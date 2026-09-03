@@ -8,10 +8,10 @@ import { MyListingsPage } from './MyListingsPage';
 import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
-  getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile, updateProfile,
+  getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile,
   getMyAccountSummary,
 } from '../lib/api';
-import { type UserMedia, type Profile, type AgentProfileStatus } from '../lib/supabase';
+import { type UserMedia, type Profile } from '../lib/supabase';
 import { buildUniqueSlug } from '../lib/slug';
 
 export type AccountHubTab = 'listings' | 'media' | 'favorites' | 'profile';
@@ -207,9 +207,7 @@ function ProfileTab() {
   const [agentSlug, setAgentSlug] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
   const [agentBio, setAgentBio] = useState<string | null>(null);
-  const [agentPhone, setAgentPhone] = useState<string | null>(null);
   const [agentZalo, setAgentZalo] = useState<string | null>(null);
-  const [agentStatus, setAgentStatus] = useState<AgentProfileStatus | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -226,26 +224,11 @@ function ProfileTab() {
   const phoneVal = phone ?? profile?.phone ?? '';
   const agentNameVal = agentDisplayName ?? agentProfile?.display_name ?? nameVal;
   const agentBioVal = agentBio ?? agentProfile?.bio ?? '';
-  const agentPhoneVal = agentPhone ?? agentProfile?.public_phone ?? '';
   const agentZaloVal = agentZalo ?? agentProfile?.public_zalo ?? '';
-  const agentStatusVal = agentStatus ?? agentProfile?.status ?? 'draft';
   const agentSlugVal = agentSlug ?? agentProfile?.slug ?? '';
-  const wantsAgentProfile = Boolean(
-    agentProfile
-      || agentDisplayName?.trim()
-      || agentBio?.trim()
-      || agentSlug?.trim()
-      || agentPhone?.trim()
-      || agentZalo?.trim()
-      || agentStatus !== null,
-  );
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!wantsAgentProfile) {
-        await updateProfile({ display_name: nameVal, phone: phoneVal });
-        return null;
-      }
       if (!agentNameVal.trim()) {
         throw new Error('Hãy nhập tên hiển thị công khai trước khi lưu hồ sơ người đăng tin.');
       }
@@ -255,9 +238,7 @@ function ProfileTab() {
         slug: agentSlugVal || buildUniqueSlug(agentNameVal || 'nguoi-dang-tin'),
         agent_display_name: agentNameVal,
         bio: agentBioVal,
-        public_phone: agentPhone ?? agentProfile?.public_phone ?? null,
         public_zalo: agentZaloVal,
-        status: agentStatusVal,
       });
     },
     onSuccess: () => {
@@ -298,22 +279,11 @@ function ProfileTab() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <div>
-            <h3 className="font-bold text-gray-900">Hồ sơ người đăng công khai</h3>
-            <p className="text-gray-500 text-xs mt-1 leading-relaxed">
-              Tùy chọn hiển thị trên các tin đăng đã được duyệt của bạn. Hồ sơ này tách biệt với quyền nhân viên quản trị.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={agentStatusVal === 'published'}
-              onChange={e => { setAgentStatus(e.target.checked ? 'published' : 'draft'); setSaved(false); }}
-              className="h-4 w-4 accent-red-600"
-            />
-            Công khai
-          </label>
+        <div className="mb-2">
+          <h3 className="font-bold text-gray-900">Hồ sơ người đăng công khai</h3>
+          <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+            Hồ sơ user được công khai mặc định để mọi người có thể xem danh tính và các tin đăng đã được duyệt. Thông tin đăng nhập và dữ liệu quản trị nội bộ không hiển thị công khai.
+          </p>
         </div>
         <div className="space-y-4 mt-5">
           <div>
@@ -336,17 +306,12 @@ function ProfileTab() {
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-gray-600 text-sm font-medium block mb-1.5">Số điện thoại công khai</label>
-              <input type="tel" value={agentPhoneVal} onChange={e => { setAgentPhone(e.target.value); setSaved(false); }}
-                placeholder="Để trống dùng số cá nhân"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-            </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="text-gray-600 text-sm font-medium block mb-1.5">Zalo công khai</label>
               <input value={agentZaloVal} onChange={e => { setAgentZalo(e.target.value); setSaved(false); }}
-                placeholder="Số hoặc tên Zalo"
+                placeholder="Số hoặc tên Zalo (không bắt buộc)"
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <p className="text-gray-400 text-[11px] mt-1">Số điện thoại tài khoản là số liên hệ công khai mặc định.</p>
             </div>
           </div>
         </div>

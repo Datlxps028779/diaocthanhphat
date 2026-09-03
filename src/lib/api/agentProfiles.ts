@@ -1,13 +1,11 @@
-import { supabase, type AgentProfile, type AgentProfileStatus, type PublicPropertyAgent } from '../supabase';
+import { supabase, type AgentProfile, type PublicPropertyAgent } from '../supabase';
 
 export type SaveAgentProfileInput = {
   slug: string;
   display_name: string;
   bio?: string | null;
   avatar_url?: string | null;
-  public_phone?: string | null;
   public_zalo?: string | null;
-  status: AgentProfileStatus;
 };
 
 export async function getMyAgentProfile(): Promise<AgentProfile | null> {
@@ -28,9 +26,7 @@ export async function saveMyAgentProfile(input: SaveAgentProfileInput): Promise<
     p_display_name: input.display_name,
     p_bio: input.bio ?? null,
     p_avatar_url: input.avatar_url ?? null,
-    p_public_phone: input.public_phone ?? null,
     p_public_zalo: input.public_zalo ?? null,
-    p_status: input.status,
   });
   if (error) throw error;
   return data as AgentProfile;
@@ -42,9 +38,7 @@ export async function saveMyProfileAndAgentProfile(input: {
   slug: string;
   agent_display_name: string;
   bio?: string | null;
-  public_phone?: string | null;
   public_zalo?: string | null;
-  status: AgentProfileStatus;
 }): Promise<AgentProfile> {
   const { data, error } = await supabase.rpc('save_my_profile_and_agent_profile', {
     p_display_name: input.display_name,
@@ -52,9 +46,7 @@ export async function saveMyProfileAndAgentProfile(input: {
     p_slug: input.slug,
     p_agent_display_name: input.agent_display_name,
     p_bio: input.bio ?? null,
-    p_public_phone: input.public_phone ?? null,
     p_public_zalo: input.public_zalo ?? null,
-    p_status: input.status,
   });
   if (error) throw error;
   return data as AgentProfile;
