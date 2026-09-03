@@ -32,6 +32,11 @@ const defaultPublicMigration = readFileSync(
   'utf8',
 );
 
+const roleTransitionMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260928000000_sync_agent_profile_on_role_change.sql'),
+  'utf8',
+);
+
 const activityMigration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260924000000_public_agent_profile_activity.sql'),
   'utf8',
@@ -111,6 +116,18 @@ describe('agent profile migration', () => {
     expect(defaultPublicMigration).toContain('public_phone = COALESCE');
     expect(defaultPublicMigration).not.toContain('contact_phone');
     expect(defaultPublicMigration).not.toContain('contact_name');
+  });
+
+  it('provisions a public profile when a staff account becomes a user', () => {
+    expect(roleTransitionMigration).toContain('AFTER INSERT OR UPDATE OF role ON public.profiles');
+    expect(roleTransitionMigration).toContain("IF NEW.role <> 'user' THEN");
+    expect(roleTransitionMigration).toContain('ON CONFLICT DO NOTHING');
+    expect(roleTransitionMigration).toContain('NEW.id, v_slug, v_display_name');
+    expect(roleTransitionMigration).toContain("WHERE p.role = 'user'");
+    expect(roleTransitionMigration).toContain('NOT EXISTS (');
+    expect(roleTransitionMigration).not.toContain('user_listings');
+    expect(roleTransitionMigration).not.toContain('contact_phone');
+    expect(roleTransitionMigration).toContain('REVOKE ALL ON FUNCTION public.provision_agent_profile_from_profile()');
   });
 
   it('does not accept client status as a visibility decision', () => {
