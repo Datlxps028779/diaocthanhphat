@@ -47,6 +47,7 @@ import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMe
 import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDetailActions';
 import { mergeDiscoveryFilters } from '../lib/discoveryJourney';
 import { buildPropertyDetailContinuationTargets } from '../lib/propertyDetailContinuation';
+import { agentProfilePath } from '../lib/agentProfileSeo';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -286,6 +287,21 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   const showModified = modifiedDate && modifiedDate !== postedDate;
 
   const contactPhone = publicAgent?.public_phone ?? property.contact_phone ?? sitePhone;
+  const publicAgentProfileHref = publicAgent?.slug ? agentProfilePath(publicAgent.slug) : null;
+  const publicAgentName = publicAgent?.display_name ?? property.contact_name ?? 'Nhân viên tư vấn';
+  const publicAgentVisual = publicAgent?.avatar_url ? (
+    <SafeImage
+      src={publicAgent.avatar_url}
+      alt={publicAgentName}
+      width={48}
+      height={48}
+      className="h-12 w-12 flex-shrink-0 rounded-full object-cover ring-2 ring-white"
+    />
+  ) : (
+    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 ring-2 ring-white">
+      <span className="text-lg font-black text-red-600">{publicAgentName.charAt(0).toUpperCase()}</span>
+    </div>
+  );
   const hasCoords = property.latitude && property.longitude;
   const gmapsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${property.latitude},${property.longitude}`
@@ -358,7 +374,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-5">
-        <div className="flex gap-5">
+        <div className="flex flex-col gap-5 lg:flex-row">
           {/* Main */}
           <div className="flex-1 min-w-0 space-y-4">
 
@@ -674,10 +690,10 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
           </div>
 
           {/* Sticky sidebar */}
-          <aside className="hidden lg:block w-80 flex-shrink-0">
-            <div className="sticky top-16 space-y-4">
+          <aside className="w-full flex-shrink-0 lg:w-80">
+            <div className="space-y-4 lg:sticky lg:top-16">
               {/* Price box */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div className="hidden rounded-xl border border-gray-100 bg-white p-5 shadow-sm lg:block">
                 <p className="text-xs text-gray-500 mb-1">Mức giá</p>
                 <p className="text-2xl font-black text-red-600 mb-1">
                   {formatPropertyPrice(property)}
@@ -708,60 +724,63 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
               </div>
 
               {/* Agent */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-3">
-                  {publicAgent?.avatar_url ? (
-                    <SafeImage
-                      src={publicAgent.avatar_url}
-                      alt={publicAgent.display_name}
-                      width={48}
-                      height={48}
-                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-red-600 font-black text-lg">
-                        {(publicAgent?.display_name ?? property.contact_name ?? 'NV').charAt(0)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-bold text-gray-900 text-sm flex items-center gap-1">
-                      {publicAgent?.display_name ?? property.contact_name ?? 'Nhân viên tư vấn'}
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                    </p>
-                    <p className="text-gray-500 text-xs">{publicAgent ? 'Người đăng tin' : 'Tư vấn bất động sản'}</p>
+                  {publicAgentProfileHref ? (
+                    <Link href={publicAgentProfileHref} aria-label={`Xem hồ sơ của ${publicAgentName}`} className="flex-shrink-0 rounded-full transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                      {publicAgentVisual}
+                    </Link>
+                  ) : publicAgentVisual}
+                  <div className="min-w-0 flex-1">
+                    {publicAgentProfileHref ? (
+                      <Link href={publicAgentProfileHref} className="group inline-flex max-w-full items-center gap-1 rounded-md font-bold text-sm text-gray-900 transition-colors hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                        <span className="truncate">{publicAgentName}</span>
+                        <ChevronRight className="h-4 w-4 flex-shrink-0 text-red-500 transition-transform group-hover:translate-x-0.5" />
+                      </Link>
+                    ) : (
+                      <p className="truncate font-bold text-sm text-gray-900">{publicAgentName}</p>
+                    )}
+                    <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : 'Tư vấn bất động sản'}</p>
                   </div>
                 </div>
                 {publicAgent?.bio && (
-                  <p className="mt-3 text-xs leading-relaxed text-gray-600 line-clamp-3">{publicAgent.bio}</p>
+                  <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-gray-600">{publicAgent.bio}</p>
                 )}
-                <div className="mt-3 flex items-center gap-2 text-[11px] text-gray-500">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-500" />Mục tiêu phản hồi {responseTime}</span>
+                <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-blue-500" />Mục tiêu phản hồi {responseTime}</span>
                   {property.legal_status && <>
                     <span className="text-gray-300">·</span>
-                    <span className="flex items-center gap-1"><FileCheck className="w-3 h-3 text-emerald-500" />Có thông tin pháp lý</span>
+                    <span className="flex items-center gap-1"><FileCheck className="h-3 w-3 text-emerald-500" />Có thông tin pháp lý</span>
                   </>}
                 </div>
+                {publicAgentProfileHref && (
+                  <Link href={publicAgentProfileHref} className="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-700 transition-colors hover:border-red-300 hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                    Xem hồ sơ người đăng <ChevronRight className="h-4 w-4" />
+                  </Link>
+                )}
                 {phoneRevealed ? (
                   <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
-                    className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                    <Phone className="w-3.5 h-3.5" />{contactPhone}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
+                    <Phone className="h-3.5 w-3.5" />{contactPhone}
                   </a>
                 ) : (
                   <button onClick={() => { setPhoneRevealed(true); track(EVENTS.PHONE_REVEAL, { listingId: property?.id ?? '', source: 'property_detail' }); }}
-                    className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-                    <Phone className="w-3.5 h-3.5" />Bấm để hiện số
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
+                    <Phone className="h-3.5 w-3.5" />Bấm để hiện số
                   </button>
                 )}
               </div>
 
-              {property.listing_type !== 'cho_thue' && <LoanCalculator propertyPrice={property.price} priceUnit={property.price_unit} />}
+              {property.listing_type !== 'cho_thue' && (
+                <div className="hidden lg:block">
+                  <LoanCalculator propertyPrice={property.price} priceUnit={property.price_unit} />
+                </div>
+              )}
 
               {/* Sidebar giữ vai trò điều hướng; danh sách BĐS tương tự đầy đủ nằm ở
                   block phía dưới để tránh lặp cùng một dataset trên desktop. */}
               {continuationTargets.length > 0 && (
-                <nav className="bg-white rounded-xl shadow-sm border border-gray-100 p-4" aria-label="Khám phá bất động sản liên quan">
+                <nav className="hidden rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:block" aria-label="Khám phá bất động sản liên quan">
                   <h3 className="font-bold text-gray-900 text-sm mb-3">Khám phá tiếp</h3>
                   <div className="space-y-2 text-sm">
                     {continuationTargets.map(target => target.href.startsWith('#') ? (

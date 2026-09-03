@@ -106,7 +106,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
   if (userId) {
     const [{ data: record, error: recordError }, { data: profile, error: profileError }, { data: assignments, error: assignmentError }, { data: activities, error: activityError }, { data: listings, error: listingError }, { data: media, error: mediaError }, { data: linkedLeads, error: linkedLeadsError }, { data: linkedChats, error: linkedChatsError }] = await Promise.all([
       client.from('user_customer_records').select('*').eq('user_id', userId).maybeSingle(),
-      client.from('profiles').select('id, display_name, phone, created_at').eq('id', userId).maybeSingle(),
+      client.from('profiles').select('id, role, display_name, phone, created_at').eq('id', userId).maybeSingle(),
       client.from('user_customer_assignments').select('*').eq('user_id', userId).order('started_at', { ascending: false }),
       client.from('user_customer_activities').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100),
       client.from('user_listings').select('*').eq('user_id', userId).order('created_at', { ascending: false }),

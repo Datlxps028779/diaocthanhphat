@@ -5,6 +5,7 @@ import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { SafeImage } from '@/components/SafeImage';
 import { SiteChrome } from '@/components/SiteChrome';
 import { buildProductPath } from '@/lib/productPath';
+import { buildZaloHref } from '@/lib/zalo';
 import {
   buildAgentProfileItemListJsonLd,
   buildAgentProfileJsonLd,
@@ -57,7 +58,7 @@ function AgentListingCard({ listing }: { listing: PublicAgentListing }) {
   const image = listing.image_url || listing.images?.[0] || null;
   const location = listingLocation(listing);
   return (
-    <Link href={href} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl">
+    <Link href={href} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
       <div className="relative h-48 overflow-hidden bg-gray-100">
         {image ? (
           <SafeImage src={image} alt={listing.title} width={640} height={384} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" fallbackSrc="/placeholder-property.svg" />
@@ -80,6 +81,7 @@ function AgentListingCard({ listing }: { listing: PublicAgentListing }) {
 
 function AgentProfileContent({ profile, listings }: AgentProfileData) {
   const summary = buildAgentProfileSummary(profile, listings);
+  const zaloHref = buildZaloHref(profile.public_zalo);
   return (
     <main className="bg-gray-50">
       <section className="bg-gray-950 text-white">
@@ -105,15 +107,16 @@ function AgentProfileContent({ profile, listings }: AgentProfileData) {
               <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">{summary}</p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                 <span className="rounded-full bg-white/10 px-3 py-1.5">{listings.length} tin đang hiển thị</span>
-                {profile.public_phone && <a href={`tel:${profile.public_phone}`} className="rounded-full bg-red-600 px-3 py-1.5 text-white hover:bg-red-700">Gọi {profile.public_phone}</a>}
-                {profile.public_zalo && <span className="rounded-full bg-white/10 px-3 py-1.5">Zalo: {profile.public_zalo}</span>}
+                {listings.length > 0 && <a href="#agent-listings" className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-white hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Xem tin đăng</a>}
+                {profile.public_phone && <a href={`tel:${profile.public_phone.replace(/\s/g, '')}`} className="rounded-full bg-red-600 px-3 py-1.5 text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Gọi {profile.public_phone}</a>}
+                {zaloHref && <a href={zaloHref} target="_blank" rel="noreferrer" className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Nhắn Zalo</a>}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-8 md:py-10">
+      <section id="agent-listings" className="mx-auto max-w-7xl scroll-mt-6 px-4 py-8 md:py-10">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-red-600">Tin đăng</p>

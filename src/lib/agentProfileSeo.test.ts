@@ -44,6 +44,7 @@ const listing: PublicAgentListing = {
 describe('agent profile SEO', () => {
   it('builds a stable encoded profile path', () => {
     expect(agentProfilePath('nguyen-van-a')).toBe('/nguoi-dang-tin/nguyen-van-a');
+    expect(agentProfilePath('nguyen-van-a-2')).toBe('/nguoi-dang-tin/nguyen-van-a-2');
   });
 
   it('only indexes profiles with active approved listing content', () => {
