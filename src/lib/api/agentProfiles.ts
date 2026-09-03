@@ -52,6 +52,11 @@ export async function saveMyProfileAndAgentProfile(input: {
   return data as AgentProfile;
 }
 
+export async function touchMyPresence(): Promise<void> {
+  const { error } = await supabase.rpc('touch_my_presence');
+  if (error) throw error;
+}
+
 export async function getPublicPropertyAgent(propertyId: string): Promise<PublicPropertyAgent | null> {
   const { data, error } = await supabase.rpc('public_get_property_agent', { p_property_id: propertyId });
   if (error) throw error;

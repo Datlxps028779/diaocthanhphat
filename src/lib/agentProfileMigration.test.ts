@@ -32,6 +32,16 @@ const defaultPublicMigration = readFileSync(
   'utf8',
 );
 
+const activityMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260924000000_public_agent_profile_activity.sql'),
+  'utf8',
+);
+
+const activityDryRun = readFileSync(
+  resolve(process.cwd(), 'supabase/manual_public_agent_profile_activity_dry_run.sql'),
+  'utf8',
+);
+
 describe('agent profile migration', () => {
   it('keeps public identity separate from internal roles and supports explicit states', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.agent_profiles');
@@ -106,5 +116,26 @@ describe('agent profile migration', () => {
   it('does not accept client status as a visibility decision', () => {
     expect(defaultPublicMigration).toContain("status = CASE WHEN agent_profiles.status = 'disabled' THEN 'disabled' ELSE 'published' END");
     expect(defaultPublicMigration).toContain("p_status text DEFAULT 'published'");
+  });
+
+  it('keeps public activity safe and presence user-scoped', () => {
+    expect(activityMigration).toContain('ADD COLUMN IF NOT EXISTS last_seen_at timestamptz');
+    expect(activityMigration).toContain('CREATE OR REPLACE FUNCTION public.touch_my_presence()');
+    expect(activityMigration).toContain('v_actor uuid := auth.uid()');
+    expect(activityMigration).toContain('GRANT EXECUTE ON FUNCTION public.touch_my_presence() TO authenticated');
+    expect(activityMigration).toContain("'account_created_at', p.created_at");
+    expect(activityMigration).toContain("'last_login_at', au.last_sign_in_at");
+    expect(activityMigration).toContain("'is_online', COALESCE(p.last_seen_at > now() - interval '5 minutes', false)");
+    expect(activityMigration).toContain("'property_type_name', listing.property_type_name");
+    expect(activityMigration).toContain("LEFT JOIN public.property_types pt ON pt.id = pr.property_type_id");
+    expect(activityMigration).not.toContain("'email'");
+    expect(activityMigration).not.toContain("'user_id'");
+  });
+
+  it('keeps the activity dry-run executable before the new column and functions exist', () => {
+    expect(activityDryRun).toContain("to_jsonb(p)->>'last_seen_at'");
+    expect(activityDryRun).toContain("to_regprocedure('public.touch_my_presence()')");
+    expect(activityDryRun).not.toContain('p.last_seen_at');
+    expect(activityDryRun).not.toContain("has_function_privilege('anon', 'public.touch_my_presence()'");
   });
 });

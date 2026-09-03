@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { SafeImage } from '@/components/SafeImage';
 import { SiteChrome } from '@/components/SiteChrome';
-import { buildProductPath } from '@/lib/productPath';
 import { buildZaloHref } from '@/lib/zalo';
 import {
   buildAgentProfileItemListJsonLd,
@@ -12,9 +11,9 @@ import {
   buildAgentProfileMetadata,
   buildAgentProfileSummary,
 } from '@/lib/agentProfileSeo';
-import { formatPropertyPrice } from '@/lib/listingPrice';
 import { serverGetPublicAgentProfile, serverGetPublicAgentProfileListings } from '@/lib/supabase-server';
 import type { PublicAgentListing, PublicAgentProfile } from '@/lib/supabase';
+import { AgentProfileListings } from './AgentProfileListings';
 
 export const revalidate = 3600;
 
@@ -42,41 +41,15 @@ function initials(name: string): string {
   return name.trim().charAt(0).toUpperCase() || 'N';
 }
 
-function listingLocation(listing: PublicAgentListing): string {
-  return [listing.district, listing.city].filter(Boolean).join(', ');
-}
-
-function AgentListingCard({ listing }: { listing: PublicAgentListing }) {
-  const href = buildProductPath({
-    id: listing.id,
-    slug: listing.slug,
-    public_code: listing.public_code,
-    listing_type: listing.listing_type,
-    district: listing.district,
-    areas: { slug: listing.area_slug ?? undefined },
-  });
-  const image = listing.image_url || listing.images?.[0] || null;
-  const location = listingLocation(listing);
-  return (
-    <Link href={href} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
-      <div className="relative h-48 overflow-hidden bg-gray-100">
-        {image ? (
-          <SafeImage src={image} alt={listing.title} width={640} height={384} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" fallbackSrc="/placeholder-property.svg" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm font-semibold text-gray-400">Chưa có ảnh</div>
-        )}
-        <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold text-white ${listing.listing_type === 'cho_thue' ? 'bg-blue-600' : 'bg-red-600'}`}>
-          {listing.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán'}
-        </span>
-      </div>
-      <div className="space-y-2 p-4">
-        <h2 className="line-clamp-2 text-sm font-bold text-gray-900 group-hover:text-red-600">{listing.title}</h2>
-        <p className="text-base font-black text-red-600">{formatPropertyPrice(listing)}</p>
-        {location && <p className="truncate text-xs text-gray-500">{location}</p>}
-        {listing.area_sqm && <p className="text-xs text-gray-500">Diện tích {listing.area_sqm} m²</p>}
-      </div>
-    </Link>
-  );
+function formatDateTime(value: string | null): string {
+  if (!value) return 'Chưa ghi nhận';
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 function AgentProfileContent({ profile, listings }: AgentProfileData) {
@@ -85,27 +58,27 @@ function AgentProfileContent({ profile, listings }: AgentProfileData) {
   return (
     <main className="bg-gray-50">
       <section className="bg-gray-950 text-white">
-        <div className="mx-auto max-w-7xl px-4 py-10 md:py-14">
-          <nav className="mb-6 text-xs text-white/70">
+        <div className="mx-auto max-w-7xl px-4 py-8 md:py-12">
+          <nav className="mb-7 text-xs text-white/70">
             <Link href="/" className="hover:text-white">Trang chủ</Link>
             <span className="mx-2">/</span>
             <Link href="/danh-sach" className="hover:text-white">Bất động sản</Link>
             <span className="mx-2">/</span>
             <span className="text-white">Người đăng tin</span>
           </nav>
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-full bg-red-100 ring-4 ring-white/10">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+            <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-3xl bg-red-100 ring-4 ring-white/10 sm:h-28 sm:w-28">
               {profile.avatar_url ? (
-                <SafeImage src={profile.avatar_url} alt={profile.display_name} width={96} height={96} className="h-full w-full object-cover" fallbackSrc="/placeholder-property.svg" />
+                <SafeImage src={profile.avatar_url} alt={profile.display_name} width={112} height={112} className="h-full w-full object-cover" fallbackSrc="/placeholder-property.svg" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-3xl font-black text-red-600">{initials(profile.display_name)}</div>
               )}
             </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-red-300">Hồ sơ người đăng tin</p>
-              <h1 className="mt-2 text-3xl font-black md:text-5xl">{profile.display_name}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">{summary}</p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">Hồ sơ người đăng tin</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">{profile.display_name}</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/75">{summary}</p>
+              <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
                 <span className="rounded-full bg-white/10 px-3 py-1.5">{listings.length} tin đang hiển thị</span>
                 {listings.length > 0 && <a href="#agent-listings" className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-white hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Xem tin đăng</a>}
                 {profile.public_phone && <a href={`tel:${profile.public_phone.replace(/\s/g, '')}`} className="rounded-full bg-red-600 px-3 py-1.5 text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Gọi {profile.public_phone}</a>}
@@ -113,26 +86,28 @@ function AgentProfileContent({ profile, listings }: AgentProfileData) {
               </div>
             </div>
           </div>
+          <div className="mt-7 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
+            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Tham gia từ</p>
+              <p className="mt-1 text-sm font-bold text-white">{formatDateTime(profile.account_created_at)}</p>
+            </div>
+            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Đăng nhập gần nhất</p>
+              <p className="mt-1 text-sm font-bold text-white">{formatDateTime(profile.last_login_at)}</p>
+            </div>
+            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Trạng thái hiện tại</p>
+              <p className="mt-1 flex items-center gap-2 text-sm font-bold text-white">
+                <span className={`h-2.5 w-2.5 rounded-full ${profile.is_online ? 'bg-emerald-400' : 'bg-white/35'}`} aria-hidden="true" />
+                {profile.is_online ? 'Đang online' : 'Ngoại tuyến'}
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section id="agent-listings" className="mx-auto max-w-7xl scroll-mt-6 px-4 py-8 md:py-10">
-        <div className="mb-5 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-red-600">Tin đăng</p>
-            <h2 className="mt-1 text-2xl font-black text-gray-900">Bất động sản đang hiển thị</h2>
-          </div>
-          <span className="text-sm text-gray-500">{listings.length} tin</span>
-        </div>
-        {listings.length > 0 ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {listings.map(listing => <AgentListingCard key={listing.id} listing={listing} />)}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center text-sm text-gray-500">
-            Hồ sơ chưa có tin đăng đang hiển thị.
-          </div>
-        )}
+        <AgentProfileListings listings={listings} />
       </section>
     </main>
   );

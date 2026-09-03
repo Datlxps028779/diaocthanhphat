@@ -16,6 +16,9 @@ const profile: PublicAgentProfile = {
   avatar_url: null,
   public_phone: '0901234567',
   public_zalo: '0901234567',
+  account_created_at: '2026-08-01T00:00:00.000Z',
+  last_login_at: '2026-09-01T00:00:00.000Z',
+  is_online: true,
   updated_at: '2026-09-01T00:00:00.000Z',
 };
 
@@ -27,6 +30,8 @@ const listing: PublicAgentListing = {
   price_label: null,
   price_per_month: null,
   listing_type: 'mua_ban',
+  property_type_name: 'Nhà phố',
+  property_type_slug: 'nha-pho',
   area_sqm: 80,
   city: 'Bình Dương',
   district: 'Dĩ An',

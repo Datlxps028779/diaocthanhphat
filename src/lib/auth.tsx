@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from './supabase';
+import { touchMyPresence } from './api/agentProfiles';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthState {
@@ -15,6 +16,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, session: null, loading: true });
 
   useEffect(() => {
+    let presenceInterval: ReturnType<typeof setInterval> | null = null;
+    let presenceActive = false;
+
+    const touchPresence = () => {
+      if (!presenceActive || document.visibilityState !== 'visible') return;
+      void touchMyPresence().catch(() => undefined);
+    };
+
+    const setPresenceActive = (active: boolean) => {
+      presenceActive = active;
+      if (presenceInterval) clearInterval(presenceInterval);
+      presenceInterval = active ? setInterval(touchPresence, 60_000) : null;
+      if (active) touchPresence();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') touchPresence();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       // Token trong localStorage có thể còn sót từ project/signing-key cũ.
       // getSession() KHÔNG verify chữ ký — nếu để nguyên, client sẽ đính Bearer
@@ -23,11 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         const { error } = await supabase.auth.getUser();
         if (error) {
+          setPresenceActive(false);
           await supabase.auth.signOut();
           setState({ user: null, session: null, loading: false });
           return;
         }
       }
+      setPresenceActive(Boolean(session));
       setState({ user: session?.user ?? null, session, loading: false });
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -39,9 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.location.replace('/dat-lai-mat-khau');
         return;
       }
+      setPresenceActive(Boolean(session));
       setState({ user: session?.user ?? null, session, loading: false });
     });
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (presenceInterval) clearInterval(presenceInterval);
+    };
   }, []);
 
   return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
