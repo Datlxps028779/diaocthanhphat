@@ -1,7 +1,6 @@
 // Phân quyền truy cập admin panel theo role (thuần, test được).
-// admin: toàn quyền. staff (nhân viên sales): CHỈ CRM khách hàng + duyệt tin đăng.
-// user: không vào panel. Nguồn quyền thật là RLS ở DB (is_admin/is_admin_or_staff);
-// đây là lớp gate UI để staff không thấy khu nhạy cảm.
+// admin: toàn quyền. staff (nhân viên sales): CHỈ CRM khách hàng.
+// Nguồn quyền thật là RLS ở DB; đây là lớp gate UI để staff không thấy khu nhạy cảm.
 import type { AdminTab } from '../components/admin/types';
 
 export type Role = 'user' | 'staff' | 'admin';
@@ -13,8 +12,8 @@ export const ALL_TABS: AdminTab[] = [
   'page-builder', 'home-experience', 'pages', 'neighborhoods', 'menu', 'backup', 'ai-analytics', 'google-analytics', 'ai-chat', 'ai-rag', 'seo-geo',
 ];
 
-// Tab staff được thấy: chăm sóc khách + duyệt tin đăng.
-export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'user-listings', 'users'];
+// Tab staff được thấy: chăm sóc khách hàng, lead và phiên chat.
+export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'users'];
 
 export function canAccessPanel(role: Role | null | undefined): boolean {
   return role === 'admin' || role === 'staff';

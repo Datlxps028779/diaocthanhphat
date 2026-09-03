@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UserCog, UserPlus, RefreshCw, AlertTriangle, Ban, CheckCircle2, Mail, Phone, Shield, X, Search } from 'lucide-react';
-import { getAdminUsers, getCustomerStaff, upsertStaffCustomerSettings, setUserRole, banUser, unbanUser, createStaff, type AdminUserRow } from '../../../lib/api';
+import { getAdminUsers, getCustomerStaff, upsertStaffCustomerSettings, setUserRole, banUser, unbanUser, createStaff, type AdminUserRow, type StaffCustomerScope } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // Nhãn + màu badge cho role đội ngũ.
@@ -25,6 +25,7 @@ export function StaffTab() {
   const [creating, setCreating] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [customerSettings, setCustomerSettings] = useState<Record<string, CustomerStaffSetting>>({});
+  const [staffScopes, setStaffScopes] = useState<StaffCustomerScope[]>([]);
   const [settingsBusy, setSettingsBusy] = useState<string | null>(null);
 
   const load = async () => {
@@ -32,6 +33,7 @@ export function StaffTab() {
     try {
       const [{ users, serviceRole }, staffResult] = await Promise.all([getAdminUsers(), getCustomerStaff()]);
       setAll(users); setServiceRole(serviceRole);
+      setStaffScopes(staffResult.staffScopes);
       setCustomerSettings(Object.fromEntries(staffResult.staff.map(person => [person.id, {
         is_available: person.is_available,
         max_active_customers: person.max_active_customers,
@@ -161,8 +163,13 @@ export function StaffTab() {
                     {(() => {
                       const setting = customerSettings[u.id] ?? { is_available: true, max_active_customers: 50 };
                       const settingBusy = settingsBusy === u.id;
+                      const scopes = staffScopes.filter(scope => scope.staff_user_id === u.id);
+                      const listingCount = scopes.reduce((sum, scope) => sum + scope.listing_count, 0);
+                      const leadCount = scopes.reduce((sum, scope) => sum + scope.lead_count, 0);
                       return (
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="space-y-2">
+                          <div className="text-xs text-gray-500">{scopes.length} customer · {listingCount} tin · {leadCount} lead</div>
+                          <div className="flex flex-wrap items-center gap-2">
                           <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
                             <input type="checkbox" checked={setting.is_available} disabled={settingBusy}
                               onChange={e => void updateCustomerSetting(u.id, { is_available: e.target.checked })}
@@ -177,6 +184,7 @@ export function StaffTab() {
                               className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center disabled:opacity-50" />
                           </label>
                           {settingBusy && <RefreshCw className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
+                          </div>
                         </div>
                       );
                     })()}
@@ -266,7 +274,7 @@ function CreateStaffModal({ serviceRole, onClose, onCreated }: { serviceRole: bo
             placeholder="Email đăng nhập *" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
           <input type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             placeholder="Mật khẩu (tối thiểu 6 ký tự) *" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
-          <p className="text-xs bg-blue-50 border border-blue-100 text-blue-800 rounded-lg px-3 py-2">Tài khoản mới chỉ có quyền nhân viên: CRM và duyệt tin. Console chủ hệ thống yêu cầu UUID owner và MFA riêng.</p>
+          <p className="text-xs bg-blue-50 border border-blue-100 text-blue-800 rounded-lg px-3 py-2">Tài khoản mới chỉ có quyền nhân viên: CRM khách hàng và phiên chat. Console chủ hệ thống yêu cầu UUID owner và MFA riêng.</p>
         </div>
 
         <div className="flex justify-end gap-2">

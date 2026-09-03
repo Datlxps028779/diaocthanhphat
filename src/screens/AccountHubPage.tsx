@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, ClipboardList, Search, Headset, AlertTriangle } from 'lucide-react';
+import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, ClipboardList, Search, Headset, AlertTriangle, Users } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { MyListingsPage } from './MyListingsPage';
+import { MyListingLeadsPage } from './MyListingLeadsPage';
 import { AccountPage } from './AccountPage';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
@@ -14,7 +15,7 @@ import {
 import { type UserMedia, type Profile } from '../lib/supabase';
 import { buildUniqueSlug } from '../lib/slug';
 
-export type AccountHubTab = 'listings' | 'media' | 'favorites' | 'profile';
+export type AccountHubTab = 'listings' | 'leads' | 'media' | 'favorites' | 'profile';
 
 interface AccountHubPageProps {
   onNavigate: (p: Page) => void;
@@ -23,6 +24,7 @@ interface AccountHubPageProps {
 
 const TABS: { id: AccountHubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'listings', label: 'Tin đăng', icon: <Building2 className="w-4 h-4" /> },
+  { id: 'leads', label: 'Khách quan tâm', icon: <Users className="w-4 h-4" /> },
   { id: 'media', label: 'Kho ảnh', icon: <ImageIcon className="w-4 h-4" /> },
   { id: 'favorites', label: 'Yêu thích', icon: <Heart className="w-4 h-4" /> },
   { id: 'profile', label: 'Hồ sơ', icon: <UserIcon className="w-4 h-4" /> },
@@ -79,6 +81,7 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
 
       <div className="max-w-5xl mx-auto px-4 py-5">
         {tab === 'listings' && <MyListingsPage onNavigate={onNavigate} embedded />}
+        {tab === 'leads' && <MyListingLeadsPage />}
         {tab === 'favorites' && <AccountPage onNavigate={onNavigate} embedded />}
         {tab === 'media' && <MediaTab />}
         {tab === 'profile' && <ProfileTab />}

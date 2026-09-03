@@ -1,4 +1,4 @@
-import { supabase, type Lead, type LeadActivity } from '../supabase';
+import { supabase, type Lead, type LeadActivity, type MyListingLead, type MyListingLeadStats } from '../supabase';
 import { stageMeta } from '../leadPipeline';
 import { assigneesOf, type TeamMember } from '../leadAssignment';
 
@@ -82,6 +82,32 @@ export async function getLeads(status?: string): Promise<Lead[]> {
   if (status && status !== 'all') q = q.eq('status', status);
   const { data } = await q;
   return (data ?? []) as Lead[];
+}
+
+export type MyListingLeadFilters = {
+  propertyId?: string;
+  source?: 'property_phone_reveal' | 'property_callback' | 'property_detail_form' | 'contact_modal' | 'invest_page' | 'about_page' | 'valuation_page' | 'ai_advisor';
+  status?: Lead['status'];
+  limit?: number;
+  offset?: number;
+};
+
+export async function getMyListingLeads(filters: MyListingLeadFilters = {}): Promise<MyListingLead[]> {
+  const { data, error } = await supabase.rpc('get_my_listing_leads', {
+    p_property_id: filters.propertyId ?? null,
+    p_source: filters.source ?? null,
+    p_status: filters.status ?? null,
+    p_limit: filters.limit ?? 50,
+    p_offset: filters.offset ?? 0,
+  });
+  if (error) throw error;
+  return (data ?? []) as MyListingLead[];
+}
+
+export async function getMyListingLeadStats(): Promise<MyListingLeadStats[]> {
+  const { data, error } = await supabase.rpc('get_my_listing_lead_stats');
+  if (error) throw error;
+  return (data ?? []) as MyListingLeadStats[];
 }
 export async function updateLeadStatus(id: string, status: Lead['status']): Promise<void> {
   const { error } = await supabase.rpc('admin_update_lead_crm', {

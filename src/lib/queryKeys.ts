@@ -37,6 +37,8 @@ export const qk = {
   userFavorites: () => ['userFavorites'] as const,
   myListings: () => ['myListings'] as const,
   myPropertyEngagement: () => ['myPropertyEngagement'] as const,
+  myListingLeads: (filters?: Record<string, unknown>) => ['myListingLeads', filters ?? {}] as const,
+  myListingLeadStats: () => ['myListingLeadStats'] as const,
   testimonials: () => ['testimonials'] as const,
 
   // Projects

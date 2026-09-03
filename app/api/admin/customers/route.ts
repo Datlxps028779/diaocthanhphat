@@ -43,6 +43,26 @@ type LinkedChat = {
   updated_at: string;
   last_message_at: string;
 };
+type ListingLead = {
+  id: string;
+  property_id: string;
+  property_title: string;
+  full_name: string;
+  phone: string;
+  message: string | null;
+  note: string | null;
+  status: string;
+  source: string | null;
+  follow_up_at: string | null;
+  created_at: string;
+};
+type StaffScope = {
+  staff_user_id: string;
+  customer_user_id: string;
+  assignment_kind: 'primary' | 'co_assignee';
+  listing_count: number;
+  lead_count: number;
+};
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -69,16 +89,18 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
   const canManageAssignments = callerIsAdmin === true;
 
   if (url.searchParams.get('staff') === '1') {
-    const [{ data, error }, { data: settings, error: settingsError }] = await Promise.all([
+    const [{ data, error }, { data: settings, error: settingsError }, { data: scopeRows, error: scopeError }] = await Promise.all([
       client
         .from('profiles')
         .select('id, role, display_name, phone, created_at')
         .eq('role', 'staff')
         .order('created_at', { ascending: true }),
       client.from('staff_customer_settings').select('user_id, is_available, max_active_customers'),
+      canManageAssignments ? client.rpc('get_staff_customer_scope') : Promise.resolve({ data: [], error: null }),
     ]);
     if (error) return jsonError(error.message, 500);
     if (settingsError) return jsonError(settingsError.message, 500);
+    if (scopeError) return jsonError(scopeError.message, 500);
     const settingsById = new Map((settings ?? []).map(setting => [setting.user_id, setting]));
     return NextResponse.json({
       staff: (data ?? []).map(profile => ({
@@ -86,6 +108,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
         is_available: settingsById.get(profile.id)?.is_available ?? true,
         max_active_customers: settingsById.get(profile.id)?.max_active_customers ?? 50,
       })),
+      staffScopes: (scopeRows ?? []) as StaffScope[],
       canManageAssignments,
     });
   }
@@ -104,7 +127,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
   const userId = url.searchParams.get('userId');
 
   if (userId) {
-    const [{ data: record, error: recordError }, { data: profile, error: profileError }, { data: assignments, error: assignmentError }, { data: activities, error: activityError }, { data: listings, error: listingError }, { data: media, error: mediaError }, { data: linkedLeads, error: linkedLeadsError }, { data: linkedChats, error: linkedChatsError }] = await Promise.all([
+    const [{ data: record, error: recordError }, { data: profile, error: profileError }, { data: assignments, error: assignmentError }, { data: activities, error: activityError }, { data: listings, error: listingError }, { data: media, error: mediaError }, { data: linkedLeads, error: linkedLeadsError }, { data: listingLeads, error: listingLeadsError }, { data: linkedChats, error: linkedChatsError }] = await Promise.all([
       client.from('user_customer_records').select('*').eq('user_id', userId).maybeSingle(),
       client.from('profiles').select('id, role, display_name, phone, created_at').eq('id', userId).maybeSingle(),
       client.from('user_customer_assignments').select('*').eq('user_id', userId).order('started_at', { ascending: false }),
@@ -112,9 +135,10 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
       client.from('user_listings').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
       client.from('user_media').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
       client.rpc('get_customer_linked_leads', { p_user_id: userId }),
+      client.rpc('get_customer_listing_leads', { p_user_id: userId }),
       client.rpc('get_customer_linked_chats', { p_user_id: userId }),
     ]);
-    const errors = [recordError, profileError, assignmentError, activityError, listingError, mediaError, linkedLeadsError, linkedChatsError].filter(Boolean);
+    const errors = [recordError, profileError, assignmentError, activityError, listingError, mediaError, linkedLeadsError, listingLeadsError, linkedChatsError].filter(Boolean);
     if (errors.length > 0) return jsonError(errors[0]!.message, 500);
     if (!record) return jsonError('Không tìm thấy customer.', 404);
     if ((profile as Profile | null)?.role !== 'user') return jsonError('Tài khoản không còn là customer.', 404);
@@ -143,6 +167,7 @@ async function getWorkspace(client: ReturnType<typeof callerClient>, req: NextRe
       listings: listings ?? [],
       media: media ?? [],
       linkedLeads: (linkedLeads ?? []) as LinkedLead[],
+      listingLeads: (listingLeads ?? []) as ListingLead[],
       linkedChats: (linkedChats ?? []) as LinkedChat[],
     });
   }

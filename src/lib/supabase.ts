@@ -225,6 +225,29 @@ export type Lead = {
   lead_assignments?: { user_id: string }[];   // NV cùng phụ trách (nested select)
 };
 
+export type MyListingLead = {
+  lead_id: string;
+  property_id: string;
+  property_title: string;
+  full_name: string;
+  phone: string;
+  message: string | null;
+  status: Lead['status'];
+  source: string | null;
+  follow_up_at: string | null;
+  created_at: string;
+};
+
+export type MyListingLeadStats = {
+  property_id: string;
+  property_title: string;
+  views: number;
+  phone_reveals: number;
+  total_leads: number;
+  callback_leads: number;
+  open_leads: number;
+};
+
 export type LeadAssignment = {
   id: string; lead_id: string; user_id: string;
   added_by: string | null; created_at: string;

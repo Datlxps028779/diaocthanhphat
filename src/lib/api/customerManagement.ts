@@ -43,6 +43,7 @@ export interface CustomerDetail extends CustomerListRow {
   listings: Array<Record<string, unknown>>;
   media: Array<Record<string, unknown>>;
   linkedLeads: CustomerLinkedLead[];
+  listingLeads: CustomerListingLead[];
   linkedChats: CustomerLinkedChat[];
 }
 
@@ -67,6 +68,20 @@ export interface CustomerLinkedChat {
   created_at: string;
   updated_at: string;
   last_message_at: string;
+}
+
+export interface CustomerListingLead {
+  id: string;
+  property_id: string;
+  property_title: string;
+  full_name: string;
+  phone: string;
+  message: string | null;
+  note: string | null;
+  status: string;
+  source: string | null;
+  follow_up_at: string | null;
+  created_at: string;
 }
 
 export interface CustomerLinkOptions {
@@ -111,7 +126,25 @@ export async function getCustomerWorkspace(params: {
   return parseResponse<CustomerListResult>(res);
 }
 
-export async function getCustomerStaff(): Promise<{ staff: Array<{ id: string; display_name: string | null; phone: string | null; created_at: string; is_available: boolean; max_active_customers: number }>; canManageAssignments: boolean }> {
+export interface StaffCustomerSetting {
+  user_id: string;
+  is_available: boolean;
+  max_active_customers: number;
+}
+
+export interface StaffCustomerScope {
+  staff_user_id: string;
+  customer_user_id: string;
+  assignment_kind: CustomerAssignmentKind;
+  listing_count: number;
+  lead_count: number;
+}
+
+export async function getCustomerStaff(): Promise<{
+  staff: Array<{ id: string; display_name: string | null; phone: string | null; created_at: string; is_available: boolean; max_active_customers: number }>;
+  staffScopes: StaffCustomerScope[];
+  canManageAssignments: boolean;
+}> {
   const res = await fetch('/api/admin/customers?staff=1', { headers: await authHeader() });
   return parseResponse(res);
 }
@@ -196,12 +229,6 @@ export async function getMyAccountSummary(): Promise<MyAccountSummary> {
     support: (supportResult.data ?? []) as Array<{ staff_display_name: string | null; assignment_kind: CustomerAssignmentKind }>,
     supportAvailable: !supportResult.error,
   };
-}
-
-export interface StaffCustomerSetting {
-  user_id: string;
-  is_available: boolean;
-  max_active_customers: number;
 }
 
 export async function upsertStaffCustomerSettings(input: {

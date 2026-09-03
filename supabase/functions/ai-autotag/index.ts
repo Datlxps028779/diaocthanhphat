@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, verifyAdminOrStaff } from "../_shared/cors.ts";
+import { corsHeaders, verifyAdmin } from "../_shared/cors.ts";
 import { callClaude } from "../_shared/anthropic.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: cors });
   if (req.method !== "POST") return responseJson(cors, { error: "method_not_allowed" }, 405);
 
-  const adminId = await verifyAdminOrStaff(req, createClient);
+  const adminId = await verifyAdmin(req, createClient);
   if (!adminId) return responseJson(cors, { error: "unauthorized" }, 401);
 
   try {

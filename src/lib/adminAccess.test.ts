@@ -25,8 +25,8 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
       expect(tabs.length).toBeGreaterThanOrEqual(19);
     });
 
-    it('staff thấy CRM khách hàng + phiên chat + duyệt tin đăng + customer workspace', () => {
-      expect(visibleTabs('staff')).toEqual(['leads', 'chat-sessions', 'user-listings', 'users']);
+    it('staff thấy CRM khách hàng + phiên chat + customer workspace', () => {
+      expect(visibleTabs('staff')).toEqual(['leads', 'chat-sessions', 'users']);
     });
 
     it('staff KHÔNG thấy khu nhạy cảm', () => {
@@ -42,7 +42,7 @@ describe('adminAccess — phân quyền truy cập admin panel theo role', () =>
     });
 
     it('STAFF_TABS khớp tập tab staff', () => {
-      expect(STAFF_TABS).toEqual(['leads', 'chat-sessions', 'user-listings', 'users']);
+      expect(STAFF_TABS).toEqual(['leads', 'chat-sessions', 'users']);
     });
   });
 
