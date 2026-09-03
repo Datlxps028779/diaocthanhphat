@@ -103,6 +103,12 @@ describe('mergeSchema', () => {
     expect(schema.extra).toBe('them');
   });
 
+  it('locked key bị bỏ khỏi custom nếu base không có field đó', () => {
+    const custom = { '@type': 'NewsArticle', articleBody: 'Nội dung cũ' };
+    const { schema } = mergeSchema(base, custom, 'news', ['articleBody']);
+    expect(schema).not.toHaveProperty('articleBody');
+  });
+
   it('custom null → giữ nguyên base', () => {
     const { schema } = mergeSchema(base, null, 'news', ['@type']);
     expect(schema).toEqual(base);

@@ -18,6 +18,14 @@ export const PUBLIC_VERIFICATION_REASON_LABELS: Record<PublicVerificationReasonC
   document_reference_reviewed: 'Đã đối chiếu tài liệu tham chiếu được cung cấp',
 };
 
+export const PUBLIC_VERIFICATION_REASON_SHORT_LABELS: Record<PublicVerificationReasonCode, string> = {
+  contact_confirmed: 'Liên hệ',
+  location_info_reviewed: 'Vị trí',
+  media_reviewed: 'Ảnh/video',
+  listing_details_reviewed: 'Thông tin tin đăng',
+  document_reference_reviewed: 'Tài liệu tham chiếu',
+};
+
 export interface PublicVerificationSummary {
   verifiedAt: string;
   verifiedUntil: string;
@@ -58,4 +66,18 @@ export function publicVerificationLabel(_reasonCodes: readonly PublicVerificatio
 export function publicVerificationReasonLabels(reasonCodes: readonly PublicVerificationReasonCode[]): string[] {
   const found = new Set(reasonCodes);
   return PUBLIC_VERIFICATION_REASON_ORDER.filter(code => found.has(code)).map(code => PUBLIC_VERIFICATION_REASON_LABELS[code]);
+}
+
+export function publicVerificationReasonShortLabels(reasonCodes: readonly PublicVerificationReasonCode[]): string[] {
+  const found = new Set(reasonCodes);
+  return PUBLIC_VERIFICATION_REASON_ORDER.filter(code => found.has(code)).map(code => PUBLIC_VERIFICATION_REASON_SHORT_LABELS[code]);
+}
+
+export function formatPublicVerificationDate(value: string): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(new Date(value));
 }

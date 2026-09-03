@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatPublicVerificationDate,
   PUBLIC_VERIFICATION_REASON_LABELS,
   normalizePublicVerificationSummary,
   publicVerificationLabel,
+  publicVerificationReasonShortLabels,
 } from './propertyVerification';
 
 describe('public verification summary', () => {
@@ -35,5 +37,11 @@ describe('public verification summary', () => {
     expect(PUBLIC_VERIFICATION_REASON_LABELS.contact_confirmed).toContain('liên hệ');
     expect(publicVerificationLabel(['contact_confirmed', 'media_reviewed']))
       .toBe('Hồ sơ đã được kiểm tra');
+  });
+
+  it('exposes concise scope labels and stable Vietnamese dates for detail UI', () => {
+    expect(publicVerificationReasonShortLabels(['media_reviewed', 'contact_confirmed']))
+      .toEqual(['Liên hệ', 'Ảnh/video']);
+    expect(formatPublicVerificationDate('2026-08-01T00:00:00.000Z')).toBe('01/08/2026');
   });
 });

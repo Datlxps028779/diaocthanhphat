@@ -84,6 +84,9 @@ export function mergeSchema(base: Record<string, unknown>, custom: unknown, targ
   const validation = validateSchemaMarkup(custom, target);
   if (!validation.valid || !validation.schema) return { schema: base, warnings: validation.warnings };
   const merged = { ...base, ...validation.schema };
-  for (const key of lockedKeys) merged[key] = base[key];
+  for (const key of lockedKeys) {
+    if (key in base) merged[key] = base[key];
+    else delete merged[key];
+  }
   return { schema: merged, warnings: validation.warnings };
 }

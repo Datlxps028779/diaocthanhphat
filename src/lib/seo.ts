@@ -10,6 +10,7 @@ import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from '
 import { normalizeListingTitle } from './listingTitle';
 import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
 import { clampSeoTitle } from './seoText';
+import { classifyPropertySegment } from './propertySpecs';
 
 const SITE_URL = getSiteUrl();
 const SITE_NAME = SITE_IDENTITY.name;
@@ -131,6 +132,13 @@ function formatPropertyPrice(p: Property): string {
   return formatListingPropertyPrice(p);
 }
 
+function buildPropertyFloorSize(p: Property): Record<string, unknown> | undefined {
+  if (p.area_sqm == null || p.area_sqm <= 0) return undefined;
+  const segment = classifyPropertySegment(p.property_types);
+  if (segment === 'land' || segment === 'other') return undefined;
+  return { '@type': 'QuantitativeValue', value: p.area_sqm, unitCode: 'MTK' };
+}
+
 // ─── Property → Metadata (Next.js Metadata API) ───────────────────────────────
 // Thay cho applyPropertySeo cũ (vốn thao tác DOM). Ưu tiên meta_title/description
 // nhập tay, fallback tự sinh deterministic từ dữ liệu thật (loại BĐS + địa danh +
@@ -200,6 +208,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   const url = absoluteUrl(buildProductPath(p));
   const gallery = buildSeoImageGallery(p.image_url, p.images);
   const video = buildPropertyVideoObject(p);
+  const floorSize = buildPropertyFloorSize(p);
   // GEO/local: dựng tên địa danh từ dữ liệu thật (phường → quận → thành phố). Chỉ
   // thêm contentLocation/spatialCoverage/about/areaServed khi có dữ liệu, không bịa.
   const placeParts = [p.ward, p.district, p.city].map(s => s?.trim()).filter(Boolean) as string[];
@@ -226,9 +235,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
         availability: 'https://schema.org/InStock',
       },
     } : {}),
-    ...(p.area_sqm ? {
-      floorSize: { '@type': 'QuantitativeValue', value: p.area_sqm, unitCode: 'MTK' },
-    } : {}),
+    ...(floorSize ? { floorSize } : {}),
     address: {
       '@type': 'PostalAddress',
       streetAddress: p.address ?? p.formatted_address ?? undefined,
@@ -249,7 +256,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   };
 
   return mergeSchema(base, p.schema_markup, 'property', [
-    '@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage', 'datePosted', 'dateModified', 'offers', 'address', 'geo',
+    '@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage', 'datePosted', 'dateModified', 'offers', 'floorSize', 'address', 'geo',
     'contentLocation', 'spatialCoverage', 'about', 'areaServed',
   ]).schema;
 }

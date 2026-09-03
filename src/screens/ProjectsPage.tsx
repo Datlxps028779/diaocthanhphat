@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, MapPin, Users, CheckCircle, Phone, ArrowRight } from 'lucide-react';
+import { Building2, MapPin, Phone, ArrowRight } from 'lucide-react';
 import { type Project } from '../lib/supabase';
 import { getProjects } from '../lib/api';
+import { buildProjectMetrics } from '../lib/projectMetrics';
 import { useAreas } from '../lib/hooks/useTaxonomy';
 import Link from 'next/link';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
@@ -214,19 +215,17 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
 
       {/* Stat bar */}
       <div className="bg-red-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          {[
-            { icon: <Building2 className="w-5 h-5" />, val: `${projects.length || '50'}+`, label: 'Dự án' },
-            { icon: <MapPin className="w-5 h-5" />, val: `${areas.length || '4'}`, label: 'Tỉnh thành' },
-            { icon: <Users className="w-5 h-5" />, val: '1.200+', label: 'Khách hàng' },
-            { icon: <CheckCircle className="w-5 h-5" />, val: '98%', label: 'Bàn giao đúng hạn' },
-          ].map((s) => (
-            <div key={s.label} className="flex flex-col items-center gap-1">
-              <div className="opacity-80">{s.icon}</div>
-              <div className="text-2xl font-bold">{s.val}</div>
-              <div className="text-sm text-red-100">{s.label}</div>
-            </div>
-          ))}
+        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 gap-4 text-center">
+          {buildProjectMetrics(projects.length, areas.length).map((s) => {
+            const Icon = s.key === 'projects' ? Building2 : MapPin;
+            return (
+              <div key={s.label} className="flex flex-col items-center gap-1">
+                <div className="opacity-80"><Icon className="w-5 h-5" /></div>
+                <div className="text-2xl font-bold">{s.value}</div>
+                <div className="text-sm text-red-100">{s.label}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

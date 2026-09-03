@@ -1,30 +1,20 @@
 import { supabase, type Lead, type LeadActivity, type MyListingLead, type MyListingLeadStats } from '../supabase';
 import { stageMeta } from '../leadPipeline';
 import { assigneesOf, type TeamMember } from '../leadAssignment';
+import type { PublicLeadSource } from '../publicLead';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
-export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: string; follow_up_at?: string }): Promise<string | undefined> {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { error } = await supabase.from('leads').insert({
-    ...(lead.id ? { id: lead.id } : {}),
-    full_name: lead.full_name, phone: lead.phone,
-    area_interest: lead.area_interest, message: lead.message, property_id: lead.property_id,
-    source: lead.source ?? null, budget: lead.budget ?? null, follow_up_at: lead.follow_up_at ?? null,
-    user_id: user?.id ?? null,
-  });
-  if (error) throw error;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  fetch(`${supabaseUrl}/functions/v1/crm-webhook`, {
+export async function submitLead(lead: { id?: string; full_name: string; phone: string; area_interest?: string; message?: string; property_id?: string; property_title?: string; budget?: string; source?: PublicLeadSource; follow_up_at?: string }): Promise<string | undefined> {
+  const response = await fetch('/api/public/leads', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
-    body: JSON.stringify({
-      full_name: lead.full_name, phone: lead.phone,
-      property_id: lead.property_id, property_title: lead.property_title,
-      message: lead.message, budget: lead.budget,
-    }),
-  }).catch(() => {});
-  return lead.id;
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(lead),
+  });
+  const result = await response.json().catch(() => null) as { id?: unknown; error?: unknown } | null;
+  if (!response.ok) {
+    throw new Error(typeof result?.error === 'string' ? result.error : 'Chưa gửi được thông tin.');
+  }
+  return typeof result?.id === 'string' ? result.id : undefined;
 }
 
 // Admin/staff tạo lead thủ công (khách gọi điện/sự kiện/giới thiệu — không qua form web).

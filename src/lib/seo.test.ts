@@ -18,6 +18,7 @@ function property(overrides: Partial<Property> = {}): Property {
     floor_count: null, floor_number: null, direction: null, road_width: null, frontage: null,
     amenities: null, latitude: null, longitude: null, formatted_address: null,
     vr_tour_url: null, video_url: null, contact_zalo: null, tags: null,
+    property_types: { id: 'pt-house', name: 'Nhà phố', slug: 'nha-pho', icon: null, created_at: '2026-01-01T00:00:00.000Z' },
     meta_title: null, meta_description: null, focus_keywords: null, schema_markup: null, faq: null,
     slug: 'nha-pho-dep', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -152,7 +153,32 @@ describe('buildPropertyJsonLd', () => {
     expect((ld.address as Record<string, unknown>).addressLocality).toBe('Thủ Dầu Một');
   });
 
-  it('converts rental monthly price to absolute VND', () => {
+  it('không gắn floorSize cho đất nền vì area_sqm là diện tích thửa đất', () => {
+    const ld = buildPropertyJsonLd(property({
+      property_types: { id: 'pt-land', name: 'Đất nền', slug: 'dat-nen', icon: null, created_at: '2026-01-01T00:00:00.000Z' },
+      area_sqm: 150,
+    }));
+    expect(ld).not.toHaveProperty('floorSize');
+  });
+
+  it('không cho schema_markup cũ khôi phục floorSize cho đất nền', () => {
+    const ld = buildPropertyJsonLd(property({
+      property_types: { id: 'pt-land', name: 'Đất nền', slug: 'dat-nen', icon: null, created_at: '2026-01-01T00:00:00.000Z' },
+      area_sqm: 150,
+      schema_markup: {
+        '@context': 'https://schema.org',
+        '@type': 'RealEstateListing',
+        floorSize: { '@type': 'QuantitativeValue', value: 150, unitCode: 'MTK' },
+      },
+    }));
+    expect(ld).not.toHaveProperty('floorSize');
+  });
+
+  it('không gắn floorSize khi loại bất động sản chưa xác định', () => {
+    const ld = buildPropertyJsonLd(property({ property_types: null, area_sqm: 150 }));
+    expect(ld).not.toHaveProperty('floorSize');
+  });
+  it('cho thuê dùng giá theo tháng trong offers', () => {
     const ld = buildPropertyJsonLd(property({
       listing_type: 'cho_thue',
       price: 0,
