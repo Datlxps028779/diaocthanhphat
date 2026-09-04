@@ -7,13 +7,13 @@ export type Role = 'user' | 'staff' | 'admin';
 
 // Toàn bộ tab (khớp AdminTab). Giữ đồng bộ với navItems trong AdminPanel.
 export const ALL_TABS: AdminTab[] = [
-  'dashboard', 'properties', 'property-verification', 'leads', 'chat-sessions', 'nurture', 'user-listings', 'users', 'staff', 'projects',
+  'dashboard', 'properties', 'property-verification', 'leads', 'chat-sessions', 'nurture', 'user-listings', 'users', 'staff', 'agent-profiles', 'projects',
   'news', 'news-categories', 'testimonials', 'cms', 'settings', 'footer', 'banners', 'featured-sections',
   'page-builder', 'home-experience', 'pages', 'neighborhoods', 'menu', 'backup', 'ai-analytics', 'google-analytics', 'ai-chat', 'ai-rag', 'seo-geo',
 ];
 
 // Tab staff được thấy: chăm sóc khách hàng, lead và phiên chat.
-export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'users'];
+export const STAFF_TABS: AdminTab[] = ['agent-profiles', 'leads', 'chat-sessions', 'users'];
 
 export function canAccessPanel(role: Role | null | undefined): boolean {
   return role === 'admin' || role === 'staff';

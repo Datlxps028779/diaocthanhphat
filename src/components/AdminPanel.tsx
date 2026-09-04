@@ -20,6 +20,7 @@ const ChatSessionsTab = lazy(() => import('./admin/tabs/ChatSessionsTab').then(m
 const UserListingsApprovalTab = lazy(() => import('./admin/tabs/UserListingsApprovalTab').then(m => ({ default: m.UserListingsApprovalTab })));
 const UsersTab = lazy(() => import('./admin/tabs/UsersTab').then(m => ({ default: m.UsersTab })));
 const StaffTab = lazy(() => import('./admin/tabs/StaffTab').then(m => ({ default: m.StaffTab })));
+const AgentProfilesTab = lazy(() => import('./admin/tabs/AgentProfilesTab').then(m => ({ default: m.AgentProfilesTab })));
 const ProjectsTab = lazy(() => import('./admin/tabs/ProjectsTab').then(m => ({ default: m.ProjectsTab })));
 const NewsTab = lazy(() => import('./admin/tabs/NewsTab').then(m => ({ default: m.NewsTab })));
 const TestimonialsTab = lazy(() => import('./admin/tabs/TestimonialsTab').then(m => ({ default: m.TestimonialsTab })));
@@ -104,6 +105,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
     { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
     { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
+    { id: 'agent-profiles', label: 'Hồ sơ người đăng', icon: <UserCog className="w-4 h-4" /> },
     { id: 'projects', label: 'Dự án', icon: <FolderOpen className="w-4 h-4" /> },
     { id: 'news', label: 'Tin tức', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'news-categories', label: 'Danh mục tin tức', icon: <Tag className="w-4 h-4" /> },
@@ -207,6 +209,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           {tab === 'user-listings' && <UserListingsApprovalTab onRefreshStats={loadStats} />}
           {tab === 'users' && <UsersTab />}
           {tab === 'staff' && <StaffTab />}
+          {tab === 'agent-profiles' && <AgentProfilesTab role={role} />}
           {tab === 'projects' && <ProjectsTab />}
           {tab === 'news' && <NewsTab focusEditId={pendingEdit?.tab === 'news' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
           {tab === 'news-categories' && <NewsCategoriesTab />}

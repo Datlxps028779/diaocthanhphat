@@ -1,4 +1,37 @@
-import { supabase, type AgentProfile, type PublicPropertyAgent } from '../supabase';
+import { supabase, type AgentProfile, type AgentProfileAuditEvent, type AgentProfileDirectoryRow, type PublicPropertyAgent } from '../supabase';
+
+export type AgentProfileDirectoryFilters = {
+  search?: string;
+  status?: AgentProfile['status'] | 'all';
+  limit?: number;
+  offset?: number;
+};
+
+export async function getAgentProfileDirectory(filters: AgentProfileDirectoryFilters = {}): Promise<AgentProfileDirectoryRow[]> {
+  const { data, error } = await supabase.rpc('get_agent_profile_directory', {
+    p_search: filters.search?.trim() || null,
+    p_status: filters.status && filters.status !== 'all' ? filters.status : null,
+    p_limit: filters.limit ?? 100,
+    p_offset: filters.offset ?? 0,
+  });
+  if (error) throw error;
+  return (data ?? []) as AgentProfileDirectoryRow[];
+}
+
+export async function updateAgentProfile(profileId: string, patch: Partial<Pick<AgentProfile, 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo' | 'status'>>): Promise<AgentProfile> {
+  const { data, error } = await supabase.rpc('update_agent_profile', {
+    p_profile_id: profileId,
+    p_patch: patch,
+  });
+  if (error) throw error;
+  return data as AgentProfile;
+}
+
+export async function getAgentProfileAudit(profileId: string): Promise<AgentProfileAuditEvent[]> {
+  const { data, error } = await supabase.rpc('get_agent_profile_audit', { p_profile_id: profileId });
+  if (error) throw error;
+  return (data ?? []) as AgentProfileAuditEvent[];
+}
 
 export type SaveAgentProfileInput = {
   slug: string;

@@ -65,7 +65,7 @@ describe('staff customer listing lead scope', () => {
   });
 
   it('keeps listing moderation admin-only across UI, RPC, policy, and Edge Function boundaries', () => {
-    expect(adminAccess).toContain("export const STAFF_TABS: AdminTab[] = ['leads', 'chat-sessions', 'users'];");
+    expect(adminAccess).toContain("export const STAFF_TABS: AdminTab[] = ['agent-profiles', 'leads', 'chat-sessions', 'users'];");
     expect(adminAccess).not.toMatch(/STAFF_TABS[^\n]*'user-listings'/);
     expect(listingModerationMigration).toContain('ALTER FUNCTION public.approve_user_listing(uuid) RENAME TO approve_user_listing_legacy;');
     expect(listingModerationMigration).toContain('ALTER FUNCTION public.admin_update_pending_user_listing(uuid, jsonb) RENAME TO admin_update_pending_user_listing_legacy;');

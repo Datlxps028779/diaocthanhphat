@@ -389,6 +389,35 @@ export type AgentProfile = {
   created_at: string;
   updated_at: string;
 };
+export type AgentProfileDirectoryRow = {
+  profile_id: string;
+  user_id: string;
+  slug: string;
+  display_name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  public_phone: string | null;
+  public_zalo: string | null;
+  status: AgentProfileStatus;
+  profile_created_at: string;
+  profile_updated_at: string;
+  account_created_at: string;
+  last_seen_at: string | null;
+  owner_role: 'user' | 'staff' | 'admin';
+  listing_count: number;
+  lead_count: number;
+  completeness_score: number;
+  missing_fields: string[];
+};
+export type AgentProfileAuditEvent = {
+  id: string;
+  agent_profile_id: string;
+  actor_id: string | null;
+  action: 'created' | 'updated' | 'published' | 'disabled' | 'deleted';
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  created_at: string;
+};
 export type PublicPropertyAgent = Omit<Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>, 'id' | 'slug'> & {
   id: string | null;
   slug: string | null;
