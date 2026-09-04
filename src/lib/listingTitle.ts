@@ -40,6 +40,9 @@ const DEFAULT_PROTECTED_PHRASES = [
   'Nguyễn Văn Linh',
   'Lê Phong',
   'Lê Duẩn',
+  'Hàn Quốc',
+  'Sông Sài Gòn',
+  'Long Hòa',
   'TP. Đồng Nai',
   'Becamex',
 ] as const;
@@ -51,8 +54,11 @@ const FIXED_PROTECTED_RULES: ProtectedRule[] = [
   { pattern: /\bSHR\b/giu, canonical: 'SHR' },
   { pattern: /\bKCN\b/giu, canonical: 'KCN' },
   { pattern: /\bKDC\b/giu, canonical: 'KDC' },
+  { pattern: /\bUBND\b/giu, canonical: 'UBND' },
+  { pattern: /\bKP([0-9]+)\b/giu, canonical: (_match, number) => `KP${number}` },
   { pattern: /\bQL\s*([0-9]+)\b/giu, canonical: (_match, number) => `QL${number}` },
   { pattern: /\b(?:PN|WC|DT)\b/giu, canonical: match => match.toLocaleUpperCase('vi-VN') },
+  { pattern: /\b[0-9]+(?:m2|m²|m)\b/giu, canonical: match => match.toLocaleLowerCase('vi-VN') },
   // Token pha chữ+số thường là mã đường, quốc lộ, diện tích hoặc giá rút gọn.
   { pattern: /\b(?=[\p{L}\p{N}.]*\p{L})(?=[\p{L}\p{N}.]*\p{N})[\p{L}\p{N}.]+\b/gu, canonical: match => match },
 ];
@@ -63,6 +69,7 @@ const SAFE_TYPO_RULES: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /(?<!\p{L})phòng\s+ngũ(?!\p{L})/giu, replacement: 'phòng ngủ' },
   { pattern: /(?<!\p{L})măt\s+tiền(?!\p{L})/giu, replacement: 'mặt tiền' },
   { pattern: /(?<!\p{L})thổ\s+cử(?!\p{L})/giu, replacement: 'thổ cư' },
+  { pattern: /(?<!\p{L})Long\s+Hoà(?!\p{L})/giu, replacement: 'Long Hòa' },
 ];
 
 function escapeRegExp(value: string): string {
@@ -144,12 +151,13 @@ export function normalizeListingTitle(
   let value = original.normalize('NFC');
 
   value = record(corrections, 'spacing', value, value.trim().replace(/\s+/g, ' '));
-  const protectedTitle = protectTitleParts(value, protectedPhrases);
-  value = protectedTitle.text;
 
   for (const rule of SAFE_TYPO_RULES) {
     value = record(corrections, 'spelling', value, value.replace(rule.pattern, rule.replacement));
   }
+
+  const protectedTitle = protectTitleParts(value, protectedPhrases);
+  value = protectedTitle.text;
 
   let punctuation = value
     .replace(/\s+([,.;:!?])/g, '$1')

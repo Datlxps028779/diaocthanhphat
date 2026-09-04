@@ -30,6 +30,16 @@ describe('normalizeListingTitle', () => {
     expect(normalize('KCN MINH HƯNG GIÁ TỐT')).toBe('KCN Minh Hưng giá tốt');
   });
 
+  it('giữ đơn vị, số thập phân và tên riêng quan sát từ production', () => {
+    expect(normalize('150M2 ĐẤT BECAMEX GIÁ 475TR')).toBe('150m2 đất Becamex giá 475TR');
+    expect(normalize('ĐẤT NGANG 5,7M GIÁ 2,95 TỶ')).toBe('Đất ngang 5,7m giá 2,95 tỷ');
+    expect(normalize('NHÀ ĐỐI DIỆN UBND LÁI THIÊU')).toBe('Nhà đối diện UBND Lái Thiêu');
+    expect(normalize('ĐẤT KCN MINH HƯNG HÀN QUỐC')).toBe('Đất KCN Minh Hưng Hàn Quốc');
+    expect(normalize('ĐẤT SÁT SÔNG SÀI GÒN')).toBe('Đất sát Sông Sài Gòn');
+    expect(normalize('BÁN ĐẤT XÃ LONG HOÀ - TP. HỒ CHÍ MINH'))
+      .toBe('Bán đất xã Long Hòa - TP. Hồ Chí Minh');
+  });
+
   it('bảo toàn địa danh động theo canonical casing', () => {
     expect(normalize('BÁN NHÀ DĨ AN BÌNH DƯƠNG', ['Dĩ An', 'Bình Dương']))
       .toBe('Bán nhà Dĩ An Bình Dương');
