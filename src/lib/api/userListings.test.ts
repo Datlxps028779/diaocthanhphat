@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isApprovedListingProperty } from './userListings';
+import { isApprovedListingProperty, isCanonicalLocationCorrectionCandidate, isCanonicalLocationCorrectionResult } from './userListings';
 
 const approvalMigration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20260903000000_atomic_user_listing_approval.sql'),
@@ -14,6 +14,21 @@ const aiListingMigration = readFileSync(
 );
 
 const identityPreservingApprovalMigration = aiListingMigration;
+
+const canonicalLocationMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260904060000_admin_canonical_location_correction.sql'),
+  'utf8',
+);
+
+const approvalTab = readFileSync(
+  resolve(process.cwd(), 'src/components/admin/tabs/UserListingsApprovalTab.tsx'),
+  'utf8',
+);
+
+const userListingsApi = readFileSync(
+  resolve(process.cwd(), 'src/lib/api/userListings.ts'),
+  'utf8',
+);
 
 describe('isApprovedListingProperty', () => {
   const approved = {
@@ -60,6 +75,62 @@ describe('approval RPC result handling', () => {
     expect(isApprovedListingProperty(committedButNotTaggable)).toBe(false);
   });
 });
+
+describe('canonical location correction guard', () => {
+  const candidate = {
+    id: '3be55890-6ab2-455a-b3ef-daebd893f15d',
+    status: 'approved' as const,
+    city: 'Đồng Nai',
+    district: null,
+    ward: 'Nha Bích',
+    area_id: 'd1a0469f-acdc-4262-9f19-617c98e917fd',
+    district_id: null,
+    ward_id: null,
+    neighborhood_slug: null,
+    expires_at: '2099-10-24T03:08:03.445Z',
+  };
+
+  const corrected = {
+    listing_id: '3be55890-6ab2-455a-b3ef-daebd893f15d',
+    property_id: '823a968b-ec91-474f-8477-b989f1f1e01a',
+    city: 'Bình Phước',
+    district: 'Chơn Thành',
+    ward: 'Nha Bích',
+    area_id: '2e1657e8-d1fc-4d70-9eff-00ab3e3fbbe5',
+    district_id: '82d73e51-d92b-4a78-bc1b-4939814acbba',
+    ward_id: 'fa9c6614-5ed7-4fcd-bb86-7dca3dd1f3eb',
+    status: 'approved' as const,
+    expires_at: '2099-10-24T03:08:03.445Z',
+  };
+
+  it('accepts only the exact approved, unexpired old snapshot', () => {
+    expect(isCanonicalLocationCorrectionCandidate(candidate)).toBe(true);
+    expect(isCanonicalLocationCorrectionCandidate({ ...candidate, status: 'pending' })).toBe(false);
+    expect(isCanonicalLocationCorrectionCandidate({ ...candidate, city: 'Bình Phước' })).toBe(false);
+    expect(isCanonicalLocationCorrectionCandidate({ ...candidate, expires_at: '2000-01-01T00:00:00.000Z' })).toBe(false);
+    expect(isCanonicalLocationCorrectionCandidate({ ...candidate, id: 'other-listing' })).toBe(false);
+  });
+
+  it('accepts only the fixed RPC result contract', () => {
+    expect(isCanonicalLocationCorrectionResult(corrected)).toBe(true);
+    expect(isCanonicalLocationCorrectionResult({ ...corrected, property_id: 'other-property' })).toBe(false);
+    expect(isCanonicalLocationCorrectionResult({ ...corrected, district_id: null })).toBe(false);
+    expect(isCanonicalLocationCorrectionResult({ ...corrected, expires_at: null })).toBe(false);
+    expect(isCanonicalLocationCorrectionResult(null)).toBe(false);
+  });
+
+  it('keeps the correction RPC fixed-scope and admin-only', () => {
+    expect(canonicalLocationMigration).toContain('admin_correct_canonical_location_conflict()');
+    expect(canonicalLocationMigration).toContain("IF auth.uid() IS NULL OR NOT public.is_admin() THEN");
+    expect(canonicalLocationMigration).toContain('REVOKE ALL ON FUNCTION public.admin_correct_canonical_location_conflict() FROM PUBLIC, anon;');
+    expect(canonicalLocationMigration).toContain('GRANT EXECUTE ON FUNCTION public.admin_correct_canonical_location_conflict() TO authenticated;');
+    expect(approvalTab).toContain('isCanonicalLocationCorrectionCandidate(listing)');
+    expect(userListingsApi).toContain(".rpc('admin_correct_canonical_location_conflict')");
+    expect(approvalTab).not.toContain('p_city');
+    expect(approvalTab).not.toContain('p_area_id');
+  });
+});
+
 
 describe('identity-preserving user-listing reapproval migration', () => {
   it('reactivates the inactive linked property instead of replacing its identity', () => {

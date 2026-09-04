@@ -3,7 +3,7 @@ import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archiv
 import { PostListingPage } from '../../../screens/PostListingPage';
 import type { Page } from '../../../lib/router';
 import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
-import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
+import { adminGetUserListings, adminGetUserListingLifecycle, adminCorrectCanonicalLocationConflict, isCanonicalLocationCorrectionCandidate, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
 import { formatPropertyPrice } from '../../../lib/listingPrice';
@@ -26,6 +26,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [editingListing, setEditingListing] = useState<UserListing | null>(null);
   const [seoProcessingId, setSeoProcessingId] = useState<string | null>(null);
+  const [correctionNotice, setCorrectionNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const historyRequest = useRef(0);
 
   const noOpNavigate = (_page: Page) => {};
@@ -58,6 +59,25 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     catch (e) { console.error('[AdminPanel] SEO AI reject', e); alert('Không bỏ được bản nháp SEO AI. Vui lòng thử lại.'); }
     finally { setSeoProcessingId(null); }
   };
+  const handleCanonicalLocationCorrection = async (listing: UserListing) => {
+    if (!isCanonicalLocationCorrectionCandidate(listing)) return;
+    if (!window.confirm('Đồng bộ location của tin này theo property Bình Phước / Chơn Thành / Nha Bích? Chỉ 6 trường location sẽ được sửa.')) return;
+
+    setProcessingId(listing.id);
+    setCorrectionNotice(null);
+    try {
+      await adminCorrectCanonicalLocationConflict();
+      setCorrectionNotice({ type: 'success', message: 'Đã đồng bộ location theo property canonical. Hãy chạy hậu kiểm production trước khi dọn RPC one-time.' });
+      await load();
+      onRefreshStats();
+    } catch (e) {
+      console.error('[AdminPanel] canonical location correction', e);
+      setCorrectionNotice({ type: 'error', message: `Không thực hiện được correction: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}` });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleReject = async () => {
     if (!rejectModal) return;
     setProcessingId(rejectModal);
@@ -178,6 +198,15 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
 
   return (
     <div className="space-y-4">
+      {correctionNotice && (
+        <div
+          role="status"
+          data-testid="canonical-location-correction-notice"
+          className={`rounded-xl border px-4 py-3 text-sm ${correctionNotice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}
+        >
+          {correctionNotice.message}
+        </div>
+      )}
       {statusFilter === 'rejected' && (
         <div className="flex items-start gap-2 bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl px-4 py-3">
           <Archive className="w-5 h-5 flex-shrink-0 text-gray-500 mt-0.5" />
@@ -329,13 +358,27 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                       </>
                     )}
                     {listing.status === 'approved' && (
-                      <div className="flex flex-col gap-1 items-end">
-                        <label className="text-[10px] text-gray-400 font-medium">Ngày hết hạn</label>
-                        <input type="date" disabled={processingId === listing.id}
-                          defaultValue={listing.expires_at ? listing.expires_at.slice(0, 10) : ''}
-                          onChange={e => handleSetExpiry(listing.id, e.target.value)}
-                          className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60" />
-                      </div>
+                      <>
+                        {isCanonicalLocationCorrectionCandidate(listing) && (
+                          <button
+                            onClick={() => handleCanonicalLocationCorrection(listing)}
+                            disabled={processingId === listing.id}
+                            data-testid={`canonical-location-correction-${listing.id}`}
+                            className="flex items-center justify-center gap-1 border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-60"
+                            title="Đồng bộ 6 trường location theo property canonical"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                            {processingId === listing.id ? 'Đang đồng bộ...' : 'Sửa location canonical'}
+                          </button>
+                        )}
+                        <div className="flex flex-col gap-1 items-end">
+                          <label className="text-[10px] text-gray-400 font-medium">Ngày hết hạn</label>
+                          <input type="date" disabled={processingId === listing.id}
+                            defaultValue={listing.expires_at ? listing.expires_at.slice(0, 10) : ''}
+                            onChange={e => handleSetExpiry(listing.id, e.target.value)}
+                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60" />
+                        </div>
+                      </>
                     )}
                     {(listing.status === 'rejected' || listing.status === 'expired') && (
                       <>
