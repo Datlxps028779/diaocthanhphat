@@ -542,10 +542,10 @@ export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }
   );
 }
 
-export function FloatingButtons({ onNavigate }: { onNavigate?: (p: Page) => void }) {
+export function FloatingButtons({ onNavigate, profilePage = false }: { onNavigate?: (p: Page) => void; profilePage?: boolean }) {
   return (
     <>
-      <AiSearchChat onNavigate={onNavigate} />
+      <AiSearchChat onNavigate={onNavigate} profilePage={profilePage} />
     </>
   );
 }

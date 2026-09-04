@@ -16,10 +16,6 @@ const profile: PublicAgentProfile = {
   avatar_url: null,
   public_phone: '0901234567',
   public_zalo: '0901234567',
-  account_created_at: '2026-08-01T00:00:00.000Z',
-  last_login_at: '2026-09-01T00:00:00.000Z',
-  is_online: true,
-  updated_at: '2026-09-01T00:00:00.000Z',
 };
 
 const listing: PublicAgentListing = {

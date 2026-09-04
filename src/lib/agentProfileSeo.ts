@@ -47,7 +47,6 @@ export function buildAgentProfileJsonLd(profile: PublicAgentProfile): Record<str
     '@id': `${absoluteUrl(path)}#profilepage`,
     url: absoluteUrl(path),
     name: profile.display_name,
-    dateModified: profile.updated_at,
     mainEntity: {
       '@type': 'Person',
       '@id': `${absoluteUrl(path)}#person`,

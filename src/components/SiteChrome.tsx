@@ -13,7 +13,7 @@ import { CompareBar } from './CompareBar';
 
 // Shell dùng chung cho mọi trang nội dung (trừ home có shell riêng, và admin).
 // Tái tạo phần Header/Footer/FloatingButtons + auth modal của App.tsx cũ.
-export function SiteChrome({ currentPage, children }: { currentPage: Page; children: React.ReactNode }) {
+export function SiteChrome({ currentPage, children, profilePage = false }: { currentPage: Page; children: React.ReactNode; profilePage?: boolean }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [areas, setAreas] = useState<Area[]>([]);
@@ -49,7 +49,7 @@ export function SiteChrome({ currentPage, children }: { currentPage: Page; child
       />
       <div className="pt-[52px] md:pt-[76px]">{children}</div>
       <Footer areas={areas} districts={districts} propertyTypes={propertyTypes} onNavigate={navigate} />
-      <FloatingButtons onNavigate={navigate} />
+      <FloatingButtons onNavigate={navigate} profilePage={profilePage} />
       <CompareBar />
       {authModal && (
         <UserAuthModal

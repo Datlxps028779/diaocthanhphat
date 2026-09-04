@@ -413,6 +413,8 @@ export type AgentProfileAuditEvent = {
   id: string;
   agent_profile_id: string;
   actor_id: string | null;
+  actor_display_name?: string | null;
+  actor_role?: 'user' | 'staff' | 'admin' | null;
   action: 'created' | 'updated' | 'published' | 'disabled' | 'deleted';
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
@@ -422,11 +424,7 @@ export type PublicPropertyAgent = Omit<Pick<AgentProfile, 'id' | 'slug' | 'displ
   id: string | null;
   slug: string | null;
 };
-export type PublicAgentProfile = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo' | 'updated_at'> & {
-  account_created_at: string;
-  last_login_at: string | null;
-  is_online: boolean;
-};
+export type PublicAgentProfile = Pick<AgentProfile, 'id' | 'slug' | 'display_name' | 'bio' | 'avatar_url' | 'public_phone' | 'public_zalo'>;
 export type PublicAgentListing = Pick<Property, 'id' | 'title' | 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type' | 'area_sqm' | 'city' | 'district' | 'legal_status' | 'image_url' | 'images' | 'slug' | 'neighborhood_slug' | 'created_at' | 'updated_at'> & {
   public_code: number | null;
   area_slug: string | null;

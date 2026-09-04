@@ -176,11 +176,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
 
     const agentProfiles = await sb.rpc('public_list_indexable_agent_profiles');
-    for (const profile of (agentProfiles.data ?? []) as Array<{ slug: string; updated_at?: string | null }>) {
+    for (const profile of (agentProfiles.data ?? []) as Array<{ slug: string }>) {
       if (!profile.slug?.trim()) continue;
       entries.push({
         url: `${SITE_URL}/nguoi-dang-tin/${encodeURIComponent(profile.slug)}`,
-        lastModified: profile.updated_at ? new Date(profile.updated_at) : undefined,
         changeFrequency: 'weekly',
         priority: 0.55,
       });

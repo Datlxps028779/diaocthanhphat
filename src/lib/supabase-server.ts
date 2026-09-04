@@ -37,11 +37,11 @@ export async function serverGetPublicAgentProfileListings(slug: string): Promise
   }
 }
 
-export async function serverGetIndexableAgentProfiles(): Promise<Array<{ slug: string; updated_at: string }>> {
+export async function serverGetIndexableAgentProfiles(): Promise<Array<{ slug: string }>> {
   try {
     const { data, error } = await serverClient().rpc('public_list_indexable_agent_profiles');
     if (error || !Array.isArray(data)) return [];
-    return data as Array<{ slug: string; updated_at: string }>;
+    return data as Array<{ slug: string }>;
   } catch {
     return [];
   }

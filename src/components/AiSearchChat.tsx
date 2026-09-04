@@ -45,7 +45,7 @@ function TakoMascot({ className }: { className?: string }) {
   );
 }
 
-export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void }) {
+export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?: (p: Page) => void; profilePage?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AdvisorMessage[]>([GREETING]);
@@ -466,7 +466,7 @@ export function AiSearchChat({ onNavigate }: { onNavigate?: (p: Page) => void })
   };
 
   return (
-    <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6 transform-none' : 'top-1/2 -translate-y-1/2'}`}>
+    <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6 transform-none' : profilePage ? 'bottom-24 transform-none' : 'top-1/2 -translate-y-1/2'}`}>
       {open && (
         <div className="ai-search-panel fixed sm:absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78dvh,640px)] sm:h-auto sm:max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">

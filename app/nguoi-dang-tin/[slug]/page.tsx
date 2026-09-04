@@ -41,17 +41,6 @@ function initials(name: string): string {
   return name.trim().charAt(0).toUpperCase() || 'N';
 }
 
-function formatDateTime(value: string | null): string {
-  if (!value) return 'Chưa ghi nhận';
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
 function AgentProfileContent({ profile, listings }: AgentProfileData) {
   const summary = buildAgentProfileSummary(profile, listings);
   const zaloHref = buildZaloHref(profile.public_zalo);
@@ -78,29 +67,12 @@ function AgentProfileContent({ profile, listings }: AgentProfileData) {
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">Hồ sơ người đăng tin</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">{profile.display_name}</h1>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/75">{summary}</p>
-              <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-full bg-white/10 px-3 py-1.5">{listings.length} tin đang hiển thị</span>
-                {listings.length > 0 && <a href="#agent-listings" className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-white hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Xem tin đăng</a>}
-                {profile.public_phone && <a href={`tel:${profile.public_phone.replace(/\s/g, '')}`} className="rounded-full bg-red-600 px-3 py-1.5 text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Gọi {profile.public_phone}</a>}
-                {zaloHref && <a href={zaloHref} target="_blank" rel="noreferrer" className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Nhắn Zalo</a>}
+              <div className="relative z-[61] mt-5 flex flex-col gap-2 text-xs font-semibold sm:flex-row sm:flex-wrap">
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-center">{listings.length} tin đang hiển thị</span>
+                {listings.length > 0 && <a href="#agent-listings" className="rounded-full border border-white/20 bg-white/10 px-3 py-2 text-center text-white hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Xem tin đăng</a>}
+                {profile.public_phone && <a href={`tel:${profile.public_phone.replace(/\s/g, '')}`} className="rounded-full bg-red-600 px-3 py-2 text-center text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Gọi {profile.public_phone}</a>}
+                {zaloHref && <a href={zaloHref} target="_blank" rel="noreferrer" className="rounded-full bg-white/10 px-3 py-2 text-center hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950">Nhắn Zalo</a>}
               </div>
-            </div>
-          </div>
-          <div className="mt-7 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Tham gia từ</p>
-              <p className="mt-1 text-sm font-bold text-white">{formatDateTime(profile.account_created_at)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Đăng nhập gần nhất</p>
-              <p className="mt-1 text-sm font-bold text-white">{formatDateTime(profile.last_login_at)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/[0.07] px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Trạng thái hiện tại</p>
-              <p className="mt-1 flex items-center gap-2 text-sm font-bold text-white">
-                <span className={`h-2.5 w-2.5 rounded-full ${profile.is_online ? 'bg-emerald-400' : 'bg-white/35'}`} aria-hidden="true" />
-                {profile.is_online ? 'Đang online' : 'Ngoại tuyến'}
-              </p>
             </div>
           </div>
         </div>
@@ -120,7 +92,7 @@ export default async function AgentProfilePage({ params }: Props) {
   return (
     <>
       <JsonLdScripts schemas={[buildAgentProfileJsonLd(data.profile), itemList]} />
-      <SiteChrome currentPage={{ name: 'home' }}>
+      <SiteChrome currentPage={{ name: 'home' }} profilePage>
         <AgentProfileContent profile={data.profile} listings={data.listings} />
       </SiteChrome>
     </>
