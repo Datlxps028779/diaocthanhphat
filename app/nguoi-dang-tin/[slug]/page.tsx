@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { SafeImage } from '@/components/SafeImage';
 import { SiteChrome } from '@/components/SiteChrome';
@@ -14,6 +14,7 @@ import {
 import { serverGetPublicAgentProfile, serverGetPublicAgentProfileListings } from '@/lib/supabase-server';
 import type { PublicAgentListing, PublicAgentProfile } from '@/lib/supabase';
 import { AgentProfileListings } from './AgentProfileListings';
+import { agentProfilePath } from '@/lib/agentProfileSeo';
 
 export const revalidate = 3600;
 
@@ -86,8 +87,10 @@ function AgentProfileContent({ profile, listings }: AgentProfileData) {
 }
 
 export default async function AgentProfilePage({ params }: Props) {
-  const data = await loadAgentProfile(decodeURIComponent(params.slug));
+  const requestedSlug = decodeURIComponent(params.slug);
+  const data = await loadAgentProfile(requestedSlug);
   if (!data) notFound();
+  if (data.profile.slug !== requestedSlug) redirect(agentProfilePath(data.profile.slug));
   const itemList = buildAgentProfileItemListJsonLd(data.profile, data.listings);
   return (
     <>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSlug, buildUniqueSlug } from './slug';
+import { buildAgentProfileSlug, buildSlug, buildUniqueSlug } from './slug';
 
 describe('buildSlug', () => {
   it('bỏ dấu tiếng Việt và chuyển về chữ thường có gạch nối', () => {
@@ -25,6 +25,13 @@ describe('buildSlug', () => {
   it('giới hạn tối đa 80 ký tự', () => {
     const long = 'a'.repeat(200);
     expect(buildSlug(long).length).toBeLessThanOrEqual(80);
+  });
+});
+
+describe('buildAgentProfileSlug', () => {
+  it('sinh slug readable deterministic từ tên hồ sơ', () => {
+    expect(buildAgentProfileSlug('Võ Thị Mỹ Nhân')).toBe('vo-thi-my-nhan');
+    expect(buildAgentProfileSlug('Võ Thị Mỹ Nhân')).toBe(buildAgentProfileSlug('Võ Thị Mỹ Nhân'));
   });
 });
 

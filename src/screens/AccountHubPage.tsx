@@ -13,7 +13,7 @@ import {
   getMyAccountSummary,
 } from '../lib/api';
 import { type UserMedia, type Profile } from '../lib/supabase';
-import { buildUniqueSlug } from '../lib/slug';
+import { buildAgentProfileSlug } from '../lib/slug';
 
 export type AccountHubTab = 'listings' | 'leads' | 'media' | 'favorites' | 'profile';
 
@@ -211,6 +211,7 @@ function ProfileTab() {
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
   const [agentBio, setAgentBio] = useState<string | null>(null);
   const [agentZalo, setAgentZalo] = useState<string | null>(null);
+  const [confirmSlugChange, setConfirmSlugChange] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -229,17 +230,23 @@ function ProfileTab() {
   const agentBioVal = agentBio ?? agentProfile?.bio ?? '';
   const agentZaloVal = agentZalo ?? agentProfile?.public_zalo ?? '';
   const agentSlugVal = agentSlug ?? agentProfile?.slug ?? '';
+  const slugHasChanged = Boolean(agentProfile && agentSlugVal.trim() && agentSlugVal.trim() !== agentProfile.slug);
+  const slugIsLocked = (agentProfile?.slug_change_count ?? 0) >= 1;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!agentNameVal.trim()) {
         throw new Error('Hãy nhập tên hiển thị công khai trước khi lưu hồ sơ người đăng tin.');
       }
+      if (slugHasChanged && !confirmSlugChange) {
+        throw new Error('Hãy xác nhận cảnh báo trước khi đổi slug hồ sơ.');
+      }
       return saveMyProfileAndAgentProfile({
         display_name: nameVal,
         phone: phoneVal,
-        slug: agentSlugVal || buildUniqueSlug(agentNameVal || 'nguoi-dang-tin'),
+        slug: agentSlugVal || buildAgentProfileSlug(agentNameVal || 'nguoi-dang-tin'),
         agent_display_name: agentNameVal,
+        confirm_slug_change: slugHasChanged && confirmSlugChange,
         bio: agentBioVal,
         public_zalo: agentZaloVal,
       });
@@ -249,6 +256,8 @@ function ProfileTab() {
       setError('');
       queryClient.invalidateQueries({ queryKey: ['myProfile'] });
       queryClient.invalidateQueries({ queryKey: ['myAgentProfile'] });
+      setAgentSlug(null);
+      setConfirmSlugChange(false);
       setTimeout(() => setSaved(false), 2000);
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Không lưu được hồ sơ.'),
@@ -297,10 +306,11 @@ function ProfileTab() {
           </div>
           <div>
             <label className="text-gray-600 text-sm font-medium block mb-1.5">Slug hồ sơ</label>
-            <input value={agentSlugVal} onChange={e => { setAgentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '')); setSaved(false); }}
+            <input value={agentSlugVal} disabled={slugIsLocked} onChange={e => { setAgentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '')); setConfirmSlugChange(false); setSaved(false); }}
               placeholder="ten-tu-van-vien"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-            <p className="text-gray-400 text-[11px] mt-1">Chỉ dùng chữ thường, số và dấu gạch ngang.</p>
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 disabled:bg-gray-100 disabled:text-gray-500" />
+            <p className="text-gray-400 text-[11px] mt-1">{slugIsLocked ? 'Slug đã được đổi một lần và hiện đã khóa vĩnh viễn.' : 'Chỉ dùng chữ thường, số và dấu gạch ngang.'}</p>
+            {slugHasChanged && !slugIsLocked && <label className="mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800"><input type="checkbox" checked={confirmSlugChange} onChange={e => setConfirmSlugChange(e.target.checked)} className="mt-0.5" /><span>Tôi hiểu URL cũ sẽ chuyển hướng qua alias, và sau lần đổi này slug sẽ bị khóa vĩnh viễn, không thể đổi thêm.</span></label>}
           </div>
           <div>
             <label className="text-gray-600 text-sm font-medium block mb-1.5">Giới thiệu ngắn</label>

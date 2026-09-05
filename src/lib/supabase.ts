@@ -386,6 +386,7 @@ export type AgentProfile = {
   public_phone: string | null;
   public_zalo: string | null;
   status: AgentProfileStatus;
+  slug_change_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -399,6 +400,7 @@ export type AgentProfileDirectoryRow = {
   public_phone: string | null;
   public_zalo: string | null;
   status: AgentProfileStatus;
+  slug_change_count: number;
   profile_created_at: string;
   profile_updated_at: string;
   account_created_at: string;

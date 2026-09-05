@@ -1,0 +1,3 @@
+-- Script này đã được thay thế bởi manual_agent_profile_slugs_readable_apply.sql.
+-- Script mới chuẩn hóa toàn bộ agent_profiles, lưu alias URL cũ và yêu cầu actor admin rõ ràng.
+-- Không chạy file này để tránh cập nhật đơn lẻ thiếu cơ chế backfill/alias/audit.
