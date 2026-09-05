@@ -69,10 +69,9 @@ describe('contentReadiness', () => {
       focusKeywords: '',
       geoArea: '',
       geoEntity: '',
-      schemaError: 'Schema JSON không hợp lệ.',
     });
     expect(result.canPublish).toBe(false);
     expect(result.status).toBe('blocked');
-    expect(result.errors.map(e => e.key)).toEqual(expect.arrayContaining(['title', 'excerpt', 'content', 'image', 'image-alt', 'meta-title', 'meta-description', 'keywords', 'geo', 'schema']));
+    expect(result.errors.map(e => e.key)).toEqual(expect.arrayContaining(['title', 'excerpt', 'content', 'image', 'image-alt', 'meta-title', 'meta-description', 'keywords', 'geo']));
   });
 });

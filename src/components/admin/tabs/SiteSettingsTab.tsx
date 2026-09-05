@@ -28,7 +28,7 @@ export function SiteSettingsTab() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const groups = [...new Set([...settings.map(s => s.group_name), 'seo'])];
+  const groups = [...new Set([...settings.map(s => s.group_name).filter(group => group !== 'schema'), 'seo'])];
   const groupSettings = settings.filter(s => s.group_name === activeGroup && s.key !== 'og_image');
   const ogImageSetting = settings.find(setting => setting.key === 'og_image');
   const ogImageValue = editVals.og_image ?? ogImageSetting?.value ?? '';
@@ -84,7 +84,7 @@ export function SiteSettingsTab() {
 
   const GROUP_LABELS: Record<string, string> = {
     general: 'Chung', contact: 'Liên hệ', social: 'Mạng xã hội', seo: 'SEO',
-    footer: 'Footer', hero: 'Hero / Banner', sections: 'Tiêu đề Section', schema: 'Schema',
+    footer: 'Footer', hero: 'Hero / Banner', sections: 'Tiêu đề Section',
   };
 
   const isImageSetting = (setting: SiteSetting) => {

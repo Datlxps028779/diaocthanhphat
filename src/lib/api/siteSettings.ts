@@ -2,6 +2,7 @@ import { supabase, type SiteSetting, type SiteContent, type Banner } from '../su
 import { buildAutoSchema, schemaToJson } from '../seoAuto';
 import { parseSchemaJson } from '../schemaValidation';
 import { SITE_IDENTITY } from '../siteIdentity';
+import { revalidateHomeContent, revalidateSiteWideContent } from './contentRevalidation';
 
 export function buildSiteEntitySchema(settings: Record<string, string>): Record<string, unknown> {
   return buildAutoSchema('home', {
@@ -40,6 +41,7 @@ export async function updateSiteSetting(key: string, value: string): Promise<voi
     .eq('key', key);
   if (error) throw error;
   if (count === 0) throw new Error(`Không tìm thấy cài đặt "${key}" để cập nhật.`);
+  await revalidateSiteWideContent();
 }
 
 export async function upsertSiteSetting(input: Pick<SiteSetting, 'key' | 'value' | 'label' | 'group_name' | 'type'>): Promise<void> {
@@ -50,12 +52,16 @@ export async function upsertSiteSetting(input: Pick<SiteSetting, 'key' | 'value'
     .eq('key', input.key)
     .select('id');
   if (updateError) throw updateError;
-  if (data && data.length > 0) return;
+  if (data && data.length > 0) {
+    await revalidateSiteWideContent();
+    return;
+  }
 
   const { error: insertError } = await supabase
     .from('site_settings')
     .insert({ ...input, created_at: now, updated_at: now });
   if (insertError) throw insertError;
+  await revalidateSiteWideContent();
 }
 
 // ─── CMS: Site Content ────────────────────────────────────────────────────────
@@ -81,6 +87,7 @@ export async function adminGetAllSiteContent(): Promise<SiteContent[]> {
 export async function updateSiteContent(id: string, value: string): Promise<void> {
   const { error } = await supabase.from('site_content').update({ value, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
+  await revalidateSiteWideContent();
 }
 
 // ─── CMS: Banners ─────────────────────────────────────────────────────────────
@@ -109,14 +116,17 @@ export async function adminGetAllBanners(): Promise<Banner[]> {
 export async function createBanner(b: Omit<Banner, 'id' | 'created_at' | 'updated_at'>): Promise<void> {
   const { error } = await supabase.from('banners').insert(b);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 export async function updateBanner(id: string, b: Partial<Banner>): Promise<void> {
   const { error } = await supabase.from('banners').update({ ...b, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 export async function deleteBanner(id: string): Promise<void> {
   const { error } = await supabase.from('banners').delete().eq('id', id);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────

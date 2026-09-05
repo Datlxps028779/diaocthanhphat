@@ -113,19 +113,33 @@ describe('buildBreadcrumbJsonLd', () => {
 });
 
 describe('buildPropertyJsonLd', () => {
-  it('không cho schema_markup tùy ý ghi đè schema BĐS thật', () => {
-    const custom = { '@context': 'https://schema.org', '@type': 'Thing', name: 'custom' };
+  it('không cho schema_markup tùy ý ghi đè hoặc bổ sung schema BĐS thật', () => {
+    const custom = {
+      '@context': 'https://schema.org',
+      '@type': 'RealEstateListing',
+      name: 'custom',
+      url: 'https://www.diaocthanhphat.com/dang-tin?id=p1',
+      image: ['https://www.diaocthanhphat.com/image.jpg'],
+      seller: { '@type': 'Person', name: 'Nguồn ngoài' },
+      additionalType: 'https://schema.org/House',
+    };
     const ld = buildPropertyJsonLd(property({ schema_markup: custom }));
     expect(ld['@type']).toBe('RealEstateListing');
     expect(ld.name).toBe('Nhà phố đẹp');
     expect(ld.url).toBe(`${SITE_URL}/bat-dong-san/nha-pho-dep`);
+    expect(ld).not.toHaveProperty('seller');
+    expect(ld).not.toHaveProperty('additionalType');
+    expect(ld.image).toBeUndefined();
   });
 
-  it('custom schema hợp lệ chỉ merge field bổ sung, không ghi đè locked field', () => {
-    const custom = { '@context': 'https://schema.org', '@type': 'RealEstateListing', name: 'custom', additionalType: 'https://schema.org/House' };
-    const ld = buildPropertyJsonLd(property({ schema_markup: custom }));
-    expect(ld.name).toBe('Nhà phố đẹp');
-    expect(ld.additionalType).toBe('https://schema.org/House');
+  it('cùng property luôn cho cùng JSON-LD dù stored schema khác nhau', () => {
+    const first = buildPropertyJsonLd(property({
+      schema_markup: { '@context': 'https://schema.org', '@type': 'RealEstateListing', url: 'https://evil.example/one' },
+    }));
+    const second = buildPropertyJsonLd(property({
+      schema_markup: { '@context': 'https://schema.org', '@type': 'RealEstateListing', url: 'https://evil.example/two', image: ['https://evil.example/two.jpg'] },
+    }));
+    expect(second).toEqual(first);
   });
 
   it('dùng URL mới cho canonical + JSON-LD khi có public_code và area slug', () => {
@@ -140,6 +154,33 @@ describe('buildPropertyJsonLd', () => {
     expect(metadata.openGraph?.url).toBe(`${SITE_URL}${path}`);
     expect(ld.url).toBe(`${SITE_URL}${path}`);
     expect(ld['@id']).toBe(`${SITE_URL}${path}#realestatelisting`);
+  });
+
+  it('structured data luôn dùng domain canonical dù môi trường preview khác domain', () => {
+    vi.stubEnv('SITE_URL', 'https://preview.example.com');
+    const ld = buildPropertyJsonLd(property({ public_code: 1001 }));
+    const breadcrumb = buildBreadcrumbJsonLd([{ name: 'BĐS', path: '/mua-ban' }]);
+    expect(ld.url).toContain(`${SITE_URL}/`);
+    expect(ld.url).not.toContain('preview.example.com');
+    expect((breadcrumb.itemListElement as Array<Record<string, unknown>>)[0].item).toBe(`${SITE_URL}/mua-ban`);
+  });
+
+  it('giữ nguyên location canonical của properties, không rewrite từ schema lưu trữ', () => {
+    const ld = buildPropertyJsonLd(property({
+      address: 'Ấp 5',
+      district: 'Chơn Thành',
+      latitude: 11.496847,
+      longitude: 106.696644,
+      schema_markup: {
+        '@context': 'https://schema.org',
+        '@type': 'RealEstateListing',
+        address: { '@type': 'PostalAddress', streetAddress: 'ẤP 1' },
+        geo: { '@type': 'GeoCoordinates', latitude: 11.1, longitude: 106.1 },
+      },
+    }));
+    expect((ld.address as Record<string, unknown>).streetAddress).toBe('Ấp 5');
+    expect((ld.geo as Record<string, unknown>).latitude).toBe(11.496847);
+    expect((ld.geo as Record<string, unknown>).longitude).toBe(106.696644);
   });
 
   it('RealEstateListing cơ bản: type/name/url/offers/floorSize/address', () => {
@@ -275,6 +316,14 @@ describe('buildNewsJsonLd/buildNewsMetadata', () => {
     const metadata = buildNewsMetadata(news({ title: full, meta_title: full.slice(0, 60) }));
     expect(metadata.openGraph?.title).toBe(full);
     expect(metadata.title).toBe(full.slice(0, 60));
+  });
+
+  it('JSON-LD ưu tiên meta_description mới hơn excerpt', () => {
+    const ld = buildNewsJsonLd(news({
+      excerpt: 'Tóm tắt cũ',
+      meta_description: 'Mô tả SEO mới sau khi biên tập cập nhật',
+    }));
+    expect(ld.description).toBe('Mô tả SEO mới sau khi biên tập cập nhật');
   });
 
   it('phát E-E-A-T metadata nhất quán khi field đã được xác minh', () => {

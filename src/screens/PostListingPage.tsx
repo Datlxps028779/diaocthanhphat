@@ -111,7 +111,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     legal_status: '', bedrooms: '', bathrooms: '', direction: '',
     contact_name: '', contact_phone: '', amenities: [] as string[],
     latitude: '', longitude: '',
-    meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '',
+    meta_title: '', meta_description: '', focus_keywords: '',
     faq: [] as FaqItem[],
   });
 
@@ -218,7 +218,6 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   useEffect(() => { setForm(f => ({ ...f, meta_title: seo.metaTitle })); }, [seo.metaTitle]);
   useEffect(() => { setForm(f => ({ ...f, meta_description: seo.metaDescription })); }, [seo.metaDescription]);
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
-  useEffect(() => { setForm(f => ({ ...f, schema_markup: seo.schemaMarkup })); }, [seo.schemaMarkup]);
 
   // Chế độ sửa: nạp tin cũ vào form. Chỉ chạy 1 lần theo editId.
   useEffect(() => {
@@ -453,7 +452,6 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         meta_title: specForm.meta_title || null,
         meta_description: specForm.meta_description || null,
         focus_keywords: specForm.focus_keywords || null,
-        schema_markup: parseSchema(specForm.schema_markup),
         legal_status: specForm.legal_status || null,
         bedrooms: specForm.bedrooms ? parseOptionalNonNegativeInteger(specForm.bedrooms) : null,
         bathrooms: specForm.bathrooms ? parseOptionalNonNegativeInteger(specForm.bathrooms) : null,
@@ -940,7 +938,7 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 <p className={`mt-1 text-xs ${errors.description ? 'text-red-600' : 'text-gray-400'}`}>Nội dung: {plainTextDescription(form.description).length}/{DESCRIPTION_MIN} ký tự tối thiểu</p>
               </FormField>
 
-              {/* FAQ nhập tay — hiển thị cuối trang chi tiết + sinh schema FAQPage */}
+              {/* FAQ nhập tay — hiển thị cuối trang chi tiết. */}
               <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
@@ -1097,9 +1095,6 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 <p className="text-gray-400 text-xs mt-1">URL chuẩn được tạo sau khi đăng: giao dịch/khu vực/quận-huyện/slug-pr{`{mã}`}.</p>
               </FormField>
 
-              {/* Schema Markup (JSON-LD) vẫn được tạo tự động ngầm khi submit —
-                  ẩn khỏi giao diện vì người dùng không cần chỉnh tay, tránh nhiễu. */}
-
               <button
                 type="button"
                 onClick={seo.resetAuto}
@@ -1189,11 +1184,6 @@ function FormField({ label, error, children, className = '', id }: { label: stri
       {error && <p id={errorId} role="alert" className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
-}
-// Schema JSON-LD tự sinh ẩn — không để JSON hỏng chặn việc gửi tin. Lỗi parse → null.
-function parseSchema(raw: string): Record<string, unknown> | null {
-  if (!raw || !raw.trim()) return null;
-  try { return JSON.parse(raw); } catch { return null; }
 }
 const inputCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400`;
 const selectCls = (err?: string) => `w-full border ${err ? 'border-red-400' : 'border-gray-200'} rounded-xl px-4 py-3 text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-red-400`;

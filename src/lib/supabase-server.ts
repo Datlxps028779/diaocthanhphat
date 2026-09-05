@@ -49,7 +49,7 @@ export async function serverGetIndexableAgentProfiles(): Promise<Array<{ slug: s
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const PROPERTY_SELECT = 'id, title, description, price, price_unit, price_label, price_per_month, loan_support, listing_type, area_sqm, address, city, district, ward, area_id, district_id, ward_id, property_type_id, neighborhood_slug, image_url, images, badge, badge_color, legal_status, is_featured, is_hot, is_active, is_verified, views, bedrooms, bathrooms, floor_count, floor_number, direction, road_width, frontage, amenities, latitude, longitude, formatted_address, vr_tour_url, video_url, tags, meta_title, meta_description, focus_keywords, schema_markup, slug, public_code, faq, created_at, updated_at, areas(id,name,slug), property_types(id,name,slug)';
+const PROPERTY_SELECT = 'id, title, description, price, price_unit, price_label, price_per_month, loan_support, listing_type, area_sqm, address, city, district, ward, area_id, district_id, ward_id, property_type_id, neighborhood_slug, image_url, images, badge, badge_color, legal_status, is_featured, is_hot, is_active, is_verified, views, bedrooms, bathrooms, floor_count, floor_number, direction, road_width, frontage, amenities, latitude, longitude, formatted_address, vr_tour_url, video_url, tags, meta_title, meta_description, focus_keywords, slug, public_code, faq, created_at, updated_at, areas(id,name,slug), property_types(id,name,slug)';
 
 // Tra cứu 1 BĐS theo slug (URL mới) hoặc UUID (link cũ) — dùng cho generateMetadata
 // + prefetch initialData ở trang chi tiết. Bọc try/catch: Supabase timeout/rate-limit

@@ -79,10 +79,13 @@ describe('listingToFormState — DB row → state form đăng tin', () => {
     expect(f.amenities).toEqual(['Gần chợ', 'View sông']);
   });
 
-  it('schema_markup: object → chuỗi JSON, null → rỗng', () => {
-    expect(listingToFormState(makeListing()).schema_markup).toBe('');
-    const f = listingToFormState(makeListing({ schema_markup: { '@type': 'Residence' } }));
-    expect(JSON.parse(f.schema_markup)).toEqual({ '@type': 'Residence' });
+  it('giữ các trường SEO editorial mà form cho phép chỉnh sửa', () => {
+    const f = listingToFormState(makeListing({
+      meta_title: 'Tiêu đề SEO', meta_description: 'Mô tả SEO', focus_keywords: 'đất, Dĩ An',
+    }));
+    expect(f.meta_title).toBe('Tiêu đề SEO');
+    expect(f.meta_description).toBe('Mô tả SEO');
+    expect(f.focus_keywords).toBe('đất, Dĩ An');
   });
 
   it('giữ district_id đã chọn khi mở lại tin để sửa', () => {

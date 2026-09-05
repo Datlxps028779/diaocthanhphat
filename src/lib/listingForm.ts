@@ -20,7 +20,7 @@ export interface ListingFormState {
   legal_status: string; bedrooms: string; bathrooms: string; direction: string;
   contact_name: string; contact_phone: string; amenities: string[];
   latitude: string; longitude: string;
-  meta_title: string; meta_description: string; focus_keywords: string; schema_markup: string;
+  meta_title: string; meta_description: string; focus_keywords: string;
   faq: { question: string; answer: string }[];
 }
 
@@ -49,13 +49,11 @@ export function listingToFormState(l: UserListing): ListingFormState {
     latitude: n(l.latitude), longitude: n(l.longitude),
     meta_title: s(l.meta_title), meta_description: s(l.meta_description),
     focus_keywords: s(l.focus_keywords),
-    schema_markup: l.schema_markup ? JSON.stringify(l.schema_markup, null, 2) : '',
     faq: l.faq ?? [],
   };
 }
 
-// Dựng Property tạm từ form state để tái dùng builder public (buildPropertyMetadata +
-// buildPropertyJsonLd) và render preview bằng chính PropertyDetailPage — form khớp 1:1
+// Dựng Property tạm từ form state để tái dùng builder metadata và render preview bằng chính PropertyDetailPage — form khớp 1:1
 // trang công khai /bat-dong-san/[slug]. Field số trong form là chuỗi → number | null;
 // field không có trong form → null.
 export function formToProperty(

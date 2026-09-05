@@ -1,4 +1,5 @@
 import { supabase, type SeoRouteOverride, type Area, type NewsArticle, type Property } from '../supabase';
+import { revalidateRouteContent, routeRevalidationSnapshot } from './contentRevalidation';
 
 export const SEO_ROUTE_PATHS = ['/', '/danh-sach', '/mua-ban', '/cho-thue', '/khu-vuc', '/khu-dan-cu', '/tin-tuc', '/kien-thuc', '/ve-chung-toi', '/so-sanh', '/dinh-gia', '/du-lieu-gia', '/du-an', '/dau-tu'] as const;
 
@@ -11,7 +12,13 @@ export async function adminGetSeoRouteOverrides(): Promise<SeoRouteOverride[]> {
   return (data ?? []) as SeoRouteOverride[];
 }
 
-export async function adminUpsertSeoRouteOverride(row: Partial<SeoRouteOverride> & { path: string }): Promise<void> {
+export async function adminUpsertSeoRouteOverride(row: Omit<Partial<SeoRouteOverride>, 'schema_markup'> & { path: string }): Promise<void> {
+  const { data: previous, error: previousError } = await supabase
+    .from('seo_route_overrides')
+    .select('path')
+    .eq('path', row.path)
+    .maybeSingle();
+  if (previousError) throw previousError;
   const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase
     .from('seo_route_overrides')
@@ -23,11 +30,14 @@ export async function adminUpsertSeoRouteOverride(row: Partial<SeoRouteOverride>
       canonical_path: row.canonical_path ?? null,
       robots_index: row.robots_index ?? true,
       robots_follow: row.robots_follow ?? true,
-      schema_markup: row.schema_markup ?? null,
       updated_by: user?.id ?? null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'path' });
   if (error) throw error;
+  await revalidateRouteContent('update', [{
+    previous: previous ? routeRevalidationSnapshot(previous.path) : undefined,
+    current: routeRevalidationSnapshot(row.path),
+  }]);
 }
 
 export async function adminGetSeoAudit(): Promise<{

@@ -10,8 +10,7 @@ import {
 } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
-import { buildPropertyMetadata, buildPropertyJsonLd } from '../../../lib/seo';
-import { parseSeoSchema } from '../shared/SeoFields';
+import { buildPropertyMetadata } from '../../../lib/seo';
 import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { formToProperty } from '../../../lib/listingForm';
 import { LocationPicker, type GeocodeTarget, type TaxonomyScope } from '../../LocationPicker';
@@ -531,7 +530,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     meta_title: property?.meta_title ?? '',
     meta_description: property?.meta_description ?? '',
     focus_keywords: property?.focus_keywords ?? '',
-    schema_markup: property?.schema_markup ? JSON.stringify(property.schema_markup, null, 2) : '',
   });
   const [titleCorrection, setTitleCorrection] = useState('');
   const [faq, setFaq] = useState<FaqItem[]>(property?.faq ?? []);
@@ -596,33 +594,18 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     contact_phone: form.contact_phone,
     property_type_name: types.find(t => t.id === form.property_type_id)?.name ?? '',
   });
-  const seoSchemaState = useMemo(() => parseSeoSchema(seo.schemaMarkup, 'property'), [seo.schemaMarkup]);
   // Sync SEO vào form
   useEffect(() => { setForm(f => ({ ...f, meta_title: seo.metaTitle })); }, [seo.metaTitle]);
   useEffect(() => { setForm(f => ({ ...f, meta_description: seo.metaDescription })); }, [seo.metaDescription]);
   useEffect(() => { setForm(f => ({ ...f, focus_keywords: seo.focusKeywords })); }, [seo.focusKeywords]);
-  // Schema auto = đúng builder public (buildPropertyJsonLd, đã GEO contentLocation/
-  // spatialCoverage/about/areaServed + video + offers VND). Khớp 1:1 JSON-LD public page.
-  useEffect(() => {
-    const temp = formToProperty(form as Record<string, unknown>, property, types, faq);
-    const autoSchema = buildPropertyJsonLd(temp);
-    setForm(f => {
-      const generated = JSON.stringify(autoSchema, null, 2);
-      const current = f.schema_markup.trim();
-      const previousAuto = seo.schemaMarkup.trim();
-      return { ...f, schema_markup: !current || current === previousAuto ? generated : f.schema_markup };
-    });
-  }, [form.title, form.description, form.image_url, form.images, form.listing_type, form.price, form.price_unit, form.price_per_month, form.city, form.district, form.ward, form.area_sqm, form.bedrooms, form.bathrooms, form.address, form.latitude, form.longitude, form.contact_name, form.legal_status, form.direction, form.video_url, form.slug, faq, property, types]);
 
-  // Nút "Điền mẫu từ dữ liệu": dựng record tạm → fill meta (buildPropertyMetadata) + schema
-  // (buildPropertyJsonLd) đầy đủ GEO. Setter của useSEOAutofill tự mark touched → ghi đè an toàn.
+  // Nút "Điền mẫu từ dữ liệu": dựng record tạm → fill metadata SEO.
   const fillPropertyFromData = () => {
     const temp = formToProperty(form as Record<string, unknown>, property, types, faq);
     const meta = buildPropertyMetadata(temp);
     seo.setMetaTitle((meta.title as string).slice(0, 60));
     seo.setMetaDescription((meta.description as string).slice(0, 155));
     seo.setFocusKeywords((meta.keywords as string) || '');
-    seo.setSchemaMarkup(JSON.stringify(buildPropertyJsonLd(temp), null, 2));
   };
 
   const setField = (name: string, value: unknown) => setForm(f => ({ ...f, [name]: value }));
@@ -840,11 +823,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
         return;
       }
     }
-    let parsedSchema: Record<string, unknown> | null = null;
-    if (specForm.schema_markup && specForm.schema_markup.trim()) {
-      try { parsedSchema = JSON.parse(specForm.schema_markup); }
-      catch { parsedSchema = null; console.error('[PropertyForm] schema_markup JSON không hợp lệ'); }
-    }
     const cs = (v: string) => v?.trim() || null;
     const cn = (v: string | number) => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
     const priceValue = (v: string | number) => typeof v === 'string'
@@ -908,7 +886,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       meta_title: cs(specForm.meta_title),
       meta_description: cs(specForm.meta_description),
       focus_keywords: cs(specForm.focus_keywords),
-      schema_markup: parsedSchema,
       faq: (() => {
         const valid = faq
           .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
@@ -1208,7 +1185,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-violet-700">Câu hỏi thường gặp (FAQ)</p>
-                <p className="mt-1 text-[11px] text-violet-700/80">Hiển thị cuối trang chi tiết + sinh schema FAQPage. Để trống sẽ tự sinh từ dữ liệu tin. Chỉ câu đủ hỏi + đáp mới được lưu.</p>
+                <p className="mt-1 text-[11px] text-violet-700/80">Hiển thị cuối trang chi tiết. Để trống sẽ tự sinh từ dữ liệu tin. Chỉ câu đủ hỏi + đáp mới được lưu.</p>
               </div>
               <button type="button" onClick={suggestFaq}
                 className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
@@ -1263,9 +1240,9 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
-                    <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO / schema
+                    <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO
                   </p>
-                  <p className="mt-1 text-[11px] text-amber-700/80">Sinh title/description/keywords + RealEstateListing JSON-LD (GEO contentLocation/spatialCoverage/about/areaServed + offers + video) từ dữ liệu BĐS thật. Bấm nút để điền, hoặc sửa tay bất kỳ ô nào.</p>
+                  <p className="mt-1 text-[11px] text-amber-700/80">Sinh title/description/keywords từ dữ liệu BĐS thật. Bấm nút để điền, hoặc sửa tay bất kỳ ô nào.</p>
                 </div>
                 <button type="button" onClick={fillPropertyFromData}
                   className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">
@@ -1313,13 +1290,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
                 </p>
                 <PublicUrlPreview path={publicUrlPreview} />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Schema Markup (JSON-LD)</label>
-                <textarea value={seo.schemaMarkup} onChange={e => seo.setSchemaMarkup(e.target.value)} rows={6}
-                  className={`w-full border rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 resize-none ${seoSchemaState.error ? 'border-red-200 bg-red-50 focus:ring-red-300' : 'border-gray-200 focus:ring-red-400'}`} />
-                <p className={`mt-1 text-[10px] ${seoSchemaState.error ? 'text-red-600' : 'text-emerald-600'}`}>{seoSchemaState.error || 'Schema BĐS tự sinh hợp lệ theo dữ liệu đang nhập.'}</p>
-              </div>
-              <button type="button" onClick={seo.resetAuto} className="text-xs text-red-600 hover:underline">↻ Tự động điền lại schema/SEO</button>
+              <button type="button" onClick={seo.resetAuto} className="text-xs text-red-600 hover:underline">↻ Tự động điền lại SEO</button>
               <SEOPreview metaTitle={seo.metaTitle} metaDescription={seo.metaDescription} focusKeywords={seo.focusKeywords} />
             </div>
           </div>

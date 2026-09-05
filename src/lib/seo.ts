@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import type { Property, NewsArticle } from './supabase';
 import { buildSeoImageGallery, FALLBACK_PROPERTY_IMAGE, normalizeSeoImageUrl } from './propertyImages';
 import { formatPropertyPrice as formatListingPropertyPrice, priceToVnd } from './listingPrice';
-import { absoluteUrl, getSiteUrl, normalizePublicImageUrl } from './siteUrl';
-import { mergeSchema } from './schemaValidation';
+import { absoluteUrl, getSiteUrl, normalizePublicImageUrl, publicCanonicalUrl } from './siteUrl';
 import { stripHtml, isHtmlContent } from './markdown';
 import { buildProductPath } from './productPath';
 import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
@@ -201,11 +200,11 @@ export function buildPropertyMetadata(p: Property): Metadata {
   };
 }
 
-// JSON-LD RealEstateListing. Ưu tiên schema_markup nhập tay trong admin; nếu không
-// có thì tự dựng. Render trong page.tsx qua <script type="application/ld+json">.
+// JSON-LD RealEstateListing từ public property snapshot. Schema này là contract v1:
+// chỉ dữ liệu canonical và các URL do builder kiểm soát được phép xuất hiện.
 export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
   const listingTitle = normalizeListingTitle(p.title).value;
-  const url = absoluteUrl(buildProductPath(p));
+  const url = publicCanonicalUrl(buildProductPath(p));
   const gallery = buildSeoImageGallery(p.image_url, p.images);
   const video = buildPropertyVideoObject(p);
   const floorSize = buildPropertyFloorSize(p);
@@ -255,10 +254,7 @@ export function buildPropertyJsonLd(p: Property): Record<string, unknown> {
     ...(video ? { video } : {}),
   };
 
-  return mergeSchema(base, p.schema_markup, 'property', [
-    '@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage', 'datePosted', 'dateModified', 'offers', 'floorSize', 'address', 'geo',
-    'contentLocation', 'spatialCoverage', 'about', 'areaServed',
-  ]).schema;
+  return base;
 }
 
 function buildPropertyVideoObject(p: Property): Record<string, unknown> | null {
@@ -354,7 +350,7 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
     '@type': 'NewsArticle',
     '@id': `${url}#article`,
     headline: a.title,
-    description: a.excerpt ?? a.meta_description ?? undefined,
+    description: a.meta_description ?? a.excerpt ?? undefined,
     ...(image ? { image } : {}),
     datePublished: a.published_at || a.created_at,
     dateModified: a.updated_at,
@@ -387,10 +383,7 @@ export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string
     contentLocation: { '@type': 'Place', name: geoName },
     spatialCoverage: { '@type': 'Place', name: geoName },
   };
-  return mergeSchema(base, a.schema_markup, 'news', [
-    '@context', '@type', '@id', 'headline', 'url', 'mainEntityOfPage', 'datePublished', 'dateModified', 'author', 'publisher',
-    'inLanguage', 'articleBody', 'wordCount', 'contentLocation', 'spatialCoverage', 'articleSection', 'about', 'mentions', 'citation',
-  ]).schema;
+  return base;
 }
 
 export const buildArticleJsonLd = buildNewsJsonLd;
@@ -405,7 +398,7 @@ export function buildBreadcrumbJsonLd(items: { name: string; path: string }[]): 
       '@type': 'ListItem',
       position: i + 1,
       name: it.name,
-      item: `${SITE_URL}${it.path}`,
+      item: publicCanonicalUrl(it.path),
     })),
   };
 }

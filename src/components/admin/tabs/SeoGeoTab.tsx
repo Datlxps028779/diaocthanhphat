@@ -1,26 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck, Wand2, X } from 'lucide-react';
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, diagnoseSearchConsoleAccess, getAreas, getSearchVisibilityAudit, inspectSearchVisibilityBatch, SEO_ROUTE_PATHS, SearchVisibilityApiError, submitSearchVisibilitySitemap, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
-import { buildLocalBusinessJsonLd, serializeJsonLd } from '../../../lib/seo';
-import { buildAutoSchema, schemaToJson } from '../../../lib/seoAuto';
-import { buildSiteEntitySchema } from '../../../lib/api';
-import { areaSummaryFromData, buildAreaCollectionJsonLd, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
-import { parseSeoSchema, SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
+import { areaSummaryFromData, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
+import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
 import type { SearchConsoleAccessDiagnosis, SearchVisibilityAuditResponse } from '../../../lib/api/searchVisibility';
-
-function schemaTypeFromGuide(schemaType?: string): 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' {
-  if (!schemaType) return 'WebPage';
-  if (schemaType.includes('CollectionPage')) return 'CollectionPage';
-  if (schemaType.includes('AboutPage')) return 'AboutPage';
-  if (schemaType.includes('WebSite')) return 'WebSite';
-  if (schemaType.includes('FAQPage')) return 'FAQPage';
-  return 'WebPage';
-}
 
 const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 'type'> & { placeholder?: string }> = [
   { key: 'organization_legal_name', label: 'Tên pháp lý doanh nghiệp', group_name: 'schema', type: 'text' },
@@ -121,22 +109,11 @@ const ROUTE_GUIDE: Record<string, { title: string; description: string; canonica
   },
 };
 
-function schemaExample(path: string): string {
-  const type = path === '/tin-tuc' || path === '/mua-ban' || path === '/cho-thue' || path === '/danh-sach' || path === '/khu-vuc' ? 'CollectionPage' : 'WebPage';
-  return JSON.stringify({
-    '@context': 'https://schema.org',
-    '@type': type,
-    name: ROUTE_GUIDE[path]?.title ?? path,
-    description: ROUTE_GUIDE[path]?.description ?? '',
-  }, null, 2);
-}
-
 function emptySeo(row?: SeoRouteOverride): SeoFieldsValue {
   return {
     meta_title: row?.meta_title ?? '',
     meta_description: row?.meta_description ?? '',
     focus_keywords: row?.focus_keywords ?? '',
-    schema_markup: row?.schema_markup ? JSON.stringify(row.schema_markup, null, 2) : '',
   };
 }
 
@@ -152,8 +129,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [auditModal, setAuditModal] = useState<'properties' | 'news' | 'areas' | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeAreaId, setActiveAreaId] = useState('');
-  const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '', schema_markup: '' });
-  const [areaListings, setAreaListings] = useState<Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[]>([]);
+  const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '' });
   const [areaIndexable, setAreaIndexable] = useState<boolean | null>(null);
   const [areaGateReasons, setAreaGateReasons] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<SearchVisibilityAuditResponse | null>(null);
@@ -252,15 +228,14 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       meta_title: area?.meta_title ?? '',
       meta_description: area?.meta_description ?? '',
       focus_keywords: area?.focus_keywords ?? '',
-      schema_markup: area?.schema_markup ? JSON.stringify(area.schema_markup, null, 2) : '',
     });
   }, [activeAreaId, areas]);
 
-  // Nạp listings thật của khu vực để schema + quality gate khớp public page
+  // Nạp listings thật của khu vực để quality gate khớp public page
   // (/khu-vuc/[slug]). Thiếu dữ liệu → evaluateAreaSeo ra noindex, admin thấy ngay.
   useEffect(() => {
     let cancelled = false;
-    if (!activeAreaId) { setAreaListings([]); setAreaIndexable(null); setAreaGateReasons([]); return; }
+    if (!activeAreaId) { setAreaIndexable(null); setAreaGateReasons([]); return; }
     (async () => {
       const { data, error } = await supabase
         .from('properties')
@@ -269,9 +244,8 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
         .eq('area_id', activeAreaId)
         .limit(50);
       if (cancelled) return;
-      if (error) { setAreaListings([]); setAreaIndexable(null); setAreaGateReasons([]); return; }
+      if (error) { setAreaIndexable(null); setAreaGateReasons([]); return; }
       const listings = (data ?? []) as Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[];
-      setAreaListings(listings);
       const area = areas.find(a => a.id === activeAreaId);
       if (area) {
         const districts = Array.from(new Set(listings.map(l => l.district).filter(Boolean))) as string[];
@@ -295,7 +269,6 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       meta_title: activeArea.meta_title?.trim() || `Bất động sản ${activeArea.name}`,
       meta_description: activeArea.meta_description?.trim() || fallbackDescription,
       focus_keywords: activeArea.focus_keywords?.trim() || `${activeArea.name}, bất động sản ${activeArea.name}`,
-      schema_markup: schemaToJson(buildAreaCollectionJsonLd(activeArea, areaListings.map(l => ({ id: l.id, title: l.title, slug: l.slug })))),
     });
     if (areaIndexable !== null) {
       setRobotsIndex(areaIndexable);
@@ -306,29 +279,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       : 'Đã điền mẫu SEO/GEO từ dữ liệu khu vực.');
   };
 
-  const settingsMap = useMemo(() => ({ ...settingValues }), [settingValues]);
   const activeGuide = ROUTE_GUIDE[activePath];
-  const activeRouteSchema = buildAutoSchema('route', {
-    title: routeSeo.meta_title || activeGuide?.title,
-    description: routeSeo.meta_description || activeGuide?.description,
-    focus_keywords: routeSeo.focus_keywords || activeGuide?.keywords,
-    path: canonicalPath || activePath,
-    route_type: schemaTypeFromGuide(activeGuide?.schemaType),
-  });
-  const organizationSchema = useMemo(() => buildSiteEntitySchema(settingsMap), [settingsMap]);
-  const organizationPreview = useMemo(() => serializeJsonLd(buildLocalBusinessJsonLd(settingsMap)), [settingsMap]);
-  const routePreview = useMemo(() => JSON.stringify(activeRouteSchema, null, 2), [activeRouteSchema]);
-  const sitePreview = useMemo(() => schemaToJson(organizationSchema), [organizationSchema]);
-  const routeValidation = parseSeoSchema(routeSeo.schema_markup, 'route');
-  // Schema deterministic cho area = đúng builder public (CollectionPage + ItemList từ listings thật),
-  // fallback buildAutoSchema('area') khi chưa nạp listings. Truyền vào autoSchema của SeoFields.
-  const areaAutoSchema = useMemo(() => {
-    if (!activeArea) return buildAutoSchema('area', { path: '/khu-vuc' });
-    if (areaListings.length > 0) {
-      return buildAreaCollectionJsonLd(activeArea, areaListings.map(l => ({ id: l.id, title: l.title, slug: l.slug })));
-    }
-    return buildAutoSchema('area', { title: `Bất động sản ${activeArea.name}`, path: `/khu-vuc/${activeArea.slug}` });
-  }, [activeArea, areaListings]);
 
   const saveSettings = async () => {
     setSaving(true);
@@ -337,18 +288,16 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       for (const def of SCHEMA_SETTINGS) {
         await upsertSiteSetting({ ...def, value: settingValues[def.key] ?? '' });
       }
-      setMessage('Đã lưu Site Entity schema settings.');
+      setMessage('Đã lưu Site Entity settings.');
       await load();
     } catch (e) {
       console.error(e);
       const detail = e instanceof Error ? e.message : 'Không rõ lỗi';
-      setMessage(`Lưu settings thất bại: ${detail}. Nếu bạn đang dùng tài khoản admin, hãy kiểm tra migration đã seed các key schema và policy site_settings có is_admin().`);
+      setMessage(`Lưu settings thất bại: ${detail}. Nếu bạn đang dùng tài khoản admin, hãy kiểm tra migration đã seed các key và policy site_settings có is_admin().`);
     } finally { setSaving(false); }
   };
 
   const saveRoute = async () => {
-    const parsed = parseSeoSchema(routeSeo.schema_markup, 'route');
-    if (parsed.error) { setMessage(parsed.error); return; }
     setSaving(true);
     setMessage('');
     try {
@@ -360,7 +309,6 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
         canonical_path: canonicalPath.trim() || null,
         robots_index: robotsIndex,
         robots_follow: robotsFollow,
-        schema_markup: parsed.schema,
       });
       setMessage(`Đã lưu override cho ${activePath}.`);
       const nextRoutes = await adminGetSeoRouteOverrides().catch(() => []);
@@ -371,12 +319,8 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
     } finally { setSaving(false); }
   };
 
-  const areaValidation = parseSeoSchema(areaSeo.schema_markup, 'area');
-
   const saveArea = async () => {
     if (!activeAreaId) { setMessage('Chọn khu vực trước khi lưu.'); return; }
-    const parsed = parseSeoSchema(areaSeo.schema_markup, 'area');
-    if (parsed.error) { setMessage(parsed.error); return; }
     setSaving(true);
     setMessage('');
     try {
@@ -384,7 +328,6 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
         meta_title: areaSeo.meta_title.trim() || null,
         meta_description: areaSeo.meta_description.trim() || null,
         focus_keywords: areaSeo.focus_keywords.trim() || null,
-        schema_markup: parsed.schema,
       });
       setMessage(`Đã lưu SEO cho khu vực ${activeArea?.name ?? ''}.`);
       const nextAreas = await getAreas().catch(() => areas);
@@ -402,9 +345,9 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       <div className="rounded-2xl border border-red-100 bg-gradient-to-r from-red-50 to-white p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-red-600">Schema Pro</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-red-600">SEO / GEO</p>
             <h2 className="mt-1 text-xl font-black text-gray-900">SEO / GEO cho Google Search & AI</h2>
-            <p className="mt-1 text-sm text-gray-500">Quản trị entity, schema JSON-LD, route override và audit chất lượng index.</p>
+            <p className="mt-1 text-sm text-gray-500">Quản trị entity, route và audit chất lượng index.</p>
           </div>
           <button onClick={() => load()} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50">
             <RefreshCw className="h-4 w-4" /> Làm mới audit
@@ -449,14 +392,13 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
             <h3 className="mb-4 flex items-center gap-2 text-base font-black text-gray-900"><Search className="h-4 w-4 text-red-500" />Route Overrides</h3>
             <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
               <p className="font-bold">Nên cấu hình gì cho từng route?</p>
-              <p className="mt-1 text-blue-800">Dùng route override cho các trang tĩnh/danh mục để Google hiểu đúng mục đích trang. Trang chi tiết BĐS, bài viết và khu vực con đã có schema riêng theo dữ liệu thật.</p>
+              <p className="mt-1 text-blue-800">Dùng route override cho các trang tĩnh/danh mục để Google hiểu đúng mục đích trang. Trang chi tiết BĐS, bài viết và khu vực con được hệ thống xử lý theo dữ liệu thật.</p>
               {activeGuide && (
                 <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
                   <div><span className="font-bold">Title mẫu:</span> {activeGuide.title}</div>
                   <div><span className="font-bold">Canonical:</span> {activeGuide.canonical}</div>
                   <div className="md:col-span-2"><span className="font-bold">Description mẫu:</span> {activeGuide.description}</div>
                   <div><span className="font-bold">Keywords:</span> {activeGuide.keywords}</div>
-                  <div><span className="font-bold">Schema nên dùng:</span> {activeGuide.schemaType}</div>
                   <div className="md:col-span-2"><span className="font-bold">Lưu ý:</span> {activeGuide.note}</div>
                 </div>
               )}
@@ -469,7 +411,6 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                     meta_title: activeGuide.title,
                     meta_description: activeGuide.description,
                     focus_keywords: activeGuide.keywords,
-                    schema_markup: schemaExample(activePath),
                   });
                 }}
                 className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
@@ -499,9 +440,9 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                 <input type="checkbox" checked={robotsFollow} onChange={e => setRobotsFollow(e.target.checked)} className="accent-red-600" /> Follow
               </label>
             </div>
-            <SeoFields value={routeSeo} onChange={setRouteSeo} target="route" basePath={canonicalPath || activePath} autoSchema={activeRouteSchema} />
+            <SeoFields value={routeSeo} onChange={setRouteSeo} basePath={canonicalPath || activePath} />
             <div className="mt-4 flex justify-end">
-              <button onClick={saveRoute} disabled={saving || !!routeValidation.error}
+              <button onClick={saveRoute} disabled={saving}
                 className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
                 <Save className="h-4 w-4" /> Lưu route
               </button>
@@ -510,7 +451,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
 
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 text-base font-black text-gray-900"><MapPin className="h-4 w-4 text-red-500" />SEO / GEO khu vực</h3>
-            <p className="mb-4 text-sm text-gray-500">Chỉnh metadata và schema cho từng trang khu vực <code className="rounded bg-gray-100 px-1">/khu-vuc/[slug]</code>. Trang khu vực vẫn phải đủ dữ liệu thật trước khi index.</p>
+            <p className="mb-4 text-sm text-gray-500">Chỉnh metadata cho từng trang khu vực <code className="rounded bg-gray-100 px-1">/khu-vuc/[slug]</code>. Trang khu vực vẫn phải đủ dữ liệu thật trước khi index.</p>
             <div className="mb-4">
               <label className="mb-1 block text-xs font-semibold text-gray-700">Chọn khu vực</label>
               <select value={activeAreaId} onChange={e => setActiveAreaId(e.target.value)}
@@ -525,7 +466,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-bold">Điền mẫu từ dữ liệu khu vực</p>
-                      <p className="mt-1 text-blue-800">Sinh title/description/keywords + schema CollectionPage (ItemList từ {areaListings.length} tin đăng thật) đúng chuẩn public page. Robots tự khớp quality gate.</p>
+                      <p className="mt-1 text-blue-800">Sinh title/description/keywords từ dữ liệu thật. Robots tự khớp quality gate.</p>
                     </div>
                     <button type="button" onClick={fillAreaFromData}
                       className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
@@ -538,9 +479,9 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                     </p>
                   )}
                 </div>
-                <SeoFields value={areaSeo} onChange={setAreaSeo} target="area" basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} autoSchema={areaAutoSchema} />
+                <SeoFields value={areaSeo} onChange={setAreaSeo} basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} />
                 <div className="mt-4 flex justify-end">
-                  <button onClick={saveArea} disabled={saving || !!areaValidation.error}
+                  <button onClick={saveArea} disabled={saving}
                     className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
                     <Save className="h-4 w-4" /> Lưu SEO khu vực
                   </button>
@@ -576,24 +517,9 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
             onInspectBatch={() => void runGoogleVisibilityAction('inspection')}
           />
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="mb-3 text-base font-black text-gray-900">Preview Organization JSON-LD</h3>
-            <pre className="max-h-[420px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{organizationPreview}</pre>
-          </div>
-
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="mb-3 text-base font-black text-gray-900">Preview Route JSON-LD</h3>
-            <pre className="max-h-[320px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{routePreview}</pre>
-          </div>
-
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="mb-3 text-base font-black text-gray-900">Preview Site Entity Schema</h3>
-            <pre className="max-h-[320px] overflow-auto rounded-xl bg-gray-950 p-4 text-[11px] leading-relaxed text-emerald-100">{sitePreview}</pre>
-          </div>
-
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
             <div className="mb-1 flex items-center gap-2 font-bold"><CheckCircle className="h-4 w-4" />Nguyên tắc GEO</div>
-            Schema chỉ giúp Google/AI hiểu dữ liệu; thứ hạng vẫn phụ thuộc nội dung thật, độ dày trang, internal links, tín hiệu doanh nghiệp và Search Console sau deploy.
+            Nội dung public phải dựa trên dữ liệu thật, độ dày trang, internal links, tín hiệu doanh nghiệp và Search Console sau deploy.
           </div>
         </aside>
       </div>
@@ -646,7 +572,7 @@ function SearchVisibilityCard({
     : error?.code === 'CANONICAL_POLICY'
       ? 'Đã chặn trước khi ghi dữ liệu vì URL không đúng canonical domain. Không cần chạy lại migration.'
       : error?.code === 'SOURCE_READ'
-      ? 'Kiểm tra schema nguồn URL của production; không cần gọi Google hay chạy lại migration audit.'
+      ? 'Kiểm tra nguồn URL của production; không cần gọi Google hay chạy lại migration audit.'
       : error?.code === 'AUDIT_WRITE'
         ? 'Kiểm tra dữ liệu canonical/slug trong registry; không cần gọi Google.'
         : error?.code === 'GOOGLE_NOT_CONFIGURED'

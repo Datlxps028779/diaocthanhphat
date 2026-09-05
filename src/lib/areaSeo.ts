@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import type { Area, Property, PriceStat } from './supabase';
 import { absoluteUrl } from './siteUrl';
-import { mergeSchema } from './schemaValidation';
 import type { FaqItem } from './propertyFaq';
 import { buildPriceAnswer } from './priceStatsFormat';
 import { ogTitle, ogDescription } from './seo';
@@ -119,7 +118,7 @@ export function buildAreaCollectionJsonLd(
       })),
     },
   };
-  return mergeSchema(base, area.schema_markup, 'area', ['@context', '@type', '@id', 'name', 'url', 'mainEntity']).schema;
+  return base;
 }
 
 // FAQ tự-sinh cho trang khu vực — CHỈ từ dữ liệu thật (giá tổng hợp, số tin, hạ tầng

@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import type { SeoRouteOverride } from './supabase';
 import { staticPageMetadata, buildBreadcrumbJsonLd } from './seo';
 import { buildAutoSchema } from './seoAuto';
-import { mergeSchema } from './schemaValidation';
 import { canonicalPath } from './siteUrl';
 import { serverGetSeoRouteOverride } from './supabase-server';
 import { normalizeSiteBrandText } from './siteIdentity';
@@ -15,8 +14,6 @@ export interface RouteFallback {
   breadcrumb?: Array<{ name: string; path: string }>;
   routeType?: 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage';
 }
-
-const ROUTE_LOCKED_KEYS = ['@context', '@type', '@id', 'name', 'url', 'mainEntityOfPage'];
 
 const DYNAMIC_LISTING_QUERY_KEYS = new Set([
   'area', 'type', 'loai', 'district', 'ward', 'legal', 'q', 'sort',
@@ -100,10 +97,7 @@ export function buildRouteJsonLd({
     },
     { basePath: canonical, routeType: fallback.routeType },
   );
-  const merged = override?.schema_markup
-    ? mergeSchema(base, override.schema_markup, 'route', ROUTE_LOCKED_KEYS).schema
-    : base;
-  const schemas: Record<string, unknown>[] = [merged];
+  const schemas: Record<string, unknown>[] = [base];
   if (fallback.breadcrumb && fallback.breadcrumb.length > 0) {
     schemas.push(buildBreadcrumbJsonLd(fallback.breadcrumb));
   }

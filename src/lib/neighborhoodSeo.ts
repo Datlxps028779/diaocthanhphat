@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import type { Neighborhood, Property } from './supabase';
 import { absoluteUrl } from './siteUrl';
-import { mergeSchema } from './schemaValidation';
 import { ogTitle, ogDescription } from './seo';
 import { buildProductPath } from './productPath';
 import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
@@ -94,6 +93,5 @@ export function buildNeighborhoodCollectionJsonLd(n: Neighborhood, listings: Arr
       })),
     },
   };
-  // Tái dùng target 'area' (đã cho phép CollectionPage/ItemList/Place/BreadcrumbList).
-  return mergeSchema(base, n.schema_markup, 'area', ['@context', '@type', '@id', 'name', 'url', 'mainEntity']).schema;
+  return base;
 }

@@ -271,7 +271,7 @@ describe('POST /api/public/articles', () => {
     expect(inserts).toHaveLength(0);
   });
 
-  it('lưu đủ field Admin, related IDs và schema do server tự sinh', async () => {
+  it('chỉ lưu canonical fields và không lưu schema legacy', async () => {
     const { admin, inserts } = makeAdmin();
     adminClientMock.mockReturnValue(admin);
 
@@ -295,20 +295,8 @@ describe('POST /api/public/articles', () => {
       },
     });
     expect(inserts).toHaveLength(1);
-    expect(inserts[0]).toMatchObject({
-      category: 'Đầu tư',
-      external_id: 'make-2',
-      is_published: false,
-      related_ids: ['related-4', 'related-3', 'related-2', 'related-1', 'related-0'],
-      geo_area: 'Dĩ An, Bình Dương',
-      faq: expect.any(Array),
-      citations: expect.any(Array),
-      schema_markup: {
-        '@type': 'NewsArticle',
-        headline: validPayload().title,
-      },
-    });
     expect(inserts[0]).not.toHaveProperty('views');
+    expect(inserts[0]).not.toHaveProperty('schema_markup');
     expect(inserts[0].slug).not.toBe('slug-tu-caller');
   });
 

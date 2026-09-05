@@ -4,6 +4,7 @@ import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
 import { mergeRelatedPropertyCandidates, rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
 import { normalizeListingTitle } from '../listingTitle';
+import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -16,7 +17,9 @@ export interface PropertyFilters {
   page?: number; limit?: number;
 }
 
-export const PUBLIC_PROPERTY_SELECT = 'id, title, description, price, price_unit, price_label, price_per_month, loan_support, listing_type, area_sqm, address, city, district, ward, area_id, district_id, ward_id, property_type_id, neighborhood_slug, image_url, images, badge, badge_color, legal_status, is_featured, is_hot, is_active, is_verified, views, bedrooms, bathrooms, floor_count, floor_number, direction, road_width, frontage, amenities, latitude, longitude, formatted_address, vr_tour_url, video_url, tags, meta_title, meta_description, focus_keywords, schema_markup, slug, public_code, faq, created_at, updated_at, areas(id,name,slug), property_types(id,name,slug)';
+export const PUBLIC_PROPERTY_SELECT = 'id, title, description, price, price_unit, price_label, price_per_month, loan_support, listing_type, area_sqm, address, city, district, ward, area_id, district_id, ward_id, property_type_id, neighborhood_slug, image_url, images, badge, badge_color, legal_status, is_featured, is_hot, is_active, is_verified, views, bedrooms, bathrooms, floor_count, floor_number, direction, road_width, frontage, amenities, latitude, longitude, formatted_address, vr_tour_url, video_url, tags, meta_title, meta_description, focus_keywords, slug, public_code, faq, created_at, updated_at, areas(id,name,slug), property_types(id,name,slug)';
+
+export type PropertyWrite = Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types' | 'schema_markup'>;
 
 export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, views, areas(id,name,slug), property_types(id,name,slug)';
 
@@ -25,7 +28,6 @@ export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
   'contact_phone',
   'contact_zalo',
   'description',
-  'schema_markup',
   'focus_keywords',
   'meta_title',
   'meta_description',
@@ -567,32 +569,67 @@ export function buildPropertyPath(p: {
   return buildProductPath(p);
 }
 
-export async function createProperty(p: Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>): Promise<Property> {
+export async function createProperty(p: PropertyWrite): Promise<Property> {
   const title = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   const slug = (p.slug && p.slug.trim()) || buildUniquePropertySlug(title);
-  const { data, error } = await supabase.from('properties').insert({ ...p, title, slug }).select().single();
+  const { schema_markup: _schemaMarkup, ...safePayload } = p as PropertyWrite & { schema_markup?: unknown };
+  const { data, error } = await supabase.from('properties').insert({ ...safePayload, title, slug }).select().single();
   if (error) throw error;
-  return data as Property;
+  const property = data as Property;
+  await revalidatePropertyContent('create', [{ current: propertyRevalidationSnapshot(property) }]);
+  return property;
 }
-export async function updateProperty(id: string, p: Partial<Property>): Promise<Property> {
+export async function updateProperty(id: string, p: Partial<Omit<Property, 'schema_markup'>>): Promise<Property> {
+  const { data: previousData, error: previousError } = await supabase
+    .from('properties')
+    .select('id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active')
+    .eq('id', id)
+    .maybeSingle();
+  if (previousError) throw previousError;
   const patch = typeof p.title === 'string'
     ? { ...p, title: normalizeListingTitle(p.title, [p.city ?? '', p.district ?? '', p.ward ?? '']).value }
     : p;
+  const { schema_markup: _schemaMarkup, ...safePatch } = patch as typeof patch & { schema_markup?: unknown };
   const { data, error } = await supabase
     .from('properties')
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update({ ...safePatch, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
   if (error) throw error;
-  return data as Property;
+  const property = data as Property;
+  await revalidatePropertyContent('update', [{
+    previous: previousData ? propertyRevalidationSnapshot(previousData) : undefined,
+    current: propertyRevalidationSnapshot(property),
+  }]);
+  return property;
 }
 export async function deleteProperty(id: string): Promise<void> {
+  const { data: previousData, error: previousError } = await supabase
+    .from('properties')
+    .select('id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active')
+    .eq('id', id)
+    .maybeSingle();
+  if (previousError) throw previousError;
   const { error } = await supabase.from('properties').delete().eq('id', id);
   if (error) throw error;
+  if (previousData) {
+    await revalidatePropertyContent('delete', [{ previous: propertyRevalidationSnapshot(previousData) }]);
+  }
 }
 
 // ─── Bulk operations (Sprint 3c) ──────────────────────────────────────────────
+const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active';
+
+async function getPropertyRevalidationRows(ids: string[]): Promise<PropertyRevalidationSnapshotRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from('properties').select(PROPERTY_REVALIDATION_SELECT).in('id', ids);
+  if (error) throw error;
+  return (data ?? []) as PropertyRevalidationSnapshotRow[];
+}
+
+type PropertyRevalidationSnapshotRow = Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>;
+
 // Cập nhật/xóa nhiều BĐS trong 1 câu (.in) thay vì lặp N request. Trả số dòng ảnh
 // hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field nhạy cảm.
 export async function bulkUpdateProperties(
@@ -600,20 +637,32 @@ export async function bulkUpdateProperties(
   patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>,
 ): Promise<number> {
   if (ids.length === 0) return 0;
+  const previousRows = await getPropertyRevalidationRows(ids);
   const { error, count } = await supabase
     .from('properties')
     .update({ ...patch, updated_at: new Date().toISOString() }, { count: 'exact' })
     .in('id', ids);
   if (error) throw error;
+  const currentRows = await getPropertyRevalidationRows(ids);
+  await revalidatePropertyContent('bulk', previousRows.map(previous => ({
+    previous: propertyRevalidationSnapshot(previous),
+    current: currentRows.find(current => current.id === previous.id)
+      ? propertyRevalidationSnapshot(currentRows.find(current => current.id === previous.id)!)
+      : undefined,
+  })));
   return count ?? ids.length;
 }
 
 export async function bulkDeleteProperties(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
+  const previousRows = await getPropertyRevalidationRows(ids);
   const { error, count } = await supabase
     .from('properties')
     .delete({ count: 'exact' })
     .in('id', ids);
   if (error) throw error;
+  if (previousRows.length > 0) {
+    await revalidatePropertyContent('bulk', previousRows.map(previous => ({ previous: propertyRevalidationSnapshot(previous) })));
+  }
   return count ?? ids.length;
 }

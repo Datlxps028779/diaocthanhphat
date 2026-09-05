@@ -1,5 +1,6 @@
 import { supabase, type UserListing, type UserListingLifecycleEvent } from '../supabase';
 import { normalizeListingTitle } from '../listingTitle';
+import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
 
 function canonicalListingTitle<T extends { title: string; city?: string | null; district?: string | null; ward?: string | null }>(listing: T): T {
   return {
@@ -8,9 +9,30 @@ function canonicalListingTitle<T extends { title: string; city?: string | null; 
   };
 }
 
+const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active';
+type LinkedProperty = Pick<UserListing, 'property_id'>;
+type PropertyRevalidationRow = Parameters<typeof propertyRevalidationSnapshot>[0];
+
+async function getLinkedProperty(listingId: string): Promise<LinkedProperty | null> {
+  const { data, error } = await supabase.from('user_listings').select('property_id').eq('id', listingId).maybeSingle();
+  if (error) throw error;
+  return data as LinkedProperty | null;
+}
+
+async function getPropertyRevalidationRow(propertyId: string | null | undefined): Promise<PropertyRevalidationRow | null> {
+  if (!propertyId) return null;
+  const { data, error } = await supabase.from('properties').select(PROPERTY_REVALIDATION_SELECT).eq('id', propertyId).maybeSingle();
+  if (error) throw error;
+  return data as PropertyRevalidationRow | null;
+}
+
+
 // ─── User Listings ────────────────────────────────────────────────────────────
-export async function submitUserListing(listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles'>): Promise<void> {
-  const { error } = await supabase.from('user_listings').insert(canonicalListingTitle(listing));
+type UserListingWrite = Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles' | 'schema_markup'>;
+
+export async function submitUserListing(listing: UserListingWrite): Promise<void> {
+  const { schema_markup: _schemaMarkup, ...safeListing } = canonicalListingTitle(listing) as UserListingWrite & { schema_markup?: unknown };
+  const { error } = await supabase.from('user_listings').insert(safeListing);
   if (error) throw error;
 }
 export async function getMyListings(): Promise<UserListing[]> {
@@ -36,12 +58,13 @@ export async function getMyListing(id: string): Promise<UserListing | null> {
 // duyệt lại (xoá luôn lý do từ chối cũ). RLS user_listings_update_own giới hạn đúng chủ.
 export async function updateMyListing(
   id: string,
-  listing: Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles'>,
+  listing: UserListingWrite,
 ): Promise<void> {
   const canonical = canonicalListingTitle(listing);
+  const { schema_markup: _schemaMarkup, ...safeCanonical } = canonical as UserListingWrite & { schema_markup?: unknown };
   const { data, error } = await supabase
     .from('user_listings')
-    .update({ ...canonical, status: 'pending', reject_reason: null, expires_at: null, ai_seo_draft: null })
+    .update({ ...safeCanonical, status: 'pending', reject_reason: null, expires_at: null, ai_seo_draft: null })
     .eq('id', id)
     .select('id');
   if (error) throw error;
@@ -74,7 +97,7 @@ export async function adminGetUserListingLifecycle(id: string): Promise<UserList
 // status/property_id/user_id. Approval vẫn chỉ do approve_user_listing đảm nhiệm.
 export async function adminUpdatePendingUserListing(
   id: string,
-  patch: Partial<Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles'>>,
+  patch: Partial<Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'areas' | 'property_types' | 'profiles' | 'schema_markup'>>,
 ): Promise<UserListing> {
   const canonicalPatch = typeof patch.title === 'string'
     ? {
@@ -82,8 +105,9 @@ export async function adminUpdatePendingUserListing(
         title: normalizeListingTitle(patch.title, [patch.city ?? '', patch.district ?? '', patch.ward ?? '']).value,
       }
     : patch;
+  const { schema_markup: _schemaMarkup, ...safePatch } = canonicalPatch as typeof canonicalPatch & { schema_markup?: unknown };
   const { data, error } = await supabase
-    .rpc('admin_update_pending_user_listing', { p_listing_id: id, p_patch: canonicalPatch })
+    .rpc('admin_update_pending_user_listing', { p_listing_id: id, p_patch: safePatch })
     .single();
   if (error) throw error;
   if (!data || typeof data !== 'object' || !('id' in data)) {
@@ -148,11 +172,24 @@ export async function approveUserListing(id: string): Promise<void> {
   if (!hasApprovedPropertyId(data)) {
     throw new Error('Duyệt tin không trả về property_id hợp lệ.');
   }
+  const property = await getPropertyRevalidationRow(data.property_id);
+  if (property) {
+    await revalidatePropertyContent('publish', [{ current: propertyRevalidationSnapshot(property) }]);
+  }
 }
 
 export async function rejectUserListing(id: string, reason: string): Promise<void> {
+  const linked = await getLinkedProperty(id);
+  const previous = await getPropertyRevalidationRow(linked?.property_id);
   const { error } = await supabase.from('user_listings').update({ status: 'rejected', reject_reason: reason, ai_seo_draft: null }).eq('id', id);
   if (error) throw error;
+  const current = await getPropertyRevalidationRow(linked?.property_id);
+  if (previous || current) {
+    await revalidatePropertyContent('unpublish', [{
+      previous: previous ? propertyRevalidationSnapshot(previous) : undefined,
+      current: current ? propertyRevalidationSnapshot(current) : undefined,
+    }]);
+  }
 }
 
 // User tự gia hạn tin đã hết hạn (hoặc sắp hết hạn): đưa về 'pending' để admin
@@ -174,8 +211,17 @@ export async function renewMyListing(id: string): Promise<void> {
 // Admin đặt/đổi ngày hết hạn cho 1 tin (form chỉnh sửa BĐS). Chỉ đổi expires_at,
 // giữ nguyên status. RLS user_listings_admin_update (is_admin) cho phép.
 export async function adminSetExpiry(id: string, expiresAtISO: string | null): Promise<void> {
+  const linked = await getLinkedProperty(id);
+  const previous = await getPropertyRevalidationRow(linked?.property_id);
   const { error } = await supabase.from('user_listings').update({ expires_at: expiresAtISO }).eq('id', id);
   if (error) throw error;
+  const current = await getPropertyRevalidationRow(linked?.property_id);
+  if (previous || current) {
+    await revalidatePropertyContent('update', [{
+      previous: previous ? propertyRevalidationSnapshot(previous) : undefined,
+      current: current ? propertyRevalidationSnapshot(current) : undefined,
+    }]);
+  }
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────

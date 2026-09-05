@@ -109,7 +109,7 @@ describe('buildRouteJsonLd', () => {
     expect(types).toContain('BreadcrumbList');
   });
 
-  it('schema_markup tùy chỉnh chỉ merge field bổ sung, KHÔNG ghi đè khóa locked', () => {
+  it('bỏ qua schema_markup legacy và chỉ sinh schema từ dữ liệu route canonical', () => {
     const schemas = buildRouteJsonLd({
       path: '/mua-ban',
       fallback: fallback(),
@@ -123,14 +123,6 @@ describe('buildRouteJsonLd', () => {
       }),
     });
     expect(schemas[0].url).toBe('/mua-ban');
-    expect(schemas[0].keywords).toBe('bổ sung');
-  });
-
-  it('schema_markup sai kiểu (không phải object) không làm throw', () => {
-    expect(() => buildRouteJsonLd({
-      path: '/mua-ban',
-      fallback: fallback(),
-      override: override({ schema_markup: 'not-an-object' as never }),
-    })).not.toThrow();
+    expect(schemas[0].keywords).toBeUndefined();
   });
 });

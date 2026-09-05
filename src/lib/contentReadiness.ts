@@ -30,7 +30,6 @@ export interface NewsReadinessInput {
   metaTitle: string;
   metaDescription: string;
   focusKeywords: string;
-  schemaError?: string | null;
   geoArea?: string;
   geoEntity?: string;
   relatedCount?: number;
@@ -97,7 +96,7 @@ export function evaluateNewsReadiness(input: NewsReadinessInput): ReadinessResul
         ? item('content', 'Nội dung', 'warning', `${wordCount} từ — nên bổ sung thêm dữ liệu thật, địa danh, pháp lý, hạ tầng.`)
         : item('content', 'Nội dung', 'error', `${wordCount} từ — nội dung quá mỏng để đăng public.`),
     compact(input.imageUrl)
-      ? item('image', 'Ảnh đại diện', 'pass', 'Đã có ảnh đại diện cho OG và NewsArticle schema.')
+      ? item('image', 'Ảnh đại diện', 'pass', 'Đã có ảnh đại diện cho nội dung công khai.')
       : item('image', 'Ảnh đại diện', 'error', 'Bắt buộc có ảnh đại diện thật.'),
     missingAlt === 0
       ? item('image-alt', 'Alt ảnh trong bài', 'pass', 'Ảnh trong bài đều có alt đủ dài.')
@@ -122,9 +121,6 @@ export function evaluateNewsReadiness(input: NewsReadinessInput): ReadinessResul
       : geoArea || geoEntity
         ? item('geo', 'GEO/entity bài viết', 'warning', 'Nên đủ cả khu vực và entity để AI/GEO trích xuất chính xác.')
         : item('geo', 'GEO/entity bài viết', 'error', 'Bắt buộc nhập GEO/entity riêng cho bài public.'),
-    input.schemaError
-      ? item('schema', 'Schema JSON-LD', 'error', input.schemaError)
-      : item('schema', 'Schema JSON-LD', 'pass', 'Schema hợp lệ và sẵn sàng merge với dữ liệu thật.'),
     internalLinks > 0
       ? item('internal-links', 'Liên kết nội bộ', 'pass', `Đã có ${internalLinks} backlink nội bộ trong nội dung.`)
       : item('internal-links', 'Liên kết nội bộ', 'warning', 'Nên có ít nhất 1 link nội bộ tới bài/trang liên quan.'),

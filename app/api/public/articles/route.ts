@@ -4,7 +4,6 @@ import { requireIngestAuth } from '@/lib/server/ingestAuth';
 import { normalizeArticlePayload, type ArticleRow } from '@/lib/apiIngest';
 import { evaluateArticleIngestQuality } from '@/lib/articleIngestQuality';
 import { pickRelated } from '@/lib/relatedNews';
-import { buildNewsJsonLd } from '@/lib/seo';
 import type { NewsArticle } from '@/lib/supabase';
 import { buildSlug } from '@/lib/slug';
 
@@ -53,7 +52,6 @@ function articleSnapshot(
   row: ArticleRow,
   slug: string,
   relatedIds: string[],
-  schemaMarkup: Record<string, unknown> | null,
   timestamp: string,
 ): NewsArticle {
   return {
@@ -77,7 +75,7 @@ function articleSnapshot(
     meta_title: row.meta_title,
     meta_description: row.meta_description,
     focus_keywords: row.focus_keywords,
-    schema_markup: schemaMarkup,
+    schema_markup: null,
     related_ids: relatedIds,
     geo_area: row.geo_area,
     geo_entity: row.geo_entity,
@@ -188,7 +186,7 @@ export async function POST(req: NextRequest) {
   const baseSlug = buildSlug(parsed.row.title) || 'bai-viet';
   const timestamp = new Date().toISOString();
   const relatedIds = pickRelated(
-    articleSnapshot(parsed.row, baseSlug, [], null, timestamp),
+    articleSnapshot(parsed.row, baseSlug, [], timestamp),
     [],
     (relatedRows ?? []) as NewsArticle[],
     5,
@@ -211,15 +209,12 @@ export async function POST(req: NextRequest) {
 
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt += 1) {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-    const snapshot = articleSnapshot(parsed.row, slug, relatedIds, null, timestamp);
-    const schemaMarkup = buildNewsJsonLd(snapshot);
     const { data, error } = await admin
       .from('news')
       .insert({
         ...parsed.row,
         slug,
         related_ids: relatedIds,
-        schema_markup: schemaMarkup,
         created_at: timestamp,
         updated_at: timestamp,
       })

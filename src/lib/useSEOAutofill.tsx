@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { buildAutoSchema } from './seoAuto';
+import { useState, useEffect, useCallback } from 'react';
 import { stripHtml } from './markdown';
 
 export const META_DESCRIPTION_MAX = 155;
@@ -28,13 +27,6 @@ export function buildMetaDescription(raw: string): string {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export interface SEOFields {
-  meta_title: string;
-  meta_description: string;
-  focus_keywords: string;
-  schema_markup: string; // JSON-LD string
-}
-
 export interface SEOInput {
   title: string;
   description: string;
@@ -77,59 +69,12 @@ export function generateSlug(title: string): string {
   return str.substring(0, 100);
 }
 
-// ─── JSON-LD RealEstateListing generator ──────────────────────────────────────
-export function generateRealEstateSchema(input: SEOInput): Record<string, unknown> {
-  return buildAutoSchema('property', {
-    title: input.title,
-    description: input.description,
-    image_url: input.image_url,
-    images: input.images,
-    listing_type: input.listing_type,
-    price: input.price,
-    price_unit: input.price_unit,
-    price_per_month: input.price_per_month,
-    city: input.city,
-    district: input.district,
-    area_sqm: input.area_sqm,
-    bedrooms: input.bedrooms,
-    bathrooms: input.bathrooms,
-    address: input.address,
-    latitude: input.latitude,
-    longitude: input.longitude,
-    author: input.contact_name,
-    site_name: input.contact_name,
-    path: typeof window !== 'undefined' ? window.location.pathname : '',
-  });
-}
-
-export function generateNewsSchema(input: { title: string; description?: string; image_url?: string; images?: string[]; author?: string; slug?: string; path?: string }) {
-  return buildAutoSchema('news', {
-    title: input.title,
-    description: input.description,
-    image_url: input.image_url,
-    images: input.images,
-    author: input.author,
-    slug: input.slug,
-    path: input.path,
-  });
-}
-
-export function generateRouteSchema(input: { title?: string; description?: string; focus_keywords?: string; path?: string; route_type?: 'WebPage' | 'CollectionPage' | 'AboutPage' | 'WebSite' | 'FAQPage' }) {
-  return buildAutoSchema('route', input, { basePath: input.path, routeType: input.route_type });
-}
-
-export function generateHomeSchema(input: { title?: string; description?: string; site_name?: string; path?: string }) {
-  return buildAutoSchema('home', input, { basePath: input.path });
-}
-
 // ─── Hook: useSEOAutofill ─────────────────────────────────────────────────────
-// Tự động fill meta_title, meta_description, focus_keywords, schema_markup
-// dựa trên các trường đầu vào. Cho phép user override.
+// Tự động fill meta_title, meta_description, focus_keywords dựa trên các trường đầu vào.
 export function useSEOAutofill(input: SEOInput) {
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [focusKeywords, setFocusKeywords] = useState('');
-  const [schemaMarkup, setSchemaMarkup] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Auto-fill khi input thay đổi và field chưa bị user touch
@@ -156,14 +101,6 @@ export function useSEOAutofill(input: SEOInput) {
     }
   }, [input.title, input.city, input.district, input.property_type_name, touched.focus_keywords]);
 
-  // Auto-generate schema markup
-  const autoSchema = useMemo(() => generateRealEstateSchema(input), [input]);
-  useEffect(() => {
-    if (!touched.schema_markup) {
-      setSchemaMarkup(JSON.stringify(autoSchema, null, 2));
-    }
-  }, [autoSchema, touched.schema_markup]);
-
   // Mark field as touched khi user chỉnh
   const handleMetaTitleChange = useCallback((v: string) => {
     setMetaTitle(v);
@@ -176,10 +113,6 @@ export function useSEOAutofill(input: SEOInput) {
   const handleFocusKeywordsChange = useCallback((v: string) => {
     setFocusKeywords(v);
     setTouched(t => ({ ...t, focus_keywords: true }));
-  }, []);
-  const handleSchemaMarkupChange = useCallback((v: string) => {
-    setSchemaMarkup(v);
-    setTouched(t => ({ ...t, schema_markup: true }));
   }, []);
 
   // Reset touched + re-auto-fill
@@ -196,7 +129,6 @@ export function useSEOAutofill(input: SEOInput) {
     metaTitle, setMetaTitle: handleMetaTitleChange,
     metaDescription, setMetaDescription: handleMetaDescriptionChange,
     focusKeywords, setFocusKeywords: handleFocusKeywordsChange,
-    schemaMarkup, setSchemaMarkup: handleSchemaMarkupChange,
     resetAuto,
     titleValid, descValid,
     titleLength: metaTitle.length,

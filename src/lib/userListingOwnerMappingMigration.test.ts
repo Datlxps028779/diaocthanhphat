@@ -52,7 +52,7 @@ describe('user listing owner mapping contract', () => {
 
   it('does not let the client submit an owner id', () => {
     expect(submitApi).toContain(".from('user_listings')");
-    expect(submitApi).toContain('.insert(canonicalListingTitle(listing))');
+    expect(submitApi).toContain('.insert(safeListing)');
     expect(submitApi).not.toContain('user_id:');
   });
 });

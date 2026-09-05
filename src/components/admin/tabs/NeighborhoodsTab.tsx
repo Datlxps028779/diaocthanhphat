@@ -186,7 +186,7 @@ export function NeighborhoodsTab() {
         ward_id: form.ward_id || null, description: form.description.trim() || null,
         image_url: form.image_url.trim() || null, order_index: editing?.order_index ?? items.length,
         meta_title: form.meta_title.trim() || null, meta_description: form.meta_description.trim() || null,
-        focus_keywords: form.focus_keywords.trim() || null, schema_markup: null,
+        focus_keywords: form.focus_keywords.trim() || null,
       };
       if (editing) await adminUpdateNeighborhood(editing.id, payload, editing.slug);
       else await adminCreateNeighborhood(payload);

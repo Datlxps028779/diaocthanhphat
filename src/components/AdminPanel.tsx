@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense, Fragment } from 'react';
 import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag, ShieldCheck, BarChart3
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, UserRound, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag, ShieldCheck, BarChart3
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
@@ -95,7 +95,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
 
   const handleLogout = async () => { await supabase.auth.signOut(); onLogout(); };
 
-  const navItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+  const navItems: { id: AdminTab; label: string; section?: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'properties', label: 'Bất động sản', icon: <Building2 className="w-4 h-4" />, badge: stats.activeProperties },
     { id: 'property-verification', label: 'Hồ sơ kiểm tra', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -103,9 +103,9 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     { id: 'chat-sessions', label: 'Phiên chat', icon: <MessagesSquare className="w-4 h-4" /> },
     { id: 'nurture', label: 'Nuôi dưỡng', icon: <Send className="w-4 h-4" /> },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
-    { id: 'users', label: 'Người dùng', icon: <Users className="w-4 h-4" /> },
-    { id: 'staff', label: 'Nhân viên', icon: <UserCog className="w-4 h-4" /> },
-    { id: 'agent-profiles', label: 'Hồ sơ người đăng', icon: <UserCog className="w-4 h-4" /> },
+    { id: 'users', label: 'Khách hàng / CRM', section: 'Con người', icon: <Users className="w-4 h-4" /> },
+    { id: 'staff', label: 'Nhân sự & tài khoản', section: 'Con người', icon: <UserCog className="w-4 h-4" /> },
+    { id: 'agent-profiles', label: 'Hồ sơ công khai', section: 'Con người', icon: <UserRound className="w-4 h-4" /> },
     { id: 'projects', label: 'Dự án', icon: <FolderOpen className="w-4 h-4" /> },
     { id: 'news', label: 'Tin tức', icon: <Newspaper className="w-4 h-4" /> },
     { id: 'news-categories', label: 'Danh mục tin tức', icon: <Tag className="w-4 h-4" /> },
@@ -147,19 +147,26 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
         </div>
 
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {navItems.filter(item => allowedTabs.includes(item.id)).map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${tab === item.id ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span className="flex-shrink-0">{item.icon}</span>
-              {sidebarOpen && (
-                <>
-                  <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{item.badge}</span>
-                  )}
-                </>
+          {navItems.filter(item => allowedTabs.includes(item.id)).map((item, index, visibleNavItems) => (
+            <Fragment key={item.id}>
+              {sidebarOpen && item.section && (index === 0 || visibleNavItems[index - 1].section !== item.section) && (
+                <div className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                  {item.section}
+                </div>
               )}
-            </button>
+              <button onClick={() => setTab(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${tab === item.id ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                <span className="flex-shrink-0">{item.icon}</span>
+                {sidebarOpen && (
+                  <>
+                    <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{item.badge}</span>
+                    )}
+                  </>
+                )}
+              </button>
+            </Fragment>
           ))}
         </nav>
 

@@ -19,10 +19,11 @@ import {
 } from '../../../lib/api';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
-import { buildNewsMetadata, buildNewsJsonLd } from '../../../lib/seo';
+import { buildNewsMetadata } from '../../../lib/seo';
+import { compareNewsByPublishedAt, newsPublishedAt } from '../../../lib/newsOrdering';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
-import { SeoFields, parseSeoSchema, type SeoFieldsValue } from '../shared/SeoFields';
+import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { suggestNewsFaq, type FaqItem } from '../../../lib/propertyFaq';
 import { autofillNewsFaq, autofillNewsGeo, autofillNewsExcerpt } from '../../../lib/newsAutofill';
 import { RichTextEditor } from '../shared/RichTextEditor';
@@ -79,7 +80,7 @@ function newsSlug(title: string): string {
 }
 
 // Dựng NewsArticle tạm từ form state để tái dùng builder public (buildNewsMetadata +
-// buildNewsJsonLd) — đảm bảo SEO/GEO form fill khớp 1:1 JSON-LD public /tin-tuc/[slug].
+// Tạo object tạm từ form để dùng chung metadata và preview public.
 // Các field không có trong form (id, views, related_ids...) → giá trị tạm an toàn.
 function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now: string): NewsArticle {
   const slug = form.slug.trim() || newsSlug(form.title) || 'slug';
@@ -151,7 +152,6 @@ function initialForm(article: NewsArticle | null): NewsFormState {
     meta_title: article?.meta_title ?? '',
     meta_description: article?.meta_description ?? '',
     focus_keywords: article?.focus_keywords ?? '',
-    schema_markup: article?.schema_markup ? JSON.stringify(article.schema_markup, null, 2) : '',
     related_ids: article?.related_ids ?? [],
     geo_area: article?.geo_area ?? '',
     geo_entity: article?.geo_entity ?? '',
@@ -291,20 +291,8 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   const [markdownOpen, setMarkdownOpen] = useState(false);
   const [markdownDraft, setMarkdownDraft] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const generatedSchemaRef = useRef(form.schema_markup);
-  const manualSchemaRef = useRef(Boolean(form.schema_markup.trim()));
-  // Timestamp ổn định theo vòng đời form. Nếu dùng new Date() mỗi lần dựng schema thì
-  // chuỗi JSON-LD đổi liên tục → effect auto-schema bắn onChange vô hạn (Maximum update
-  // depth) làm hỏng cả subtree editor khi tạo bài mới.
+  // Timestamp ổn định theo vòng đời form cho metadata preview.
   const nowRef = useRef(new Date().toISOString());
-  const autoSchema = useMemo(
-    () => buildNewsJsonLd(formToNewsArticle(form, article, nowRef.current)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [form.title, form.slug, form.excerpt, form.content, form.image_url, form.author, form.author_type, form.author_role,
-     form.published_at, form.as_of_date, form.reviewer_name, form.reviewer_role, form.source_note, form.category,
-     form.geo_area, form.geo_entity, form.geo_notes, form.faq, form.citations, form.focus_keywords,
-     form.meta_title, form.meta_description, article],
-  );
   const set = (key: keyof NewsFormState, value: string | boolean) => setForm(f => ({ ...f, [key]: value }));
 
   const candidatePool = allArticles.filter(a => a.id !== article?.id);
@@ -377,13 +365,11 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     .filter(a => !form.related_ids.includes(a.id) && (!q || a.title.toLowerCase().includes(q)))
     .slice(0, 8);
   const setSeo = (value: SeoFieldsValue) => {
-    manualSchemaRef.current = Boolean(value.schema_markup.trim()) && value.schema_markup !== generatedSchemaRef.current;
     setForm(f => ({ ...f, ...value }));
   };
 
   const resolvedSlug = form.slug.trim() || newsSlug(form.title);
   const publicPath = resolvedSlug ? `/tin-tuc/${resolvedSlug}` : '';
-  const schemaState = parseSeoSchema(form.schema_markup, 'news');
   const readiness = evaluateNewsReadiness({
     title: form.title,
     slug: resolvedSlug,
@@ -393,7 +379,6 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     metaTitle: form.meta_title,
     metaDescription: form.meta_description,
     focusKeywords: form.focus_keywords,
-    schemaError: schemaState.error,
     geoArea: form.geo_area,
     geoEntity: form.geo_entity,
     relatedCount: form.related_ids.length,
@@ -406,15 +391,12 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
 
   useEffect(() => {
     const temp = formToNewsArticle(form, article, nowRef.current);
-    const schema = JSON.stringify(buildNewsJsonLd(temp), null, 2);
-    generatedSchemaRef.current = schema;
     const meta = buildNewsMetadata(temp);
     setForm(f => ({
       ...f,
       meta_title: f.meta_title.trim() || clampSeoTitle(meta.title as string),
       meta_description: f.meta_description.trim() || (meta.description as string).slice(0, 155),
       focus_keywords: f.focus_keywords.trim() || (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
-      schema_markup: manualSchemaRef.current ? f.schema_markup : schema,
     }));
   }, [form.title, form.slug, form.category, form.author, form.author_type, form.author_role, form.published_at, form.as_of_date,
     form.reviewer_name, form.reviewer_role, form.source_note, form.image_url, form.excerpt, form.content, form.geo_area, form.geo_entity, form.geo_notes, article]);
@@ -427,7 +409,6 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
       meta_title: clampSeoTitle(meta.title as string),
       meta_description: (meta.description as string).slice(0, 155),
       focus_keywords: (meta.keywords as string) || [f.title, f.category, 'bất động sản'].filter(Boolean).join(', '),
-      schema_markup: JSON.stringify(buildNewsJsonLd(temp), null, 2),
     }));
   };
 
@@ -442,7 +423,6 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
       setError(`Bài chưa đủ nguồn đã kiểm tra để đăng công khai: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
       return;
     }
-    if (schemaState.error) { setError(schemaState.error); return; }
     setSaving(true);
     setError('');
     const bodyHtml = sanitizeArticleHtml(form.content.replace(/<p>\s*<\/p>/g, '').trim());
@@ -466,7 +446,6 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         meta_title: form.meta_title.trim() ? clampSeoTitle(form.meta_title) : null,
         meta_description: form.meta_description.trim() || null,
         focus_keywords: form.focus_keywords.trim() || null,
-        schema_markup: schemaState.schema,
         related_ids: form.related_ids.length ? form.related_ids : null,
         geo_area: form.geo_area.trim() || null,
         geo_entity: form.geo_entity.trim() || null,
@@ -496,7 +475,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
       <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white px-6 py-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{article ? 'Sửa bài viết' : 'Viết bài mới'}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">Tối ưu metadata, schema NewsArticle và trạng thái index.</p>
+          <p className="mt-0.5 text-xs text-gray-400">Tối ưu metadata và trạng thái index.</p>
         </div>
         <button onClick={onCancel}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
       </div>
@@ -634,7 +613,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-violet-700">FAQ (AEO / AI search)</p>
-                <p className="mt-1 text-[11px] text-violet-700/80">Câu hỏi – trả lời hiển thị công khai cuối bài và sinh schema FAQPage. Chỉ câu có đủ hỏi + đáp mới được lưu và render.</p>
+                <p className="mt-1 text-[11px] text-violet-700/80">Câu hỏi – trả lời hiển thị công khai cuối bài. Chỉ câu có đủ hỏi + đáp mới được lưu và render.</p>
               </div>
               <button type="button" onClick={suggestFaq}
                 className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-200">
@@ -666,7 +645,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
             <div className="mb-3">
               <p className="text-xs font-bold uppercase tracking-wide text-sky-700">Nguồn tham khảo (E-E-A-T / GEO)</p>
-              <p className="mt-1 text-[11px] text-sky-700/80">Nguồn thật, uy tín (cổng thông tin tỉnh/huyện, quy hoạch, báo lớn). Hiển thị công khai cuối bài và sinh schema citation. Chỉ nguồn có URL http(s) hợp lệ mới được lưu.</p>
+              <p className="mt-1 text-[11px] text-sky-700/80">Nguồn thật, uy tín (cổng thông tin tỉnh/huyện, quy hoạch, báo lớn). Hiển thị công khai cuối bài. Chỉ nguồn có URL http(s) hợp lệ mới được lưu.</p>
             </div>
             <div className="space-y-3">
               {form.citations.map((c, idx) => (
@@ -711,7 +690,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
                   <Upload className="h-3.5 w-3.5" /> Import .md
                 </button>
                 <button type="button" onClick={autoGenerateSeo} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">
-                  <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO/schema
+                  <Sparkles className="h-3.5 w-3.5" /> Tự sinh SEO
                 </button>
               </div>
             </div>
@@ -762,7 +741,6 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
               <span className={`rounded-lg px-2 py-1 ${missingAltCount ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{missingAltCount} ảnh thiếu alt</span>
             </div>
             <p className="mt-1 text-[11px] text-gray-400">Visual dùng toolbar chèn ảnh/video; View code cho phép sửa HTML trực tiếp. Khi chuyển lại Visual hoặc lưu, HTML sẽ được kiểm tra, giữ marker video hợp lệ và loại thẻ/URL không an toàn.</p>
-            <p className="text-[10px] text-gray-400">Tự sinh schema sẽ cập nhật khi tiêu đề/tóm tắt/keywords đổi và dừng khi bạn sửa ô schema tay.</p>
           </div>
 
           <div>
@@ -862,9 +840,9 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
-                  <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO / schema
+                  <Wand2 className="h-3.5 w-3.5" /> Tự sinh SEO / GEO
                 </p>
-                <p className="mt-1 break-words text-[11px] text-amber-700/80">Sinh title/description/keywords + NewsArticle JSON-LD (GEO contentLocation/spatialCoverage/about/mentions + speakable) từ dữ liệu bài viết thật. Bấm nút bên cạnh nội dung để điền, hoặc sửa tay bất kỳ ô nào.</p>
+                <p className="mt-1 break-words text-[11px] text-amber-700/80">Sinh title/description/keywords từ dữ liệu bài viết thật. Hệ thống tự xử lý dữ liệu kỹ thuật khi nội dung được public.</p>
               </div>
               <button type="button" onClick={autoGenerateSeo}
                 className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700">
@@ -876,9 +854,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           <SeoFields
             value={form}
             onChange={setSeo}
-            target="news"
             basePath={`/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`}
-            autoSchema={autoSchema}
           />
         </aside>
       </div>
@@ -978,11 +954,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
               ? a.is_published && editorialFor(a).citationStatus === 'needs-review'
               : a.is_published && editorialFor(a).faqStatus === 'needs-review',
     )
-    .sort((a, b) => {
-      const aPriority = a.is_published && editorialFor(a).citationStatus === 'needs-review' ? 0 : 1;
-      const bPriority = b.is_published && editorialFor(b).citationStatus === 'needs-review' ? 0 : 1;
-      return aPriority - bPriority;
-    });
+    .sort(compareNewsByPublishedAt);
   const allIds = filtered.map(a => a.id);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
@@ -1151,7 +1123,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                             {a.is_published ? 'Đã đăng' : 'Nháp'}
                           </span>
-                          {(a.meta_title || a.meta_description || a.schema_markup) && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">SEO</span>}
+                          {(a.meta_title || a.meta_description) && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">SEO</span>}
                           {(() => {
                             const quality = editorialFor(a);
                             return (
@@ -1170,7 +1142,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell"><span className="text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded">{a.category}</span></td>
-                  <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">{new Date(a.created_at).toLocaleDateString('vi-VN')}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">{new Date(newsPublishedAt(a)).toLocaleDateString('vi-VN')}</td>
                   <td className="px-4 py-3 text-center text-xs text-gray-500 hidden lg:table-cell">
                     <span className="flex items-center justify-center gap-1"><Eye className="w-3 h-3" />{a.views}</span>
                   </td>

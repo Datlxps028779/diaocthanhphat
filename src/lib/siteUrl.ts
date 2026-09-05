@@ -1,4 +1,5 @@
 const DEFAULT_SITE_URL = 'https://chonhaviet.com';
+export const PUBLIC_CANONICAL_ORIGIN = 'https://chonhaviet.com';
 const BRANDED_IMAGE_PREFIX = '/hinh-anh';
 
 export type StorageImagePath = { bucket: string; path: string };
@@ -18,6 +19,10 @@ export function absoluteUrl(path: string): string {
   if (!path) return getSiteUrl();
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   return `${getSiteUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+export function publicCanonicalUrl(path: string): string {
+  return `${PUBLIC_CANONICAL_ORIGIN}${canonicalPath(path)}`;
 }
 
 export function publicImageUrlToStoragePath(url: string | null | undefined): StorageImagePath | null {

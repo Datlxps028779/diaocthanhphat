@@ -1,4 +1,22 @@
 import { supabase, type Property, type FeaturedSection, type FeaturedSectionItem, type PageSection, type ManagedPage, type PageBlock } from '../supabase';
+import { revalidateHomeContent, revalidateNeighborhoodContent, revalidateRouteContent, routeRevalidationSnapshot, neighborhoodRevalidationSnapshot } from './contentRevalidation';
+
+async function revalidatePageBlockContent(pageSlug: string): Promise<void> {
+  if (pageSlug.startsWith('khu-dan-cu:')) {
+    const neighborhoodSlug = pageSlug.slice('khu-dan-cu:'.length);
+    const { data, error } = await supabase
+      .from('neighborhoods')
+      .select('id,slug,area_id')
+      .eq('slug', neighborhoodSlug)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      await revalidateNeighborhoodContent('update', [{ current: neighborhoodRevalidationSnapshot(data) }]);
+    }
+    return;
+  }
+  await revalidateRouteContent('update', [{ current: routeRevalidationSnapshot(`/trang/${pageSlug}`) }]);
+}
 
 // ─── Featured Sections (public) ───────────────────────────────────────────────
 export async function getFeaturedSections(): Promise<FeaturedSection[]> {
@@ -61,17 +79,20 @@ export async function adminGetFeaturedSections(): Promise<FeaturedSection[]> {
 export async function adminCreateFeaturedSection(s: Omit<FeaturedSection, 'id' | 'created_at' | 'updated_at'>): Promise<FeaturedSection> {
   const { data, error } = await supabase.from('featured_sections').insert(s).select().single();
   if (error) throw error;
+  await revalidateHomeContent();
   return data as FeaturedSection;
 }
 
 export async function adminUpdateFeaturedSection(id: string, s: Partial<FeaturedSection>): Promise<void> {
   const { error } = await supabase.from('featured_sections').update({ ...s, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 
 export async function adminDeleteFeaturedSection(id: string): Promise<void> {
   const { error } = await supabase.from('featured_sections').delete().eq('id', id);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 
 export async function adminGetSectionItems(sectionId: string): Promise<FeaturedSectionItem[]> {
@@ -84,11 +105,16 @@ export async function adminGetSectionItems(sectionId: string): Promise<FeaturedS
 }
 
 export async function adminSetSectionItems(sectionId: string, propertyIds: string[]): Promise<void> {
-  await supabase.from('featured_section_items').delete().eq('section_id', sectionId);
-  if (propertyIds.length === 0) return;
+  const { error: deleteError } = await supabase.from('featured_section_items').delete().eq('section_id', sectionId);
+  if (deleteError) throw deleteError;
+  if (propertyIds.length === 0) {
+    await revalidateHomeContent();
+    return;
+  }
   const items = propertyIds.map((property_id, i) => ({ section_id: sectionId, property_id, order_index: i }));
   const { error } = await supabase.from('featured_section_items').insert(items);
   if (error) throw error;
+  await revalidateHomeContent();
 }
 
 // ─── Managed Pages ────────────────────────────────────────────────────────────
@@ -119,6 +145,7 @@ export async function adminGetAllManagedPages(): Promise<ManagedPage[]> {
 export async function adminCreateManagedPage(page: Omit<ManagedPage, 'id' | 'created_at' | 'updated_at'>): Promise<ManagedPage> {
   const { data, error } = await supabase.from('managed_pages').insert(page).select().single();
   if (error) throw error;
+  await revalidatePageBlockContent(data.slug);
   return data as ManagedPage;
 }
 
@@ -134,13 +161,26 @@ export async function adminEnsureManagedPage(slug: string, title: string): Promi
 }
 
 export async function adminUpdateManagedPage(id: string, updates: Partial<ManagedPage>): Promise<void> {
+  const { data: previous, error: previousError } = await supabase.from('managed_pages').select('slug').eq('id', id).maybeSingle();
+  if (previousError) throw previousError;
   const { error } = await supabase.from('managed_pages').update(updates).eq('id', id);
   if (error) throw error;
+  const { data: current, error: currentError } = await supabase.from('managed_pages').select('slug').eq('id', id).maybeSingle();
+  if (currentError) throw currentError;
+  const paths = [previous?.slug, current?.slug]
+    .filter((slug): slug is string => Boolean(slug))
+    .map(slug => ({ current: routeRevalidationSnapshot(`/trang/${slug}`) }));
+  if (paths.length) await revalidateRouteContent('update', paths);
 }
 
 export async function adminDeleteManagedPage(id: string): Promise<void> {
+  const { data: previous, error: previousError } = await supabase.from('managed_pages').select('slug').eq('id', id).maybeSingle();
+  if (previousError) throw previousError;
   const { error } = await supabase.from('managed_pages').delete().eq('id', id);
   if (error) throw error;
+  if (previous?.slug) {
+    await revalidateRouteContent('delete', [{ previous: routeRevalidationSnapshot(`/trang/${previous.slug}`) }]);
+  }
 }
 
 export async function adminGetPageBlocks(slug: string): Promise<PageBlock[]> {
@@ -152,11 +192,15 @@ export async function adminSavePageBlock(block: Omit<PageBlock, 'id' | 'created_
   const { error } = await supabase.from('page_blocks')
     .upsert({ ...block }, { onConflict: 'page_slug,section,key' });
   if (error) throw error;
+  await revalidatePageBlockContent(block.page_slug);
 }
 
 export async function adminDeletePageBlock(id: string): Promise<void> {
+  const { data: block, error: readError } = await supabase.from('page_blocks').select('page_slug').eq('id', id).maybeSingle();
+  if (readError) throw readError;
   const { error } = await supabase.from('page_blocks').delete().eq('id', id);
   if (error) throw error;
+  if (block?.page_slug) await revalidatePageBlockContent(block.page_slug);
 }
 
 export async function adminSaveAllPageBlocks(_slug: string, blocks: Omit<PageBlock, 'id' | 'created_at' | 'updated_at'>[]): Promise<void> {
@@ -165,6 +209,8 @@ export async function adminSaveAllPageBlocks(_slug: string, blocks: Omit<PageBlo
       .upsert({ ...b }, { onConflict: 'page_slug,section,key' });
     if (error) throw error;
   }
+  const slugs = [...new Set(blocks.map(block => block.page_slug))];
+  await Promise.all(slugs.map(revalidatePageBlockContent));
 }
 
 export async function getPageLayout(): Promise<PageSection[]> {
@@ -179,4 +225,5 @@ export async function adminSavePageLayout(sections: Pick<PageSection, 'id' | 'is
       .eq('id', s.id);
     if (error) throw error;
   }
+  await revalidateHomeContent();
 }
