@@ -4,6 +4,36 @@ import { newsRevalidationSnapshot, revalidateNewsContent } from './contentRevali
 
 export const NEWS_PER_PAGE = 12;
 
+type NewsPublicationFields = {
+  is_published?: boolean;
+  published_at?: string | null;
+};
+
+export function ensureNewsPublicationTimestamp<T extends object>(
+  previous: Pick<NewsArticle, 'is_published' | 'published_at'> | null | undefined,
+  patch: T & NewsPublicationFields,
+  now = new Date().toISOString(),
+): T & NewsPublicationFields {
+  if (patch.published_at == null && previous?.published_at) {
+    return { ...patch, published_at: previous.published_at };
+  }
+
+  const nextIsPublished = patch.is_published ?? previous?.is_published ?? false;
+  if (nextIsPublished && !previous?.is_published && patch.published_at == null) {
+    return { ...patch, published_at: now };
+  }
+
+  return patch;
+}
+
+export function getNewsIdsToStampOnBulkPublish(
+  rows: Array<Pick<NewsArticle, 'id' | 'is_published' | 'published_at'>>,
+): string[] {
+  return rows
+    .filter(row => !row.is_published && !row.published_at)
+    .map(row => row.id);
+}
+
 const NEWS_LIST_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,created_at,updated_at';
 
 // ─── News ─────────────────────────────────────────────────────────────────────
@@ -84,7 +114,8 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
   // Slug auto từ tiêu đề (+ hậu tố chống trùng). Chỉ dùng slug nhập tay khi admin
   // chủ động điền — còn lại luôn sinh tự động để đảm bảo chuẩn SEO.
   const slug = (n.slug && n.slug.trim()) || buildUniqueSlug(n.title);
-  const { schema_markup: _schemaMarkup, ...safePayload } = n as NewsWrite & { schema_markup?: unknown };
+  const publicationPayload = ensureNewsPublicationTimestamp(undefined, n);
+  const { schema_markup: _schemaMarkup, ...safePayload } = publicationPayload as NewsWrite & { schema_markup?: unknown };
   const { data, error } = await supabase.from('news').insert({ ...safePayload, slug }).select().single();
   if (error) throw error;
   const article = data as NewsArticle;
@@ -94,11 +125,12 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
 export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schema_markup'>>): Promise<NewsArticle> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
-    .select('id,slug,category,is_published')
+    .select('id,slug,category,is_published,published_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
-  const { schema_markup: _schemaMarkup, ...safePatch } = n as typeof n & { schema_markup?: unknown };
+  const publicationPatch = ensureNewsPublicationTimestamp(previousData, n);
+  const { schema_markup: _schemaMarkup, ...safePatch } = publicationPatch as typeof n & { schema_markup?: unknown };
   const { data, error } = await supabase
     .from('news')
     .update({ ...safePatch, updated_at: new Date().toISOString() })
@@ -128,8 +160,8 @@ export async function deleteNews(id: string): Promise<void> {
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────
-const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published';
-type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published'>;
+const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published,published_at';
+type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'published_at'>;
 
 async function getNewsRevalidationRows(ids: string[]): Promise<NewsRevalidationSnapshotRow[]> {
   if (ids.length === 0) return [];
@@ -146,11 +178,24 @@ export async function bulkUpdateNews(
 ): Promise<number> {
   if (ids.length === 0) return 0;
   const previousRows = await getNewsRevalidationRows(ids);
+  const publicationTimestamp = new Date().toISOString();
+  const idsToStamp = patch.is_published === true
+    ? getNewsIdsToStampOnBulkPublish(previousRows)
+    : [];
   const { error, count } = await supabase
     .from('news')
-    .update({ ...patch, updated_at: new Date().toISOString() }, { count: 'exact' })
+    .update({ ...patch, updated_at: publicationTimestamp }, { count: 'exact' })
     .in('id', ids);
   if (error) throw error;
+  if (idsToStamp.length > 0) {
+    const { error: timestampError } = await supabase
+      .from('news')
+      .update({ published_at: publicationTimestamp, updated_at: publicationTimestamp })
+      .in('id', idsToStamp)
+      .eq('is_published', true)
+      .is('published_at', null);
+    if (timestampError) throw timestampError;
+  }
   const currentRows = await getNewsRevalidationRows(ids);
   await revalidateNewsContent('bulk', previousRows.map(previous => ({
     previous: newsRevalidationSnapshot(previous),
