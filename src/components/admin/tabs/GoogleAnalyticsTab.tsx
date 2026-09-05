@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BarChart3, Eye, RefreshCw, Users, UserPlus, Activity } from 'lucide-react';
-import { diagnoseGoogleAnalytics, getGoogleAnalyticsReport, getLeads, type GoogleAnalyticsReport } from '../../../lib/api';
+import { diagnoseGoogleAnalytics, getGoogleAnalyticsReport, getLeads, getTeamMembers, type GoogleAnalyticsReport } from '../../../lib/api';
 import type { GoogleAnalyticsDiagnostic, GoogleAnalyticsDimension, GoogleAnalyticsDimensionBreakdown } from '../../../lib/api/googleAnalytics';
 import { EVENTS, MEASURED_FUNNEL_EVENTS, type AnalyticsEventName } from '../../../lib/analytics';
 import { crmMeasurement, measurementBreakdown, measurementFunnel, type CrmMeasurementSummary, type MeasurementEventRow } from '../../../lib/measurement';
@@ -98,17 +98,39 @@ function DimensionBreakdown({ report }: { report: GoogleAnalyticsReport }) {
   </div>;
 }
 
-function CrmEvidence({ summary, error }: { summary: CrmMeasurementSummary | null; error: string }) {
+function CrmEvidence({ summary, error, roster }: { summary: CrmMeasurementSummary | null; error: string; roster: Awaited<ReturnType<typeof getTeamMembers>> }) {
+  const workload = summary ? Object.entries(summary.assigneeWorkload)
+    .map(([id, count]) => ({
+      id,
+      count,
+      label: roster.find(member => member.id === id)?.display_name?.trim() || 'Nhân viên trong dữ liệu',
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)) : [];
+
   return <div className="rounded-xl border border-violet-100 bg-violet-50 p-5 shadow-sm">
-    <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="font-bold text-violet-950">Bằng chứng CRM read-only</h3><p className="mt-0.5 text-xs text-violet-800">Lead, assignment, activity và follow-up từ dữ liệu CRM đã phân quyền.</p></div><span className="text-xs text-violet-700">CRM evidence</span></div>
-    {error ? <p className="rounded-lg border border-violet-200 bg-white/70 p-4 text-sm text-violet-900">Chưa đọc được dữ liệu CRM: {error}</p> : !summary ? <p className="rounded-lg border border-violet-200 bg-white/70 p-4 text-sm text-violet-900">Đang tải dữ liệu CRM...</p> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{[
-      ['Tổng lead', number(summary.totalLeads)],
-      ['Đã gán', number(summary.assignedLeads)],
-      ['Chưa gán', number(summary.unassignedLeads)],
-      ['Có hoạt động gần nhất', number(summary.leadsWithActivity)],
-      ['Có follow-up', number(summary.leadsWithFollowUp)],
-      ['Follow-up quá hạn', summary.hasFollowUpData ? number(summary.overdueFollowUps ?? 0) : 'Chưa đủ dữ liệu'],
-    ].map(([label, value]) => <div key={label} className="rounded-lg bg-white/80 p-3"><p className="text-xs font-semibold text-violet-800">{label}</p><p className="mt-2 text-lg font-black text-violet-950">{value}</p></div>)}</div>}
+    <div className="mb-4 flex items-start justify-between gap-3"><div><h3 className="font-bold text-violet-950">Bằng chứng CRM read-only</h3><p className="mt-0.5 text-xs text-violet-800">Lead, assignment, activity, follow-up và SLA từ dữ liệu CRM đã phân quyền.</p></div><span className="text-xs text-violet-700">CRM evidence</span></div>
+    {error ? <p className="rounded-lg border border-violet-200 bg-white/70 p-4 text-sm text-violet-900">Chưa đọc được dữ liệu CRM: {error}</p> : !summary ? <p className="rounded-lg border border-violet-200 bg-white/70 p-4 text-sm text-violet-900">Đang tải dữ liệu CRM...</p> : <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{[
+        ['Tổng lead', number(summary.totalLeads)],
+        ['Đã gán', number(summary.assignedLeads)],
+        ['Chưa gán', number(summary.unassignedLeads)],
+        ['Có hoạt động gần nhất', number(summary.leadsWithActivity)],
+        ['Có follow-up', summary.hasFollowUpData ? number(summary.leadsWithFollowUp) : 'Chưa đủ dữ liệu'],
+        ['Follow-up quá hạn', summary.hasFollowUpData ? number(summary.overdueFollowUps ?? 0) : 'Chưa đủ dữ liệu'],
+      ].map(([label, value]) => <div key={label} className="rounded-lg bg-white/80 p-3"><p className="text-xs font-semibold text-violet-800">{label}</p><p className="mt-2 text-lg font-black text-violet-950">{value}</p></div>)}</div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg bg-white/80 p-4">
+          <h4 className="text-sm font-bold text-violet-950">SLA tham chiếu</h4>
+          <p className="mt-1 text-[11px] leading-5 text-violet-700">Tính theo logic hiện có và timestamp thật; chưa phải SLA kinh doanh đã phê duyệt.</p>
+          {!summary.sla ? <p className="mt-3 text-xs text-violet-800">Chưa đủ dữ liệu để đánh giá SLA.</p> : <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-md bg-red-50 p-2"><p className="text-[11px] text-red-700">Quá hạn</p><p className="mt-1 font-bold text-red-900">{number(summary.sla.overdue)}</p></div><div className="rounded-md bg-amber-50 p-2"><p className="text-[11px] text-amber-700">Cần gọi hôm nay</p><p className="mt-1 font-bold text-amber-900">{number(summary.sla.dueSoon)}</p></div></div>}
+        </div>
+        <div className="rounded-lg bg-white/80 p-4">
+          <h4 className="text-sm font-bold text-violet-950">Workload theo phụ trách</h4>
+          <p className="mt-1 text-[11px] leading-5 text-violet-700">Mỗi lead được đếm theo assignment thật; không tự chọn phụ trách chính.</p>
+          {!summary.hasAssignmentData || workload.length === 0 ? <p className="mt-3 text-xs text-violet-800">Chưa đủ dữ liệu assignment để phân rã workload.</p> : <div className="mt-3 space-y-2">{workload.map(row => <div key={row.id} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-violet-900">{row.label}</span><strong className="text-violet-950">{number(row.count)}</strong></div>)}</div>}
+        </div>
+      </div>
+    </>}
   </div>;
 }
 
@@ -156,6 +178,7 @@ export function GoogleAnalyticsTab() {
   const [days, setDays] = useState<Range>(30);
   const [report, setReport] = useState<GoogleAnalyticsReport | null>(null);
   const [crmLeads, setCrmLeads] = useState<Awaited<ReturnType<typeof getLeads>> | null>(null);
+  const [crmRoster, setCrmRoster] = useState<Awaited<ReturnType<typeof getTeamMembers>>>([]);
   const [configurationState, setConfigurationState] = useState<'not_configured' | 'configured' | 'invalid' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -166,9 +189,10 @@ export function GoogleAnalyticsTab() {
   const load = async (range = days) => {
     setLoading(true); setError(''); setCrmError('');
     setDiagnostic(null);
-    const [analyticsResult, crmResult] = await Promise.allSettled([
+    const [analyticsResult, crmResult, rosterResult] = await Promise.allSettled([
       getGoogleAnalyticsReport(range),
       getLeads(),
+      getTeamMembers(),
     ]);
     if (analyticsResult.status === 'fulfilled') {
       setConfigurationState(analyticsResult.value.configurationState);
@@ -182,6 +206,9 @@ export function GoogleAnalyticsTab() {
       setCrmLeads(null);
       setCrmError(crmResult.reason instanceof Error ? crmResult.reason.message : 'Không tải được dữ liệu CRM.');
     }
+    if (rosterResult.status === 'fulfilled') {
+      setCrmRoster(rosterResult.value);
+    }
     setLoading(false);
   };
 
@@ -190,8 +217,12 @@ export function GoogleAnalyticsTab() {
   const crmSummary = useMemo(() => crmLeads ? crmMeasurement(
     crmLeads.map(lead => ({
       assigneeCount: lead.lead_assignments?.length ?? 0,
+      assignmentIds: lead.lead_assignments?.map(assignment => assignment.user_id),
       activityCount: lead.last_activity_at ? 1 : 0,
       followUpAt: lead.follow_up_at,
+      status: lead.status,
+      createdAt: lead.created_at,
+      lastActivityAt: lead.last_activity_at,
     })),
     new Date(),
   ) : null, [crmLeads]);
@@ -211,6 +242,6 @@ export function GoogleAnalyticsTab() {
       <DimensionBreakdown report={report} />
       <ReportContent report={report} />
     </>}
-    <CrmEvidence summary={crmSummary} error={crmError} />
+    <CrmEvidence summary={crmSummary} error={crmError} roster={crmRoster} />
   </div>;
 }

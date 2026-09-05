@@ -1,4 +1,5 @@
 import { EVENT_FUNNEL_STAGE, type AnalyticsEventName, type MeasurementFunnelStage } from './analytics';
+import { countSlaStates, type SlaCounts, type SlaLead } from './leadSla';
 
 export type MeasurementDimension = 'listingId' | 'source' | 'channel';
 
@@ -29,6 +30,10 @@ export type CrmMeasurementLead = {
   assigneeCount: number;
   activityCount: number;
   followUpAt: string | null;
+  assignmentIds?: string[];
+  status?: SlaLead['status'];
+  createdAt?: string;
+  lastActivityAt?: string | null;
 };
 
 export type CrmMeasurementSummary = {
@@ -39,6 +44,9 @@ export type CrmMeasurementSummary = {
   leadsWithFollowUp: number;
   overdueFollowUps: number | null;
   hasFollowUpData: boolean;
+  sla: SlaCounts | null;
+  assigneeWorkload: Record<string, number>;
+  hasAssignmentData: boolean;
 };
 
 function finiteCount(value: number): number {
@@ -99,6 +107,10 @@ export function measurementBreakdown(
     ));
 }
 
+function validTimestamp(value: string | null | undefined): boolean {
+  return Boolean(value && !Number.isNaN(new Date(value).getTime()));
+}
+
 export function crmMeasurement(
   leads: CrmMeasurementLead[],
   now: Date,
@@ -108,16 +120,40 @@ export function crmMeasurement(
   let leadsWithFollowUp = 0;
   let overdueFollowUps = 0;
   let hasFollowUpData = false;
+  const assigneeWorkload: Record<string, number> = {};
+  const hasAssignmentData = leads.length > 0 && leads.every(lead => Array.isArray(lead.assignmentIds));
+  const slaLeads: SlaLead[] = [];
 
   for (const lead of leads) {
     if (lead.assigneeCount > 0) assignedLeads += 1;
-    if (lead.activityCount > 0) leadsWithActivity += 1;
-    if (lead.followUpAt) {
+    const assignmentIds = Array.isArray(lead.assignmentIds) ? [...new Set(lead.assignmentIds.filter(Boolean))] : [];
+    for (const assigneeId of assignmentIds) {
+      assigneeWorkload[assigneeId] = (assigneeWorkload[assigneeId] ?? 0) + 1;
+    }
+
+    const hasActivity = lead.activityCount > 0
+      && (!('lastActivityAt' in lead) || validTimestamp(lead.lastActivityAt));
+    if (hasActivity) leadsWithActivity += 1;
+
+    if (validTimestamp(lead.followUpAt)) {
       hasFollowUpData = true;
       leadsWithFollowUp += 1;
-      if (new Date(lead.followUpAt).getTime() < now.getTime()) overdueFollowUps += 1;
+      if (new Date(lead.followUpAt as string).getTime() <= now.getTime()) overdueFollowUps += 1;
+    }
+
+    if (lead.status && typeof lead.createdAt === 'string') {
+      slaLeads.push({
+        status: lead.status,
+        created_at: lead.createdAt,
+        follow_up_at: lead.followUpAt,
+        last_activity_at: lead.lastActivityAt,
+      });
     }
   }
+
+  const sla = leads.length > 0 && slaLeads.length === leads.length
+    ? countSlaStates(slaLeads, now)
+    : null;
 
   return {
     totalLeads: leads.length,
@@ -127,5 +163,8 @@ export function crmMeasurement(
     leadsWithFollowUp,
     overdueFollowUps: hasFollowUpData ? overdueFollowUps : null,
     hasFollowUpData,
+    sla,
+    assigneeWorkload,
+    hasAssignmentData,
   };
 }
