@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { track, sanitizeProps, EVENTS } from './analytics';
+import {
+  track,
+  sanitizeProps,
+  sanitizeEventProps,
+  EVENTS,
+  EVENT_DIMENSIONS,
+  EVENT_REQUIRED_DIMENSIONS,
+  EVENT_FUNNEL_STAGE,
+} from './analytics';
 
 describe('analytics — facade gửi event tới Vercel + GA4', () => {
   describe('sanitizeProps — chỉ giữ giá trị Vercel Analytics chấp nhận', () => {
@@ -25,6 +33,36 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
       expect(sanitizeProps()).toEqual({});
       expect(sanitizeProps(undefined)).toEqual({});
     });
+
+    it('loại khóa PII và giá trị nhận diện khỏi telemetry', () => {
+      const out = sanitizeProps({
+        phone: '0900000000',
+        email: 'user@example.com',
+        message: 'Tôi muốn xem nhà',
+        rawUrl: 'https://example.com/danh-sach?phone=0900000000',
+        safeFlag: true,
+      });
+      expect(out).toEqual({ safeFlag: true });
+    });
+
+    it('chỉ giữ dimension được phép theo từng event', () => {
+      expect(sanitizeEventProps(EVENTS.LEAD_SUBMIT, {
+        listingId: 'listing-1',
+        source: 'contact_modal',
+        hasMessage: true,
+        position: 2,
+        email: 'user@example.com',
+      })).toEqual({
+        listingId: 'listing-1',
+        source: 'contact_modal',
+        hasMessage: true,
+      });
+      expect(sanitizeEventProps(EVENTS.LEAD_SUBMIT, {
+        source: 'Nguyễn Văn A',
+        channel: 'https://example.com?phone=0900000000',
+      })).toEqual({});
+    });
+
   });
 
   describe('track — dispatch tới cả hai nhà cung cấp nếu có mặt', () => {
@@ -86,6 +124,24 @@ describe('analytics — facade gửi event tới Vercel + GA4', () => {
       expect(EVENTS.DISCOVERY_MODULE_VIEW).toBe('discovery_module_view');
       expect(EVENTS.DISCOVERY_MODULE_CLICK).toBe('discovery_module_click');
       Object.values(EVENTS).forEach(v => expect(v.length).toBeGreaterThan(0));
+    });
+    it('khai báo đủ stage view → CTA → lead và allowlist dimension', () => {
+      expect(EVENT_FUNNEL_STAGE[EVENTS.LISTING_VIEW]).toBe('view');
+      expect(EVENT_FUNNEL_STAGE[EVENTS.CONTACT_OPEN]).toBe('cta');
+      expect(EVENT_FUNNEL_STAGE[EVENTS.PHONE_REVEAL]).toBe('cta');
+      expect(EVENT_FUNNEL_STAGE[EVENTS.LEAD_SUBMIT]).toBe('lead');
+      Object.values(EVENTS).forEach(event => {
+        expect(EVENT_DIMENSIONS[event]).toBeDefined();
+      });
+      expect(EVENT_REQUIRED_DIMENSIONS[EVENTS.LISTING_VIEW]).toEqual(['listingId', 'source']);
+      expect(EVENT_REQUIRED_DIMENSIONS[EVENTS.LEAD_SUBMIT]).toEqual(['source']);
+    });
+
+    it('bỏ qua event không nằm trong contract ở runtime', () => {
+      const va = vi.fn();
+      (globalThis as Record<string, unknown>).va = va;
+      track('unknown_event' as never, { source: 'test' });
+      expect(va).not.toHaveBeenCalled();
     });
   });
 });
