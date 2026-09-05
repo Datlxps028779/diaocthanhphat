@@ -80,8 +80,39 @@ describe('googleAnalytics', () => {
       { name: 'lead_submit', label: 'Gửi lead', eventCount: 0, activeUsers: 0 },
     ]);
     expect(report.topEvents).toEqual([]);
+    expect(report.dimensionBreakdowns).toEqual({
+      listingId: { status: 'unavailable', rows: [] },
+      source: { status: 'unavailable', rows: [] },
+      channel: { status: 'unavailable', rows: [] },
+    });
     expect(report.acquisition).toEqual([]);
     expect(report.devices).toEqual([]);
+  });
+
+  it('normalizes real custom dimension rows and skips blank or unsafe values', () => {
+    const report = normalizeGoogleAnalyticsReport(30, {}, {}, {}, {}, {}, {}, {
+      listingId: {
+        rows: [
+          { dimensionValues: [{ value: 'listing_view' }, { value: 'property-1' }], metricValues: [{ value: '8' }, { value: '6' }] },
+          { dimensionValues: [{ value: 'contact_open' }, { value: 'property-1' }], metricValues: [{ value: '3' }, { value: '3' }] },
+          { dimensionValues: [{ value: 'lead_submit' }, { value: 'property-1' }], metricValues: [{ value: '1' }, { value: '1' }] },
+          { dimensionValues: [{ value: 'listing_view' }, { value: 'Nguyễn Văn A' }], metricValues: [{ value: '9' }, { value: '9' }] },
+          { dimensionValues: [{ value: 'listing_view' }, { value: '' }], metricValues: [{ value: '4' }, { value: '4' }] },
+        ],
+      },
+      source: { rows: [] },
+    });
+
+    expect(report.dimensionBreakdowns.listingId).toEqual({
+      status: 'available',
+      rows: [
+        { eventName: 'listing_view', eventCount: 8, activeUsers: 6, value: 'property-1' },
+        { eventName: 'contact_open', eventCount: 3, activeUsers: 3, value: 'property-1' },
+        { eventName: 'lead_submit', eventCount: 1, activeUsers: 1, value: 'property-1' },
+      ],
+    });
+    expect(report.dimensionBreakdowns.source).toEqual({ status: 'empty', rows: [] });
+    expect(report.dimensionBreakdowns.channel).toEqual({ status: 'unavailable', rows: [] });
   });
 
   it('identifies token failures separately from property permission failures', async () => {
@@ -94,9 +125,36 @@ describe('googleAnalytics', () => {
     expect(permissionFailure).toMatchObject({ ok: false, stage: 'property_report', errorCode: 'GOOGLE_AUTH' });
   });
 
+  it('keeps the main report when a custom dimension query is rejected', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
+      .mockResolvedValueOnce(response({ rows: [{ metricValues: [{ value: '4' }, { value: '3' }, { value: '2' }, { value: '1' }, { value: '0.5' }] }] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ error: { message: 'Custom dimension not registered.' } }, 400))
+      .mockResolvedValueOnce(response({ rows: [{ dimensionValues: [{ value: 'listing_view' }, { value: 'organic' }], metricValues: [{ value: '2' }, { value: '2' }] }] }))
+      .mockResolvedValueOnce(response({ rows: [] }));
+
+    const report = await getGoogleAnalyticsReport(config, 30, fetchMock);
+
+    expect(report.overview.activeUsers).toBe(4);
+    expect(report.dimensionBreakdowns.listingId).toEqual({ status: 'unavailable', rows: [] });
+    expect(report.dimensionBreakdowns.source).toEqual({
+      status: 'available',
+      rows: [{ eventName: 'listing_view', eventCount: 2, activeUsers: 2, value: 'organic' }],
+    });
+    expect(report.dimensionBreakdowns.channel).toEqual({ status: 'empty', rows: [] });
+  });
+
   it('calls only the GA4 Data API with bounded page rows and never exposes the access token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
+      .mockResolvedValueOnce(response({ rows: [] }))
       .mockResolvedValueOnce(response({ rows: [] }))
       .mockResolvedValueOnce(response({ rows: [] }))
       .mockResolvedValueOnce(response({ rows: [] }))
@@ -106,7 +164,7 @@ describe('googleAnalytics', () => {
 
     const report = await getGoogleAnalyticsReport(config, 30, fetchMock);
 
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
     for (const [, init] of fetchMock.mock.calls.slice(1)) {
       expect(init).toMatchObject({ method: 'POST', headers: { Authorization: 'Bearer secret-token' } });
     }
@@ -120,6 +178,16 @@ describe('googleAnalytics', () => {
       dimensions: [{ name: 'eventName' }, { name: 'pagePath' }],
       limit: '100000',
       dimensionFilter: { andGroup: { expressions: expect.any(Array) } },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[7][1].body)).toMatchObject({
+      dimensions: [{ name: 'eventName' }, { name: 'customEvent:listingId' }],
+      limit: '100000',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[8][1].body)).toMatchObject({
+      dimensions: [{ name: 'eventName' }, { name: 'customEvent:source' }],
+    });
+    expect(JSON.parse(fetchMock.mock.calls[9][1].body)).toMatchObject({
+      dimensions: [{ name: 'eventName' }, { name: 'customEvent:channel' }],
     });
     expect(JSON.stringify(report)).not.toContain('secret-token');
   });

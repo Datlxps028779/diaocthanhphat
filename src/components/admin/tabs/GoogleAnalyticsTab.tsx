@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BarChart3, Eye, RefreshCw, Users, UserPlus, Activity } from 'lucide-react';
 import { diagnoseGoogleAnalytics, getGoogleAnalyticsReport, getLeads, type GoogleAnalyticsReport } from '../../../lib/api';
-import type { GoogleAnalyticsDiagnostic } from '../../../lib/api/googleAnalytics';
-import { MEASURED_FUNNEL_EVENTS } from '../../../lib/analytics';
-import { crmMeasurement, measurementFunnel, type CrmMeasurementSummary } from '../../../lib/measurement';
+import type { GoogleAnalyticsDiagnostic, GoogleAnalyticsDimension, GoogleAnalyticsDimensionBreakdown } from '../../../lib/api/googleAnalytics';
+import { EVENTS, MEASURED_FUNNEL_EVENTS, type AnalyticsEventName } from '../../../lib/analytics';
+import { crmMeasurement, measurementBreakdown, measurementFunnel, type CrmMeasurementSummary, type MeasurementEventRow } from '../../../lib/measurement';
 
 const RANGES = [7, 30, 90] as const;
 type Range = (typeof RANGES)[number];
@@ -51,6 +51,50 @@ function MeasuredFunnel({ report }: { report: GoogleAnalyticsReport }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-emerald-200 bg-white/60 p-3"><p className="text-xs text-emerald-800">View → CTA</p><p className="mt-1 font-bold text-emerald-950">{rate(summary.viewToCtaRate)}</p></div><div className="rounded-lg border border-emerald-200 bg-white/60 p-3"><p className="text-xs text-emerald-800">CTA → Lead</p><p className="mt-1 font-bold text-emerald-950">{rate(summary.ctaToLeadRate)}</p></div></div>
       <p className="mt-3 text-[11px] text-emerald-800">Phân rã event theo property, source hoặc channel: chưa có trong response GA4 hiện tại.</p>
     </>}
+  </div>;
+}
+
+const DIMENSION_LABELS: Array<{ key: GoogleAnalyticsDimension; label: string }> = [
+  { key: 'listingId', label: 'Property / listing' },
+  { key: 'source', label: 'Source' },
+  { key: 'channel', label: 'Channel' },
+];
+
+function isAnalyticsEventName(name: string): name is AnalyticsEventName {
+  return (Object.values(EVENTS) as string[]).includes(name);
+}
+
+function dimensionMeasurementRows(
+  dimension: GoogleAnalyticsDimension,
+  breakdown: GoogleAnalyticsDimensionBreakdown,
+): ReturnType<typeof measurementBreakdown> {
+  const rows: MeasurementEventRow[] = breakdown.rows
+    .filter(row => isAnalyticsEventName(row.eventName))
+    .map(row => ({
+      eventName: row.eventName as AnalyticsEventName,
+      eventCount: row.eventCount,
+      activeUsers: row.activeUsers,
+      dimensions: { [dimension]: row.value },
+    }));
+  return measurementBreakdown(rows, dimension);
+}
+
+function DimensionBreakdown({ report }: { report: GoogleAnalyticsReport }) {
+  return <div className="rounded-xl border border-sky-100 bg-sky-50 p-5 shadow-sm">
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div><h3 className="font-bold text-sky-950">Phân rã theo dữ liệu GA4 thật</h3><p className="mt-0.5 text-xs text-sky-800">Chỉ hiển thị property, source và channel khi custom dimension đã được GA4 trả về; không suy diễn từ URL hoặc sample.</p></div>
+      <span className="text-xs text-sky-700">Dimension evidence</span>
+    </div>
+    <div className="grid gap-4 lg:grid-cols-3">
+      {DIMENSION_LABELS.map(({ key, label }) => {
+        const breakdown = report.dimensionBreakdowns[key];
+        const rows = dimensionMeasurementRows(key, breakdown);
+        return <section key={key} className="rounded-lg bg-white/80 p-3">
+          <h4 className="text-sm font-bold text-sky-950">{label}</h4>
+          {breakdown.status === 'unavailable' ? <p className="mt-3 text-xs leading-5 text-sky-800">Chưa đọc được custom dimension này. Kiểm tra đăng ký dimension và quyền GA4.</p> : breakdown.status === 'empty' || rows.length === 0 ? <p className="mt-3 text-xs leading-5 text-sky-800">Chưa đủ dữ liệu có giá trị trong khoảng {report.startDate} → {report.endDate}.</p> : <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[360px] text-left text-xs"><thead><tr className="border-b border-sky-100 text-sky-700"><th className="pb-2 font-semibold">Giá trị</th><th className="pb-2 text-right font-semibold">View</th><th className="pb-2 text-right font-semibold">CTA</th><th className="pb-2 text-right font-semibold">Lead</th></tr></thead><tbody>{rows.map(row => <tr key={row.value} className="border-b border-sky-50 last:border-0"><td className="max-w-[180px] truncate py-2 font-medium text-sky-950" title={row.value}>{row.value}</td><td className="py-2 text-right text-sky-800">{row.view === null ? '—' : number(row.view)}</td><td className="py-2 text-right text-sky-800">{row.cta === null ? '—' : number(row.cta)}</td><td className="py-2 text-right text-sky-800">{row.lead === null ? '—' : number(row.lead)}</td></tr>)}</tbody></table></div>}
+        </section>;
+      })}
+    </div>
   </div>;
 }
 
@@ -164,6 +208,7 @@ export function GoogleAnalyticsTab() {
     {loading && <div className="rounded-xl border border-gray-200 bg-white p-12 text-center text-sm text-gray-400">Đang tải báo cáo GA4...</div>}
     {!loading && !error && report && <>
       <MeasuredFunnel report={report} />
+      <DimensionBreakdown report={report} />
       <ReportContent report={report} />
     </>}
     <CrmEvidence summary={crmSummary} error={crmError} />

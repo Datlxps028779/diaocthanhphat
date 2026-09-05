@@ -9,6 +9,17 @@ export type GoogleAnalyticsOverview = {
 };
 
 export type GoogleAnalyticsEvent = { name: string; eventCount: number; activeUsers: number };
+export type GoogleAnalyticsDimension = 'listingId' | 'source' | 'channel';
+export type GoogleAnalyticsDimensionRow = {
+  eventName: string;
+  eventCount: number;
+  activeUsers: number;
+  value: string;
+};
+export type GoogleAnalyticsDimensionBreakdown = {
+  status: 'available' | 'empty' | 'unavailable';
+  rows: GoogleAnalyticsDimensionRow[];
+};
 export type GoogleAnalyticsFunnelStep = GoogleAnalyticsEvent & { label: string };
 export type GoogleAnalyticsAcquisition = { sourceMedium: string; sessions: number; activeUsers: number; engagementRate: number };
 export type GoogleAnalyticsDevice = { category: string; sessions: number; activeUsers: number; pageViews: number };
@@ -22,6 +33,7 @@ export type GoogleAnalyticsReport = {
   topPages: Array<{ path: string; pageViews: number; activeUsers: number }>;
   funnel: GoogleAnalyticsFunnelStep[];
   topEvents: GoogleAnalyticsEvent[];
+  dimensionBreakdowns: Record<GoogleAnalyticsDimension, GoogleAnalyticsDimensionBreakdown>;
   acquisition: GoogleAnalyticsAcquisition[];
   devices: GoogleAnalyticsDevice[];
 };

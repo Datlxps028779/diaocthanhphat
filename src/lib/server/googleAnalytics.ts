@@ -23,6 +23,12 @@ export const GA4_BEHAVIOR_EVENTS = [
 
 const FUNNEL_EVENT_NAMES = ['search', 'listing_view', 'contact_open', 'lead_submit'] as const;
 const PRIVATE_PATH_PREFIXES = ['/quantrihethong', '/quantrithethong', '/noi-bo'] as const;
+const CUSTOM_EVENT_DIMENSIONS: Record<GoogleAnalyticsDimension, string> = {
+  listingId: 'customEvent:listingId',
+  source: 'customEvent:source',
+  channel: 'customEvent:channel',
+};
+const SAFE_DIMENSION_VALUE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 type FetchLike = typeof fetch;
 
@@ -72,6 +78,17 @@ export type GoogleAnalyticsOverview = {
 export type GoogleAnalyticsDailyPoint = GoogleAnalyticsOverview & { date: string };
 export type GoogleAnalyticsTopPage = { path: string; pageViews: number; activeUsers: number };
 export type GoogleAnalyticsEvent = { name: string; eventCount: number; activeUsers: number };
+export type GoogleAnalyticsDimension = 'listingId' | 'source' | 'channel';
+export type GoogleAnalyticsDimensionRow = {
+  eventName: string;
+  eventCount: number;
+  activeUsers: number;
+  value: string;
+};
+export type GoogleAnalyticsDimensionBreakdown = {
+  status: 'available' | 'empty' | 'unavailable';
+  rows: GoogleAnalyticsDimensionRow[];
+};
 export type GoogleAnalyticsFunnelStep = GoogleAnalyticsEvent & { label: string };
 export type GoogleAnalyticsAcquisition = { sourceMedium: string; sessions: number; activeUsers: number; engagementRate: number };
 export type GoogleAnalyticsDevice = { category: string; sessions: number; activeUsers: number; pageViews: number };
@@ -85,6 +102,7 @@ export type GoogleAnalyticsReport = {
   topPages: GoogleAnalyticsTopPage[];
   funnel: GoogleAnalyticsFunnelStep[];
   topEvents: GoogleAnalyticsEvent[];
+  dimensionBreakdowns: Record<GoogleAnalyticsDimension, GoogleAnalyticsDimensionBreakdown>;
   acquisition: GoogleAnalyticsAcquisition[];
   devices: GoogleAnalyticsDevice[];
 };
@@ -251,6 +269,45 @@ function dimensionValue(row: GaReportRow, index = 0, fallback = ''): string {
   return row.dimensionValues?.[index]?.value || fallback;
 }
 
+function normalizeDimensionBreakdown(payload: GaReportResponse | undefined): GoogleAnalyticsDimensionBreakdown {
+  if (!payload) return { status: 'unavailable', rows: [] };
+  const groups = new Map<string, GoogleAnalyticsDimensionRow>();
+  for (const row of payload.rows ?? []) {
+    const eventName = dimensionValue(row, 0);
+    const value = dimensionValue(row, 1).trim();
+    if (!GA4_BEHAVIOR_EVENTS.includes(eventName as typeof GA4_BEHAVIOR_EVENTS[number]) || !SAFE_DIMENSION_VALUE.test(value)) continue;
+    const key = `${eventName}|${value}`;
+    const current = groups.get(key);
+    const normalized = {
+      eventName,
+      eventCount: parseMetric(row.metricValues?.[0]?.value),
+      activeUsers: parseMetric(row.metricValues?.[1]?.value),
+      value,
+    };
+    groups.set(key, current ? {
+      ...current,
+      eventCount: current.eventCount + normalized.eventCount,
+      activeUsers: current.activeUsers + normalized.activeUsers,
+    } : normalized);
+  }
+  const rows = [...groups.values()].sort((a, b) => b.eventCount - a.eventCount || a.value.localeCompare(b.value));
+  return { status: rows.length > 0 ? 'available' : 'empty', rows };
+}
+
+function unavailableDimensionBreakdown(): GoogleAnalyticsDimensionBreakdown {
+  return { status: 'unavailable', rows: [] };
+}
+
+function dimensionBreakdowns(
+  payloads: Partial<Record<GoogleAnalyticsDimension, GaReportResponse | undefined>>,
+): Record<GoogleAnalyticsDimension, GoogleAnalyticsDimensionBreakdown> {
+  return {
+    listingId: payloads.listingId ? normalizeDimensionBreakdown(payloads.listingId) : unavailableDimensionBreakdown(),
+    source: payloads.source ? normalizeDimensionBreakdown(payloads.source) : unavailableDimensionBreakdown(),
+    channel: payloads.channel ? normalizeDimensionBreakdown(payloads.channel) : unavailableDimensionBreakdown(),
+  };
+}
+
 export function publicPagePathFilter(): Record<string, unknown> {
   return {
     andGroup: {
@@ -293,6 +350,7 @@ export function normalizeGoogleAnalyticsReport(
   eventsPayload: GaReportResponse = {},
   acquisitionPayload: GaReportResponse = {},
   devicesPayload: GaReportResponse = {},
+  dimensionPayloads: Partial<Record<GoogleAnalyticsDimension, GaReportResponse | undefined>> = {},
 ): GoogleAnalyticsReport {
   const range = dateRange(days);
   const eventGroups = new Map<string, GaReportRow[]>();
@@ -326,6 +384,7 @@ export function normalizeGoogleAnalyticsReport(
       return { name, label: funnelLabel(name), eventCount: event?.eventCount ?? 0, activeUsers: event?.activeUsers ?? 0 };
     }),
     topEvents,
+    dimensionBreakdowns: dimensionBreakdowns(dimensionPayloads),
     acquisition: aggregateAcquisition(acquisitionPayload.rows ?? []),
     devices: aggregateDevices(devicesPayload.rows ?? []),
   };
@@ -343,6 +402,28 @@ async function runReport(config: GoogleAnalyticsConfig, token: string, body: Rec
     throw new GoogleAnalyticsError('GOOGLE_RESPONSE', 'Google Analytics trả về báo cáo không hợp lệ.');
   }
   return payload as GaReportResponse;
+}
+
+async function runOptionalDimensionReport(
+  config: GoogleAnalyticsConfig,
+  token: string,
+  dateRanges: Array<{ startDate: string; endDate: string }>,
+  dimension: GoogleAnalyticsDimension,
+  publicPathDimensionFilter: Record<string, unknown>,
+  fetchImpl: FetchLike,
+): Promise<GaReportResponse | undefined> {
+  try {
+    return await runReport(config, token, {
+      dateRanges,
+      dimensions: [{ name: 'eventName' }, { name: CUSTOM_EVENT_DIMENSIONS[dimension] }],
+      metrics: [{ name: 'eventCount' }, { name: 'activeUsers' }],
+      dimensionFilter: { andGroup: { expressions: [behaviorEventFilter(), publicPathDimensionFilter] } },
+      orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+      limit: '100000',
+    }, fetchImpl);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function diagnoseGoogleAnalytics(config: GoogleAnalyticsConfig, fetchImpl: FetchLike = fetch): Promise<GoogleAnalyticsDiagnostic> {
@@ -405,5 +486,9 @@ export async function getGoogleAnalyticsReport(config: GoogleAnalyticsConfig, re
     runReport(config, token, { dateRanges, dimensions: [{ name: 'sessionSourceMedium' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'engagementRate' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: REPORT_LIMIT }, fetchImpl),
     runReport(config, token, { dateRanges, dimensions: [{ name: 'deviceCategory' }], metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ metric: { metricName: 'sessions' }, desc: true }], limit: REPORT_LIMIT }, fetchImpl),
   ]);
-  return normalizeGoogleAnalyticsReport(days, overview, daily, pages, events, acquisition, devices);
+  const dimensionPayloads: Partial<Record<GoogleAnalyticsDimension, GaReportResponse | undefined>> = {};
+  await Promise.all((Object.keys(CUSTOM_EVENT_DIMENSIONS) as GoogleAnalyticsDimension[]).map(async dimension => {
+    dimensionPayloads[dimension] = await runOptionalDimensionReport(config, token, dateRanges, dimension, publicPathDimensionFilter, fetchImpl);
+  }));
+  return normalizeGoogleAnalyticsReport(days, overview, daily, pages, events, acquisition, devices, dimensionPayloads);
 }
