@@ -172,7 +172,6 @@ WITH profile_rows AS (
 SELECT now() AS measured_at,
        p.id AS property_id,
        p.is_active,
-       p.user_listing_id,
        l.id AS linked_listing_id,
        l.status AS linked_listing_status,
        l.user_id,
