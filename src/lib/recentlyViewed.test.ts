@@ -27,6 +27,7 @@ function property(overrides: Partial<Property> = {}): Property {
 describe('recentlyViewed', () => {
   let getRecentlyViewed: typeof import('./recentlyViewed').getRecentlyViewed;
   let recordRecentlyViewed: typeof import('./recentlyViewed').recordRecentlyViewed;
+  let pruneRecentlyViewed: typeof import('./recentlyViewed').pruneRecentlyViewed;
 
   beforeEach(async () => {
     installLocalStorage();
@@ -34,6 +35,7 @@ describe('recentlyViewed', () => {
     const mod = await import('./recentlyViewed');
     getRecentlyViewed = mod.getRecentlyViewed;
     recordRecentlyViewed = mod.recordRecentlyViewed;
+    pruneRecentlyViewed = mod.pruneRecentlyViewed;
   });
 
   it('ghi 1 BĐS rồi đọc lại được', () => {
@@ -51,6 +53,14 @@ describe('recentlyViewed', () => {
   it('giới hạn tối đa 8 mục', () => {
     for (let i = 0; i < 12; i++) recordRecentlyViewed(property({ id: `p${i}` }));
     expect(getRecentlyViewed()).toHaveLength(8);
+  });
+
+  it('dọn các mục không còn public và giữ thứ tự', () => {
+    recordRecentlyViewed(property({ id: 'a' }));
+    recordRecentlyViewed(property({ id: 'b' }));
+    recordRecentlyViewed(property({ id: 'c' }));
+    expect(pruneRecentlyViewed(['c', 'a'], 'c').map(p => p.id)).toEqual(['a']);
+    expect(getRecentlyViewed()).toEqual([expect.objectContaining({ id: 'a' })]);
   });
 
   it('excludeId loại BĐS đang xem khỏi danh sách', () => {

@@ -136,6 +136,22 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
   return { data: (data ?? []) as Property[], total: count ?? 0 };
 }
 
+export async function getPublicPropertiesByIds(ids: string[]): Promise<Property[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (uniqueIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('properties')
+    .select(PUBLIC_PROPERTY_SELECT)
+    .eq('is_active', true)
+    .in('id', uniqueIds);
+  if (error) throw error;
+  const byId = new Map((data ?? []).map(row => [row.id, row as unknown as Property]));
+  return uniqueIds.flatMap(id => {
+    const property = byId.get(id);
+    return property ? [property] : [];
+  });
+}
+
 interface RankedMatch { id: string; rank: number; total_count: number }
 interface AdvisorMatch {
   id: string;

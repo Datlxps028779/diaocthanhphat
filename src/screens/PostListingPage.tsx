@@ -5,8 +5,8 @@ import {
   Home, MapPin, Phone,
   CheckCircle, ArrowLeft, Info, Image as ImageIcon, Search, AlertCircle, Plus, X, Zap, Eye
 } from 'lucide-react';
-import { type ListingType } from '../lib/supabase';
-import { submitUserListing, updateMyListing, getMyListing, adminUpdatePendingUserListing } from '../lib/api';
+import { type ListingType, type Profile } from '../lib/supabase';
+import { submitUserListing, updateMyListing, getMyListing, adminUpdatePendingUserListing, getProfile } from '../lib/api';
 import { listingToFormState, formToProperty } from '../lib/listingForm';
 import { LocationPicker, type GeocodeTarget, type TaxonomyScope } from '../components/LocationPicker';
 import { PropertyDetailPage } from './PropertyDetailPage';
@@ -18,7 +18,7 @@ import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { useAuth } from '../lib/auth';
 import { requestAuth } from '../lib/authModal';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
-import { isValidVnPhone } from '../lib/phone';
+import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../lib/locationSelection';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
@@ -94,6 +94,9 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   }, []);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [loadError, setLoadError] = useState('');
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState('');
   const [titleCorrection, setTitleCorrection] = useState('');
   const [draftCandidate, setDraftCandidate] = useState<ListingDraft<Record<string, unknown>> | null>(null);
   const [aiListingProvenance, setAiListingProvenance] = useState<AiListingProvenance[]>([]);
@@ -122,6 +125,32 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const selectedPropertyType = types.find(t => t.id === form.property_type_id);
   const visibleSpecFields = getCompatibleSpecFields(selectedPropertyType, 'user_listing');
   const showSpec = (field: SpecFieldKey) => visibleSpecFields.includes(field);
+  const canonicalContact = !adminMode && profile?.display_name?.trim() && profile.phone && isValidVnPhone(profile.phone)
+    ? { name: profile.display_name.trim(), phone: normalizeVnPhone(profile.phone) }
+    : null;
+
+  useEffect(() => {
+    if (authLoading || !user || adminMode) return;
+    let alive = true;
+    setProfileLoading(true);
+    setProfileLoadError('');
+    getProfile()
+      .then(nextProfile => {
+        if (!alive) return;
+        setProfile(nextProfile);
+        if (!nextProfile) setProfileLoadError('Không tải được thông tin tài khoản.');
+      })
+      .catch(() => { if (alive) setProfileLoadError('Không tải được thông tin tài khoản.'); })
+      .finally(() => { if (alive) setProfileLoading(false); });
+    return () => { alive = false; };
+  }, [authLoading, user, adminMode]);
+
+  useEffect(() => {
+    if (!canonicalContact) return;
+    setForm(current => current.contact_name === canonicalContact.name && current.contact_phone === canonicalContact.phone
+      ? current
+      : { ...current, contact_name: canonicalContact.name, contact_phone: canonicalContact.phone });
+  }, [canonicalContact]);
 
   const set = (k: string, v: string | string[] | ListingType) => {
     setForm(f => ({ ...f, [k]: v }));
@@ -232,7 +261,10 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
       .then(listing => {
         if (!alive) return;
         if (!listing) { setLoadError('Không tìm thấy tin đăng hoặc bạn không có quyền sửa.'); return; }
-        setForm(listingToFormState(listing));
+        const next = listingToFormState(listing);
+        setForm(canonicalContact
+          ? { ...next, contact_name: canonicalContact.name, contact_phone: canonicalContact.phone }
+          : next);
         setAiListingProvenance(parseAiListingProvenance(listing.ai_provenance));
         addressEditedRef.current = Boolean(listing.address?.trim());
       })
@@ -257,7 +289,12 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   const restoreDraft = () => {
     if (!draftCandidate) return;
-    setForm(current => ({ ...current, ...draftCandidate.form, ward_id: String(draftCandidate.form.ward_id ?? '') } as typeof form));
+    setForm(current => ({
+      ...current,
+      ...draftCandidate.form,
+      ward_id: String(draftCandidate.form.ward_id ?? ''),
+      ...(canonicalContact ? { contact_name: canonicalContact.name, contact_phone: canonicalContact.phone } : {}),
+    } as typeof form));
     addressEditedRef.current = Boolean(String(draftCandidate.form.address ?? '').trim());
     setStep(Math.min(Math.max(draftCandidate.step, 0), STEPS.length - 1));
     setDraftCandidate(null);
@@ -404,8 +441,13 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
     };
     const errorsForStep: Record<string, string> = {};
     for (const key of keysByStep[targetStep] ?? []) if (all[key]) errorsForStep[key] = all[key];
-    if (targetStep === 3 && form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
-      errorsForStep.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
+    if (targetStep === 3) {
+      if (!adminMode && !canonicalContact) {
+        errorsForStep.contact_name = profileLoadError || 'Vui lòng hoàn thiện họ tên và số điện thoại trong tài khoản trước khi đăng tin.';
+        errorsForStep.contact_phone = 'Số điện thoại trong tài khoản chưa hợp lệ.';
+      } else if (form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
+        errorsForStep.contact_phone = 'Số điện thoại trong tài khoản chưa hợp lệ.';
+      }
     }
     if (targetStep === 1) Object.assign(errorsForStep, validateLocation());
     return errorsForStep;
@@ -429,6 +471,13 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         setForm(current => ({ ...current, title: canonicalTitle }));
         setTitleCorrection('Đã tự sửa viết hoa, khoảng trắng hoặc lỗi chính tả trong tiêu đề.');
       }
+      if (!adminMode && !canonicalContact) {
+        throw new Error(profileLoadError || 'Vui lòng hoàn thiện họ tên và số điện thoại trong tài khoản trước khi đăng tin.');
+      }
+      const contact = adminMode ? {
+        name: specForm.contact_name.trim(),
+        phone: normalizeVnPhone(specForm.contact_phone),
+      } : canonicalContact!;
       const cleanImages = specForm.images.filter((url): url is string => !!url);
       const coverId = cleanImages[0] ?? (specForm.image_url || null);
       const coordinates = coordinatePairFromUnknown(specForm.latitude, specForm.longitude);
@@ -461,9 +510,9 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         bedrooms: specForm.bedrooms ? parseOptionalNonNegativeInteger(specForm.bedrooms) : null,
         bathrooms: specForm.bathrooms ? parseOptionalNonNegativeInteger(specForm.bathrooms) : null,
         direction: specForm.direction || null,
-        contact_name: specForm.contact_name,
-        contact_phone: specForm.contact_phone,
-        contact_zalo: null,
+        contact_name: contact.name,
+        contact_phone: contact.phone,
+        contact_zalo: contact.phone,
         amenities: specForm.amenities.length ? specForm.amenities : null,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
@@ -493,8 +542,11 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
 
   const handleSubmit = () => {
     const allErrors = validateListingForm(form, { includeQualityGate: true });
-    if (form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
-      allErrors.contact_phone = 'Số điện thoại chưa hợp lệ (VD: 0901234567)';
+    if (!adminMode && !canonicalContact) {
+      allErrors.contact_name = profileLoadError || 'Vui lòng hoàn thiện họ tên và số điện thoại trong tài khoản trước khi đăng tin.';
+      allErrors.contact_phone = 'Số điện thoại trong tài khoản chưa hợp lệ.';
+    } else if (form.contact_phone.trim() && !isValidVnPhone(form.contact_phone)) {
+      allErrors.contact_phone = 'Số điện thoại trong tài khoản chưa hợp lệ.';
     }
     Object.assign(allErrors, validateLocation());
     if (Object.keys(allErrors).length > 0) {
@@ -534,6 +586,34 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
               Đăng nhập
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!adminMode && profileLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-500">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-red-500 rounded-full animate-spin" />
+          Đang tải thông tin tài khoản...
+        </div>
+      </div>
+    );
+  }
+  if (!adminMode && !profileLoading && !canonicalContact) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Phone className="w-10 h-10 text-amber-600" />
+          </div>
+          <h2 className="font-black text-2xl text-gray-900 mb-2">Cần bổ sung thông tin tài khoản</h2>
+          <p className="text-gray-500 text-sm mb-6">{profileLoadError || 'Tài khoản cần họ tên và số điện thoại Việt Nam hợp lệ trước khi đăng tin.'}</p>
+          <button onClick={() => { onNavigate({ name: 'account' }); scrollTop(); }}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-colors">
+            Mở tài khoản
+          </button>
         </div>
       </div>
     );
@@ -1011,17 +1091,18 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                 </p>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField label="Họ và tên *" error={errors.contact_name} id="contact_name">
-                    <input id="contact_name" value={form.contact_name} onChange={e => set('contact_name', e.target.value)}
-                      aria-invalid={Boolean(errors.contact_name)} aria-describedby={errors.contact_name ? 'contact_name-error' : undefined}
-                      placeholder="Nguyễn Văn A" className={inputCls(errors.contact_name)} />
-                  </FormField>
-                  <FormField label="Số điện thoại *" error={errors.contact_phone} id="contact_phone">
-                    <input id="contact_phone" type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)}
-                      aria-invalid={Boolean(errors.contact_phone)} aria-describedby={errors.contact_phone ? 'contact_phone-error' : undefined}
-                      placeholder="0901 234 567" className={inputCls(errors.contact_phone)} />
-                  </FormField>
+                <FormField label="Họ và tên *" error={errors.contact_name} id="contact_name">
+                  <div id="contact_name" className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700" aria-describedby={errors.contact_name ? 'contact_name-error' : undefined}>
+                    {canonicalContact?.name ?? (adminMode ? form.contact_name : 'Chưa có thông tin')}
+                  </div>
+                </FormField>
+                <FormField label="Số điện thoại / Zalo *" error={errors.contact_phone} id="contact_phone">
+                  <div id="contact_phone" className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700" aria-describedby={errors.contact_phone ? 'contact_phone-error' : undefined}>
+                    {canonicalContact?.phone ?? (adminMode ? form.contact_phone : 'Chưa có thông tin')}
+                  </div>
+                </FormField>
               </div>
+              <p className="text-gray-500 text-xs">Tên, số điện thoại và Zalo được lấy tự động từ tài khoản đăng tin và không thể chỉnh sửa trong tin này.</p>
 
               {/* Review summary */}
               <div className="bg-gray-50 rounded-xl p-4 space-y-2">

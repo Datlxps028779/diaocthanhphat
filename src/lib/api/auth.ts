@@ -1,6 +1,7 @@
 import { supabase, type Profile } from '../supabase';
 import { isElevatedRole } from '../authGuard';
 import type { Role } from '../adminAccess';
+import { isValidVnPhone, normalizeVnPhone } from '../phone';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 // Đăng ký. emailRedirectTo dựng theo origin hiện tại → link xác nhận trong mail
@@ -9,12 +10,16 @@ import type { Role } from '../adminAccess';
 // profile server-side, tránh RLS chặn khi email confirm bật (lúc này chưa có session).
 // display_name + phone gửi qua user metadata để trigger đọc.
 export async function signUp(email: string, password: string, displayName: string, phone: string) {
+  const canonicalName = displayName.trim();
+  const canonicalPhone = normalizeVnPhone(phone);
+  if (!canonicalName) throw new Error('Họ tên là bắt buộc.');
+  if (!isValidVnPhone(canonicalPhone)) throw new Error('Số điện thoại Việt Nam không hợp lệ.');
   const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/xac-nhan-email` : undefined;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { display_name: displayName, phone },
+      data: { display_name: canonicalName, phone: canonicalPhone },
       emailRedirectTo,
     },
   });

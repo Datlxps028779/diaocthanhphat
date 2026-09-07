@@ -3,6 +3,7 @@ import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, Arro
 import { signIn, signUp, requestPasswordReset, resendConfirmation, getCurrentRole } from '../lib/api';
 import { interpretSignUpResult, isEmailNotConfirmedError } from '../lib/authFlow';
 import { privateWorkspacePath } from '../lib/authGuard';
+import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
 
 interface UserAuthModalProps {
   mode: 'login' | 'register';
@@ -49,9 +50,12 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
         }
         onSuccess();
       } else {
-        if (!displayName.trim()) { setError('Vui lòng nhập họ tên.'); setLoading(false); return; }
+        const canonicalName = displayName.trim();
+        const canonicalPhone = normalizeVnPhone(phone);
+        if (!canonicalName) { setError('Vui lòng nhập họ tên.'); setLoading(false); return; }
+        if (!canonicalPhone || !isValidVnPhone(canonicalPhone)) { setError('Vui lòng nhập số điện thoại Việt Nam hợp lệ.'); setLoading(false); return; }
         if (password.length < 6) { setError('Mật khẩu tối thiểu 6 ký tự.'); setLoading(false); return; }
-        const data = await signUp(email, password, displayName, phone);
+        const data = await signUp(email, password, canonicalName, canonicalPhone);
         const outcome = interpretSignUpResult(data);
         if (outcome === 'logged_in') {
           // Confirm email TẮT → đã đăng nhập luôn.
@@ -197,9 +201,9 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
               {mode === 'register' && (
                 <>
                   <InputField icon={<User className="w-4 h-4" />} type="text" placeholder="Họ và tên *"
-                    value={displayName} onChange={setDisplayName} />
-                  <InputField icon={<Phone className="w-4 h-4" />} type="tel" placeholder="Số điện thoại"
-                    value={phone} onChange={setPhone} />
+                    value={displayName} onChange={setDisplayName} required />
+                  <InputField icon={<Phone className="w-4 h-4" />} type="tel" placeholder="Số điện thoại *"
+                    value={phone} onChange={setPhone} required />
                 </>
               )}
               <InputField icon={<Mail className="w-4 h-4" />} type="email" placeholder="Email *"

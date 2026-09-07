@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { getRecentlyViewed, type RecentProperty } from '../lib/recentlyViewed';
+import { getPublicPropertiesByIds } from '../lib/api/properties';
+import { getRecentlyViewed, pruneRecentlyViewed, toRecentProperty, type RecentProperty } from '../lib/recentlyViewed';
 import { PropertyDiscoveryRail } from './discovery/PropertyDiscoveryRail';
 import type { DiscoverySurface } from '../lib/discoveryJourney';
 
@@ -22,7 +23,23 @@ export function RecentlyViewed({
   const [items, setItems] = useState<RecentProperty[]>([]);
 
   useEffect(() => {
-    setItems(getRecentlyViewed(excludeId));
+    let alive = true;
+    const snapshots = getRecentlyViewed(excludeId);
+    const ids = snapshots.map(item => item.id);
+    setItems([]);
+    if (ids.length === 0) return () => { alive = false; };
+
+    getPublicPropertiesByIds(ids)
+      .then(properties => {
+        if (!alive) return;
+        const visibleIds = properties.map(property => property.id);
+        pruneRecentlyViewed(visibleIds, excludeId);
+        setItems(properties.map(toRecentProperty));
+      })
+      .catch(() => {
+        if (alive) setItems([]);
+      });
+    return () => { alive = false; };
   }, [excludeId]);
 
   return (

@@ -8,6 +8,14 @@ export interface ListingDraft<T> {
 
 const PREFIX = 'chonhaviet:listing-draft:v1';
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CONTACT_KEYS = ['contact_name', 'contact_phone', 'contact_zalo'] as const;
+
+function stripContactFields<T>(form: T): T {
+  if (!form || typeof form !== 'object' || Array.isArray(form)) return form;
+  const sanitized = { ...(form as Record<string, unknown>) };
+  for (const key of CONTACT_KEYS) delete sanitized[key];
+  return sanitized as T;
+}
 
 export function listingDraftKey(userId: string, editId?: string): string {
   return `${PREFIX}:${userId}:${editId || 'new'}`;
@@ -23,7 +31,7 @@ export function readListingDraft<T>(userId: string, editId?: string, now = Date.
       window.localStorage.removeItem(listingDraftKey(userId, editId));
       return null;
     }
-    return parsed as ListingDraft<T>;
+    return { ...parsed, form: stripContactFields(parsed.form) } as ListingDraft<T>;
   } catch {
     return null;
   }
@@ -32,7 +40,7 @@ export function readListingDraft<T>(userId: string, editId?: string, now = Date.
 export function writeListingDraft<T>(userId: string, editId: string | undefined, form: T, step: number, now = Date.now(), panoramaDraftId?: string): boolean {
   if (typeof window === 'undefined' || !userId) return false;
   try {
-    window.localStorage.setItem(listingDraftKey(userId, editId), JSON.stringify({ version: 1, savedAt: now, step, form, panoramaDraftId }));
+    window.localStorage.setItem(listingDraftKey(userId, editId), JSON.stringify({ version: 1, savedAt: now, step, form: stripContactFields(form), panoramaDraftId }));
     return true;
   } catch {
     return false;

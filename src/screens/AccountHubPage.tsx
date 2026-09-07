@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { type UserMedia, type Profile } from '../lib/supabase';
 import { buildAgentProfileSlug } from '../lib/slug';
+import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
 
 export type AccountHubTab = 'listings' | 'leads' | 'media' | 'favorites' | 'profile';
 
@@ -235,6 +236,14 @@ function ProfileTab() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const canonicalName = nameVal.trim();
+      const canonicalPhone = normalizeVnPhone(phoneVal);
+      if (!canonicalName) {
+        throw new Error('Hãy nhập họ và tên trước khi lưu hồ sơ.');
+      }
+      if (!isValidVnPhone(canonicalPhone)) {
+        throw new Error('Số điện thoại Việt Nam không hợp lệ.');
+      }
       if (!agentNameVal.trim()) {
         throw new Error('Hãy nhập tên hiển thị công khai trước khi lưu hồ sơ người đăng tin.');
       }
@@ -242,8 +251,8 @@ function ProfileTab() {
         throw new Error('Hãy xác nhận cảnh báo trước khi đổi slug hồ sơ.');
       }
       return saveMyProfileAndAgentProfile({
-        display_name: nameVal,
-        phone: phoneVal,
+        display_name: canonicalName,
+        phone: canonicalPhone,
         slug: agentSlugVal || buildAgentProfileSlug(agentNameVal || 'nguoi-dang-tin'),
         agent_display_name: agentNameVal,
         confirm_slug_change: slugHasChanged && confirmSlugChange,
