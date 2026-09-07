@@ -36,6 +36,12 @@ describe('resolveImageRequest — quyết định đường dẫn ảnh nào đ�
     expect(resolveImageRequest(['admin-uploads', 'ai%2Ddocs', 'x.jpg'])).toBeNull();
   });
 
+  it('cho phép path ảnh 360 nhưng không mở rộng thành tài liệu', () => {
+    expect(resolveImageRequest(['property-360', 'property-id', 'room.webp'])?.path)
+      .toBe('property-id/room.webp');
+    expect(resolveImageRequest(['property-360', 'property-id', 'room.pdf'])).toBeNull();
+  });
+
   it('chặn bucket không nằm trong danh sách', () => {
     expect(resolveImageRequest(['bucket-la', 'properties', 'a.jpg'])).toBeNull();
   });
@@ -69,6 +75,7 @@ describe('resolveImageRequest — quyết định đường dẫn ảnh nào đ�
   it('cấu hình khớp bucket thật đang dùng', () => {
     expect(IMAGE_BUCKETS).toContain('admin-uploads');
     expect(IMAGE_BUCKETS).toContain('public-media');
+    expect(IMAGE_BUCKETS).toContain('property-360');
     expect(PRIVATE_FOLDERS).toContain('ai-docs');
   });
 });

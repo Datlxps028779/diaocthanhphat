@@ -3,6 +3,7 @@ export interface ListingDraft<T> {
   savedAt: number;
   step: number;
   form: T;
+  panoramaDraftId?: string;
 }
 
 const PREFIX = 'chonhaviet:listing-draft:v1';
@@ -28,10 +29,10 @@ export function readListingDraft<T>(userId: string, editId?: string, now = Date.
   }
 }
 
-export function writeListingDraft<T>(userId: string, editId: string | undefined, form: T, step: number, now = Date.now()): boolean {
+export function writeListingDraft<T>(userId: string, editId: string | undefined, form: T, step: number, now = Date.now(), panoramaDraftId?: string): boolean {
   if (typeof window === 'undefined' || !userId) return false;
   try {
-    window.localStorage.setItem(listingDraftKey(userId, editId), JSON.stringify({ version: 1, savedAt: now, step, form }));
+    window.localStorage.setItem(listingDraftKey(userId, editId), JSON.stringify({ version: 1, savedAt: now, step, form, panoramaDraftId }));
     return true;
   } catch {
     return false;

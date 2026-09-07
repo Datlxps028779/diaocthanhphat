@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache';
-import type { Property, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow, PublicAgentProfile, PublicAgentListing } from './supabase';
+import type { Property, PropertyPanorama, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow, PublicAgentProfile, PublicAgentListing } from './supabase';
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
@@ -90,6 +90,24 @@ export async function serverGetPropertyByPublicCode(code: number): Promise<Prope
   }
 }
 
+export async function serverGetPublicPropertyPanoramas(propertyId: string): Promise<PropertyPanorama[]> {
+  try {
+    const { data, error } = await serverClient()
+      .from('property_panoramas')
+      .select('id,property_id,storage_path,original_filename,mime_type,size_bytes,width,height,label,sort_order,is_active,created_at,updated_at')
+      .eq('property_id', propertyId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) return [];
+    return ((data ?? []) as PropertyPanorama[]).map(row => ({
+      ...row,
+      url: `/hinh-anh/property-360/${row.storage_path.split('/').map(encodeURIComponent).join('/')}`,
+    }));
+  } catch {
+    return [];
+  }
+}
 export async function serverGetFeaturedProperties(): Promise<Property[]> {
   try {
     const sb = serverClient();

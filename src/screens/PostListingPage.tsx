@@ -22,6 +22,7 @@ import { isValidVnPhone } from '../lib/phone';
 import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey } from '../lib/propertySpecs';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../lib/locationSelection';
 import { ImageUpload, ImageUrlInput } from '../components/ImageUpload';
+import { UserListingPanoramaManager } from '../components/UserListingPanoramaManager';
 import { AiDescriptionHelper } from '../components/AiDescriptionHelper';
 import { RichTextEditor } from '../components/admin/shared/RichTextEditor';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../lib/useSEOAutofill';
@@ -96,6 +97,9 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   const [titleCorrection, setTitleCorrection] = useState('');
   const [draftCandidate, setDraftCandidate] = useState<ListingDraft<Record<string, unknown>> | null>(null);
   const [aiListingProvenance, setAiListingProvenance] = useState<AiListingProvenance[]>([]);
+  const [panoramaDraftId, setPanoramaDraftId] = useState(() => crypto.randomUUID());
+  const [panoramaIds, setPanoramaIds] = useState<string[]>([]);
+  const handlePanoramaChange = useCallback((ids: string[]) => setPanoramaIds(ids), []);
   const draftReadyRef = useRef(false);
 
   const [form, setForm] = useState({
@@ -240,15 +244,16 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
   useEffect(() => {
     if (authLoading || !user || (editId && loadingEdit)) return;
     const draft = readListingDraft<Record<string, unknown>>(user.id, editId);
+    if (draft?.panoramaDraftId) setPanoramaDraftId(draft.panoramaDraftId);
     draftReadyRef.current = true;
     if (draft && hasListingDraftContent(draft.form)) setDraftCandidate(draft);
   }, [authLoading, user, editId, loadingEdit]);
 
   useEffect(() => {
     if (!draftReadyRef.current || !user || !hasListingDraftContent(form)) return;
-    const timer = window.setTimeout(() => writeListingDraft(user.id, editId, form, step), 800);
+    const timer = window.setTimeout(() => writeListingDraft(user.id, editId, form, step, Date.now(), panoramaDraftId), 800);
     return () => window.clearTimeout(timer);
-  }, [form, step, user, editId]);
+  }, [form, step, user, editId, panoramaDraftId]);
 
   const restoreDraft = () => {
     if (!draftCandidate) return;
@@ -474,8 +479,8 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
         })(),
       };
       if (editId && adminMode) await adminUpdatePendingUserListing(editId, payload);
-      else if (editId) await updateMyListing(editId, payload);
-      else await submitUserListing(payload);
+      else if (editId) await updateMyListing(editId, payload, { draftId: panoramaDraftId, panoramaIds });
+      else await submitUserListing(payload, { draftId: panoramaDraftId, panoramaIds });
     },
     onSuccess: () => {
       if (user) clearListingDraft(user.id, editId);
@@ -907,6 +912,14 @@ export function PostListingPage({ onNavigate, editId, adminMode = false, onAdmin
                     <Info className="w-3 h-3" />Dán link ảnh từ Pexels, ImgBB hoặc dịch vụ lưu ảnh
                   </p>
                 </FormField>
+              )}
+
+              {!adminMode && (
+                <UserListingPanoramaManager
+                  draftId={panoramaDraftId}
+                  listingId={editId}
+                  onChange={handlePanoramaChange}
+                />
               )}
 
               <AiDescriptionHelper

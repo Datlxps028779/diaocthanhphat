@@ -1,4 +1,4 @@
-import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia } from '../supabase';
+import { supabase, type Property, type PropertyFavorite, type UserFavorite, type UserMedia, type PropertyPanorama, type UserListingPanorama } from '../supabase';
 import { buildSlug } from '../slug';
 import { publicImageUrlToStoragePath, storageUrlToPublicImageUrl } from '../siteUrl';
 import { compressImage } from '../imageCompress';
@@ -269,6 +269,271 @@ export async function uploadDocument(file: File, isAdmin = true): Promise<Upload
     mime_type: file.type || '',
     size_bytes: file.size,
   };
+}
+
+// ─── Property Panorama 360 Upload ─────────────────────────────────────────────
+export const MAX_PANORAMA_SIZE_BYTES = 30 * 1024 * 1024;
+export const MIN_PANORAMA_WIDTH = 2000;
+export const MIN_PANORAMA_HEIGHT = 1000;
+export const MAX_PANORAMA_WIDTH = 16000;
+export const MAX_PANORAMA_HEIGHT = 8000;
+
+const PANORAMA_MIME: Record<'jpeg' | 'webp', string> = {
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
+
+export function propertyPanoramaUrl(storagePath: string): string {
+  return `/hinh-anh/property-360/${storagePath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export function validatePanoramaDimensions(width: number, height: number): void {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < MIN_PANORAMA_WIDTH || height < MIN_PANORAMA_HEIGHT) {
+    throw new Error(`Ảnh 360 cần tối thiểu ${MIN_PANORAMA_WIDTH} × ${MIN_PANORAMA_HEIGHT}px.`);
+  }
+  if (width > MAX_PANORAMA_WIDTH || height > MAX_PANORAMA_HEIGHT) {
+    throw new Error(`Ảnh 360 không được vượt quá ${MAX_PANORAMA_WIDTH} × ${MAX_PANORAMA_HEIGHT}px.`);
+  }
+  const ratio = width / height;
+  if (ratio < 1.8 || ratio > 2.2) {
+    throw new Error('Ảnh 360 phải là ảnh equirectangular với tỷ lệ gần 2:1.');
+  }
+}
+
+export function assertSafePanoramaMetadata(file: Pick<File, 'name' | 'type' | 'size'>): 'jpeg' | 'webp' {
+  const extension = (file.name.split('.').pop() || '').toLowerCase();
+  const format = extension === 'jpg' || extension === 'jpeg' ? 'jpeg' : extension === 'webp' ? 'webp' : null;
+  if (!format || file.type !== PANORAMA_MIME[format]) {
+    throw new Error('Chỉ chấp nhận ảnh 360 JPG/JPEG hoặc WEBP với MIME khớp phần mở rộng.');
+  }
+  if (!file.size || file.size > MAX_PANORAMA_SIZE_BYTES) {
+    throw new Error('Ảnh 360 phải có dung lượng từ 1 byte đến tối đa 30MB.');
+  }
+  return format;
+}
+
+async function panoramaDimensions(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error('Trình duyệt hiện tại không hỗ trợ đọc kích thước ảnh 360.');
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    return { width: bitmap.width, height: bitmap.height };
+  } finally {
+    bitmap.close();
+  }
+}
+
+export type PanoramaInspection = {
+  format: 'jpeg' | 'webp';
+  mime_type: PropertyPanorama['mime_type'];
+  size_bytes: number;
+  width: number;
+  height: number;
+};
+
+export async function inspectPanorama360(file: File): Promise<PanoramaInspection> {
+  const format = assertSafePanoramaMetadata(file);
+  const dimensions = await panoramaDimensions(file);
+  validatePanoramaDimensions(dimensions.width, dimensions.height);
+  return {
+    format,
+    mime_type: PANORAMA_MIME[format] as PropertyPanorama['mime_type'],
+    size_bytes: file.size,
+    ...dimensions,
+  };
+}
+
+function assertPanoramaPropertyId(propertyId: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(propertyId)) {
+    throw new Error('Mã sản phẩm không hợp lệ.');
+  }
+}
+
+export type UploadedPanoramaObject = PanoramaInspection & {
+  storage_path: string;
+  original_filename: string;
+};
+
+export async function uploadPanoramaObject(
+  file: File,
+  propertyId: string,
+  isAdmin = false,
+): Promise<UploadedPanoramaObject> {
+  if (!isAdmin) throw new Error('Bạn không có quyền tải ảnh 360.');
+  assertPanoramaPropertyId(propertyId);
+  const inspection = await inspectPanorama360(file);
+  const extension = inspection.format === 'jpeg' ? 'jpg' : 'webp';
+  const storagePath = `${propertyId}/${crypto.randomUUID()}.${extension}`;
+  const { error: uploadError } = await supabase.storage.from('property-360').upload(storagePath, file, {
+    upsert: false,
+    contentType: file.type,
+    cacheControl: '31536000',
+  });
+  if (uploadError) throw uploadError;
+  return {
+    ...inspection,
+    storage_path: storagePath,
+    original_filename: file.name.slice(0, 255),
+  };
+}
+
+export async function uploadPanorama360(
+  file: File,
+  propertyId: string,
+  isAdmin = false,
+  label = '',
+  sortOrder?: number,
+): Promise<PropertyPanorama> {
+  const uploaded = await uploadPanoramaObject(file, propertyId, isAdmin);
+  const safeLabel = label.trim().replace(/\s+/g, ' ').slice(0, 120);
+  const { data, error } = await supabase.from('property_panoramas').insert({
+    property_id: propertyId,
+    storage_path: uploaded.storage_path,
+    original_filename: uploaded.original_filename,
+    mime_type: uploaded.mime_type,
+    size_bytes: uploaded.size_bytes,
+    width: uploaded.width,
+    height: uploaded.height,
+    label: safeLabel,
+    ...(sortOrder === undefined ? {} : { sort_order: Math.max(0, Math.floor(sortOrder)) }),
+  }).select().single();
+  if (error || !data) {
+    await supabase.storage.from('property-360').remove([uploaded.storage_path]);
+    throw error ?? new Error('Không thể lưu thông tin ảnh 360.');
+  }
+  return { ...(data as PropertyPanorama), url: propertyPanoramaUrl(uploaded.storage_path) };
+}
+
+export async function deletePanoramaObject(storagePath: string): Promise<void> {
+  const { error } = await supabase.storage.from('property-360').remove([storagePath]);
+  if (error) throw error;
+}
+
+function assertUuid(value: string, message: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(message);
+  }
+}
+
+async function uploadUserListingPanoramaViaServer(
+  file: File,
+  draftId: string,
+  fields: Record<string, string> = {},
+): Promise<UserListingPanorama> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Bạn cần đăng nhập để tải ảnh 360 lên.');
+  const form = new FormData();
+  form.set('file', file);
+  form.set('draft_id', draftId);
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  const response = await fetch('/api/user-listing-panoramas', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  const payload = await response.json().catch(() => null) as { error?: string } | UserListingPanorama | null;
+  if (!response.ok) throw new Error(payload && 'error' in payload && payload.error ? payload.error : 'Không thể lưu ảnh 360.');
+  return payload as UserListingPanorama;
+}
+
+export async function uploadUserListingPanorama(
+  file: File,
+  draftId: string,
+  label = '',
+): Promise<UserListingPanorama> {
+  assertUuid(draftId, 'Mã bản nháp không hợp lệ.');
+  await inspectPanorama360(file);
+  return uploadUserListingPanoramaViaServer(file, draftId, { label });
+}
+
+export async function replaceUserListingPanorama(
+  id: string,
+  file: File,
+): Promise<UserListingPanorama> {
+  assertUuid(id, 'Mã ảnh 360 không hợp lệ.');
+  await inspectPanorama360(file);
+  const { data: existing, error: readError } = await supabase
+    .from('user_listing_panoramas')
+    .select('draft_id')
+    .eq('id', id)
+    .single();
+  if (readError || !existing) throw readError ?? new Error('Không tìm thấy ảnh 360.');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Bạn cần đăng nhập để thay ảnh 360.');
+  const form = new FormData();
+  form.set('id', id);
+  form.set('draft_id', existing.draft_id);
+  form.set('file', file);
+  const response = await fetch('/api/user-listing-panoramas', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  const payload = await response.json().catch(() => null) as { error?: string } | UserListingPanorama | null;
+  if (!response.ok) throw new Error(payload && 'error' in payload && payload.error ? payload.error : 'Không thể cập nhật ảnh 360.');
+  return payload as UserListingPanorama;
+}
+
+export async function getUserListingPanoramas(options: {
+  draftId?: string;
+  listingId?: string;
+  admin?: boolean;
+} = {}): Promise<UserListingPanorama[]> {
+  if (options.draftId) assertUuid(options.draftId, 'Mã bản nháp không hợp lệ.');
+  if (options.listingId) assertUuid(options.listingId, 'Mã tin đăng không hợp lệ.');
+  let query = supabase
+    .from('user_listing_panoramas')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (options.draftId) query = query.eq('draft_id', options.draftId);
+  if (options.listingId) query = query.eq('user_listing_id', options.listingId);
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = (data ?? []) as UserListingPanorama[];
+  return Promise.all(rows.map(async row => {
+    const { data: signed } = await supabase.storage.from('property-360').createSignedUrl(row.storage_path, 600);
+    return { ...row, preview_url: signed?.signedUrl };
+  }));
+}
+
+export async function deleteUserListingPanorama(id: string): Promise<void> {
+  assertUuid(id, 'Mã ảnh 360 không hợp lệ.');
+  const { data: row, error: readError } = await supabase
+    .from('user_listing_panoramas')
+    .select('id,storage_path')
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!row) throw new Error('Không tìm thấy ảnh 360.');
+  const { error: deleteError } = await supabase.from('user_listing_panoramas').delete().eq('id', id);
+  if (deleteError) throw deleteError;
+  const { error: storageError } = await supabase.storage.from('property-360').remove([row.storage_path]);
+  if (storageError) throw storageError;
+}
+
+export async function updateUserListingPanorama(
+  id: string,
+  patch: Partial<Pick<UserListingPanorama, 'label' | 'sort_order' | 'is_active'>>,
+): Promise<UserListingPanorama> {
+  assertUuid(id, 'Mã ảnh 360 không hợp lệ.');
+  const { data, error } = await supabase.rpc('update_user_listing_panorama', {
+    p_panorama_id: id,
+    p_label: patch.label !== undefined ? patch.label : null,
+    p_sort_order: patch.sort_order !== undefined ? Math.max(0, Math.floor(patch.sort_order)) : null,
+    p_is_active: patch.is_active !== undefined ? patch.is_active : null,
+  });
+  const row = Array.isArray(data) ? data[0] as UserListingPanorama | undefined : undefined;
+  if (error || !row) throw error ?? new Error('Không thể cập nhật ảnh 360.');
+  const { data: signed } = await supabase.storage.from('property-360').createSignedUrl(row.storage_path, 600);
+  return { ...row, preview_url: signed?.signedUrl };
+}
+
+export async function reorderUserListingPanoramas(rows: UserListingPanorama[]): Promise<void> {
+  for (const [index, row] of rows.entries()) {
+    await updateUserListingPanorama(row.id, { sort_order: index });
+  }
 }
 
 // ─── User Favorites (cho người dùng đăng nhập) ──────────────────────────────────

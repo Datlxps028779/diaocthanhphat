@@ -52,6 +52,42 @@ export type PropertyEngagement = {
   phone_reveals: number;
   phone_leads: number;
 };
+export type PropertyPanorama = {
+  id: string;
+  property_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: 'image/jpeg' | 'image/webp';
+  size_bytes: number;
+  width: number;
+  height: number;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  url?: string;
+};
+
+export type UserListingPanorama = {
+  id: string;
+  owner_user_id: string;
+  user_listing_id: string | null;
+  draft_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: 'image/jpeg' | 'image/webp';
+  size_bytes: number;
+  width: number;
+  height: number;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  preview_url?: string;
+};
+
 export type Property = {
   id: string; title: string; description: string | null;
   price: number; price_unit: string; price_label: string | null;
@@ -83,6 +119,7 @@ export type Property = {
   faq: { question: string; answer: string }[] | null;
   created_at: string; updated_at: string;
   areas?: Area | null; property_types?: PropertyType | null;
+  panoramas?: PropertyPanorama[];
 };
 export type PriceStatScope = 'area' | 'ward' | 'neighborhood';
 export type PropertyVerificationStatus = 'draft' | 'submitted' | 'verified' | 'rejected' | 'revoked' | 'withdrawn' | 'superseded';

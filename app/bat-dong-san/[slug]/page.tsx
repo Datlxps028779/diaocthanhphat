@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { serverGetPropertyByIdOrSlug } from '@/lib/supabase-server';
+import { serverGetPropertyByIdOrSlug, serverGetPublicPropertyPanoramas } from '@/lib/supabase-server';
 import { buildPropertyMetadata } from '@/lib/seo';
 
 // Route cũ giữ lại làm ĐÍCH FALLBACK cho tin CHƯA có public_code. Link cũ đã share/index
@@ -28,6 +28,7 @@ export default async function PropertyPage({ params }: Params) {
   if (!property) notFound();
 
   const legacyPath = legacyPathOf(property);
+  const panoramas = await serverGetPublicPropertyPanoramas(property.id);
 
   // Fallback (chưa có public_code): render như cũ để không vỡ trang.
   const { buildPropertyJsonLd, buildBreadcrumbJsonLd } = await import('@/lib/seo');
@@ -49,7 +50,7 @@ export default async function PropertyPage({ params }: Params) {
   return (
     <>
       <JsonLdScripts schemas={schemas} />
-      <PropertyDetailClient propertyId={slug} initialData={property} />
+      <PropertyDetailClient propertyId={slug} initialData={property} initialPanoramas={panoramas} />
     </>
   );
 }

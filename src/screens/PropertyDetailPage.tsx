@@ -10,7 +10,7 @@ import {
   Navigation, ExternalLink, CalendarClock,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getRelatedProperties, getPublicPropertyAgent, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getPropertyByIdOrSlug, getPropertyPanoramas, getRelatedProperties, getPublicPropertyAgent, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
@@ -49,17 +49,20 @@ import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDeta
 import { mergeDiscoveryFilters } from '../lib/discoveryJourney';
 import { buildPropertyDetailContinuationTargets } from '../lib/propertyDetailContinuation';
 import { agentProfilePath } from '../lib/agentProfileSeo';
+import type { PropertyPanorama } from '../lib/supabase';
+import { Panorama360Section } from '../components/Panorama360Section';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
   onNavigate: (p: Page) => void;
   initialData?: Property | null;
+  initialPanoramas?: PropertyPanorama[];
   // Chế độ xem trước từ form đăng/sửa tin: dựng từ initialData, KHÔNG gọi network
   // chính và KHÔNG bắn side-effect thật (view/taste/lead/favorite/related).
   preview?: boolean;
 }
 
-export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, preview = false }: PropertyDetailPageProps) {
+export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, initialPanoramas, preview = false }: PropertyDetailPageProps) {
   const [showContact, setShowContact] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -84,6 +87,14 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
   // Preview đọc thẳng từ initialData (bỏ qua cache dùng chung key rỗng để mỗi lần
   // xem trước luôn phản ánh đúng form hiện tại); không loading.
   const property = preview ? (initialData ?? null) : queryProperty;
+  const { data: queryPanoramas = [] } = useQuery({
+    queryKey: ['property-panoramas', property?.id],
+    queryFn: () => getPropertyPanoramas(property!.id),
+    enabled: !!property?.id && !preview && initialPanoramas === undefined,
+    initialData: preview ? undefined : initialPanoramas,
+    staleTime: 60_000,
+  });
+  const panoramas = preview ? (initialPanoramas ?? property?.panoramas ?? []) : queryPanoramas;
   const listingTitle = property ? normalizeListingTitle(property.title).value : '';
   const loading = preview ? false : loadingQuery;
   const { data: publicAgent = null } = useQuery({
@@ -452,6 +463,9 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, p
                 </div>
               )}
             </div>
+
+            {/* Ảnh 360 nội bộ — tách khỏi gallery ảnh phẳng và tour ngoài. */}
+            <Panorama360Section panoramas={panoramas} />
 
             {/* VR Tour */}
             <VrTourSection vrTourUrl={property.vr_tour_url} />

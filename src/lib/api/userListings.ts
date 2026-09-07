@@ -2,6 +2,11 @@ import { supabase, type UserListing, type UserListingLifecycleEvent } from '../s
 import { normalizeListingTitle } from '../listingTitle';
 import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
 
+export type UserListingPanoramaBinding = {
+  draftId: string;
+  panoramaIds: string[];
+};
+
 function canonicalListingTitle<T extends { title: string; city?: string | null; district?: string | null; ward?: string | null }>(listing: T): T {
   return {
     ...listing,
@@ -30,10 +35,26 @@ async function getPropertyRevalidationRow(propertyId: string | null | undefined)
 // ─── User Listings ────────────────────────────────────────────────────────────
 type UserListingWrite = Omit<UserListing, 'id' | 'user_id' | 'status' | 'reject_reason' | 'expires_at' | 'property_id' | 'created_at' | 'updated_at' | 'tags' | 'ai_seo_draft' | 'areas' | 'property_types' | 'profiles' | 'schema_markup'>;
 
-export async function submitUserListing(listing: UserListingWrite): Promise<void> {
+export async function submitUserListing(
+  listing: UserListingWrite,
+  panoramaBinding?: UserListingPanoramaBinding,
+): Promise<string> {
   const { schema_markup: _schemaMarkup, ...safeListing } = canonicalListingTitle(listing) as UserListingWrite & { schema_markup?: unknown };
-  const { error } = await supabase.from('user_listings').insert(safeListing);
-  if (error) throw error;
+  const { data, error } = await supabase.from('user_listings').insert(safeListing).select('id').single();
+  if (error || !data) throw error ?? new Error('Không thể tạo tin đăng.');
+  const listingId = data.id as string;
+  if (panoramaBinding) {
+    const { error: attachError } = await supabase.rpc('attach_user_listing_panoramas', {
+      p_listing_id: listingId,
+      p_draft_id: panoramaBinding.draftId,
+      p_panorama_ids: panoramaBinding.panoramaIds,
+    });
+    if (attachError) {
+      await supabase.from('user_listings').delete().eq('id', listingId);
+      throw attachError;
+    }
+  }
+  return listingId;
 }
 export async function getMyListings(): Promise<UserListing[]> {
   const { data } = await supabase
@@ -59,6 +80,7 @@ export async function getMyListing(id: string): Promise<UserListing | null> {
 export async function updateMyListing(
   id: string,
   listing: UserListingWrite,
+  panoramaBinding?: UserListingPanoramaBinding,
 ): Promise<void> {
   const canonical = canonicalListingTitle(listing);
   const { schema_markup: _schemaMarkup, ...safeCanonical } = canonical as UserListingWrite & { schema_markup?: unknown };
@@ -68,10 +90,16 @@ export async function updateMyListing(
     .eq('id', id)
     .select('id');
   if (error) throw error;
-  // RLS có thể lọc mất dòng (không đúng chủ) → update trúng 0 dòng mà không báo lỗi.
-  // Bắt trường hợp này để không hiện "thành công" giả trong khi DB không đổi.
   if (!data || data.length === 0) {
     throw new Error('Không cập nhật được tin — bạn không có quyền sửa hoặc tin không tồn tại.');
+  }
+  if (panoramaBinding) {
+    const { error: attachError } = await supabase.rpc('attach_user_listing_panoramas', {
+      p_listing_id: id,
+      p_draft_id: panoramaBinding.draftId,
+      p_panorama_ids: panoramaBinding.panoramaIds,
+    });
+    if (attachError) throw attachError;
   }
 }
 export async function adminGetUserListings(status?: string): Promise<UserListing[]> {
@@ -83,6 +111,19 @@ export async function adminGetUserListings(status?: string): Promise<UserListing
   const { data } = await q;
   return (data ?? []) as UserListing[];
 }
+export async function adminGetUserListingPanoramaCounts(listingIds: string[]): Promise<Record<string, number>> {
+  if (listingIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('user_listing_panoramas')
+    .select('user_listing_id')
+    .in('user_listing_id', listingIds);
+  if (error) throw error;
+  return (data ?? []).reduce<Record<string, number>>((counts, row: { user_listing_id: string | null }) => {
+    if (row.user_listing_id) counts[row.user_listing_id] = (counts[row.user_listing_id] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 export async function adminGetUserListingLifecycle(id: string): Promise<UserListingLifecycleEvent[]> {
   const { data, error } = await supabase
     .from('user_listing_lifecycle_events')

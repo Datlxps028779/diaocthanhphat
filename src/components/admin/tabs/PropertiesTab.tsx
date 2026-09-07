@@ -9,6 +9,7 @@ import {
   propertyRevalidationSnapshot, revalidatePropertyContent, type AdminPropertyFilters,
 } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
+import { PropertyPanoramaManager, type PendingPanoramaUpload } from '../../PropertyPanoramaManager';
 import { useSEOAutofill, SEOPreview, generateSlug } from '../../../lib/useSEOAutofill';
 import { buildPropertyMetadata } from '../../../lib/seo';
 import { buildPropertyFaq, type FaqItem } from '../../../lib/propertyFaq';
@@ -22,7 +23,6 @@ import { clearIncompatibleSpecValues, getCompatibleSpecFields, type SpecFieldKey
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { stripHtml, isHtmlContent } from '../../../lib/markdown';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
-import { parseLegacyPropertyVideo, parseVrTourUrl } from '../../../lib/videoMedia';
 import { validateCoordinatePair } from '../../../lib/locationCoordinates';
 import { buildProductPath } from '../../../lib/productPath';
 import { applyAreaSelection, applyDistrictSelection, resolveUniqueDistrict } from '../../../lib/locationSelection';
@@ -33,6 +33,7 @@ import { formatFinancingAmount, formatPriceInput, parsePriceInput, priceInputFro
 import { ListingPrice } from '../../ListingPrice';
 import { normalizeListingTitle } from '../../../lib/listingTitle';
 import { PriceField } from '../../PriceField';
+import { uploadPanorama360 } from '../../../lib/api/media';
 
 // ─── Properties Tab ───────────────────────────────────────────────────────────
 export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: { onStatsRefresh?: () => void; focusEditId?: string; onFocusHandled?: () => void }) {
@@ -49,6 +50,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   const [editing, setEditing] = useState<Property | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadedPendingIds, setUploadedPendingIds] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // Bulk selection (Sprint 3c)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -166,20 +168,56 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
       current: propertyRevalidationSnapshot({ ...property, ...patch }),
     }));
 
-  const handleSave = async (data: Partial<Property>) => {
+  const handleSave = async ({ data, pendingPanoramas }: { data: Partial<Property>; pendingPanoramas: PendingPanoramaUpload[] }) => {
     setSaving(true);
     try {
+      const validPanoramas = pendingPanoramas.filter(item => item.status === 'valid');
       if (creating) {
         const saved = await createProperty(data as Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>);
         await warnRevalidation('create', [{ current: propertyRevalidationSnapshot(saved) }]);
+        const uploadedIds: string[] = [];
+        const failures: { name: string; message: string }[] = [];
+        for (const [index, item] of validPanoramas.entries()) {
+          try {
+            await uploadPanorama360(item.file, saved.id, true, item.label, index);
+            uploadedIds.push(item.id);
+          } catch (error) {
+            failures.push({ name: item.file.name, message: error instanceof Error ? error.message : 'Tải ảnh thất bại.' });
+          }
+        }
+        setUploadedPendingIds(uploadedIds);
+        await load(); onStatsRefresh?.();
+        if (failures.length > 0) {
+          setEditing(saved); setCreating(false);
+          alert(`Đã lưu sản phẩm nhưng ${failures.length}/${validPanoramas.length} ảnh 360 chưa tải được.\n${failures.map(item => `- ${item.name}: ${item.message}`).join('\n')}\nBạn có thể tải lại các ảnh lỗi trong màn hình chỉnh sửa.`);
+          return;
+        }
       } else if (editing) {
         const saved = await updateProperty(editing.id, data);
         await warnRevalidation('update', [{
           previous: propertyRevalidationSnapshot(editing),
           current: propertyRevalidationSnapshot(saved),
         }]);
+        if (pendingPanoramas.length > 0) {
+          const uploadedIds: string[] = [];
+          const failures: { name: string; message: string }[] = [];
+          for (const [index, item] of pendingPanoramas.entries()) {
+            try {
+              await uploadPanorama360(item.file, editing.id, true, item.label, index);
+              uploadedIds.push(item.id);
+            } catch (error) {
+              failures.push({ name: item.file.name, message: error instanceof Error ? error.message : 'Tải ảnh thất bại.' });
+            }
+          }
+          setUploadedPendingIds(uploadedIds);
+          if (failures.length > 0) {
+            alert(`Đã cập nhật sản phẩm nhưng ${failures.length}/${pendingPanoramas.length} ảnh 360 chưa tải được.\n${failures.map(item => `- ${item.name}: ${item.message}`).join('\n')}\nBạn có thể tải lại các ảnh lỗi.`);
+            return;
+          }
+        }
       }
       await load(); onStatsRefresh?.();
+      setUploadedPendingIds([]);
       setEditing(null); setCreating(false);
     } catch (e) {
       console.error("[AdminPanel] Lưu BĐS thất bại:", e);
@@ -210,6 +248,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
         areas={areas} types={types}
         saving={saving}
         onSave={handleSave}
+        clearPendingIds={uploadedPendingIds}
         onCancel={() => { setEditing(null); setCreating(false); }}
       />
     );
@@ -222,7 +261,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           <h2 className="text-base font-bold text-gray-900">Danh mục bất động sản</h2>
           <p className="mt-0.5 text-xs text-gray-500">Tìm và quản lý nhanh toàn bộ tin, kể cả tin đang ẩn.</p>
         </div>
-        <button onClick={() => setCreating(true)}
+        <button onClick={() => { setUploadedPendingIds([]); setCreating(true); }}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors">
           <Plus className="w-4 h-4" />Thêm BĐS
         </button>
@@ -481,9 +520,12 @@ const SPEC_PLACEHOLDERS: Partial<Record<SpecFieldKey, string>> = {
 const DIRECTIONS = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Nam', 'Đông Bắc', 'Tây Nam', 'Tây Bắc'];
 
 // ─── Property Form ────────────────────────────────────────────────────────────
-function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
+function PropertyForm({ property, areas, types, saving, onSave, clearPendingIds, onCancel }: {
   property: Property | null; areas: Area[]; types: PropertyType[];
-  saving: boolean; onSave: (data: Partial<Property>) => void; onCancel: () => void;
+  saving: boolean;
+  onSave: (request: { data: Partial<Property>; pendingPanoramas: PendingPanoramaUpload[] }) => void;
+  clearPendingIds: string[];
+  onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     title: property?.title ?? '',
@@ -525,14 +567,14 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     floor_number: property?.floor_number ?? '',
     latitude: property?.latitude ? String(property.latitude) : '',
     longitude: property?.longitude ? String(property.longitude) : '',
-    vr_tour_url: property?.vr_tour_url ?? '',
-    video_url: property?.video_url ?? '',
     meta_title: property?.meta_title ?? '',
     meta_description: property?.meta_description ?? '',
     focus_keywords: property?.focus_keywords ?? '',
   });
   const [titleCorrection, setTitleCorrection] = useState('');
   const [faq, setFaq] = useState<FaqItem[]>(property?.faq ?? []);
+  const [pendingPanoramas, setPendingPanoramas] = useState<PendingPanoramaUpload[]>([]);
+  const handlePendingChange = useCallback((items: PendingPanoramaUpload[]) => setPendingPanoramas(items), []);
 
   const [districts, setDistricts] = useState<District[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -828,17 +870,15 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
     const priceValue = (v: string | number) => typeof v === 'string'
       ? parsePriceInput(v)
       : (v != null && Number.isFinite(v) ? v : null);
-    const videoUrl = cs(specForm.video_url);
-    const vrTourUrl = cs(specForm.vr_tour_url);
-    if (videoUrl && !parseLegacyPropertyVideo(videoUrl, `Video: ${specForm.title}`)) {
-      window.alert('Link video không hợp lệ. Chỉ chấp nhận YouTube HTTPS hoặc MP4 đã tải lên kho media của hệ thống.');
+    if (pendingPanoramas.some(item => item.status === 'checking')) {
+      window.alert('Vui lòng chờ kiểm tra xong ảnh 360 trước khi lưu.');
       return;
     }
-    if (vrTourUrl && !parseVrTourUrl(vrTourUrl)) {
-      window.alert('Link VR Tour không hợp lệ. Chỉ chấp nhận URL HTTPS.');
+    if (pendingPanoramas.some(item => item.status === 'invalid')) {
+      window.alert('Vui lòng bỏ ảnh 360 không hợp lệ trước khi lưu.');
       return;
     }
-    onSave({
+    onSave({ data: {
       // Để trống → createProperty tự sinh slug duy nhất; có nhập → dùng nguyên
       slug: cs(specForm.slug),
       title: canonicalTitle,
@@ -881,8 +921,6 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
       floor_number: cn(specForm.floor_number),
       latitude: coordinates.coordinates.latitude,
       longitude: coordinates.coordinates.longitude,
-      vr_tour_url: vrTourUrl,
-      video_url: videoUrl,
       meta_title: cs(specForm.meta_title),
       meta_description: cs(specForm.meta_description),
       focus_keywords: cs(specForm.focus_keywords),
@@ -892,7 +930,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           .filter(it => it.question && it.answer);
         return valid.length ? valid : null;
       })(),
-    } as Partial<Property>);
+    } as Partial<Property>, pendingPanoramas });
   };
 
   const addFaq = () => setFaq(prev => [...prev, { question: '', answer: '' }]);
@@ -1152,8 +1190,7 @@ function PropertyForm({ property, areas, types, saving, onSave, onCancel }: {
           </div>
 
           {/* Media */}
-          {fld('Link video thực tế (YouTube hoặc MP4 từ kho media)', 'video_url', { type: 'url', placeholder: 'https://youtube.com/watch?v=...' })}
-          {fld('Link VR Tour 360° (HTTPS)', 'vr_tour_url', { type: 'url', placeholder: 'https://kuula.co/...' })}
+          <PropertyPanoramaManager propertyId={property?.id ?? null} onPendingChange={handlePendingChange} clearPendingIds={clearPendingIds} />
 
           {/* Description */}
           <div>

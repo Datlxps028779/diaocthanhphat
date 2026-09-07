@@ -1,10 +1,11 @@
-import { supabase, type ListingType, type Property, type PropertyEngagement, type PropertyPhoneRevealResult } from '../supabase';
+import { supabase, type ListingType, type Property, type PropertyEngagement, type PropertyPhoneRevealResult, type PropertyPanorama } from '../supabase';
 import { buildSlug, buildUniqueSlug } from '../slug';
 import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
 import { mergeRelatedPropertyCandidates, rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
 import { normalizeListingTitle } from '../listingTitle';
 import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
+import { propertyPanoramaUrl, deletePanoramaObject, uploadPanoramaObject } from './media';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
@@ -347,6 +348,109 @@ export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property 
   return data as Property | null;
 }
 
+export async function getPropertyPanoramas(propertyId: string, admin = false): Promise<PropertyPanorama[]> {
+  let query = supabase
+    .from('property_panoramas')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (!admin) query = query.eq('is_active', true);
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = (data ?? []) as PropertyPanorama[];
+  return Promise.all(rows.map(async row => {
+    let url = propertyPanoramaUrl(row.storage_path);
+    if (admin) {
+      const { data: signed } = await supabase.storage.from('property-360').createSignedUrl(row.storage_path, 600);
+      if (signed?.signedUrl) url = signed.signedUrl;
+    }
+    return { ...row, url };
+  }));
+}
+
+export async function updatePropertyPanorama(
+  propertyId: string,
+  panoramaId: string,
+  patch: Partial<Pick<PropertyPanorama, 'label' | 'sort_order' | 'is_active'>>,
+): Promise<PropertyPanorama> {
+  const safePatch = {
+    ...(patch.label !== undefined ? { label: patch.label.trim().replace(/\s+/g, ' ').slice(0, 120) } : {}),
+    ...(patch.sort_order !== undefined ? { sort_order: Math.max(0, Math.floor(patch.sort_order)) } : {}),
+    ...(patch.is_active !== undefined ? { is_active: patch.is_active } : {}),
+  };
+  const { data, error } = await supabase
+    .from('property_panoramas')
+    .update(safePatch)
+    .eq('id', panoramaId)
+    .eq('property_id', propertyId)
+    .select()
+    .single();
+  if (error || !data) throw error ?? new Error('Không thể cập nhật ảnh 360.');
+  const row = data as PropertyPanorama;
+  return { ...row, url: propertyPanoramaUrl(row.storage_path) };
+}
+
+export async function replacePropertyPanorama(
+  propertyId: string,
+  panoramaId: string,
+  file: File,
+  admin = false,
+): Promise<PropertyPanorama> {
+  if (!admin) throw new Error('Bạn không có quyền thay ảnh 360.');
+  const { data: current, error: currentError } = await supabase
+    .from('property_panoramas')
+    .select('*')
+    .eq('id', panoramaId)
+    .eq('property_id', propertyId)
+    .single();
+  if (currentError || !current) throw currentError ?? new Error('Không tìm thấy ảnh 360.');
+
+  const uploaded = await uploadPanoramaObject(file, propertyId, admin);
+  const { data, error } = await supabase
+    .from('property_panoramas')
+    .update({
+      storage_path: uploaded.storage_path,
+      original_filename: uploaded.original_filename,
+      mime_type: uploaded.mime_type,
+      size_bytes: uploaded.size_bytes,
+      width: uploaded.width,
+      height: uploaded.height,
+    })
+    .eq('id', panoramaId)
+    .eq('property_id', propertyId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    await deletePanoramaObject(uploaded.storage_path);
+    throw error ?? new Error('Không thể cập nhật thông tin ảnh 360.');
+  }
+
+  try {
+    await deletePanoramaObject((current as PropertyPanorama).storage_path);
+  } catch {
+    throw new Error('Đã thay ảnh mới nhưng chưa dọn được object ảnh cũ.');
+  }
+  return { ...(data as PropertyPanorama), url: propertyPanoramaUrl(uploaded.storage_path) };
+}
+
+export async function deletePropertyPanorama(propertyId: string, panoramaId: string): Promise<void> {
+  const { data, error: fetchError } = await supabase
+    .from('property_panoramas')
+    .select('storage_path')
+    .eq('id', panoramaId)
+    .eq('property_id', propertyId)
+    .single();
+  if (fetchError || !data) throw fetchError ?? new Error('Không tìm thấy ảnh 360.');
+  await deletePanoramaObject((data as { storage_path: string }).storage_path);
+  const { error } = await supabase
+    .from('property_panoramas')
+    .delete()
+    .eq('id', panoramaId)
+    .eq('property_id', propertyId);
+  if (error) throw error;
+}
 export async function incrementPropertyView(id: string): Promise<void> {
   const { error } = await supabase.rpc('increment_property_views', { row_id: id });
   if (error) throw error;

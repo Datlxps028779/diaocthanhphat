@@ -18,6 +18,24 @@ export async function GET(_req: Request, { params }: Params) {
   if (!SUPABASE_URL || !SERVICE_KEY) return new Response('Not configured', { status: 404 });
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  if (target.bucket === 'property-360') {
+    const { data: panorama } = await sb
+      .from('property_panoramas')
+      .select('property_id')
+      .eq('storage_path', target.path)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!panorama) return new Response('Not found', { status: 404 });
+
+    const { data: property } = await sb
+      .from('properties')
+      .select('id')
+      .eq('id', panorama.property_id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!property) return new Response('Not found', { status: 404 });
+  }
+
   const { data, error } = await sb.storage.from(target.bucket).download(target.path);
   if (error || !data) return new Response('Not found', { status: 404 });
   if (data.type && !data.type.toLowerCase().startsWith('image/')) {
@@ -30,9 +48,11 @@ export async function GET(_req: Request, { params }: Params) {
       'Content-Type': data.type || 'image/jpeg',
       // Path copy-on-write không đổi bytes nên cache lâu; path legacy từng bị ghi đè
       // chỉ cache ngắn để CDN không giữ phiên bản cũ hàng tháng.
-      'Cache-Control': copyOnWriteObject
-        ? 'public, max-age=86400, s-maxage=31536000, immutable'
-        : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+      'Cache-Control': target.bucket === 'property-360'
+        ? 'private, no-store'
+        : copyOnWriteObject
+          ? 'public, max-age=86400, s-maxage=31536000, immutable'
+          : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
       'X-Content-Type-Options': 'nosniff',
     },
   });

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { serverGetPropertyByPublicCode } from '@/lib/supabase-server';
+import { serverGetPropertyByPublicCode, serverGetPublicPropertyPanoramas } from '@/lib/supabase-server';
 import { buildPropertyMetadata, buildPropertyJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
 import { buildPropertyFaq, buildFaqJsonLd } from '@/lib/propertyFaq';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
@@ -48,6 +48,7 @@ export async function renderProductDetail(
   const property = await loadProduct(listingType, code);
   if (!property) notFound();
   const canonical = buildProductPath(property);
+  const panoramas = await serverGetPublicPropertyPanoramas(property.id);
 
   const jsonLd = buildPropertyJsonLd(property);
   const listingHref = property.listing_type === 'cho_thue' ? '/cho-thue' : '/mua-ban';
@@ -63,7 +64,7 @@ export async function renderProductDetail(
   return (
     <>
       <JsonLdScripts schemas={schemas} />
-      <PropertyDetailClient propertyId={(property.slug && property.slug.trim()) || property.id} initialData={property} />
+      <PropertyDetailClient propertyId={(property.slug && property.slug.trim()) || property.id} initialData={property} initialPanoramas={panoramas} />
     </>
   );
 }

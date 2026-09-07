@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Building2, CheckCircle, XCircle, Phone, MapPin, Clock, FileText, Archive, RotateCcw, Trash2, CalendarClock, History, X, Pencil, Sparkles } from 'lucide-react';
+import { UserListingPanoramaReview } from '../UserListingPanoramaReview';
 import { PostListingPage } from '../../../screens/PostListingPage';
 import type { Page } from '../../../lib/router';
 import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
-import { adminGetUserListings, adminGetUserListingLifecycle, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
+import { adminGetUserListings, adminGetUserListingLifecycle, adminGetUserListingPanoramaCounts, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
 import { formatPropertyPrice } from '../../../lib/listingPrice';
@@ -25,12 +26,25 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [editingListing, setEditingListing] = useState<UserListing | null>(null);
+  const [panoramaReviewListing, setPanoramaReviewListing] = useState<UserListing | null>(null);
+  const [panoramaCounts, setPanoramaCounts] = useState<Record<string, number>>({});
   const [seoProcessingId, setSeoProcessingId] = useState<string | null>(null);
   const historyRequest = useRef(0);
 
   const noOpNavigate = (_page: Page) => {};
 
-  const load = async () => { setLoading(true); const data = await adminGetUserListings(statusFilter); setListings(data); setLoading(false); };
+  const load = async () => {
+    setLoading(true);
+    const data = await adminGetUserListings(statusFilter);
+    setListings(data);
+    try {
+      setPanoramaCounts(await adminGetUserListingPanoramaCounts(data.map(listing => listing.id)));
+    } catch (e) {
+      console.error('[AdminPanel] panorama counts', e);
+      setPanoramaCounts({});
+    }
+    setLoading(false);
+  };
   useEffect(() => { load(); }, [statusFilter]);
   // Đổi filter thì bỏ chọn để tránh giữ id không còn hiển thị.
   useEffect(() => { setSelected(new Set()); }, [statusFilter]);
@@ -275,6 +289,16 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                         {STATUS_CONFIG[listing.status].label}
                       </span>
                     </div>
+                    {(panoramaCounts[listing.id] ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPanoramaReviewListing(listing)}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100"
+                        data-testid={`review-panoramas-${listing.id}`}
+                      >
+                        Ảnh 360° · {panoramaCounts[listing.id]}
+                      </button>
+                    )}
                   </div>
                   {listing.status === 'pending' && (
                     <div className="w-full rounded-xl border border-violet-100 bg-violet-50/60 p-3 lg:max-w-xs">
@@ -364,6 +388,26 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
             ))}
           </div>
         )}
+
+      {panoramaReviewListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="listing-panoramas-title">
+          <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-gray-50 shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 bg-white px-5 py-4">
+              <div className="min-w-0">
+                <h3 id="listing-panoramas-title" className="font-bold text-gray-900">Ảnh 360° của tin đăng</h3>
+                <p className="mt-0.5 truncate text-xs text-gray-500">{panoramaReviewListing.title}</p>
+              </div>
+              <button type="button" onClick={() => setPanoramaReviewListing(null)} aria-label="Đóng ảnh 360 của tin đăng" className="flex-shrink-0 text-gray-400 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <p className="mb-3 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800">Ảnh đang chờ duyệt chỉ hiển thị trong khu vực quản trị. Kiểm tra nhãn và tắt ảnh không phù hợp trước khi duyệt tin.</p>
+              <UserListingPanoramaReview listingId={panoramaReviewListing.id} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {historyListing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="listing-history-title">

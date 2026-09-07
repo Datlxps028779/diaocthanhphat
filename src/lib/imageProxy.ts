@@ -2,7 +2,7 @@
 // Bucket admin-uploads là PRIVATE (chứa cả tài liệu nội bộ ai-docs) nên URL
 // /object/public/... của Supabase trả 400. Route ảnh đọc bằng service_role, vì vậy
 // đây là chốt chặn duy nhất: chỉ ảnh mới ra ngoài, tài liệu thì không.
-export const IMAGE_BUCKETS = ['admin-uploads', 'public-media', 'user-uploads', 'property-images'] as const;
+export const IMAGE_BUCKETS = ['admin-uploads', 'public-media', 'user-uploads', 'property-images', 'property-360'] as const;
 
 // Thư mục chứa tài liệu nội bộ — không bao giờ phục vụ qua đường ảnh công khai.
 export const PRIVATE_FOLDERS = ['ai-docs'] as const;
