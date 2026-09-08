@@ -889,8 +889,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   // Modal "Tạo bài bằng AI"
   const [aiOpen, setAiOpen] = useState(false);
   const [aiKeyword, setAiKeyword] = useState('');
-  const [aiDistrict, setAiDistrict] = useState('');
-  const [aiWard, setAiWard] = useState('');
+  const [aiLocation, setAiLocation] = useState<NewsLocationFields>(EMPTY_NEWS_LOCATION);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiDone, setAiDone] = useState<string | null>(null);
@@ -901,12 +900,14 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
     try {
       const r = await generateArticleAI({
         keyword: aiKeyword.trim(),
-        district: aiDistrict.trim() || undefined,
-        ward: aiWard.trim() || undefined,
+        areaId: aiLocation.area_id || undefined,
+        districtId: aiLocation.district_id || undefined,
+        wardId: aiLocation.ward_id || undefined,
+        neighborhoodId: aiLocation.neighborhood_id || undefined,
       });
       await load();
       setAiDone(r.title);
-      setAiKeyword(''); setAiDistrict(''); setAiWard('');
+      setAiKeyword(''); setAiLocation(EMPTY_NEWS_LOCATION);
     } catch (e) {
       setAiError((e as { message?: string })?.message ?? 'Không tạo được bài viết.');
     } finally { setAiBusy(false); }
@@ -1016,7 +1017,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
-        <button onClick={() => { setAiOpen(true); setAiError(null); setAiDone(null); }}
+        <button onClick={() => { setAiOpen(true); setAiError(null); setAiDone(null); setAiLocation(EMPTY_NEWS_LOCATION); }}
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors">
           <Sparkles className="w-4 h-4" />Tạo bài bằng AI
         </button>
@@ -1237,20 +1238,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                   placeholder='vd: giá đất Dĩ An 2026'
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">Khu vực (tùy chọn)</label>
-                  <input value={aiDistrict} onChange={e => setAiDistrict(e.target.value)} disabled={aiBusy}
-                    placeholder='vd: Dĩ An'
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">Phường/xã (tùy chọn)</label>
-                  <input value={aiWard} onChange={e => setAiWard(e.target.value)} disabled={aiBusy}
-                    placeholder='vd: Tân Đông Hiệp'
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50" />
-                </div>
-              </div>
+              <NewsLocationPicker value={aiLocation} onChange={setAiLocation} />
 
               {aiError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{aiError}</div>}
               {aiDone && (

@@ -59,4 +59,32 @@ export async function requireAdminOrStaff(req: NextRequest): Promise<TeamAuthRes
   return { ok: true, token, userId: user.id };
 }
 
+export async function requireStaffPermission(
+  req: NextRequest,
+  module: string,
+  action: string,
+  scope?: {
+    areaId?: string | null;
+    districtId?: string | null;
+    wardId?: string | null;
+    neighborhoodId?: string | null;
+  },
+): Promise<TeamAuthResult> {
+  const team = await requireAdminOrStaff(req);
+  if (!team.ok) return team;
+  const client = callerClient(team.token);
+  const { data: allowed, error } = await client.rpc('has_staff_permission', {
+    p_module: module,
+    p_action: action,
+    p_area_id: scope?.areaId ?? null,
+    p_district_id: scope?.districtId ?? null,
+    p_ward_id: scope?.wardId ?? null,
+    p_neighborhood_id: scope?.neighborhoodId ?? null,
+  });
+  if (error || allowed !== true) {
+    return { ok: false, status: 403, msg: 'Tài khoản chưa được cấp quyền cho thao tác này.' };
+  }
+  return team;
+}
+
 export const requireAdmin = requireOwner;

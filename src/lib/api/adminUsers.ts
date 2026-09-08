@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import type { UserListing, UserMedia } from '../supabase';
+import type { StaffPermission } from '../staffPermissions';
 
 // Client gọi API route /api/admin/users. Đính access_token của phiên hiện tại làm
 // Bearer để route xác thực caller là admin (route tự kiểm role qua RLS). Mọi thao
@@ -54,7 +55,34 @@ export async function createStaff(input: { email: string; password: string; role
   await postAction({ action: 'create_staff', ...input });
 }
 
-// Hoạt động của MỘT user (dùng ở chi tiết admin). Đọc trực tiếp qua RLS admin sẵn có:
+export async function replaceStaffPermissions(staffUserId: string, assignments: StaffPermission[]): Promise<void> {
+  const res = await fetch('/api/admin/permissions', {
+    method: 'PUT',
+    headers: await authHeader(),
+    body: JSON.stringify({ staffUserId, assignments }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? 'Không lưu được phân quyền.');
+}
+
+export async function getStaffPermissions(staffUserId: string): Promise<{
+  catalog: { module: string; action: string; location_scoped: boolean }[];
+  permissions: StaffPermission[];
+}> {
+  const res = await fetch(`/api/admin/permissions?staffUserId=${encodeURIComponent(staffUserId)}`, {
+    headers: await authHeader(),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? 'Không tải được phân quyền.');
+  return { catalog: json.catalog ?? [], permissions: json.permissions ?? [] };
+}
+
+export async function getMyStaffPermissions(): Promise<StaffPermission[]> {
+  const { data, error } = await supabase.rpc('get_my_staff_permissions');
+  if (error) throw error;
+  return (data ?? []) as StaffPermission[];
+}
+
 // user_listings có um... policy admin, user_media có um_select_admin. KHÔNG gồm yêu
 // thích vì user_favorites chỉ cho chủ sở hữu đọc (không có policy admin).
 export interface UserActivity {

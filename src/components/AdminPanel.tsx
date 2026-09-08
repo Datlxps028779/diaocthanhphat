@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
+import { visibleTabsFromPermissions } from '../lib/staffPermissions';
 import { SlaBell } from './admin/shared/SlaBell';
 import { ChatOpsBell } from './admin/shared/ChatOpsBell';
 
@@ -43,9 +44,9 @@ const AiRagTab = lazy(() => import('./admin/tabs/AiRagTab').then(m => ({ default
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
-export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihethong' }: AdminPanelProps) {
-  // Memo hoá theo role → tham chiếu ổn định cho dep của effect popstate bên dưới.
-  const allowedTabs = useMemo(() => visibleTabs(role), [role]);
+export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihethong', permissions = [] }: AdminPanelProps) {
+  // Admin giữ policy hiện hành; staff chỉ thấy các module có assignment view.
+  const allowedTabs = useMemo(() => role === 'admin' ? visibleTabs(role) : visibleTabsFromPermissions(permissions), [permissions, role]);
   // Tab mặc định: initialTab nếu hợp quyền, else tab đầu tiên staff/admin được thấy.
   const defaultTab: AdminTab = (initialTab && allowedTabs.includes(initialTab as AdminTab))
     ? (initialTab as AdminTab)

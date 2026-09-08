@@ -17,8 +17,10 @@ async function authHeader(): Promise<HeadersInit> {
 
 export async function generateArticleAI(input: {
   keyword: string;
-  district?: string;
-  ward?: string;
+  areaId?: string;
+  districtId?: string;
+  wardId?: string;
+  neighborhoodId?: string;
 }): Promise<GenerateArticleResult> {
   const res = await fetch('/api/admin/generate-article', {
     method: 'POST',

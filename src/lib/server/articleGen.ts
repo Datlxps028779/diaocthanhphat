@@ -31,8 +31,10 @@ export type GeneratedArticle = {
 
 export type GenerateArticleInput = {
   keyword: string;
+  area?: string;
   district?: string;
   ward?: string;
+  neighborhood?: string;
 };
 
 function buildSystemPrompt(): string {
@@ -85,8 +87,10 @@ function buildSystemPrompt(): string {
 
 function buildUserPrompt(input: GenerateArticleInput): string {
   const parts = [`Từ khoá chính: "${input.keyword}".`];
+  if (input.area) parts.push(`Tỉnh/thành phố: ${input.area}.`);
   if (input.district) parts.push(`Khu vực (quận/huyện/thành phố): ${input.district}.`);
   if (input.ward) parts.push(`Phường/xã: ${input.ward}.`);
+  if (input.neighborhood) parts.push(`Khu dân cư: ${input.neighborhood}.`);
   parts.push('Hãy soạn một bài viết hoàn chỉnh và trả về DUY NHẤT object JSON theo đúng định dạng đã nêu.');
   return parts.join('\n');
 }
@@ -153,10 +157,10 @@ export async function generateArticle(input: GenerateArticleInput): Promise<Gene
     throw new Error('Bài viết sinh ra thiếu tiêu đề hoặc nội dung. Thử lại.');
   }
 
-  const geoArea = (out.geoArea || input.district || '').trim();
+  const geoArea = (out.geoArea || input.neighborhood || input.ward || input.district || input.area || '').trim();
 
   // Ảnh minh hoạ từ Pexels theo từ khoá + khu vực. Thiếu key/lỗi → '' (không chặn tạo bài).
-  const imageQuery = [input.keyword, input.district].filter(Boolean).join(' ');
+  const imageQuery = [input.keyword, input.neighborhood, input.ward, input.district, input.area].filter(Boolean).join(' ');
   const pexels = await fetchPexelsImage(imageQuery);
 
   return {

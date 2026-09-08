@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
-import { UserCog, UserPlus, RefreshCw, AlertTriangle, Ban, CheckCircle2, Mail, Phone, Shield, X, Search } from 'lucide-react';
-import { getAdminUsers, getCustomerStaff, upsertStaffCustomerSettings, setUserRole, banUser, unbanUser, createStaff, type AdminUserRow, type StaffCustomerScope } from '../../../lib/api';
+import { UserCog, UserPlus, RefreshCw, AlertTriangle, Ban, CheckCircle2, Mail, Phone, Shield, X, Search, KeyRound } from 'lucide-react';
+import type { Area, District, Ward, Neighborhood } from '../../../lib/supabase';
+import { getAreas, getDistricts, getWards, getNeighborhoods } from '../../../lib/api';
+import {
+  STAFF_PERMISSION_ACTION_LABELS,
+  STAFF_PERMISSION_CATALOG,
+  STAFF_PERMISSION_SCOPE_LABELS,
+  type StaffPermission,
+  type StaffPermissionAction,
+  type StaffPermissionScopeKind,
+} from '../../../lib/staffPermissions';
+import { getAdminUsers, getCustomerStaff, upsertStaffCustomerSettings, setUserRole, banUser, unbanUser, createStaff, getStaffPermissions, replaceStaffPermissions, type AdminUserRow, type StaffCustomerScope } from '../../../lib/api';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // Nhãn + màu badge cho role đội ngũ.
@@ -27,6 +37,7 @@ export function StaffTab() {
   const [customerSettings, setCustomerSettings] = useState<Record<string, CustomerStaffSetting>>({});
   const [staffScopes, setStaffScopes] = useState<StaffCustomerScope[]>([]);
   const [settingsBusy, setSettingsBusy] = useState<string | null>(null);
+  const [permissionEditor, setPermissionEditor] = useState<AdminUserRow | null>(null);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -191,7 +202,12 @@ export function StaffTab() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <select disabled={busy === u.id} value={u.role}
+                      <button disabled={busy === u.id} onClick={() => setPermissionEditor(u)}
+                        title="Phân quyền theo tài khoản"
+                        className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40">
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                      <select value={u.role} disabled={busy === u.id}
                         onChange={e => handleSetRole(u, e.target.value as 'user' | 'staff')}
                         title="Đổi quyền"
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:ring-1 focus:ring-red-400 outline-none disabled:opacity-40">
@@ -222,11 +238,329 @@ export function StaffTab() {
         <CreateStaffModal serviceRole={serviceRole} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />
       )}
 
-      {promoting && (
-        <PromoteUserModal candidates={all.filter(u => u.role === 'user')}
-          busyId={busy} onClose={() => setPromoting(false)}
-          onPromote={(u, role) => { setPromoting(false); handleSetRole(u, role); }} />
+      {permissionEditor && (
+        <PermissionEditorModal
+          staff={permissionEditor}
+          onClose={() => setPermissionEditor(null)}
+          onSaved={() => { setPermissionEditor(null); load(); }}
+        />
       )}
+
+      {promoting && (
+        <PromoteUserModal
+          candidates={all.filter(u => u.role === 'user')}
+          busyId={busy}
+          onClose={() => setPromoting(false)}
+          onPromote={(u, role) => { setPromoting(false); handleSetRole(u, role); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PermissionEditorModal({ staff, onClose, onSaved }: {
+  staff: AdminUserRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  type ModuleDraft = {
+    actions: StaffPermissionAction[];
+    scope_kind: StaffPermissionScopeKind;
+    scope_id: string | null;
+    scope_area_id: string;
+    scope_district_id: string;
+    scope_ward_id: string;
+  };
+  const [draft, setDraft] = useState<Record<string, ModuleDraft>>({});
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([getStaffPermissions(staff.id), getAreas(), getDistricts(), getWards(), getNeighborhoods()])
+      .then(([result, nextAreas, nextDistricts, nextWards, nextNeighborhoods]) => {
+        const next: Record<string, ModuleDraft> = {};
+        for (const item of STAFF_PERMISSION_CATALOG) {
+          const permissions = result.permissions.filter(permission => permission.module === item.module);
+          const first = permissions[0];
+          const scope_kind = first?.scope_kind ?? 'global';
+          const scope_id = first?.scope_id ?? null;
+          const scope = resolveScopeParents(scope_kind, scope_id, nextAreas, nextDistricts, nextWards, nextNeighborhoods);
+          next[item.module] = {
+            actions: permissions.map(permission => permission.action),
+            scope_kind,
+            scope_id,
+            ...scope,
+          };
+        }
+        setDraft(next);
+        setAreas(nextAreas);
+        setDistricts(nextDistricts);
+        setWards(nextWards);
+        setNeighborhoods(nextNeighborhoods);
+      })
+      .catch(e => setError(e instanceof Error ? e.message : 'Không tải được phân quyền.'))
+      .finally(() => setLoading(false));
+  }, [staff.id]);
+
+  const resolveScopeParents = (
+    scope_kind: StaffPermissionScopeKind,
+    scope_id: string | null,
+    nextAreas: Area[],
+    nextDistricts: District[],
+    nextWards: Ward[],
+    nextNeighborhoods: Neighborhood[],
+  ) => {
+    const empty = { scope_area_id: '', scope_district_id: '', scope_ward_id: '' };
+    if (!scope_id || scope_kind === 'global') return empty;
+    if (scope_kind === 'area') return { ...empty, scope_area_id: scope_id };
+    if (scope_kind === 'district') {
+      const district = nextDistricts.find(item => item.id === scope_id);
+      return { ...empty, scope_area_id: district?.area_id ?? '', scope_district_id: scope_id };
+    }
+    if (scope_kind === 'ward') {
+      const ward = nextWards.find(item => item.id === scope_id);
+      const district = nextDistricts.find(item => item.id === ward?.district_id);
+      return { ...empty, scope_area_id: district?.area_id ?? '', scope_district_id: ward?.district_id ?? '', scope_ward_id: scope_id };
+    }
+    const neighborhood = nextNeighborhoods.find(item => item.id === scope_id);
+    const district = nextDistricts.find(item => item.id === neighborhood?.district_id);
+    const areaId = neighborhood?.area_id ?? district?.area_id ?? '';
+    return {
+      scope_area_id: nextAreas.some(item => item.id === areaId) ? areaId : '',
+      scope_district_id: neighborhood?.district_id ?? '',
+      scope_ward_id: neighborhood?.ward_id ?? '',
+    };
+  };
+
+  const updateModule = (module: string, patch: Partial<ModuleDraft>) => {
+    setDraft(current => ({
+      ...current,
+      [module]: { ...current[module], ...patch },
+    }));
+  };
+
+  const emptyDraft: ModuleDraft = {
+    actions: [],
+    scope_kind: 'global',
+    scope_id: null,
+    scope_area_id: '',
+    scope_district_id: '',
+    scope_ward_id: '',
+  };
+
+  const toggleAction = (module: string, action: StaffPermissionAction) => {
+    const current = draft[module] ?? emptyDraft;
+    const actions = current.actions.includes(action)
+      ? current.actions.filter(item => item !== action)
+      : [...current.actions, action];
+    updateModule(module, { actions });
+  };
+
+  const changeScopeKind = (module: string, scope_kind: StaffPermissionScopeKind) => {
+    updateModule(module, {
+      scope_kind,
+      scope_id: null,
+      scope_area_id: '',
+      scope_district_id: '',
+      scope_ward_id: '',
+    });
+  };
+
+  const changeScopeParent = (module: string, level: 'area' | 'district' | 'ward' | 'neighborhood', value: string) => {
+    const current = draft[module] ?? emptyDraft;
+    if (level === 'area') {
+      updateModule(module, {
+        scope_area_id: value,
+        scope_district_id: '',
+        scope_ward_id: '',
+        scope_id: current.scope_kind === 'area' ? value || null : null,
+      });
+    } else if (level === 'district') {
+      updateModule(module, {
+        scope_district_id: value,
+        scope_ward_id: '',
+        scope_id: current.scope_kind === 'district' ? value || null : null,
+      });
+    } else if (level === 'ward') {
+      updateModule(module, {
+        scope_ward_id: value,
+        scope_id: current.scope_kind === 'ward' ? value || null : null,
+      });
+    } else {
+      updateModule(module, { scope_id: value || null });
+    }
+  };
+
+  const save = async () => {
+    setSaving(true); setError('');
+    try {
+      const assignments: StaffPermission[] = [];
+      for (const item of STAFF_PERMISSION_CATALOG) {
+        const value = draft[item.module];
+        if (!value) continue;
+        const scope_kind = item.locationScoped ? value.scope_kind : 'global';
+        const scope_id = scope_kind === 'global' ? null : value.scope_id;
+        for (const action of value.actions) {
+          assignments.push({ module: item.module, action, scope_kind, scope_id });
+        }
+      }
+      await replaceStaffPermissions(staff.id, assignments);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không lưu được phân quyền.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <div className="absolute inset-0 bg-black/50" onClick={() => !saving && onClose()} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" />Phân quyền theo tài khoản</h3>
+            <p className="text-xs text-gray-500 mt-1">{staff.display_name || staff.email || staff.id} · Không có quyền nào được cấp mặc định.</p>
+          </div>
+          <button onClick={() => !saving && onClose()} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        {error && <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2.5">{error}</div>}
+        <div className="overflow-y-auto px-6 py-4">
+          {loading ? <div className="text-center text-gray-400 py-12">Đang tải phân quyền...</div> : (
+            <div className="space-y-3">
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2.5 text-xs">
+                Quyền đăng bài, đăng sản phẩm, duyệt và quản lý media được kiểm tra ở server/database. AI Agent phải dùng chính account này, không có đường cấp quyền riêng.
+              </div>
+              {STAFF_PERMISSION_CATALOG.map(item => {
+                const value = draft[item.module] ?? emptyDraft;
+                const districtsForArea = value.scope_area_id
+                  ? districts.filter(district => district.area_id === value.scope_area_id)
+                  : [];
+                const wardsForDistrict = value.scope_district_id
+                  ? wards.filter(ward => ward.district_id === value.scope_district_id)
+                  : [];
+                const neighborhoodsForScope = neighborhoods.filter(neighborhood => {
+                  if (value.scope_area_id && neighborhood.area_id !== value.scope_area_id) return false;
+                  if (value.scope_district_id && neighborhood.district_id !== value.scope_district_id) return false;
+                  if (value.scope_ward_id && neighborhood.ward_id !== value.scope_ward_id) return false;
+                  return true;
+                });
+                const scopeSelectClass = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white max-w-52';
+                return (
+                  <div key={item.module} className="border border-gray-200 rounded-xl p-3">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div className="w-44 font-semibold text-sm text-gray-800">{item.label}</div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-2 flex-1">
+                        {item.actions.map(action => (
+                          <label key={action} className="inline-flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+                            <input type="checkbox" checked={value.actions.includes(action)} disabled={saving}
+                              onChange={() => toggleAction(item.module, action)} className="h-4 w-4 accent-indigo-600" />
+                            {STAFF_PERMISSION_ACTION_LABELS[action]}
+                          </label>
+                        ))}
+                      </div>
+                      {item.locationScoped && (
+                        <div className="flex flex-wrap items-center gap-2 w-full">
+                          <select value={value.scope_kind} disabled={saving}
+                            onChange={event => changeScopeKind(item.module, event.target.value as StaffPermissionScopeKind)}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                            {(['global', 'area', 'district', 'ward', 'neighborhood'] as StaffPermissionScopeKind[]).map(kind => (
+                              <option key={kind} value={kind}>{STAFF_PERMISSION_SCOPE_LABELS[kind]}</option>
+                            ))}
+                          </select>
+                          {value.scope_kind === 'area' && (
+                            <select value={value.scope_id ?? ''} disabled={saving}
+                              onChange={event => changeScopeParent(item.module, 'area', event.target.value)}
+                              className={scopeSelectClass}>
+                              <option value="">Chọn tỉnh/thành</option>
+                              {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+                            </select>
+                          )}
+                          {value.scope_kind === 'district' && (
+                            <>
+                              <select value={value.scope_area_id} disabled={saving}
+                                onChange={event => changeScopeParent(item.module, 'area', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn tỉnh/thành</option>
+                                {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+                              </select>
+                              <select value={value.scope_district_id} disabled={saving || !value.scope_area_id}
+                                onChange={event => changeScopeParent(item.module, 'district', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn quận/huyện</option>
+                                {districtsForArea.map(district => <option key={district.id} value={district.id}>{district.name}</option>)}
+                              </select>
+                            </>
+                          )}
+                          {value.scope_kind === 'ward' && (
+                            <>
+                              <select value={value.scope_area_id} disabled={saving}
+                                onChange={event => changeScopeParent(item.module, 'area', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn tỉnh/thành</option>
+                                {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+                              </select>
+                              <select value={value.scope_district_id} disabled={saving || !value.scope_area_id}
+                                onChange={event => changeScopeParent(item.module, 'district', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn quận/huyện</option>
+                                {districtsForArea.map(district => <option key={district.id} value={district.id}>{district.name}</option>)}
+                              </select>
+                              <select value={value.scope_ward_id} disabled={saving || !value.scope_district_id}
+                                onChange={event => changeScopeParent(item.module, 'ward', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn phường/xã</option>
+                                {wardsForDistrict.map(ward => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
+                              </select>
+                            </>
+                          )}
+                          {value.scope_kind === 'neighborhood' && (
+                            <>
+                              <select value={value.scope_area_id} disabled={saving}
+                                onChange={event => changeScopeParent(item.module, 'area', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn tỉnh/thành</option>
+                                {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+                              </select>
+                              <select value={value.scope_district_id} disabled={saving || !value.scope_area_id}
+                                onChange={event => changeScopeParent(item.module, 'district', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn quận/huyện</option>
+                                {districtsForArea.map(district => <option key={district.id} value={district.id}>{district.name}</option>)}
+                              </select>
+                              <select value={value.scope_ward_id} disabled={saving || !value.scope_district_id}
+                                onChange={event => changeScopeParent(item.module, 'ward', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Tất cả phường/xã</option>
+                                {wardsForDistrict.map(ward => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
+                              </select>
+                              <select value={value.scope_id ?? ''} disabled={saving || !value.scope_area_id}
+                                onChange={event => changeScopeParent(item.module, 'neighborhood', event.target.value)}
+                                className={scopeSelectClass}>
+                                <option value="">Chọn khu dân cư</option>
+                                {neighborhoodsForScope.map(neighborhood => <option key={neighborhood.id} value={neighborhood.id}>{neighborhood.name}</option>)}
+                              </select>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
+          <button onClick={save} disabled={saving || loading} className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg">
+            {saving ? 'Đang lưu...' : 'Lưu phân quyền'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

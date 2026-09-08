@@ -2,7 +2,8 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { getPanelRole } from '@/lib/api';
+import { getPanelRole, getMyStaffPermissions } from '@/lib/api';
+import type { StaffPermission } from '@/lib/staffPermissions';
 import { canAccessPanel, type Role } from '@/lib/adminAccess';
 import { AdminLogin } from '@/components/AdminLogin';
 
@@ -19,15 +20,42 @@ export function AdminClient({ initialTab, forceStaff = false, forceOwner = false
   const { user, loading: authLoading } = useAuth();
   const [role, setRole] = useState<Role | null>(null);
   const [roleChecked, setRoleChecked] = useState(false);
+  const [permissions, setPermissions] = useState<StaffPermission[]>([]);
+  const [permissionsChecked, setPermissionsChecked] = useState(false);
   const [entered, setEntered] = useState(false); // đã bấm login thành công
 
   useEffect(() => {
-    if (user) {
-      getPanelRole().then(r => { setRole(r); setRoleChecked(true); })
-        .catch(() => { setRole(null); setRoleChecked(true); });
-    } else {
-      setRole(null); setRoleChecked(true);
+    if (!user) {
+      setRole(null);
+      setRoleChecked(true);
+      setPermissions([]);
+      setPermissionsChecked(true);
+      return;
     }
+
+    setRoleChecked(false);
+    setPermissionsChecked(false);
+    getPanelRole().then(async r => {
+      setRole(r);
+      setRoleChecked(true);
+      if (r !== 'staff') {
+        setPermissions([]);
+        setPermissionsChecked(true);
+        return;
+      }
+      try {
+        setPermissions(await getMyStaffPermissions());
+      } catch {
+        setPermissions([]);
+      } finally {
+        setPermissionsChecked(true);
+      }
+    }).catch(() => {
+      setRole(null);
+      setRoleChecked(true);
+      setPermissions([]);
+      setPermissionsChecked(true);
+    });
   }, [user]);
 
   useEffect(() => {
@@ -38,15 +66,16 @@ export function AdminClient({ initialTab, forceStaff = false, forceOwner = false
   const panelRole: Role | null = forceOwner ? 'admin' : forceStaff ? 'staff' : role;
 
   if (authLoading) return <Spinner />;
-  if (!user || !canAccessPanel(panelRole)) {
-    if (!roleChecked || forceOwner || forceStaff) return <Spinner dark />;
+  if (!user || !roleChecked || !permissionsChecked) return <Spinner dark />;
+  if (!canAccessPanel(panelRole)) {
+    if (forceOwner || forceStaff) return <Spinner dark />;
     return <AdminLogin onSuccess={() => setEntered(true)} />;
   }
   // user + quyền vào panel (admin|staff) OK
   void entered;
   return (
     <Suspense fallback={<Spinner dark />}>
-      <AdminPanel role={panelRole!} initialTab={initialTab} basePath={forceStaff ? '/noi-bo' : '/quantrihethong'} onLogout={async () => { await supabase.auth.signOut(); }} />
+      <AdminPanel role={panelRole!} permissions={permissions} initialTab={initialTab} basePath={forceStaff ? '/noi-bo' : '/quantrihethong'} onLogout={async () => { await supabase.auth.signOut(); }} />
     </Suspense>
   );
 }
