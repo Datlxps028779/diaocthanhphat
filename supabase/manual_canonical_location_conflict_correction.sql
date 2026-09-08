@@ -1,18 +1,9 @@
 -- =============================================================================
--- Horizon 1 — Confirmed location conflict correction
+-- Horizon 1 — Read-only postcheck after confirmed location correction
 --
--- The direct UPDATE formerly in this file must not be run from the SQL Editor:
--- the listing mutation guard requires auth.uid(), which is absent there.
---
--- 1. Run the migration below from the SQL Editor to install the fixed-scope RPC:
---    supabase/migrations/20260930060000_admin_correct_confirmed_location_conflict.sql
--- 2. With an authenticated admin session open in the app, send POST to:
---    /api/admin/canonical-location-correction
---    The route accepts no body and the RPC accepts no arguments.
--- 3. Run the read-only postcheck below from the SQL Editor.
---
--- The RPC changes only user_listings city, district, ward, area_id,
--- district_id, and ward_id for the measured pair.
+-- The one-time admin correction has already run and passed production postcheck.
+-- This file is retained only to repeat the read-only integrity check.
+-- Do not run an UPDATE from the SQL Editor.
 -- =============================================================================
 
 BEGIN TRANSACTION READ ONLY;

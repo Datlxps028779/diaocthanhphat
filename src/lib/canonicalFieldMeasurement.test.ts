@@ -18,10 +18,6 @@ const locationCorrection = readFileSync(
   resolve(process.cwd(), 'supabase/manual_canonical_location_conflict_correction.sql'),
   'utf8',
 );
-const locationCorrectionMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260930060000_admin_correct_confirmed_location_conflict.sql'),
-  'utf8',
-);
 const titleDryRun = readFileSync(
   resolve(process.cwd(), 'supabase/manual_listing_title_normalization_dry_run.sql'),
   'utf8',
@@ -61,26 +57,10 @@ describe('canonical field measurement SQL', () => {
     expect(locationDetail).toContain('Do not update property/listing location');
   });
 
-  it('keeps the location correction behind a fixed-scope authenticated admin RPC', () => {
-    expect(locationCorrection).toContain('must not be run from the SQL Editor');
-    expect(locationCorrection).toContain('/api/admin/canonical-location-correction');
+  it('keeps the location correction as a read-only postcheck after the admin RPC run', () => {
     expect(locationCorrection).toContain('BEGIN TRANSACTION READ ONLY;');
     expect(locationCorrection).toContain('ROLLBACK;');
     expect(locationCorrection).not.toMatch(/^\s*UPDATE\s+public\./im);
-
-    expect(locationCorrectionMigration).toContain('CREATE OR REPLACE FUNCTION public.admin_correct_confirmed_location_conflict()');
-    expect(locationCorrectionMigration).toContain('SECURITY DEFINER');
-    expect(locationCorrectionMigration).toContain('IF auth.uid() IS NULL OR NOT public.is_admin()');
-    expect(locationCorrectionMigration).toContain("'e05fd411-e6a3-4390-9096-69e3d47605f4'::uuid");
-    expect(locationCorrectionMigration).toContain("'087b078e-a678-49aa-822f-ba26f038012a'::uuid");
-    expect(locationCorrectionMigration).toContain("SET city = v_property.city");
-    expect(locationCorrectionMigration).toContain("district = v_property.district");
-    expect(locationCorrectionMigration).toContain("ward = v_property.ward");
-    expect(locationCorrectionMigration).toContain('taxonomy_geo_covers_point');
-    expect(locationCorrectionMigration).toContain('REVOKE ALL ON FUNCTION public.admin_correct_confirmed_location_conflict() FROM PUBLIC, anon, authenticated;');
-    expect(locationCorrectionMigration).toContain('GRANT EXECUTE ON FUNCTION public.admin_correct_confirmed_location_conflict() TO authenticated;');
-    expect(locationCorrectionMigration).not.toContain('p_patch');
-    expect(locationCorrectionMigration).not.toContain('property_id = v_property.id');
   });
 
   it('limits the title dry-run to lossless formatting candidates', () => {
