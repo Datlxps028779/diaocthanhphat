@@ -83,6 +83,12 @@ export async function getMyStaffPermissions(): Promise<StaffPermission[]> {
   return (data ?? []) as StaffPermission[];
 }
 
+export async function correctConfirmedLocationConflict(): Promise<void> {
+  const res = await fetch('/api/admin/canonical-location-correction', { method: 'POST' });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? 'Không sửa được conflict location.');
+}
+
 // user_listings có um... policy admin, user_media có um_select_admin. KHÔNG gồm yêu
 // thích vì user_favorites chỉ cho chủ sở hữu đọc (không có policy admin).
 export interface UserActivity {
