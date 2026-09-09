@@ -18,6 +18,10 @@ const supabaseConfig = readFileSync(
   resolve(process.cwd(), 'supabase/config.toml'),
   'utf8',
 );
+const pathCheckFixMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260909020000_seo_freshness_path_check_fix.sql'),
+  'utf8',
+);
 
 describe('SEO freshness queue contract', () => {
   it('creates a private deduplicated queue with bounded status and retry fields', () => {
@@ -51,6 +55,13 @@ describe('SEO freshness queue contract', () => {
     expect(supabaseConfig).toContain('[functions.seo-freshness-worker]');
     expect(supabaseConfig).toContain('[functions.ai-chat]');
     expect(supabaseConfig).toMatch(/\[functions\.seo-freshness-worker\][\s\S]*?verify_jwt = false/);
+  });
+
+  it('allows dot characters required by XML paths in the repaired constraint', () => {
+    expect(pathCheckFixMigration).toContain('DROP CONSTRAINT IF EXISTS seo_freshness_jobs_path_check');
+    expect(pathCheckFixMigration).toContain("path ~ '^/[A-Za-z0-9._/-]*$'");
+    expect(pathCheckFixMigration).toContain("path !~ '[?#]'");
+    expect(pathCheckFixMigration).toContain('/sitemap-images.xml');
   });
 
   it('requires an internal secret and a strict public path allowlist', () => {
