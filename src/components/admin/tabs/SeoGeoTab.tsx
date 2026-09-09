@@ -3,12 +3,13 @@ import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, Shie
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
 import { supabase } from '../../../lib/supabase';
-import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, diagnoseSearchConsoleAccess, getAreas, getSearchVisibilityAudit, inspectSearchVisibilityBatch, SEO_ROUTE_PATHS, SearchVisibilityApiError, submitSearchVisibilitySitemap, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
+import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, diagnoseSearchConsoleAccess, getAreas, getSearchVisibilityAudit, getSeoFreshnessStatus, inspectSearchVisibilityBatch, SEO_ROUTE_PATHS, SearchVisibilityApiError, SeoFreshnessApiError, submitSearchVisibilitySitemap, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
 import { areaSummaryFromData, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
 import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
 import type { SearchConsoleAccessDiagnosis, SearchVisibilityAuditResponse } from '../../../lib/api/searchVisibility';
+import type { FreshnessQueueResponse } from '../../../lib/server/seoFreshnessObservability';
 
 const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 'type'> & { placeholder?: string }> = [
   { key: 'organization_legal_name', label: 'Tên pháp lý doanh nghiệp', group_name: 'schema', type: 'text' },
@@ -138,6 +139,9 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [visibilityGoogleAction, setVisibilityGoogleAction] = useState<'diagnostic' | 'sitemap' | 'inspection' | null>(null);
   const [visibilityAccessDiagnosis, setVisibilityAccessDiagnosis] = useState<SearchConsoleAccessDiagnosis | null>(null);
   const [visibilityError, setVisibilityError] = useState<{ message: string; code: string } | null>(null);
+  const [freshness, setFreshness] = useState<FreshnessQueueResponse | null>(null);
+  const [freshnessLoading, setFreshnessLoading] = useState(false);
+  const [freshnessError, setFreshnessError] = useState<{ message: string; code: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -170,6 +174,23 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
       setVisibilityError({ message: error.message || 'Chưa tải được audit URL.', code: 'LOAD' });
     } finally {
       setVisibilityLoading(false);
+    }
+  };
+
+  const loadFreshness = async () => {
+    setFreshnessLoading(true);
+    setFreshnessError(null);
+    try {
+      setFreshness(await getSeoFreshnessStatus());
+    } catch (cause) {
+      setFreshness(null);
+      const error = cause as Error;
+      setFreshnessError({
+        message: error.message || 'Chưa tải được trạng thái freshness queue.',
+        code: error instanceof SeoFreshnessApiError ? error.code : 'UNKNOWN',
+      });
+    } finally {
+      setFreshnessLoading(false);
     }
   };
 
@@ -213,6 +234,7 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   };
 
   useEffect(() => { void loadVisibility(); }, []);
+  useEffect(() => { void loadFreshness(); }, []);
 
   useEffect(() => {
     const row = routes.find(r => r.path === activePath);
@@ -517,6 +539,13 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
             onInspectBatch={() => void runGoogleVisibilityAction('inspection')}
           />
 
+          <FreshnessQueueCard
+            queue={freshness}
+            loading={freshnessLoading}
+            error={freshnessError}
+            onRefresh={() => void loadFreshness()}
+          />
+
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
             <div className="mb-1 flex items-center gap-2 font-bold"><CheckCircle className="h-4 w-4" />Nguyên tắc GEO</div>
             Nội dung public phải dựa trên dữ liệu thật, độ dày trang, internal links, tín hiệu doanh nghiệp và Search Console sau deploy.
@@ -655,6 +684,75 @@ function SearchVisibilityCard({
             </div>
           )}
           {lastRun && <p className="mt-3 text-[11px] text-gray-400">Lần audit gần nhất: {new Date(lastRun.started_at).toLocaleString('vi-VN')} · {lastRun.status} · {lastRun.succeeded_count}/{lastRun.requested_count} URL.</p>}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function FreshnessQueueCard({ queue, loading, error, onRefresh }: {
+  queue: FreshnessQueueResponse | null;
+  loading: boolean;
+  error: { message: string; code: string } | null;
+  onRefresh: () => void;
+}) {
+  const counts = queue?.summary.counts;
+  const hasAttention = (counts?.failed ?? 0) > 0 || (counts?.dead_letter ?? 0) > 0;
+  const formatDate = (value: string | null | undefined) => value ? new Date(value).toLocaleString('vi-VN') : '—';
+  const metrics = [
+    ['pending', 'Đang chờ', 'bg-amber-50 text-amber-900'],
+    ['processing', 'Đang xử lý', 'bg-blue-50 text-blue-900'],
+    ['succeeded', 'Đã xử lý', 'bg-emerald-50 text-emerald-900'],
+    ['failed', 'Thất bại', 'bg-orange-50 text-orange-900'],
+    ['dead_letter', 'Dead-letter', 'bg-red-50 text-red-900'],
+  ] as const;
+
+  return (
+    <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-black text-gray-900"><RefreshCw className="h-4 w-4 text-emerald-600" />SEO Freshness Queue</h3>
+          <p className="mt-1 text-xs leading-5 text-gray-500">Theo dõi worker revalidate server-side. Bảng này chỉ đọc, không tự retry hoặc gọi Google.</p>
+        </div>
+        <button type="button" onClick={onRefresh} disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Làm mới
+        </button>
+      </div>
+
+      {error ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"><strong>{error.message}</strong><br />Không tải được dữ liệu vận hành; thử làm mới hoặc kiểm tra quyền owner-MFA.</div>
+      ) : loading && !queue ? (
+        <p className="mt-4 text-sm text-gray-400">Đang tải trạng thái queue…</p>
+      ) : queue ? (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {metrics.map(([key, label, color]) => (
+              <div key={key} className={`rounded-xl px-2 py-3 text-center ${color}`}>
+                <p className="text-lg font-black">{counts?.[key] ?? 0}</p>
+                <p className="text-[10px] font-semibold leading-4">{label}</p>
+              </div>
+            ))}
+          </div>
+          <div className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-5 ${hasAttention ? 'bg-red-50 text-red-900' : 'bg-emerald-50 text-emerald-900'}`}>
+            {hasAttention ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+            <span>{hasAttention ? 'Queue có job cần kiểm tra.' : 'Queue sạch: không có job chờ, đang xử lý hoặc lỗi.'} Tổng {queue.summary.total} job.</span>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-3">
+            <div className="rounded-xl bg-gray-50 px-3 py-2"><strong>Pending cũ nhất</strong><br />{queue.summary.oldestPending?.path ?? 'Không có'}<br /><span className="text-[11px] text-gray-400">{formatDate(queue.summary.oldestPending?.created_at)}</span></div>
+            <div className="rounded-xl bg-gray-50 px-3 py-2"><strong>Retry kế tiếp</strong><br />{queue.summary.nextRetry?.path ?? 'Không có'}<br /><span className="text-[11px] text-gray-400">{formatDate(queue.summary.nextRetry?.next_attempt_at)}</span></div>
+            <div className="rounded-xl bg-gray-50 px-3 py-2"><strong>Thành công gần nhất</strong><br /><span className="text-[11px] text-gray-400">{formatDate(queue.summary.latestSucceededAt)}</span></div>
+          </div>
+          {queue.alerts.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-xs font-bold text-gray-700">Job cần chú ý</p>
+              {queue.alerts.map((job, index) => (
+                <div key={`${job.path}-${job.created_at}-${index}`} className="rounded-lg bg-red-50 px-3 py-2 text-[11px] leading-4 text-red-900">
+                  <span className="font-bold">{job.path}</span> · {job.status} · attempt {job.attempt_count}/{job.max_attempts}{job.last_error ? ` · ${job.last_error}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       ) : null}
     </div>
