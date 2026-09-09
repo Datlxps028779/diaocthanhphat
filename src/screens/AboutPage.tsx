@@ -81,7 +81,8 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
   const awardsTitle = g('awards', 'title');
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative bg-gray-900 h-64 overflow-hidden">
         <img src={heroImage} alt="" className="w-full h-full object-cover opacity-30" />
@@ -264,5 +265,6 @@ export function AboutPage({ onNavigate }: AboutPageProps) {
         </div>
       </div>
     </div>
+    </main>
   );
 }

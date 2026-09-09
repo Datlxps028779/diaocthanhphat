@@ -65,8 +65,8 @@ describe('buildRouteMetadata', () => {
 
     expect(metadata.alternates?.canonical).toBe('/mua-ban-chinh');
     expect(metadata.openGraph?.url).toBe('/mua-ban-chinh');
-    expect(schemas[0].url).toBe('/mua-ban-chinh');
-    expect(schemas[0].mainEntityOfPage).toBe('/mua-ban-chinh');
+    expect(schemas[0].url).toBe('https://chonhaviet.com/mua-ban-chinh');
+    expect(schemas[0].mainEntityOfPage).toBe('https://chonhaviet.com/mua-ban-chinh');
   });
 
   it('ignores malformed, external, query, and hash canonical overrides', () => {
@@ -96,7 +96,7 @@ describe('buildRouteJsonLd', () => {
     expect(schemas.length).toBeGreaterThanOrEqual(1);
     expect(schemas[0]['@type']).toBe('CollectionPage');
     expect(schemas[0].name).toBe('Mua bán bất động sản');
-    expect(schemas[0].url).toBe('/mua-ban');
+    expect(schemas[0].url).toBe('https://chonhaviet.com/mua-ban');
   });
 
   it('có breadcrumb → thêm BreadcrumbList', () => {
@@ -122,7 +122,7 @@ describe('buildRouteJsonLd', () => {
         } as never,
       }),
     });
-    expect(schemas[0].url).toBe('/mua-ban');
+    expect(schemas[0].url).toBe('https://chonhaviet.com/mua-ban');
     expect(schemas[0].keywords).toBeUndefined();
   });
 });

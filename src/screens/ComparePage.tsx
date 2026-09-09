@@ -97,7 +97,8 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
+    <main id="main-content">
+      <div className="max-w-5xl mx-auto px-4 py-6">
       <Breadcrumb items={[{ label: 'Trang chủ', onClick: () => onNavigate({ name: 'home' }) }, { label: 'So sánh BĐS' }]} />
 
       <div className="flex items-center justify-between mb-6 mt-4">
@@ -198,5 +199,6 @@ export function ComparePage({ onNavigate }: { onNavigate: (p: Page) => void }) {
         </p>
       )}
     </div>
+    </main>
   );
 }

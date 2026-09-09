@@ -187,7 +187,8 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div
         className="relative h-64 md:h-80 flex items-center"
@@ -351,5 +352,6 @@ export function ProjectsPage({ onNavigate, initialPhase, initialArea }: { onNavi
         />
       )}
     </div>
+    </main>
   );
 }

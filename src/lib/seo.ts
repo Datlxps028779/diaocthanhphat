@@ -44,9 +44,9 @@ export function buildLocalBusinessJsonLd(settings: Record<string, string>): Reco
     '@id': `${SITE_URL}/#organization`,
     name,
     url: SITE_URL,
-    areaServed: get('geo_area_served') || 'Bình Dương, Việt Nam',
+    ...(get('geo_area_served') ? { areaServed: get('geo_area_served') } : {}),
     description: get('organization_description') || get('footer_description')
-      || 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận.',
+      || 'Nền tảng thông tin và kết nối bất động sản tại Bình Dương và khu vực lân cận.',
   };
   if (get('organization_legal_name')) ld.legalName = get('organization_legal_name');
   if (get('knows_about')) ld.knowsAbout = get('knows_about').split(',').map(s => s.trim()).filter(Boolean);

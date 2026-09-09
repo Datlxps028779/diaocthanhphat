@@ -1,6 +1,7 @@
 export type AutoSchemaTarget = 'news' | 'property' | 'area' | 'route' | 'home';
 import { parsePriceInput, priceToVnd } from './listingPrice';
 import { SITE_IDENTITY } from './siteIdentity';
+import { publicCanonicalUrl } from './siteUrl';
 
 export interface AutoSchemaInput {
   title?: string;
@@ -69,10 +70,11 @@ export function buildAutoSchema(
   input: AutoSchemaInput,
   options?: { basePath?: string; routeType?: AutoSchemaInput['route_type'] },
 ): Record<string, unknown> {
-  const path = resolvePath(input, options?.basePath);
-  const name = deriveName(input, path);
+  const rawPath = resolvePath(input, options?.basePath);
+  const path = publicCanonicalUrl(rawPath);
+  const name = deriveName(input, rawPath);
   const description = compact(input.description) || name;
-  const routeType = options?.routeType || input.route_type || routeTypeFromPath(path);
+  const routeType = options?.routeType || input.route_type || routeTypeFromPath(rawPath);
   const image = input.image_url || input.images?.[0] || undefined;
 
   switch (target) {

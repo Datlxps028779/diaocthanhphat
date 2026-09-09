@@ -741,7 +741,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         onLogout={async () => { const { supabase } = await import('./lib/supabase'); await supabase.auth.signOut(); onNavigate({ name: 'home' }); }}
       />
 
-      {/* ─── HERO (always first, not controlled by page builder) ─── */}
+      <main id="main-content">
+        {/* ─── HERO (always first, not controlled by page builder) ─── */}
       <section className="relative flex min-h-[520px] items-center justify-center overflow-hidden pt-14 md:min-h-[600px]">
         <div className="absolute inset-0">
           <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover animate-hero-zoom" />
@@ -897,6 +898,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
       {orderedIds.map(id => renderSection(id))}
+      </main>
 
       <Footer areas={areas} districts={allDistricts} propertyTypes={types} onNavigate={onNavigate} />
       <FloatingButtons onNavigate={onNavigate} />

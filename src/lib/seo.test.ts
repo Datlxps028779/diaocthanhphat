@@ -42,6 +42,9 @@ describe('buildLocalBusinessJsonLd', () => {
     expect(ld['@type']).toBe('RealEstateAgent');
     expect(ld.name).toBeTruthy();
     expect(ld.url).toBe(SITE_URL);
+    expect(ld.description).toBe('Nền tảng thông tin và kết nối bất động sản tại Bình Dương và khu vực lân cận.');
+    expect(ld.description).not.toContain('sổ đỏ chính chủ');
+    expect(ld).not.toHaveProperty('areaServed');
     expect(ld).not.toHaveProperty('telephone');
     expect(ld).not.toHaveProperty('address');
     expect(ld).not.toHaveProperty('sameAs');
@@ -52,9 +55,11 @@ describe('buildLocalBusinessJsonLd', () => {
       phone_main: '0901 234 567',
       email: 'info@bds.vn',
       address: 'Thủ Dầu Một, Bình Dương',
+      geo_area_served: 'Bình Dương',
     });
     expect(ld.telephone).toBe('0901 234 567');
     expect(ld.email).toBe('info@bds.vn');
+    expect(ld.areaServed).toBe('Bình Dương');
     expect(ld.address).toEqual({
       '@type': 'PostalAddress',
       streetAddress: 'Thủ Dầu Một, Bình Dương',

@@ -18,15 +18,15 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: 'Thông tin pháp lý của bất động sản có được kiểm tra không?',
-    a: 'Mỗi tin đăng đều ghi rõ tình trạng pháp lý (sổ hồng, sổ chung, hợp đồng mua bán...). Chúng tôi ưu tiên các bất động sản pháp lý minh bạch và hỗ trợ bạn kiểm tra trước khi giao dịch.',
+    a: 'Mỗi tin đăng hiển thị tình trạng pháp lý theo thông tin được cung cấp trong hồ sơ tin. Bạn nên yêu cầu xem và tự kiểm tra giấy tờ, điều khoản trước khi giao dịch.',
   },
   {
     q: 'Tôi có được hỗ trợ vay ngân hàng khi mua nhà đất không?',
-    a: 'Có. Đội ngũ tư vấn kết nối bạn với ngân hàng đối tác để tính khoản vay, lãi suất và hồ sơ phù hợp với khả năng tài chính của bạn.',
+    a: 'Bạn có thể sử dụng các công cụ tham khảo trên website và để lại thông tin nếu cần được tư vấn thêm. Điều kiện vay và quyết định tín dụng phụ thuộc vào ngân hàng, hồ sơ và khả năng tài chính của bạn.',
   },
   {
     q: 'Khu vực nào tại Bình Dương đang được quan tâm nhiều nhất?',
-    a: 'Các khu vực gần khu công nghiệp và hạ tầng phát triển như Dĩ An, Thuận An, Thủ Dầu Một luôn có thanh khoản tốt. Bạn có thể lọc theo khu vực để xem các bất động sản đang có.',
+    a: 'Bạn có thể lọc theo khu vực để xem các tin đang hoạt động tại Dĩ An, Thuận An, Thủ Dầu Một và những khu vực khác có dữ liệu phù hợp.',
   },
   {
     q: 'Website có công cụ định giá bất động sản không?',

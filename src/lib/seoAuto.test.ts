@@ -7,7 +7,7 @@ describe('buildAutoSchema — news', () => {
     expect(s['@type']).toBe('NewsArticle');
     expect(s.headline).toBe('Tin BĐS');
     expect(s.description).toBe('Mô tả');
-    expect(s.url).toBe('/tin-tuc/a');
+    expect(s.url).toBe('https://chonhaviet.com/tin-tuc/a');
   });
 
   it('thiếu title → suy name từ focus_keywords rồi path', () => {
@@ -63,7 +63,7 @@ describe('buildAutoSchema — route/area/home', () => {
   it('route "/tin-tuc" → CollectionPage + mainEntityOfPage', () => {
     const s = buildAutoSchema('route', { path: '/tin-tuc' });
     expect(s['@type']).toBe('CollectionPage');
-    expect(s.mainEntityOfPage).toBe('/tin-tuc');
+    expect(s.mainEntityOfPage).toBe('https://chonhaviet.com/tin-tuc');
   });
 
   it('routeType truyền qua options được ưu tiên', () => {

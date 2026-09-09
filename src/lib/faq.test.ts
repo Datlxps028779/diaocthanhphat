@@ -10,6 +10,13 @@ describe('faq — FAQPage schema cho trang chủ', () => {
     }
   });
 
+  it('không đưa claim marketing chưa có evidence vào FAQ công khai', () => {
+    const text = FAQ_ITEMS.map(item => `${item.q} ${item.a}`).join(' ').toLowerCase();
+    expect(text).not.toContain('thanh khoản tốt');
+    expect(text).not.toContain('ngân hàng đối tác');
+    expect(text).not.toContain('sổ đỏ chính chủ');
+  });
+
   it('buildFaqJsonLd dựng đúng cấu trúc FAQPage schema.org', () => {
     const ld = buildFaqJsonLd() as {
       '@context': string; '@type': string;

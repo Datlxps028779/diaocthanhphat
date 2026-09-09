@@ -39,7 +39,7 @@ export async function generateMetadata(): Promise<Metadata> {
       default: `${SITE_NAME} – Mua Bán Cho Thuê Bất Động Sản Uy Tín`,
       template: `%s | ${SITE_NAME}`,
     },
-    description: 'Mua bán, cho thuê bất động sản, đất nền sổ đỏ chính chủ tại Bình Dương và khu vực lân cận. Pháp lý minh bạch, tư vấn tận tâm.',
+    description: 'Nền tảng thông tin và kết nối bất động sản tại Bình Dương và khu vực lân cận.',
     alternates: { canonical: '/' },
     icons: fav ? { icon: [{ url: fav }] } : { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }] },
     openGraph: {

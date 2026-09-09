@@ -90,7 +90,8 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
   const detail = selectedArea;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-56 md:h-72 flex items-center"
         style={g('hero', 'image') ? { backgroundImage: `url('${g('hero', 'image')}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
@@ -164,5 +165,6 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
         </div>
       </div>}
     </div>
+    </main>
   );
 }

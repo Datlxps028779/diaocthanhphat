@@ -361,7 +361,8 @@ function ArticleDetail({
   const sourceNote = article.source_note?.trim();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div className="relative h-64 md:h-96 flex items-end overflow-hidden bg-gray-900">
         <div className="absolute inset-0">
@@ -682,6 +683,7 @@ function ArticleDetail({
         </aside>
       </div>
     </div>
+    </main>
   );
 }
 
@@ -977,7 +979,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div
         className="relative h-64 md:h-80 flex items-center"
@@ -1166,5 +1169,6 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
         </div>
       </div>
     </div>
+    </main>
   );
 }

@@ -270,7 +270,8 @@ export function InvestPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const benefits = collection('benefits', 'items').map(item => ({ title: String(item.title ?? ''), description: String(item.description ?? '') }));
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50">
       {/* Hero */}
       <div
         className="relative h-64 md:h-96 flex items-center"
@@ -426,5 +427,6 @@ export function InvestPage({ onNavigate }: { onNavigate: (p: Page) => void }) {
         </div>
       </div>
     </div>
+    </main>
   );
 }

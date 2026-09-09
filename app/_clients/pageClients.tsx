@@ -30,12 +30,14 @@ export function ListingsClient({ listingType, filters, initialData }: {
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
-      <ListingsPage
-        initialFilters={{ listingType, ...filters }}
-        initialData={initialData}
-        initialDataScope={{ listingType }}
-        onNavigate={navigate}
-      />
+      <main id="main-content">
+        <ListingsPage
+          initialFilters={{ listingType, ...filters }}
+          initialData={initialData}
+          initialDataScope={{ listingType }}
+          onNavigate={navigate}
+        />
+      </main>
     </SiteChrome>
   );
 }
@@ -53,14 +55,16 @@ export function AreaListingClient({ listingType, filters, initialData, initialDa
   const navigate = useNavigate();
   return (
     <SiteChrome currentPage={{ name: 'listings', listingType }}>
-      {header}
-      <ListingsPage
-        initialFilters={{ listingType, ...filters }}
-        initialData={initialData}
-        initialDataScope={initialDataScope}
-        hasEditorialHeader={Boolean(header)}
-        onNavigate={navigate}
-      />
+      <main id="main-content">
+        {header}
+        <ListingsPage
+          initialFilters={{ listingType, ...filters }}
+          initialData={initialData}
+          initialDataScope={initialDataScope}
+          hasEditorialHeader={Boolean(header)}
+          onNavigate={navigate}
+        />
+      </main>
     </SiteChrome>
   );
 }

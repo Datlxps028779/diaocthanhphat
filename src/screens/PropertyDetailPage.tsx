@@ -378,7 +378,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
   ].filter(Boolean) as { icon: React.ReactNode; label: string; value: string }[];
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
+    <main id="main-content">
+      <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
 
       {preview && (
         <div className="bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 text-center flex items-center justify-center gap-2">
@@ -1017,6 +1018,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
         </div>
       )}
     </div>
+    </main>
   );
 }
 
