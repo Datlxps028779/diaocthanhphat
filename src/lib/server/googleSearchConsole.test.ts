@@ -94,6 +94,46 @@ describe('googleSearchConsole', () => {
     expect(owner.status).toBe('ACCESS_CONFIRMED');
   });
 
+  it('chọn quyền mạnh nhất khi Google trả duplicate exact properties và dedupe alternate properties', () => {
+    const diagnosis = diagnoseSearchConsoleAccessEntries(config, [
+      { siteUrl: config.siteUrl, permissionLevel: 'siteRestrictedUser' },
+      { siteUrl: config.siteUrl, permissionLevel: 'siteFullUser' },
+      { siteUrl: 'https://www.chonhaviet.com/', permissionLevel: 'siteRestrictedUser' },
+      { siteUrl: 'https://www.chonhaviet.com/', permissionLevel: 'siteOwner' },
+      { siteUrl: undefined, permissionLevel: 'siteOwner' },
+    ]);
+
+    expect(diagnosis.status).toBe('ACCESS_CONFIRMED');
+    expect(diagnosis.canonicalProperty.permissionLevel).toBe('siteFullUser');
+    expect(diagnosis.alternateProperties).toEqual([{ siteUrl: 'https://www.chonhaviet.com/', permissionLevel: 'siteOwner' }]);
+  });
+
+  it('coi siteEntry thiếu hoặc malformed là không có exact property, không làm crash', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
+      .mockResolvedValueOnce(response({ siteEntry: null }));
+
+    const diagnosis = await diagnoseSearchConsoleAccess(config, fetchMock);
+
+    expect(diagnosis.status).toBe('CANONICAL_PROPERTY_MISSING');
+    expect(diagnosis.canonicalProperty.found).toBe(false);
+  });
+
+  it('giới hạn lỗi Google trả về cho owner ở mức bounded', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ access_token: 'secret-token' }))
+      .mockResolvedValueOnce(response({ error: { message: 'x'.repeat(1200) } }, 403));
+
+    await expect(diagnoseSearchConsoleAccess(config, fetchMock)).rejects.toThrow(new RegExp(`^Google Search Console từ chối yêu cầu: x{500}$`));
+  });
+
+  it('giới hạn lỗi token exchange và không gọi Sites API khi token thất bại', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ error_description: 'x'.repeat(1200) }, 400));
+
+    await expect(diagnoseSearchConsoleAccess(config, fetchMock)).rejects.toThrow(new RegExp(`^Không xác thực được Google Search Console: x{500}$`));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('uses a fixed Search Console property and normalizes only Google index evidence', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ access_token: 'secret-token' }))

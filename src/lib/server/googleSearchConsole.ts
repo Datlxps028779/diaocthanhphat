@@ -150,8 +150,9 @@ export function createServiceAccountAssertion(config: SearchConsoleConfig, now =
 async function responseError(response: Response, fallback: string): Promise<SearchConsoleError> {
   const body = await response.json().catch(() => ({})) as GoogleApiError;
   const detail = typeof body.error === 'string' ? body.error : body.error?.message;
+  const bounded = detail?.slice(0, 500);
   const code = response.status === 401 || response.status === 403 ? 'GOOGLE_AUTH' : 'GOOGLE_REQUEST';
-  return new SearchConsoleError(code, detail ? `${fallback}: ${detail}` : fallback);
+  return new SearchConsoleError(code, bounded ? `${fallback}: ${bounded}` : fallback);
 }
 
 export async function getSearchConsoleAccessToken(config: SearchConsoleConfig, fetchImpl: FetchLike = fetch): Promise<string> {
@@ -166,7 +167,7 @@ export async function getSearchConsoleAccessToken(config: SearchConsoleConfig, f
   });
   const body = await response.json().catch(() => ({})) as GoogleTokenResponse;
   if (!response.ok || !body.access_token) {
-    const detail = body.error_description || body.error;
+    const detail = (body.error_description || body.error)?.slice(0, 500);
     throw new SearchConsoleError('GOOGLE_AUTH', detail ? `Không xác thực được Google Search Console: ${detail}` : 'Không xác thực được Google Search Console.');
   }
   return body.access_token;
@@ -191,6 +192,19 @@ function permissionLevel(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function permissionRank(value: string | null): number {
+  if (value === 'siteOwner') return 3;
+  if (value === 'siteFullUser') return 2;
+  if (value === 'siteRestrictedUser') return 1;
+  return 0;
+}
+
+function strongestEntry(entries: GoogleSiteEntry[], siteUrl: string): GoogleSiteEntry | undefined {
+  return entries
+    .filter(entry => entry.siteUrl === siteUrl)
+    .sort((a, b) => permissionRank(permissionLevel(b.permissionLevel)) - permissionRank(permissionLevel(a.permissionLevel)))[0];
+}
+
 function hasSufficientSitePermission(value: string | null): boolean {
   return value === 'siteFullUser' || value === 'siteOwner';
 }
@@ -206,12 +220,14 @@ function diagnosisMessage(status: SearchConsoleAccessDiagnosis['status']): strin
 }
 
 export function diagnoseSearchConsoleAccessEntries(config: SearchConsoleConfig, entries: GoogleSiteEntry[]): SearchConsoleAccessDiagnosis {
-  const canonical = entries.find(entry => entry.siteUrl === config.siteUrl);
+  const canonical = strongestEntry(entries, config.siteUrl);
   const canonicalPermission = permissionLevel(canonical?.permissionLevel);
-  const domain = entries.find(entry => entry.siteUrl === 'sc-domain:chonhaviet.com');
-  const alternateProperties = entries
-    .filter(entry => entry.siteUrl === 'http://chonhaviet.com/' || entry.siteUrl === 'http://www.chonhaviet.com/' || entry.siteUrl === 'https://www.chonhaviet.com/')
-    .map(entry => ({ siteUrl: entry.siteUrl!, permissionLevel: permissionLevel(entry.permissionLevel) }));
+  const domain = strongestEntry(entries, 'sc-domain:chonhaviet.com');
+  const alternateUrls = new Set(['http://chonhaviet.com/', 'http://www.chonhaviet.com/', 'https://www.chonhaviet.com/']);
+  const alternateProperties = [...alternateUrls]
+    .map(siteUrl => strongestEntry(entries, siteUrl))
+    .filter((entry): entry is GoogleSiteEntry & { siteUrl: string } => typeof entry?.siteUrl === 'string')
+    .map(entry => ({ siteUrl: entry.siteUrl, permissionLevel: permissionLevel(entry.permissionLevel) }));
   const status = !canonical
     ? 'CANONICAL_PROPERTY_MISSING'
     : hasSufficientSitePermission(canonicalPermission)
