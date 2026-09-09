@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import sitemap, { shouldIncludeAreaListingType } from './sitemap';
+import sitemap, { shouldIncludeAreaListingType, shouldIncludeCompositeAreaListing } from './sitemap';
 
 describe('public sitemap', () => {
   it('always emits the approved canonical origin, never the deployment origin', async () => {
@@ -10,6 +10,21 @@ describe('public sitemap', () => {
     expect(entries.some(entry => entry.url.includes('vercel.app'))).toBe(false);
   });
 
+  it('only indexes a grouped property type route with enough distinct titled inventory', () => {
+    const area = { name: 'Bình Dương', slug: 'binh-duong', description: 'Mô tả khu vực.' };
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      id: `land-${index}`,
+      area_id: 'area-1',
+      district_id: 'district-1',
+      district: 'Dĩ An',
+      property_type_id: `type-${index}`,
+      listing_type: 'mua_ban' as const,
+      title: `Đất nền ${index}`,
+      updated_at: `2026-09-0${index + 1}T00:00:00.000Z`,
+    }));
+    expect(shouldIncludeCompositeAreaListing(area, rows, 'district-1', 'mua_ban', 'dat', new Set(rows.map(row => row.property_type_id)))).toBe(true);
+    expect(shouldIncludeCompositeAreaListing(area, rows.slice(0, 4), 'district-1', 'mua_ban', 'dat', new Set(rows.map(row => row.property_type_id)))).toBe(false);
+  });
   it('only indexes an area transaction route when that type has enough inventory', () => {
     const area = { name: 'Khu vực thử nghiệm', slug: 'khu-vuc-thu-nghiem', description: 'Mô tả khu vực.' };
     const saleRows = Array.from({ length: 5 }, (_, index) => ({

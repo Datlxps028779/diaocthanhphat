@@ -1,6 +1,6 @@
 import { renderAreaListingPage, areaListingMetadataFactory } from '@/lib/areaListingPage';
 
-export const revalidate = 1800;
+export const revalidate = 300;
 
 export const generateMetadata = areaListingMetadataFactory('cho_thue');
 

@@ -4,6 +4,12 @@ function text(value: string | undefined): string {
   return value ?? '';
 }
 
+function sameStringArray(left: string[] | undefined, right: string[] | undefined): boolean {
+  const a = [...(left ?? [])].sort();
+  const b = [...(right ?? [])].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 export function listingInitialDataScopeMatches(
   scope: ListingInitialFilters | undefined,
   current: ListingInitialFilters,
@@ -13,6 +19,8 @@ export function listingInitialDataScopeMatches(
   return text(scope.listingType) === text(current.listingType)
     && text(scope.areaId) === text(current.areaId)
     && text(scope.typeId) === text(current.typeId)
+    && sameStringArray(scope.typeIds, current.typeIds)
+    && text(scope.typePathSlug) === text(current.typePathSlug)
     && text(scope.city) === text(current.city)
     && text(scope.district) === text(current.district)
     && text(scope.ward) === text(current.ward)

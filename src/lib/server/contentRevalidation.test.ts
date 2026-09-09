@@ -64,6 +64,23 @@ describe('collectContentRevalidationPaths', () => {
     expect(paths).toContain('/mua-ban/binh-duong/thuan-an/nha-dep-pr101');
   });
 
+  it('revalidate landing group nha/dat khi property public thay đổi', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'property',
+      action: 'publish',
+      targets: [{ current: {
+        id: 'p-group', slug: 'dat-moi', public_code: 301, listing_type: 'mua_ban',
+        district: 'Thuận An', district_id: 'district-1', property_type_id: 'type-dat',
+        area_id: 'area-1', is_active: true,
+      } }],
+    }, {
+      ...lookups,
+      districtSlugs: new Map([['district-1', { areaId: 'area-1', slug: 'binh-duong-thuan-an' }]]),
+      propertyTypeSlugs: new Map([['type-dat', 'dat-nen']]),
+    });
+    expect(paths).toContain('/mua-ban/binh-duong/thuan-an/dat');
+  });
+
   it('purge khu dân cư và khu vực khi property active có neighborhood', () => {
     const paths = collectContentRevalidationPaths({
       entity: 'property',
@@ -79,6 +96,20 @@ describe('collectContentRevalidationPaths', () => {
     expect(paths).toContain('/khu-vuc/binh-duong');
     expect(paths).toContain('/sitemap.xml');
     expect(paths).toContain('/sitemap-images.xml');
+  });
+
+  it('purge URL sản phẩm khi property chuyển inactive để không giữ cache public cũ', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'property',
+      action: 'unpublish',
+      targets: [{ current: {
+        id: 'p-hidden', slug: 'nha-cu', public_code: 401, listing_type: 'mua_ban',
+        district: 'Thuận An', area_id: 'area-1', is_active: false,
+      } }],
+    }, lookups);
+    expect(paths).toContain('/bat-dong-san/nha-cu');
+    expect(paths).toContain('/mua-ban/binh-duong/thuan-an');
+    expect(paths).toContain('/sitemap.xml');
   });
 
   it('purge route tĩnh và route public theo slug, từ chối route tùy ý', () => {

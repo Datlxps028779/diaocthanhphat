@@ -35,10 +35,12 @@ export type VisibilityDatabase = {
 };
 
 export const SEARCH_VISIBILITY_SOURCE_SELECTS = {
-  properties: 'id,slug,public_code,listing_type,district,property_type_id,is_active,updated_at,neighborhood_slug,areas(slug)',
+  properties: 'id,slug,public_code,listing_type,area_id,district_id,district,property_type_id,title,is_active,updated_at,neighborhood_slug,areas(slug)',
   // areas/neighborhoods only expose created_at in production. Do not add updated_at
   // unless the production schema has explicitly been extended and verified.
   areas: 'id,name,slug,description,created_at',
+  districts: 'id,area_id,name,slug',
+  propertyTypes: 'id,name,slug',
   neighborhoods: 'id,name,slug,description,created_at',
   news: 'id,slug,is_published,updated_at',
   newsCategories: 'id,slug,updated_at',
@@ -107,20 +109,24 @@ export function classifySearchVisibilityPersistenceError(error: PersistenceError
 }
 
 async function readSources(client: VisibilityDatabase): Promise<SearchVisibilitySources> {
-  const [properties, areas, neighborhoods, news, newsCategories, managedPages] = await Promise.all([
+  const [properties, areas, districts, propertyTypes, neighborhoods, news, newsCategories, managedPages] = await Promise.all([
     client.from('properties').select(SEARCH_VISIBILITY_SOURCE_SELECTS.properties),
     client.from('areas').select(SEARCH_VISIBILITY_SOURCE_SELECTS.areas),
+    client.from('districts').select(SEARCH_VISIBILITY_SOURCE_SELECTS.districts),
+    client.from('property_types').select(SEARCH_VISIBILITY_SOURCE_SELECTS.propertyTypes),
     client.from('neighborhoods').select(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods),
     client.from('news').select(SEARCH_VISIBILITY_SOURCE_SELECTS.news),
     client.from('news_categories').select(SEARCH_VISIBILITY_SOURCE_SELECTS.newsCategories),
     client.from('managed_pages').select(SEARCH_VISIBILITY_SOURCE_SELECTS.managedPages),
   ]);
-  const results = [properties, areas, neighborhoods, news, newsCategories, managedPages];
+  const results = [properties, areas, districts, propertyTypes, neighborhoods, news, newsCategories, managedPages];
   const error = results.find(result => result.error)?.error;
   if (error) throw new SearchVisibilitySyncError('SOURCE_READ', `Không tải được nguồn URL public: ${error.message}`);
   return {
     properties: (properties.data ?? []) as unknown as SearchVisibilitySources['properties'],
     areas: (areas.data ?? []) as unknown as SearchVisibilitySources['areas'],
+    districts: (districts.data ?? []) as unknown as NonNullable<SearchVisibilitySources['districts']>,
+    propertyTypes: (propertyTypes.data ?? []) as unknown as NonNullable<SearchVisibilitySources['propertyTypes']>,
     neighborhoods: (neighborhoods.data ?? []) as unknown as SearchVisibilitySources['neighborhoods'],
     news: (news.data ?? []) as unknown as SearchVisibilitySources['news'],
     newsCategories: (newsCategories.data ?? []) as unknown as SearchVisibilitySources['newsCategories'],

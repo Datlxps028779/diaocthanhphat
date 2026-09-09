@@ -14,18 +14,21 @@ import {
   serverGetPriceStats,
   serverGetAreaWardPriceStats,
   serverGetDistrictsByArea,
+  serverGetPropertyTypesBySlugs,
 } from '@/lib/supabase-server';
 import {
   areaSummaryFromData,
   buildAreaCollectionJsonLd,
   buildAreaMetadata,
   evaluateAreaSeo,
+  evaluateCompositeAreaSeo,
   getAreaDetails,
 } from '@/lib/areaSeo';
 import { parseAreaListingPath, resolveAreaPath, buildAreaListingPath, listingTypeToSlug, type ListingType } from '@/lib/areaPath';
 import { parseListingParams } from '@/lib/router';
 import { hasDynamicListingQuery } from '@/lib/routeSeo';
 import { detectProductCode, renderProductDetail, productMetadataFromRest } from '@/lib/productDetailPage';
+import { isPropertyTypeSeoGroup, propertyTypeSeoGroupLabel, propertyTypeSlugsForSeoGroup } from '@/lib/propertyTypeGroups';
 
 // Nhãn giao dịch hiển thị + trong tiêu đề SEO. Khác nhau theo path /mua-ban vs /cho-thue.
 const LISTING_LABEL: Record<ListingType, string> = { mua_ban: 'mua bán', cho_thue: 'cho thuê' };
@@ -42,7 +45,26 @@ export async function loadAreaListing(listingSlug: string, rest: string[] | unde
   const resolved = resolveAreaPath(parts.areaSlug, parts.districtSlug, { areas: [area], districts });
   if (!resolved) return null;
 
-  const scope = { listingType: parts.listingType, district: resolved.district?.name };
+  const propertyTypeSlugs = parts.propertyTypeSlug
+    ? (isPropertyTypeSeoGroup(parts.propertyTypeSlug)
+      ? propertyTypeSlugsForSeoGroup(parts.propertyTypeSlug)
+      : [parts.propertyTypeSlug])
+    : [];
+  const propertyTypes = propertyTypeSlugs.length
+    ? await serverGetPropertyTypesBySlugs(propertyTypeSlugs)
+    : [];
+  if (parts.propertyTypeSlug && propertyTypes.length !== propertyTypeSlugs.length) return null;
+  const propertyTypeIds = propertyTypes.map(propertyType => propertyType.id);
+  const propertyTypeLabel = parts.propertyTypeSlug
+    ? (isPropertyTypeSeoGroup(parts.propertyTypeSlug)
+      ? propertyTypeSeoGroupLabel(parts.propertyTypeSlug)
+      : propertyTypes[0]?.name ?? parts.propertyTypeSlug)
+    : null;
+  const scope = {
+    listingType: parts.listingType,
+    district: resolved.district?.name,
+    propertyTypeIds: propertyTypeIds.length ? propertyTypeIds : undefined,
+  };
   const [listings, stats, priceStats, wardPriceStats] = await Promise.all([
     serverGetAreaListings(area.id, 12, scope),
     serverGetAreaStats(area.id, scope),
@@ -51,17 +73,28 @@ export async function loadAreaListing(listingSlug: string, rest: string[] | unde
   ]);
   const detail = getAreaDetails(area.slug);
   const summary = areaSummaryFromData(area, detail);
-  // Quality-gate index dùng chung engine với /khu-vuc; đủ tin + có mô tả riêng mới cho index.
-  const evaluation = evaluateAreaSeo({
-    area,
-    activeListings: Array.from({ length: stats.activeCount }, (_, i) => listings[i] ?? { id: String(i), district: null, property_type_id: null }),
-    districts: stats.districts,
-    propertyTypes: stats.propertyTypes,
-    hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
-  });
+  // Composite group landing pages have their own count/title gate; legacy area pages
+  // continue using the existing area-level policy.
+  const evaluation = parts.propertyTypeSlug
+    ? evaluateCompositeAreaSeo({
+        area,
+        propertyTypeSlug: parts.propertyTypeSlug,
+        activeCount: stats.activeCount,
+        titledCount: stats.titledCount,
+        distinctTitleCount: stats.distinctTitleCount,
+        taxonomyValid: stats.taxonomyValid,
+        hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
+      })
+    : evaluateAreaSeo({
+        area,
+        activeListings: Array.from({ length: stats.activeCount }, (_, i) => listings[i] ?? { id: String(i), district: null, property_type_id: null }),
+        districts: stats.districts,
+        propertyTypes: stats.propertyTypes,
+        hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
+      });
 
-  const path = buildAreaListingPath({ listingType: parts.listingType, areaSlug: parts.areaSlug, districtSlug: parts.districtSlug });
-  return { parts, area, district: resolved.district, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats, path };
+  const path = buildAreaListingPath({ listingType: parts.listingType, areaSlug: parts.areaSlug, districtSlug: parts.districtSlug, propertyTypeSlug: parts.propertyTypeSlug });
+  return { parts, area, district: resolved.district, propertyTypes, propertyTypeLabel, listings, stats, detail, summary, evaluation, priceStats, wardPriceStats, path };
 }
 
 export type AreaListingData = NonNullable<Awaited<ReturnType<typeof loadAreaListing>>>;
@@ -69,17 +102,21 @@ export type AreaListingData = NonNullable<Awaited<ReturnType<typeof loadAreaList
 // Metadata: tái dùng buildAreaMetadata (title/og/robots) rồi override canonical về path
 // mới này (KHÔNG để trỏ /khu-vuc) + chèn nhãn giao dịch vào tiêu đề để mỗi path khác nhau.
 export function buildAreaListingMetadata(data: AreaListingData): Metadata {
-  const { area, district, summary, evaluation, parts, path } = data;
+  const { area, district, summary, evaluation, parts, path, propertyTypeLabel } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
   const label = LISTING_LABEL[parts.listingType];
+  const typeLabel = propertyTypeLabel ? ` ${propertyTypeLabel}` : '';
   const base = buildAreaMetadata(area, summary, evaluation);
   const title = area.meta_title
-    ? `${area.meta_title} — ${label}`
-    : `Bất động sản ${label} ${scopeName}`;
-  // Cấp quận/huyện chưa có dữ liệu giá/mô tả riêng (chỉ tự-sinh từ số liệu tỉnh) →
-  // noindex để không tạo trang mỏng/trùng dưới mỗi tỉnh. Cấp tỉnh giữ quality-gate của
-  // evaluateAreaSeo. Sẽ mở index cấp quận khi có nội dung thật (đợt sau).
-  const robots = district ? { index: false, follow: true } : base.robots;
+    ? `${area.meta_title} — ${label}${typeLabel}`
+    : `Bất động sản${typeLabel} ${label} ${scopeName}`;
+  // Only broad nha/dat pages are primary SEO landings in this phase. Exact type
+  // paths remain useful filters but stay noindex until they have separate evidence.
+  const isPrimaryGroup = Boolean(parts.districtSlug && parts.propertyTypeSlug && isPropertyTypeSeoGroup(parts.propertyTypeSlug)
+    && (parts.propertyTypeSlug === 'nha' || parts.propertyTypeSlug === 'dat'));
+  const robots = isPrimaryGroup && evaluation.indexable
+    ? evaluation.robots
+    : { index: false, follow: true };
   return {
     ...base,
     title,
@@ -119,9 +156,10 @@ export function areaListingMetadataFactory(listingType: ListingType) {
 // Khối nội dung tĩnh riêng cho từng khu vực (chống thin/duplicate): tổng quan + hạ tầng +
 // loại hình + giá tổng hợp + FAQ. Hiển thị TRÊN danh sách tin qua AreaListingClient.
 function AreaStaticHeader({ data }: { data: AreaListingData }) {
-  const { area, district, stats, detail, summary, evaluation, priceStats, wardPriceStats, parts } = data;
+  const { area, district, stats, detail, summary, evaluation, priceStats, wardPriceStats, parts, propertyTypeLabel } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
   const label = LISTING_LABEL[parts.listingType];
+  const typeLabel = propertyTypeLabel ? ` ${propertyTypeLabel}` : '';
   const routePriceStats = priceStats.filter(stat => stat.listing_type === parts.listingType);
   const routeWardPriceStats = wardPriceStats.map(ward => ({
     ...ward,
@@ -141,7 +179,7 @@ function AreaStaticHeader({ data }: { data: AreaListingData }) {
 
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
         <p className="text-xs font-bold uppercase tracking-wide text-red-600">Bất động sản {label}</p>
-        <h1 className="mt-1 text-2xl font-black text-gray-900 md:text-3xl">Bất động sản {label} {scopeName}</h1>
+        <h1 className="mt-1 text-2xl font-black text-gray-900 md:text-3xl">Bất động sản{typeLabel} {label} {scopeName}</h1>
         {priceAnswer && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-semibold leading-7 text-red-800">{priceAnswer}</p>}
         <p className="mt-3 text-sm leading-7 text-gray-600">{detail?.description || summary}</p>
         {!evaluation.indexable && (
@@ -182,7 +220,7 @@ function AreaStaticHeader({ data }: { data: AreaListingData }) {
         </div>
       ) : null}
 
-      <p className="mt-6 text-xs text-gray-400">{district ? 'Danh sách tin được lọc theo quận/huyện và cập nhật tự động bên dưới.' : `${stats.activeCount} tin đang hoạt động tại ${scopeName}. Danh sách cập nhật tự động bên dưới.`}</p>
+      <p className="mt-6 text-xs text-gray-400">{district ? `Danh sách tin${typeLabel} được lọc theo quận/huyện và cập nhật tự động bên dưới.` : `${stats.activeCount} tin đang hoạt động tại ${scopeName}. Danh sách cập nhật tự động bên dưới.`}</p>
     </section>
   );
 }
@@ -201,12 +239,19 @@ export async function renderAreaListingPage(
   }
   const data = await loadAreaListing(listingSlug, rest);
   if (!data) notFound();
-  const { area, district, listings, stats, parts, path } = data;
+  const { area, district, listings, stats, parts, path, propertyTypeLabel } = data;
   const scopeName = district ? `${district.name}, ${area.name}` : area.name;
+  const scopeTypeLabel = propertyTypeLabel ? ` ${propertyTypeLabel}` : '';
 
   // Filter phụ (giá/loại/phòng/hướng…) từ query → seed lại khi F5/share link. area &
   // district lấy từ PATH nên loại khỏi query (path thắng), tránh ghi đè khu vực.
-  const { areaId: _qArea, district: _qDistrict, ...extraFilters } = parseListingParams(searchParams);
+  const parsedQueryFilters = parseListingParams(searchParams);
+  const { areaId: _qArea, district: _qDistrict, ...queryFiltersWithoutLocation } = parsedQueryFilters;
+  // Canonical path is authoritative for property type. A query `type`/`loai` on a
+  // group URL must not intersect or override the path's exact/group selection.
+  const extraFilters = parts.propertyTypeSlug
+    ? (({ typeId: _qTypeId, typeSlug: _qTypeSlug, ...restFilters }) => restFilters)(queryFiltersWithoutLocation)
+    : queryFiltersWithoutLocation;
   const dynamicQuery = hasDynamicListingQuery(searchParams);
 
   const breadcrumb = buildBreadcrumbJsonLd([
@@ -217,7 +262,7 @@ export async function renderAreaListingPage(
   const collection = listings.length > 0
     ? buildAreaCollectionJsonLd(area, listings, {
         path,
-        name: `Bất động sản ${LISTING_LABEL[parts.listingType]} ${scopeName}`,
+        name: `Bất động sản${scopeTypeLabel} ${LISTING_LABEL[parts.listingType]} ${scopeName}`,
       })
     : null;
 
@@ -226,9 +271,9 @@ export async function renderAreaListingPage(
       <JsonLdScripts schemas={dynamicQuery ? [breadcrumb] : [breadcrumb, collection]} />
       <AreaListingClient
         listingType={parts.listingType}
-        filters={{ ...extraFilters, areaId: area.id, district: district?.name }}
+        filters={{ ...extraFilters, areaId: area.id, district: district?.name, typeIds: data.propertyTypes.map(propertyType => propertyType.id), typePathSlug: parts.propertyTypeSlug }}
         initialData={{ data: listings, total: stats.activeCount }}
-        initialDataScope={{ listingType: parts.listingType, areaId: area.id, district: district?.name }}
+        initialDataScope={{ listingType: parts.listingType, areaId: area.id, district: district?.name, typeIds: data.propertyTypes.map(propertyType => propertyType.id), typePathSlug: parts.propertyTypeSlug }}
         header={<AreaStaticHeader data={data} />}
       />
     </>

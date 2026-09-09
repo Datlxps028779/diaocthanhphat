@@ -91,6 +91,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const inferredLocationRef = useRef(initialFilters?.locationSource === 'inferred');
   const [areaId, setAreaId] = useState(initialFilters?.areaId ?? '');
   const [typeId, setTypeId] = useState(initialFilters?.typeId ?? '');
+  const [typeIds] = useState<string[]>(() => initialFilters?.typeIds ?? []);
   const [priceIdx, setPriceIdx] = useState(() =>
     findRangeIndex(
       initialFilters?.listingType === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE,
@@ -204,6 +205,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     listingType: listingType || undefined,
     areaId: areaId || undefined,
     typeId: typeId || undefined,
+    typeIds: typeIds.length ? typeIds : undefined,
     district: district || undefined,
     ward: ward || undefined,
     minPrice: pr.min,
@@ -213,7 +215,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     bedrooms: bedrooms || undefined,
     direction: direction || undefined,
     legal: legal || undefined,
-  }), [listingType, areaId, typeId, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
+  }), [listingType, areaId, typeId, typeIds, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
   const searchIntent = useMemo(() => parseSearchIntent(debouncedKeyword, { areas, districts, wards, propertyTypes: types }, explicitFilters), [debouncedKeyword, areas, districts, wards, types, explicitFilters]);
   const effectiveSort: PropertySort = debouncedKeyword && sort === 'newest' ? 'relevance' : sort;
   const filters = useMemo(() => ({
@@ -230,6 +232,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     listingType: listingType || undefined,
     areaId: areaId || undefined,
     typeId: typeId || undefined,
+    typeIds: typeIds.length ? typeIds : undefined,
     district: district || undefined,
     ward: ward || undefined,
     keyword: debouncedKeyword || undefined,
@@ -329,6 +332,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       listingType: listingType || undefined,
       areaId: areaId || undefined,
       typeId: typeId || undefined,
+      typePathSlug: initialFilters?.typePathSlug,
       district: district || undefined,
       ward: ward || undefined,
       locationSource: inferredLocationRef.current ? 'inferred' : undefined,
@@ -348,7 +352,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     const current = window.location.pathname + window.location.search;
     if (current !== href) window.history.replaceState(null, '', href);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingType, areaId, typeId, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, isFeatured, isHot]);
+  }, [listingType, areaId, typeId, initialFilters?.typePathSlug, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, isFeatured, isHot]);
 
   // Map view dùng CHÍNH filter hiệu lực của list (kể cả semantic intent), chỉ bỏ
   // paging/sort vì marker là một tập kết quả chứ không phải một trang xếp hạng.

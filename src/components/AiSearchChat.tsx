@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
-import { type Page } from '../lib/router';
+import { type Page, pageToHref } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, detectHandoffTriggers, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
 import { getAdvisorMatches, getAdvisorCatalogueMatches, type PropertyFilters } from '../lib/api/properties';
@@ -111,6 +111,28 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
   const showExamples = !hasUserMessage && !loading;
   const showMatchActions = !loading && lastTurn?.stage === 'showing_matches';
   const showLeadCta = !leadSent && (Boolean(leadFor) || showGeneralLeadForm);
+  const canonicalSearchHref = useMemo(() => {
+    if (!lastTurn || lastTurn.ambiguity?.length || !lastTurn.filters.areaId || !lastTurn.filters.district || !lastTurn.filters.typePathSlug) return null;
+    const href = pageToHref({
+      name: 'listings',
+      listingType: lastTurn.filters.listingType === 'mua_ban' || lastTurn.filters.listingType === 'cho_thue' ? lastTurn.filters.listingType : undefined,
+      areaId: lastTurn.filters.areaId,
+      district: lastTurn.filters.district,
+      typeId: lastTurn.filters.typeId,
+      typeIds: lastTurn.filters.typeIds,
+      typePathSlug: lastTurn.filters.typePathSlug,
+      keyword: lastTurn.residualKeyword || undefined,
+      minPrice: lastTurn.filters.minPrice,
+      maxPrice: lastTurn.filters.maxPrice,
+      minArea: lastTurn.filters.minArea,
+      maxArea: lastTurn.filters.maxArea,
+      bedrooms: lastTurn.filters.bedrooms,
+      legal: lastTurn.filters.legal,
+      direction: lastTurn.filters.direction,
+      sort: 'relevance',
+    }, taxonomy);
+    return href.startsWith('/mua-ban/') || href.startsWith('/cho-thue/') ? href : null;
+  }, [lastTurn, taxonomy]);
 
   useEffect(() => {
     notifyAiPanel(open);
@@ -253,7 +275,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       const mergedFilters = inheritFilters(sessionFiltersRef.current, intent.filters);
       sessionFiltersRef.current = mergedFilters;
       const hasConcreteFilter = mergedFilters.minPrice != null || mergedFilters.maxPrice != null || !!mergedFilters.district
-        || !!mergedFilters.ward || !!mergedFilters.areaId || !!mergedFilters.typeId || mergedFilters.minArea != null || mergedFilters.maxArea != null;
+        || !!mergedFilters.ward || !!mergedFilters.areaId || !!mergedFilters.typeId || Boolean(mergedFilters.typeIds?.length) || mergedFilters.minArea != null || mergedFilters.maxArea != null;
       const stage = intent.confidence !== 'low' && hasConcreteFilter ? 'showing_matches' : 'collecting_need';
       const handoffRequired = ai.handoff || detectHandoffTriggers(text) || shouldAskContactByTurns;
       const turn: AdvisorTurnResult = {
@@ -261,6 +283,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
         filters: mergedFilters,
         residualKeyword: intent.residualKeyword,
         matched: intent.matched,
+        ...(intent.ambiguity?.length ? { ambiguity: intent.ambiguity } : {}),
         stage: handoffRequired && stage !== 'showing_matches' ? 'collecting_contact' : stage,
         ...(ai.safety_note ? { safetyNote: ai.safety_note } : {}),
         ...(handoffRequired ? { handoffRequired: true } : {}),
@@ -352,7 +375,12 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
   };
 
   const navigateAll = () => {
-    if (!lastTurn || !onNavigate) return;
+    if (!lastTurn) return;
+    if (canonicalSearchHref) {
+      window.location.assign(canonicalSearchHref);
+      return;
+    }
+    if (!onNavigate) return;
     onNavigate({
       name: 'listings',
       listingType: lastTurn.filters.listingType === 'mua_ban' || lastTurn.filters.listingType === 'cho_thue' ? lastTurn.filters.listingType : undefined,
@@ -360,6 +388,8 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       district: lastTurn.filters.district,
       ward: lastTurn.filters.ward,
       typeId: lastTurn.filters.typeId,
+      typeIds: lastTurn.filters.typeIds,
+      typePathSlug: lastTurn.filters.typePathSlug,
       keyword: lastTurn.residualKeyword || undefined,
       minPrice: lastTurn.filters.minPrice,
       maxPrice: lastTurn.filters.maxPrice,
@@ -565,6 +595,11 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
                   <button onClick={navigateAll} className="flex-1 min-w-[120px] border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold rounded-lg py-2 transition-colors">
                     Lọc tất cả kết quả
                   </button>
+                  {canonicalSearchHref && (
+                    <a href={canonicalSearchHref} onClick={() => setOpen(false)} className="w-full text-center text-[11px] text-gray-500 hover:text-red-600 hover:underline">
+                      Mở URL tìm kiếm chuẩn: {canonicalSearchHref}
+                    </a>
+                  )}
                   {!showLeadCta && (
                     <button onClick={() => openLeadForm()} className="flex-1 min-w-[120px] border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-semibold rounded-lg py-2 transition-colors">
                       Để lại liên hệ

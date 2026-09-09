@@ -18,6 +18,11 @@ const enforcementMigration = readFileSync(
   'utf8',
 );
 
+const itemAliasFixMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20260930080000_staff_permission_item_alias_fix.sql'),
+  'utf8',
+);
+
 const staffTab = readFileSync(
   resolve(process.cwd(), 'src/components/admin/tabs/StaffTab.tsx'),
   'utf8',
@@ -34,6 +39,19 @@ const generateArticleRoute = readFileSync(
 );
 
 describe('staff permissions contract', () => {
+  it('removes the ambiguous item variable and SQL alias in the replacement RPC', () => {
+    expect(itemAliasFixMigration).toContain('v_item jsonb;');
+    expect(itemAliasFixMigration).toContain('FOR v_item IN');
+    expect(itemAliasFixMigration).toContain('AS permission_json(value)');
+    expect(itemAliasFixMigration).toContain('permission_json.value->>\'module\'');
+    expect(itemAliasFixMigration).not.toMatch(/FROM jsonb_array_elements\(p_permissions\) item/);
+    expect(itemAliasFixMigration).toContain('IF NOT public.is_admin() THEN');
+    expect(itemAliasFixMigration).toContain('DELETE FROM public.staff_permission_assignments AS assignment');
+    expect(itemAliasFixMigration).toContain('INSERT INTO public.staff_permission_audit');
+    expect(itemAliasFixMigration).toContain('SECURITY DEFINER');
+    expect(itemAliasFixMigration).toContain('SET search_path = public, pg_temp');
+  });
+
   it('matches actions and projects visible tabs from view permissions', () => {
     const permissions: StaffPermission[] = [
       { module: 'news', action: 'view', scope_kind: 'global', scope_id: null },

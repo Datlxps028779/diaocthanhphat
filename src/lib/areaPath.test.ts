@@ -23,6 +23,10 @@ describe('buildAreaListingPath', () => {
     expect(buildAreaListingPath({ listingType: 'cho_thue', areaSlug: 'binh-duong', districtSlug: 'binh-duong-di-an' }))
       .toBe('/cho-thue/binh-duong/di-an');
   });
+  it('dựng path có district và nhóm loại BĐS', () => {
+    expect(buildAreaListingPath({ listingType: 'mua_ban', areaSlug: 'binh-duong', districtSlug: 'di-an', propertyTypeSlug: 'nha' }))
+      .toBe('/mua-ban/binh-duong/di-an/nha');
+  });
 });
 
 describe('listingTypeToSlug', () => {
@@ -41,6 +45,10 @@ describe('parseAreaListingPath', () => {
     expect(parseAreaListingPath('mua-ban', ['binh-duong', 'di-an']))
       .toEqual({ listingType: 'mua_ban', areaSlug: 'binh-duong', districtSlug: 'di-an' });
   });
+  it('parse area + district + nhóm loại BĐS', () => {
+    expect(parseAreaListingPath('mua-ban', ['binh-duong', 'di-an', 'nha']))
+      .toEqual({ listingType: 'mua_ban', areaSlug: 'binh-duong', districtSlug: 'di-an', propertyTypeSlug: 'nha' });
+  });
   it('listingType lạ → null', () => {
     expect(parseAreaListingPath('thue-mua', ['binh-duong'])).toBeNull();
   });
@@ -48,8 +56,8 @@ describe('parseAreaListingPath', () => {
     expect(parseAreaListingPath('cho-thue', [])).toBeNull();
     expect(parseAreaListingPath('cho-thue', undefined)).toBeNull();
   });
-  it('thừa segment (>2) → null', () => {
-    expect(parseAreaListingPath('cho-thue', ['binh-duong', 'di-an', 'them'])).toBeNull();
+  it('thừa segment (>3) → null', () => {
+    expect(parseAreaListingPath('cho-thue', ['binh-duong', 'di-an', 'nha', 'them'])).toBeNull();
   });
   it('round-trip build↔parse', () => {
     const parts = { listingType: 'cho_thue' as const, areaSlug: 'binh-duong', districtSlug: 'di-an' };

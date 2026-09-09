@@ -1,5 +1,6 @@
 import { buildAreaListingPath, type ListingType } from '../areaPath';
-import { evaluateAreaSeo, getAreaDetails } from '../areaSeo';
+import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '../propertyTypeGroups';
+import { evaluateAreaSeo, evaluateCompositeAreaSeo, getAreaDetails } from '../areaSeo';
 import { evaluateNeighborhoodSeo } from '../neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '../newsCategories';
 import { buildProductPath } from '../productPath';
@@ -42,11 +43,27 @@ export interface SearchVisibilityProperty {
   public_code: number | null;
   listing_type: string | null;
   district: string | null;
+  district_id?: string | null;
+  title?: string | null;
+  area_id?: string | null;
   is_active: boolean;
   updated_at: string | null;
   property_type_id?: string | null;
   areas: { slug: string | null } | null;
   neighborhood_slug?: string | null;
+}
+
+export interface SearchVisibilityDistrict {
+  id: string;
+  area_id: string | null;
+  name: string | null;
+  slug: string | null;
+}
+
+export interface SearchVisibilityPropertyType {
+  id: string;
+  name: string | null;
+  slug: string | null;
 }
 
 export interface SearchVisibilityArea {
@@ -91,6 +108,8 @@ export interface SearchVisibilityManagedPage {
 export interface SearchVisibilitySources {
   properties: SearchVisibilityProperty[];
   areas: SearchVisibilityArea[];
+  districts?: SearchVisibilityDistrict[];
+  propertyTypes?: SearchVisibilityPropertyType[];
   neighborhoods: SearchVisibilityNeighborhood[];
   news: SearchVisibilityNews[];
   newsCategories: SearchVisibilityNewsCategory[];
@@ -162,7 +181,12 @@ function eligible(
   });
 }
 
-function buildAreaCandidates(area: SearchVisibilityArea, properties: SearchVisibilityProperty[]): SearchVisibilityCandidate[] {
+function buildAreaCandidates(
+  area: SearchVisibilityArea,
+  properties: SearchVisibilityProperty[],
+  districts: SearchVisibilityDistrict[] = [],
+  propertyTypes: SearchVisibilityPropertyType[] = [],
+): SearchVisibilityCandidate[] {
   const sourceKey = `area:${area.id}`;
   if (!validSlug(area.slug) || !area.name?.trim()) {
     return [excluded(sourceKey, 'area', area.id, 'MISSING_REQUIRED_SOURCE', 'Khu vực thiếu slug hoặc tên hợp lệ.', area.updated_at ?? area.created_at)];
@@ -181,7 +205,7 @@ function buildAreaCandidates(area: SearchVisibilityArea, properties: SearchVisib
   }
 
   const updatedAt = area.updated_at ?? area.created_at;
-  return [
+  const candidates: SearchVisibilityCandidate[] = [
     eligible(sourceKey, 'area', area.id, `/khu-vuc/${area.slug}`, updatedAt),
     ...AREA_LISTING_TYPES.map(listingType => eligible(
       `area_listing:${listingType}:${area.id}`,
@@ -191,6 +215,42 @@ function buildAreaCandidates(area: SearchVisibilityArea, properties: SearchVisib
       updatedAt,
     )),
   ];
+
+  const primaryGroups: PropertyTypeSeoGroup[] = ['nha', 'dat'];
+  for (const district of districts.filter(item => item.area_id === area.id)) {
+    for (const listingType of AREA_LISTING_TYPES) {
+      for (const group of primaryGroups) {
+        const sourceSlugs = propertyTypeSlugsForSeoGroup(group);
+        const ids = new Set(propertyTypes
+          .filter(propertyType => sourceSlugs.includes(propertyType.slug ?? ''))
+          .map(propertyType => propertyType.id));
+        const matching = rows.filter(property => property.area_id === area.id
+          && property.district_id === district.id
+          && property.listing_type === listingType
+          && ids.has(property.property_type_id ?? ''));
+        const titles = matching.map(property => property.title?.trim()).filter((value): value is string => !!value);
+        const composite = evaluateCompositeAreaSeo({
+          area: { name: area.name!, slug: area.slug! },
+          propertyTypeSlug: group,
+          activeCount: matching.length,
+          titledCount: titles.length,
+          distinctTitleCount: new Set(titles).size,
+          taxonomyValid: matching.length > 0 && matching.every(property => Boolean(property.area_id && property.district_id && property.property_type_id)),
+          hasDescription: Boolean(area.description?.trim() || getAreaDetails(area.slug)?.description?.trim()),
+        });
+        if (!composite.indexable) continue;
+        const latest = matching.map(property => property.updated_at).filter((value): value is string => !!value).sort().at(-1) ?? updatedAt;
+        candidates.push(eligible(
+          `area_listing:${listingType}:${area.id}:${district.id}:${group}`,
+          'area_listing',
+          `${area.id}:${district.id}:${group}`,
+          buildAreaListingPath({ listingType, areaSlug: area.slug, districtSlug: district.slug ?? undefined, propertyTypeSlug: group }),
+          latest,
+        ));
+      }
+    }
+  }
+  return candidates;
 }
 
 function buildNeighborhoodCandidate(neighborhood: SearchVisibilityNeighborhood, properties: SearchVisibilityProperty[]): SearchVisibilityCandidate {
@@ -237,7 +297,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
       : excluded(key, 'property', property.id, 'MISSING_REQUIRED_SOURCE', 'Tin active thiếu thành phần URL canonical.', property.updated_at, path));
   }
 
-  for (const area of sources.areas) candidates.push(...buildAreaCandidates(area, sources.properties));
+  for (const area of sources.areas) candidates.push(...buildAreaCandidates(area, sources.properties, sources.districts, sources.propertyTypes));
   for (const neighborhood of sources.neighborhoods) candidates.push(buildNeighborhoodCandidate(neighborhood, sources.properties));
 
   for (const article of sources.news) {

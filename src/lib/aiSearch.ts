@@ -1,6 +1,7 @@
 import type { Area, District, PropertyType, Ward } from './supabase';
 import type { PropertyFilters } from './api/properties';
 import { LEGAL_OPTIONS } from './legalOptions';
+import { propertyTypeSeoGroupFromSlug, type PropertyTypeSeoGroup } from './propertyTypeGroups';
 
 export type AiSearchMatchKind = 'listingType' | 'area' | 'district' | 'ward' | 'type' | 'price' | 'areaSize' | 'bedrooms' | 'legal' | 'direction' | 'loan';
 export interface AiSearchMatch { kind: AiSearchMatchKind; label: string }
@@ -15,6 +16,7 @@ export interface SearchIntent {
   residualKeyword: string;
   matched: AiSearchMatch[];
   confidence: 'high' | 'medium' | 'low';
+  ambiguity?: string[];
   // "Tôi có X tỷ" KÈM ý định vay → X là vốn tự có (không phải giá trần). Tầng trên
   // dùng để gợi ý vay phần còn lại, không set maxPrice chặn tin giá cao hơn.
   selfCapital?: { amount: number; unit: 'ty' | 'trieu' };
@@ -54,6 +56,10 @@ function findNamed<T extends { name: string }>(queryNorm: string, items: T[]): T
   return sorted.find(item => new RegExp(`(^| )${escapeRegExp(normalizeVietnamese(item.name))}($| )`).test(queryNorm)) ?? null;
 }
 
+function findNamedMatches<T extends { name: string }>(queryNorm: string, items: T[]): T[] {
+  return items.filter(item => new RegExp(`(^| )${escapeRegExp(normalizeVietnamese(item.name))}($| )`).test(queryNorm));
+}
+
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -63,8 +69,8 @@ function findType(queryNorm: string, types: PropertyType[]): PropertyType | null
   if (direct) return direct;
   const aliases: Array<{ terms: string[]; re: RegExp }> = [
     { terms: ['Căn hộ', 'Chung cư'], re: /(^| )(can ho|chung cu)($| )/ },
-    { terms: ['Đất nền'], re: /(^| )(dat nen|dat)($| )/ },
-    { terms: ['Nhà phố'], re: /(^| )(nha pho|nha o)($| )/ },
+    { terms: ['Đất nền'], re: /(^| )(dat nen)($| )/ },
+    { terms: ['Nhà phố'], re: /(^| )(nha pho)($| )/ },
     { terms: ['Biệt thự'], re: /(^| )(biet thu)($| )/ },
   ];
   const matched = aliases.find(a => a.re.test(queryNorm));
@@ -177,11 +183,23 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
     removeSpan(remove, rawPhraseForNorm(query, normalizeVietnamese(area.name)));
   }
 
-  let district = findNamed(q, taxonomy.districts);
+  const ambiguity: string[] = [];
+  const districtCandidates = findNamedMatches(q, taxonomy.districts);
+  const knownAreaId = area?.id ?? (typeof explicitFilters.areaId === 'string' ? explicitFilters.areaId : undefined);
+  let district = knownAreaId
+    ? districtCandidates.find(candidate => candidate.area_id === knownAreaId) ?? null
+    : districtCandidates.length === 1 ? districtCandidates[0] : null;
   if (!district && /(^| )tdm($| )/.test(q)) district = taxonomy.districts.find(d => normalizeVietnamese(d.name) === 'thu dau mot') ?? null;
+  if (!district && districtCandidates.length > 1 && !knownAreaId) ambiguity.push('location');
   if (district && mergeFilter(filters, explicitFilters, 'district', district.name)) {
     matched.push({ kind: 'district', label: district.name });
     removeSpan(remove, /(^| )tdm($| )/.test(q) && normalizeVietnamese(district.name) === 'thu dau mot' ? 'tdm' : rawPhraseForNorm(query, normalizeVietnamese(district.name)));
+    // Huyện luôn thuộc đúng một tỉnh trong taxonomy. Khi người dùng chỉ nói
+    // "nhà Dĩ An", suy ra areaId để query và canonical URL giữ đủ cấp tỉnh/huyện.
+    if (district.area_id && !filters.areaId && mergeFilter(filters, explicitFilters, 'areaId', district.area_id)) {
+      const parentArea = taxonomy.areas.find(areaItem => areaItem.id === district.area_id);
+      if (parentArea) matched.push({ kind: 'area', label: parentArea.name });
+    }
   }
 
   const ward = findNamed(q, taxonomy.wards);
@@ -195,10 +213,30 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
   const type = findType(q, taxonomy.propertyTypes);
   if (type && mergeFilter(filters, explicitFilters, 'typeId', type.id)) {
     matched.push({ kind: 'type', label: type.name });
+    filters.typePathSlug = type.slug;
     const typeNorm = normalizeVietnamese(type.name);
     const aliases = [typeNorm, 'can ho', 'chung cu', 'dat nen', 'dat', 'nha pho', 'nha o', 'biet thu'];
     const phrase = aliases.find(a => new RegExp(`(^| )${escapeRegExp(a)}($| )`).test(q)) ?? typeNorm;
     removeSpan(remove, rawPhraseForNorm(query, phrase));
+  } else {
+    const broadGroups: PropertyTypeSeoGroup[] = [];
+    if (/(^| )(nha|nha o)($| )/.test(q)) broadGroups.push('nha');
+    if (/(^| )(dat|dat dai)($| )/.test(q)) broadGroups.push('dat');
+    const distinctGroups = [...new Set(broadGroups)];
+    if (distinctGroups.length === 1) {
+      const group = distinctGroups[0];
+      const typeIds = taxonomy.propertyTypes
+        .filter(propertyType => propertyTypeSeoGroupFromSlug(propertyType.slug) === group)
+        .map(propertyType => propertyType.id);
+      if (typeIds.length && mergeFilter(filters, explicitFilters, 'typeIds', typeIds)) {
+        filters.typePathSlug = group;
+        matched.push({ kind: 'type', label: group === 'nha' ? 'Nhà' : 'Đất' });
+        removeSpan(remove, rawPhraseForNorm(query, group));
+      }
+    } else if (distinctGroups.length > 1) {
+      ambiguity.push('property_type');
+      matched.push(...distinctGroups.map(group => ({ kind: 'type' as const, label: group === 'nha' ? 'Nhà' : 'Đất' })));
+    }
   }
 
   const price = extractPrice(q);
@@ -266,7 +304,8 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
     filters,
     residualKeyword: rawResidual(query, remove),
     matched,
-    confidence: matched.length >= 2 ? 'high' : matched.length === 1 ? 'medium' : 'low',
+    confidence: ambiguity.length ? 'low' : matched.length >= 2 ? 'high' : matched.length === 1 ? 'medium' : 'low',
+    ...(ambiguity.length ? { ambiguity } : {}),
     ...(selfCapital ? { selfCapital } : {}),
   };
 }
@@ -275,20 +314,21 @@ export function parseSearchIntent(query: string, taxonomy: SearchTaxonomy, expli
 // chủ đề. `prev` = filter lượt trước, `current` = filter parse từ lượt mới.
 // Quy tắc: nếu lượt mới nêu địa điểm mới (areaId/district/ward) thì XÓA cả nhóm địa
 // điểm cũ rồi lấy theo lượt mới (tránh trộn Dĩ An + Thuận An); tương tự nhóm loại BĐS
-// (typeId). Các filter khác (giá, diện tích, PN, pháp lý, hướng, vay) lượt mới ưu tiên,
+// (typeId/typeIds). Các filter khác (giá, diện tích, PN, pháp lý, hướng, vay) lượt mới ưu tiên,
 // còn thiếu thì kế thừa lượt trước.
 export function inheritFilters(
   prev: Partial<PropertyFilters>,
   current: Partial<PropertyFilters>,
 ): Partial<PropertyFilters> {
   const hasNewLocation = current.areaId != null || current.district != null || current.ward != null;
-  const hasNewType = current.typeId != null;
+  const hasNewType = current.typeId != null || current.typeIds != null;
   const LOCATION_KEYS: (keyof PropertyFilters)[] = ['areaId', 'district', 'ward'];
+  const TYPE_KEYS: (keyof PropertyFilters)[] = ['typeId', 'typeIds', 'typePathSlug'];
 
   const merged: Partial<PropertyFilters> = { ...prev };
   // Đổi chủ đề địa điểm: bỏ nhóm địa điểm cũ trước khi nhận địa điểm mới.
   if (hasNewLocation) for (const k of LOCATION_KEYS) delete merged[k];
-  if (hasNewType) delete merged.typeId;
+  if (hasNewType) for (const k of TYPE_KEYS) delete merged[k];
 
   // Lượt mới ưu tiên: chỉ ghi đè bằng giá trị thực sự có ở lượt mới.
   for (const [k, v] of Object.entries(current) as [keyof PropertyFilters, unknown][]) {

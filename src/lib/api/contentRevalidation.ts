@@ -20,7 +20,8 @@ export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug
 }
 
 export function propertyRevalidationSnapshot(
-  property: Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>,
+  property: Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>
+    & Partial<Pick<Property, 'district_id' | 'property_type_id'>>,
 ): PropertyRevalidationSnapshot {
   return {
     id: property.id,
@@ -28,6 +29,8 @@ export function propertyRevalidationSnapshot(
     public_code: property.public_code ?? null,
     listing_type: property.listing_type,
     district: property.district,
+    district_id: property.district_id,
+    property_type_id: property.property_type_id,
     area_id: property.area_id,
     neighborhood_slug: property.neighborhood_slug,
     is_active: property.is_active,

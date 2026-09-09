@@ -1,4 +1,6 @@
 import { buildProductPath } from '../productPath';
+import { buildAreaListingPath } from '../areaPath';
+import { propertyTypeSeoGroupFromSlug } from '../propertyTypeGroups';
 
 export type RevalidationEntity = 'news' | 'property' | 'area' | 'neighborhood' | 'route';
 export type RevalidationAction = 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk';
@@ -16,6 +18,8 @@ export type PropertyRevalidationSnapshot = {
   public_code: number | null;
   listing_type: 'mua_ban' | 'cho_thue' | null;
   district: string | null;
+  district_id?: string | null;
+  property_type_id?: string | null;
   area_id: string | null;
   neighborhood_slug?: string | null;
   is_active: boolean;
@@ -45,6 +49,8 @@ export type RevalidationSnapshot =
 export type RevalidationLookups = {
   areaSlugs: ReadonlyMap<string, string>;
   categorySlugs: ReadonlyMap<string, string>;
+  districtSlugs?: ReadonlyMap<string, { areaId: string; slug: string }>;
+  propertyTypeSlugs?: ReadonlyMap<string, string>;
 };
 
 export type RevalidationTarget<T> = {
@@ -119,6 +125,8 @@ function parsePropertySnapshot(value: unknown): PropertyRevalidationSnapshot | n
     public_code: publicCode,
     listing_type: listingType,
     district: optionalText(record.district, 120),
+    district_id: optionalId(record.district_id),
+    property_type_id: optionalId(record.property_type_id),
     area_id: optionalId(record.area_id),
     neighborhood_slug: optionalSlug(record.neighborhood_slug),
     is_active: isActive,
@@ -232,7 +240,6 @@ function addNewsPaths(paths: Set<string>, snapshot: NewsRevalidationSnapshot, lo
 }
 
 function addPropertyPaths(paths: Set<string>, snapshot: PropertyRevalidationSnapshot, lookups: RevalidationLookups) {
-  if (!snapshot.is_active) return;
   paths.add('/');
   paths.add('/danh-sach');
   paths.add('/mua-ban');
@@ -260,8 +267,21 @@ function addPropertyPaths(paths: Set<string>, snapshot: PropertyRevalidationSnap
     paths.add(canonical);
     const segments = canonical.split('/').filter(Boolean);
     if (segments.length >= 3) paths.add(`/${segments.slice(0, -1).join('/')}`);
+
+    const typeSlug = snapshot.property_type_id && lookups.propertyTypeSlugs?.get(snapshot.property_type_id);
+    const groupSlug = propertyTypeSeoGroupFromSlug(typeSlug);
+    const districtPath = snapshot.district_id ? lookups.districtSlugs?.get(snapshot.district_id) : undefined;
+    if ((groupSlug === 'nha' || groupSlug === 'dat') && districtPath?.areaId === snapshot.area_id) {
+      paths.add(buildAreaListingPath({
+        listingType: snapshot.listing_type,
+        areaSlug,
+        districtSlug: districtPath.slug,
+        propertyTypeSlug: groupSlug,
+      }));
+    }
   }
 }
+
 
 function addAreaPaths(paths: Set<string>, snapshot: AreaRevalidationSnapshot, includeSitemap = true) {
   paths.add('/');

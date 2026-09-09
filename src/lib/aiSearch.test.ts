@@ -35,13 +35,80 @@ describe('parseSearchIntent', () => {
     expect(r.residualKeyword).toContain('Atlantis');
   });
 
-  it('nhà Dĩ An dưới 3 tỷ sổ hồng → district + maxPrice + legal, residual giữ nhà', () => {
+  it('nhà Dĩ An dưới 3 tỷ sổ hồng → nhóm nhà + district + area + maxPrice + legal', () => {
     const r = parseSearchIntent('nhà Dĩ An dưới 3 tỷ sổ hồng', taxonomy);
     expect(r.filters.district).toBe('Dĩ An');
+    expect(r.filters.areaId).toBe('area-bd');
+    expect(r.filters.typeIds).toEqual(['type-nha-pho']);
+    expect(r.filters.typePathSlug).toBe('nha');
     expect(r.filters.maxPrice).toBe(3);
     expect(r.filters.legal).toBe('Sổ hồng');
-    expect(r.residualKeyword).toBe('nhà');
-    expect(r.matched.map(m => m.kind)).toEqual(expect.arrayContaining(['district', 'price', 'legal']));
+    expect(r.residualKeyword).toBe('');
+    expect(r.matched.map(m => m.kind)).toEqual(expect.arrayContaining(['district', 'type', 'price', 'legal']));
+  });
+
+  it('nhà phố giữ exact type thay vì mở rộng sang nhóm nhà', () => {
+    const r = parseSearchIntent('mua nhà phố Dĩ An', taxonomy);
+    expect(r.filters.areaId).toBe('area-bd');
+    expect(r.filters.typeId).toBe('type-nha-pho');
+    expect(r.filters.typeIds).toBeUndefined();
+    expect(r.filters.typePathSlug).toBe('nha-pho');
+  });
+
+  it('đất tổng quát dùng nhóm dat và hợp nhất nhiều taxonomy con', () => {
+    const r = parseSearchIntent('mua đất Dĩ An', taxonomy);
+    expect(r.filters.areaId).toBe('area-bd');
+    expect(r.filters.typeIds).toEqual(['type-dat']);
+    expect(r.filters.typePathSlug).toBe('dat');
+    expect(r.filters.typeId).toBeUndefined();
+  });
+
+  it('không tạo nhóm rộng nếu taxonomy chưa có type mapping', () => {
+    const r = parseSearchIntent('mua đất Dĩ An', { ...taxonomy, propertyTypes: [propertyTypes[1]] });
+    expect(r.filters.typeIds).toBeUndefined();
+    expect(r.filters.typePathSlug).toBeUndefined();
+  });
+
+  it('huyện trùng tên giữa nhiều tỉnh thì giữ ambiguity thay vì chọn sai tỉnh', () => {
+    const duplicateTaxonomy = {
+      ...taxonomy,
+      areas: [
+        ...taxonomy.areas,
+        { id: 'area-bp', name: 'Bình Phước', slug: 'binh-phuoc', description: null, image_url: null, order_index: 2, created_at: '2026-01-01' },
+      ],
+      districts: [
+        ...taxonomy.districts,
+        { id: 'd-chon-thanh', area_id: 'area-bp', name: 'Châu Thành', slug: 'chau-thanh', order_index: 4, created_at: '2026-01-01' },
+        { id: 'd-chau-thanh-bd', area_id: 'area-bd', name: 'Châu Thành', slug: 'binh-duong-chau-thanh', order_index: 5, created_at: '2026-01-01' },
+      ],
+    };
+    const r = parseSearchIntent('mua đất Châu Thành', duplicateTaxonomy);
+    expect(r.filters.district).toBeUndefined();
+    expect(r.filters.areaId).toBeUndefined();
+    expect(r.ambiguity).toContain('location');
+    expect(r.confidence).toBe('low');
+  });
+
+  it('tỉnh đã chọn trong bộ lọc giúp resolve huyện trùng tên', () => {
+    const duplicateTaxonomy = {
+      ...taxonomy,
+      districts: [
+        ...taxonomy.districts,
+        { id: 'd-other', area_id: 'area-other', name: 'Dĩ An', slug: 'other-di-an', order_index: 4, created_at: '2026-01-01' },
+      ],
+    };
+    const r = parseSearchIntent('mua đất Dĩ An', duplicateTaxonomy, { areaId: 'area-bd' });
+    expect(r.filters.district).toBe('Dĩ An');
+    expect(r.ambiguity).toBeUndefined();
+  });
+
+  it('nhà đất mơ hồ không tự chọn một nhóm', () => {
+    const r = parseSearchIntent('mua nhà đất Dĩ An', taxonomy);
+    expect(r.filters.areaId).toBe('area-bd');
+    expect(r.filters.typeId).toBeUndefined();
+    expect(r.filters.typeIds).toBeUndefined();
+    expect(r.ambiguity).toEqual(['property_type']);
+    expect(r.confidence).toBe('low');
   });
 
   it('cho thuê căn hộ Thủ Dầu Một 5-10 triệu → rent + type + district + range', () => {
@@ -171,5 +238,15 @@ describe('inheritFilters', () => {
     const merged = inheritFilters({ typeId: 'type-can-ho', district: 'Dĩ An' }, { typeId: 'type-dat' });
     expect(merged.typeId).toBe('type-dat');
     expect(merged.district).toBe('Dĩ An');
+  });
+
+  it('reset cả typeId/typeIds khi khách đổi giữa loại exact và nhóm rộng', () => {
+    const merged = inheritFilters(
+      { typeId: 'type-nha-pho', typePathSlug: 'nha-pho', district: 'Dĩ An' },
+      { typeIds: ['type-dat'], typePathSlug: 'dat' },
+    );
+    expect(merged.typeId).toBeUndefined();
+    expect(merged.typeIds).toEqual(['type-dat']);
+    expect(merged.typePathSlug).toBe('dat');
   });
 });

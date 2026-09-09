@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache';
-import type { Property, PropertyPanorama, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow, PublicAgentProfile, PublicAgentListing } from './supabase';
+import type { Property, PropertyPanorama, NewsArticle, NewsListItem, NewsPageResult, Area, District, Ward, Neighborhood, PropertyType, PriceStat, PriceStatScope, SeoRouteOverride, ManagedPage, PageBlock, MenuItem, NewsCategoryRow, PublicAgentProfile, PublicAgentListing } from './supabase';
 import { NEWS_CATEGORIES, categoryToSlug } from './newsCategories';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { LISTINGS_PER_PAGE } from './router';
@@ -264,6 +264,7 @@ export async function serverGetAreaBySlug(slug: string): Promise<Area | null> {
 export interface ServerAreaListingScope {
   listingType?: 'mua_ban' | 'cho_thue';
   district?: string;
+  propertyTypeIds?: string[];
 }
 
 export async function serverGetAreaListings(areaId: string, limit = 12, scope: ServerAreaListingScope = {}): Promise<Property[]> {
@@ -279,6 +280,7 @@ export async function serverGetAreaListings(areaId: string, limit = 12, scope: S
       .limit(limit);
     if (scope.listingType) q = q.eq('listing_type', scope.listingType);
     if (scope.district) q = q.eq('district', scope.district);
+    if (scope.propertyTypeIds?.length) q = q.in('property_type_id', scope.propertyTypeIds);
     const { data } = await q;
     return (data ?? []) as unknown as Property[];
   } catch {
@@ -286,26 +288,39 @@ export async function serverGetAreaListings(areaId: string, limit = 12, scope: S
   }
 }
 
-export async function serverGetAreaStats(areaId: string, scope: ServerAreaListingScope = {}): Promise<{ districts: string[]; propertyTypes: string[]; activeCount: number }> {
+export async function serverGetAreaStats(areaId: string, scope: ServerAreaListingScope = {}): Promise<{
+  districts: string[];
+  propertyTypes: string[];
+  activeCount: number;
+  titledCount: number;
+  distinctTitleCount: number;
+  latestUpdatedAt: string | null;
+  taxonomyValid: boolean;
+}> {
   try {
     const sb = serverClient();
     let q = sb
       .from('properties')
-      .select('district, property_type_id', { count: 'exact' })
+      .select('district, property_type_id, title, updated_at, area_id, district_id', { count: 'exact' })
       .eq('is_active', true)
       .eq('area_id', areaId)
       .limit(500);
     if (scope.listingType) q = q.eq('listing_type', scope.listingType);
     if (scope.district) q = q.eq('district', scope.district);
+    if (scope.propertyTypeIds?.length) q = q.in('property_type_id', scope.propertyTypeIds);
     const { data, count } = await q;
-    const rows = (data ?? []) as Array<{ district: string | null; property_type_id: string | null }>;
+    const rows = (data ?? []) as Array<{ district: string | null; property_type_id: string | null; title?: string | null; updated_at?: string | null; area_id?: string | null; district_id?: string | null }>;
     return {
       districts: Array.from(new Set(rows.map(r => r.district).filter((v): v is string => !!v))),
       propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
       activeCount: count ?? rows.length,
+      titledCount: rows.filter(row => Boolean(row.title?.trim())).length,
+      distinctTitleCount: new Set(rows.map(row => row.title?.trim()).filter((value): value is string => Boolean(value))).size,
+      latestUpdatedAt: rows.reduce<string | null>((latest, row) => !row.updated_at || (latest && latest >= row.updated_at) ? latest : row.updated_at, null),
+      taxonomyValid: rows.every(row => Boolean(row.area_id && row.district_id && row.property_type_id)),
     };
   } catch {
-    return { districts: [], propertyTypes: [], activeCount: 0 };
+    return { districts: [], propertyTypes: [], activeCount: 0, titledCount: 0, distinctTitleCount: 0, latestUpdatedAt: null, taxonomyValid: false };
   }
 }
 
@@ -327,6 +342,21 @@ export async function serverGetNeighborhoods(): Promise<Neighborhood[]> {
     const sb = serverClient();
     const { data } = await sb.from('neighborhoods').select('*').order('order_index', { ascending: true });
     return (data ?? []) as Neighborhood[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetPropertyTypesBySlugs(slugs: readonly string[]): Promise<PropertyType[]> {
+  const normalized = [...new Set(slugs.map(slug => slug.trim()).filter(Boolean))];
+  if (!normalized.length) return [];
+  try {
+    const { data } = await serverClient()
+      .from('property_types')
+      .select('id,name,slug,icon,created_at')
+      .in('slug', normalized)
+      .order('name');
+    return (data ?? []) as PropertyType[];
   } catch {
     return [];
   }

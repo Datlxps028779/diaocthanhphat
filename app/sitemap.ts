@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { evaluateAreaSeo, getAreaDetails } from '@/lib/areaSeo';
+import { evaluateAreaSeo, evaluateCompositeAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
+import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '@/lib/propertyTypeGroups';
 import { buildProductPath } from '@/lib/productPath';
 import type { Area } from '@/lib/supabase';
 
@@ -13,16 +14,61 @@ const SITE_URL = 'https://chonhaviet.com';
 const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
-// Revalidate mỗi giờ để tin mới xuất hiện mà không cần rebuild.
-export const revalidate = 3600;
+// Revalidate 5 phút để landing/product mới xuất hiện nhanh nhưng không biến sitemap
+// thành truy vấn DB mỗi request.
+export const revalidate = 300;
 
-type AreaSitemapListing = {
+export type AreaSitemapListing = {
   id: string;
   area_id: string | null;
+  district_id?: string | null;
   district: string | null;
   property_type_id: string | null;
   listing_type: ListingType | null;
+  title?: string | null;
+  updated_at?: string | null;
 };
+
+const PRIMARY_SEO_GROUPS: readonly PropertyTypeSeoGroup[] = ['nha', 'dat'];
+const SITEMAP_PAGE_SIZE = 1000;
+
+type QueryPageResult<T> = { data: T[] | null; error: { message?: string } | null };
+
+async function fetchAllRows<T>(loadPage: (from: number, to: number) => PromiseLike<QueryPageResult<T>>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += SITEMAP_PAGE_SIZE) {
+    const result = await loadPage(from, from + SITEMAP_PAGE_SIZE - 1);
+    if (result.error) throw result.error;
+    const page = result.data ?? [];
+    rows.push(...page);
+    if (page.length < SITEMAP_PAGE_SIZE) return rows;
+  }
+}
+
+export function shouldIncludeCompositeAreaListing(
+  area: Pick<Area, 'name' | 'slug' | 'description'>,
+  rows: AreaSitemapListing[],
+  districtId: string,
+  listingType: ListingType,
+  group: PropertyTypeSeoGroup,
+  propertyTypeIds: ReadonlySet<string>,
+): boolean {
+  const matching = rows.filter(row => row.district_id === districtId
+    && row.listing_type === listingType
+    && row.property_type_id !== null
+    && propertyTypeIds.has(row.property_type_id));
+  const titles = matching.map(row => row.title?.trim()).filter((value): value is string => !!value);
+  const evaluation = evaluateCompositeAreaSeo({
+    area,
+    propertyTypeSlug: group,
+    activeCount: matching.length,
+    titledCount: titles.length,
+    distinctTitleCount: new Set(titles).size,
+    taxonomyValid: matching.length > 0 && matching.every(row => Boolean(row.area_id && row.district_id && row.property_type_id)),
+    hasDescription: Boolean(area.description?.trim() || getAreaDetails(area.slug)?.description?.trim()),
+  });
+  return evaluation.indexable;
+}
 
 export function shouldIncludeAreaListingType(
   area: Pick<Area, 'name' | 'slug' | 'description'>,
@@ -74,29 +120,66 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Lấy đủ field để buildProductPath dựng URL mới /{lt}/{areaSlug}/{districtSlug?}/
     // {slug}-pr{code}. Tin thiếu public_code/areas.slug/listing_type → fallback URL cũ
     // (buildProductPath tự xử lý). Fallback select gọn nếu cột mới chưa tồn tại.
-    let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | null }> = [];
-    const full = await sb.from('properties').select('id,slug,updated_at,public_code,listing_type,district,areas(slug)').eq('is_active', true).limit(5000);
-    if (full.error) {
-      const noSlug = await sb.from('properties').select('id,updated_at').eq('is_active', true).limit(5000);
-      propRows = (noSlug.data ?? []) as typeof propRows;
-    } else {
-      propRows = (full.data ?? []) as typeof propRows;
+    let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | Array<{ slug?: string | null }> | null }> = [];
+    try {
+      propRows = await fetchAllRows(from => sb.from('properties')
+        .select('id,slug,updated_at,public_code,listing_type,district,areas(slug)')
+        .eq('is_active', true)
+        .range(from, from + SITEMAP_PAGE_SIZE - 1));
+    } catch {
+      propRows = await fetchAllRows(from => sb.from('properties')
+        .select('id,updated_at')
+        .eq('is_active', true)
+        .range(from, from + SITEMAP_PAGE_SIZE - 1));
     }
     for (const p of propRows) {
+      const areaRelation = Array.isArray(p.areas) ? p.areas[0] : p.areas;
       entries.push({
-        url: `${SITE_URL}${buildProductPath(p)}`,
+        url: `${SITE_URL}${buildProductPath({ ...p, areas: areaRelation })}`,
         lastModified: p.updated_at ? new Date(p.updated_at) : undefined,
         changeFrequency: 'weekly',
         priority: 0.8,
       });
     }
 
-    const [areasRes, areaPropsRes] = await Promise.all([
-      sb.from('areas').select('id,name,slug,description,created_at').limit(5000),
-      sb.from('properties').select('id,area_id,district,property_type_id,listing_type').eq('is_active', true).not('area_id', 'is', null).limit(5000),
+    const [areasRows, districtsRows, propertyTypesRows, areaPropsRows] = await Promise.all([
+      fetchAllRows(from => sb.from('areas').select('id,name,slug,description,created_at').range(from, from + SITEMAP_PAGE_SIZE - 1)),
+      fetchAllRows(from => sb.from('districts').select('id,area_id,name,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
+      fetchAllRows(from => sb.from('property_types').select('id,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
+      fetchAllRows(from => sb.from('properties').select('id,area_id,district_id,district,property_type_id,listing_type,title,updated_at').eq('is_active', true).not('area_id', 'is', null).range(from, from + SITEMAP_PAGE_SIZE - 1)),
     ]);
-    const areaProps = (areaPropsRes.data ?? []) as AreaSitemapListing[];
-    for (const area of (areasRes.data ?? []) as Array<{ id: string; name: string; slug: string; description: string | null; created_at?: string | null }>) {
+    const areaProps = areaPropsRows as AreaSitemapListing[];
+    const districts = districtsRows as Array<{ id: string; area_id: string | null; name: string; slug: string }>;
+    const propertyTypes = propertyTypesRows as Array<{ id: string; slug: string }>;
+    const propertyTypeIdsByGroup = new Map(PRIMARY_SEO_GROUPS.map(group => [
+      group,
+      new Set(propertyTypes
+        .filter(propertyType => propertyTypeSlugsForSeoGroup(group).includes(propertyType.slug))
+        .map(propertyType => propertyType.id)),
+    ]));
+    const latestTimestamp = (rows: AreaSitemapListing[]): Date | undefined => {
+      const timestamps = rows
+        .map(row => row.updated_at)
+        .filter((value): value is string => !!value)
+        .map(value => new Date(value))
+        .filter(date => Number.isFinite(date.getTime()));
+      return timestamps.length ? new Date(Math.max(...timestamps.map(date => date.getTime()))) : undefined;
+    };
+    const latestByListingType = (listingType: ListingType): Date | undefined => latestTimestamp(areaProps.filter(row => row.listing_type === listingType));
+    const latestAll = latestTimestamp(areaProps);
+    for (const entry of entries) {
+      const path = new URL(entry.url).pathname;
+      const latest = path === '/'
+        ? latestAll
+        : path === '/mua-ban'
+          ? latestByListingType('mua_ban')
+          : path === '/cho-thue'
+            ? latestByListingType('cho_thue')
+            : undefined;
+      if (latest) entry.lastModified = latest;
+    }
+
+    for (const area of areasRows as Array<{ id: string; name: string; slug: string; description: string | null; created_at?: string | null }>) {
       const rows = areaProps.filter(p => p.area_id === area.id);
       const detail = getAreaDetails(area.slug);
       const evaluation = evaluateAreaSeo({
@@ -114,8 +197,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           changeFrequency: 'weekly',
           priority: 0.65,
         });
-        // Mỗi URL giao dịch có inventory riêng. Không lấy tổng tin của area để đưa
-        // nhầm route cho thuê vào sitemap khi area chỉ có tin mua bán (hoặc ngược lại).
+        // Giữ URL area/listing hiện tại và chỉ bổ sung group landing mới đủ gate.
         for (const listingType of AREA_LISTING_TYPES) {
           if (!shouldIncludeAreaListingType(area, rows, listingType)) continue;
           entries.push({
@@ -124,6 +206,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: 'daily',
             priority: 0.72,
           });
+        }
+        for (const district of districts.filter(item => item.area_id === area.id)) {
+          for (const listingType of AREA_LISTING_TYPES) {
+            for (const group of PRIMARY_SEO_GROUPS) {
+              const typeIds = propertyTypeIdsByGroup.get(group) ?? new Set<string>();
+              if (!shouldIncludeCompositeAreaListing(area, rows, district.id, listingType, group, typeIds)) continue;
+              const matching = rows.filter(row => row.district_id === district.id
+                && row.listing_type === listingType
+                && row.property_type_id !== null
+                && typeIds.has(row.property_type_id));
+              const timestamps = matching.map(row => row.updated_at).filter((value): value is string => !!value);
+              const latestInventory = timestamps.length ? new Date(Math.max(...timestamps.map(value => new Date(value).getTime()))) : undefined;
+              entries.push({
+                url: `${SITE_URL}${buildAreaListingPath({ listingType, areaSlug: area.slug, districtSlug: district.slug, propertyTypeSlug: group })}`,
+                lastModified: latestInventory ?? lastModified,
+                changeFrequency: 'daily',
+                priority: 0.76,
+              });
+            }
+          }
         }
       }
     }
@@ -195,7 +297,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
   } catch {
-    return STATIC;
+    // Preserve the already-built static and product URLs on a partial taxonomy
+    // failure; a transient auxiliary query must not make Google see an empty sitemap.
+    return entries;
   }
 
   return entries;

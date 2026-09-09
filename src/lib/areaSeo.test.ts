@@ -3,6 +3,7 @@ import type { Area, Property } from './supabase';
 import {
   MIN_AREA_LISTINGS_FOR_INDEX,
   evaluateAreaSeo,
+  evaluateCompositeAreaSeo,
   areaSummaryFromData,
   buildAreaMetadata,
   buildAreaCollectionJsonLd,
@@ -93,6 +94,31 @@ describe('evaluateAreaSeo', () => {
     expect(result.robots).toEqual({ index: true, follow: true });
   });
 
+  it('index composite group only when inventory and distinct titled signals reach gate', () => {
+    const result = evaluateCompositeAreaSeo({
+      area,
+      propertyTypeSlug: 'dat',
+      activeCount: 5,
+      titledCount: 5,
+      distinctTitleCount: 5,
+      taxonomyValid: true,
+      hasDescription: true,
+    });
+    expect(result.indexable).toBe(true);
+    expect(result.robots).toEqual({ index: true, follow: true });
+
+    const thin = evaluateCompositeAreaSeo({
+      area,
+      propertyTypeSlug: 'dat',
+      activeCount: 4,
+      titledCount: 4,
+      distinctTitleCount: 4,
+      taxonomyValid: true,
+      hasDescription: true,
+    });
+    expect(thin.indexable).toBe(false);
+    expect(thin.reasons).toContain('not_enough_active_listings');
+  });
   it('noindex khi thiếu mô tả riêng', () => {
     const result = evaluateAreaSeo({ area: { name: area.name, slug: area.slug }, activeListings: Array.from({ length: 5 }, (_, i) => property(String(i))), districts: ['Dĩ An', 'Thủ Dầu Một'], propertyTypes: ['Nhà phố', 'Đất nền'], hasDescription: false });
     expect(result.indexable).toBe(false);

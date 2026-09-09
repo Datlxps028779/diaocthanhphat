@@ -18,6 +18,7 @@ export interface AreaListingPathParts {
   listingType: ListingType;
   areaSlug: string;
   districtSlug?: string;
+  propertyTypeSlug?: string;
 }
 
 // District slug trong DB bị tiền tố tên tỉnh (vd "binh-duong-di-an") để unique toàn
@@ -28,26 +29,33 @@ export function districtDisplaySlug(areaSlug: string, districtSlug: string): str
   return districtSlug.startsWith(prefix) ? districtSlug.slice(prefix.length) : districtSlug;
 }
 
-// Dựng path: /{lt}/{areaSlug}/{districtSlug?}. Không kèm query (filter phụ thêm sau).
-// districtSlug được rút gọn (bỏ tiền tố tỉnh) để URL sạch.
+// Dựng path: /{lt}/{areaSlug}/{districtSlug?}/{propertyTypeSlug?}. Không kèm query
+// (filter phụ thêm sau). districtSlug được rút gọn (bỏ tiền tố tỉnh) để URL sạch.
 export function buildAreaListingPath(parts: AreaListingPathParts): string {
   const lt = TYPE_TO_SLUG[parts.listingType];
   const dist = parts.districtSlug ? districtDisplaySlug(parts.areaSlug, parts.districtSlug) : undefined;
-  const segs = [lt, parts.areaSlug, dist].filter(Boolean);
+  const segs = [lt, parts.areaSlug, dist, parts.propertyTypeSlug].filter(Boolean);
   return `/${segs.join('/')}`;
 }
 
 // Chiều nghịch: từ listingSlug (đã biết từ folder route) + phần rest catch-all
-// [areaSlug, districtSlug?] → parts. Trả null nếu thừa segment hoặc thiếu area.
+// [areaSlug, districtSlug?, propertyTypeSlug?] → parts.
 export function parseAreaListingPath(listingSlug: string, rest: string[] | undefined): AreaListingPathParts | null {
   const listingType = SLUG_TO_TYPE[listingSlug as ListingSlug];
   if (!listingType) return null;
   const segs = rest ?? [];
-  if (segs.length < 1 || segs.length > 2) return null;
-  const [areaSlug, districtSlug] = segs;
+  if (segs.length < 1 || segs.length > 3) return null;
+  const [areaSlug, districtSlug, propertyTypeSlug] = segs;
   if (!areaSlug?.trim()) return null;
-  if (segs.length === 2 && !districtSlug?.trim()) return null;
-  return { listingType, areaSlug, districtSlug: districtSlug || undefined };
+  if (segs.length >= 2 && !districtSlug?.trim()) return null;
+  if (segs.length === 3 && !propertyTypeSlug?.trim()) return null;
+  const parsed: AreaListingPathParts = {
+    listingType,
+    areaSlug,
+    districtSlug: districtSlug || undefined,
+  };
+  if (propertyTypeSlug) parsed.propertyTypeSlug = propertyTypeSlug;
+  return parsed;
 }
 
 export interface ResolvedAreaPath {

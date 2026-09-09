@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.ai-chat]
 verify_jwt = false
+
+[functions.seo-freshness-worker]
+verify_jwt = false

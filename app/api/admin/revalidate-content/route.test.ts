@@ -3,10 +3,12 @@ import { NextRequest } from 'next/server';
 
 const revalidatePathMock = vi.hoisted(() => vi.fn());
 const callerClientMock = vi.hoisted(() => vi.fn());
+const adminClientMock = vi.hoisted(() => vi.fn());
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
 vi.mock('@/lib/server/requireAdmin', () => ({
+  adminClient: adminClientMock,
   callerClient: callerClientMock,
   requireOwner: requireOwnerMock,
 }));
@@ -27,6 +29,8 @@ function request(body: unknown, token = 'editor-token'): NextRequest {
 function makeClient(options: {
   areas?: Array<{ id: string; slug: string }>;
   categories?: Array<{ label: string; slug: string }>;
+  districts?: Array<{ id: string; area_id: string; slug: string }>;
+  propertyTypes?: Array<{ id: string; slug: string }>;
   areasError?: { message: string } | null;
   categoriesError?: { message: string } | null;
 } = {}) {
@@ -39,6 +43,12 @@ function makeClient(options: {
         if (table === 'news_categories') {
           return { data: options.categories ?? [{ label: 'Thị trường', slug: 'thi-truong' }], error: options.categoriesError ?? null };
         }
+        if (table === 'districts') {
+          return { data: options.districts ?? [], error: null };
+        }
+        if (table === 'property_types') {
+          return { data: options.propertyTypes ?? [], error: null };
+        }
         throw new Error(`Unexpected table: ${table}`);
       }),
     })),
@@ -48,6 +58,7 @@ function makeClient(options: {
 beforeEach(() => {
   revalidatePathMock.mockReset();
   callerClientMock.mockReset();
+  adminClientMock.mockReset();
   requireOwnerMock.mockReset();
 });
 
@@ -112,6 +123,31 @@ describe('POST /api/admin/revalidate-content', () => {
       '/tin-tuc/danh-muc/thi-truong',
     ]);
     expect(revalidatePathMock).not.toHaveBeenCalledWith('/khong-duoc-purge-tuy-y');
+  });
+
+  it('queues allowlisted paths after a successful mutation snapshot', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'editor-token', userId: 'u1' });
+    callerClientMock.mockReturnValue(makeClient());
+    const upsert = vi.fn(async () => ({ error: null }));
+    const from = vi.fn(() => ({ upsert }));
+    adminClientMock.mockReturnValue({ from });
+
+    const response = await POST(request({
+      entity: 'property',
+      action: 'publish',
+      targets: [{ current: {
+        id: 'p1', slug: 'nha-dep', public_code: 101, listing_type: 'mua_ban',
+        district: 'Thuận An', area_id: 'area-1', is_active: true,
+      } }],
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.queuedCount).toBeGreaterThan(0);
+    expect(from).toHaveBeenCalledWith('seo_freshness_jobs');
+    expect(upsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ event_kind: 'property', event_action: 'publish', path: '/sitemap.xml' }),
+    ]), { onConflict: 'dedupe_key', ignoreDuplicates: true });
   });
 
   it('trả 503 khi không tải được lookup URL public', async () => {

@@ -99,6 +99,17 @@ describe('pageToHref — listings filters', () => {
     expect(params.get('minPrice')).toBe('3');
   });
 
+  it('giữ nhóm loại BĐS trên canonical path khi điều hướng từ AIO', () => {
+    const href = pageToHref(
+      { name: 'listings', listingType: 'mua_ban', areaId: 'bd', district: 'Dĩ An', typePathSlug: 'nha', typeIds: ['house-1'] },
+      {
+        areas: [{ id: 'bd', slug: 'binh-duong' }],
+        districts: [{ area_id: 'bd', name: 'Dĩ An', slug: 'di-an' }],
+      },
+    );
+    expect(href).toBe('/mua-ban/binh-duong/di-an/nha');
+  });
+
   it('sinh path cấp area khi không có district hoặc district chưa map được', () => {
     const href = pageToHref(
       { name: 'listings', listingType: 'mua_ban', areaId: 'bd', district: 'Không tồn tại' },

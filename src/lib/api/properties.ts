@@ -9,7 +9,7 @@ import { propertyPanoramaUrl, deletePanoramaObject, uploadPanoramaObject } from 
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
-  listingType?: string; areaId?: string; typeId?: string; city?: string; keyword?: string;
+  listingType?: string; areaId?: string; typeId?: string; typeIds?: string[]; typePathSlug?: string; city?: string; keyword?: string;
   district?: string; ward?: string;
   minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
   bedrooms?: string; direction?: string; legal?: string; loan?: boolean;
@@ -39,6 +39,7 @@ export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
 // parser ↔ client wrapper ↔ màn danh sách.
 export type ListingInitialFilters = Omit<PropertyFilters, 'loan' | 'limit'> & {
   typeSlug?: string;
+  typePathSlug?: string;
   locationSource?: 'explicit' | 'inferred';
 };
 
@@ -53,7 +54,7 @@ export class PropertySearchUnavailableError extends Error {
 // Dựng query đã áp đủ filter + sort (chưa phân trang). Tách hàm để retry dùng
 // builder mới hoàn toàn — builder PostgREST đã await không dùng lại được.
 export interface PublicPropertyFilterOperation {
-  method: 'eq' | 'gte' | 'lte' | 'or';
+  method: 'eq' | 'gte' | 'lte' | 'in' | 'or';
   column?: string;
   value: unknown;
 }
@@ -63,6 +64,7 @@ export function publicPropertyFilterOperations(filters?: PropertyFilters): Publi
   if (filters?.listingType && filters.listingType !== 'all') operations.push({ method: 'eq', column: 'listing_type', value: filters.listingType });
   if (filters?.areaId) operations.push({ method: 'eq', column: 'area_id', value: filters.areaId });
   if (filters?.typeId) operations.push({ method: 'eq', column: 'property_type_id', value: filters.typeId });
+  if (filters?.typeIds?.length) operations.push({ method: 'in', column: 'property_type_id', value: filters.typeIds });
   if (filters?.city) operations.push({ method: 'eq', column: 'city', value: filters.city });
   if (filters?.district) operations.push({ method: 'eq', column: 'district', value: filters.district });
   if (filters?.ward) operations.push({ method: 'eq', column: 'ward', value: filters.ward });
@@ -91,6 +93,7 @@ export function publicPropertyFilterOperations(filters?: PropertyFilters): Publi
 function applyPublicPropertyFilters(query: any, filters?: PropertyFilters): any {
   for (const operation of publicPropertyFilterOperations(filters)) {
     if (operation.method === 'or') query = query.or(operation.value as string);
+    else if (operation.method === 'in') query = query.in(operation.column, operation.value as unknown[]);
     else query = query[operation.method](operation.column, operation.value);
   }
   return query;
@@ -167,6 +170,18 @@ async function getRankedPropertyMatches(
 ): Promise<{ data: Property[]; total: number }> {
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
+  if (filters?.typeIds?.length) {
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 20;
+    const { data, error, count } = await applyPublicPropertyFilters(
+      supabase.from('properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
+      filters,
+    ).order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+    if (error) throw new PropertySearchUnavailableError();
+    return { data: (data ?? []) as Property[], total: count ?? 0 };
+  }
+
   const bedrooms = filters.bedrooms && filters.bedrooms !== 'all' ? Number(filters.bedrooms) : undefined;
   const { data: matches, error } = await supabase.rpc('search_property_matches', {
     kw: filters.keyword ?? null,
@@ -225,6 +240,18 @@ export function mapAdvisorMatchMetadata(row: AdvisorMatch): Pick<AdvisorMatchedP
 }
 
 export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ data: AdvisorMatchedProperty[]; total: number }> {
+  if (filters.typeIds?.length) {
+    const result = await getRankedPropertyMatches(filters, ADVISOR_PROPERTY_SELECT);
+    return {
+      data: result.data.map(property => ({
+        ...property,
+        matchScore: 0,
+        matchIntentScore: 0,
+        matchReasons: [],
+      })),
+      total: result.total,
+    };
+  }
   const targetArea = filters.maxArea ?? filters.minArea ?? null;
   const { data: matches, error } = await supabase.rpc('match_properties_for_advisor', {
     f_listing_type: filters.listingType && filters.listingType !== 'all' ? filters.listingType : null,

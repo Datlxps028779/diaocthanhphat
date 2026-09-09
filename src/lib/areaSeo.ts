@@ -67,6 +67,28 @@ export function evaluateAreaSeo(input: AreaSeoInput): AreaSeoEvaluation {
   return { indexable, robots: { index: indexable, follow: true }, reasons };
 }
 
+export function evaluateCompositeAreaSeo(input: {
+  area: Pick<Area, 'name' | 'slug'>;
+  propertyTypeSlug: string;
+  activeCount: number;
+  titledCount: number;
+  distinctTitleCount: number;
+  taxonomyValid: boolean;
+  hasDescription: boolean;
+}): AreaSeoEvaluation {
+  const reasons: string[] = [];
+  if (!input.area.slug?.trim()) reasons.push('missing_area_slug');
+  if (!input.area.name?.trim()) reasons.push('missing_area_name');
+  if (!input.propertyTypeSlug.trim()) reasons.push('missing_property_type_slug');
+  if (!input.hasDescription) reasons.push('missing_unique_description');
+  if (input.activeCount < MIN_AREA_LISTINGS_FOR_INDEX) reasons.push('not_enough_active_listings');
+  if (input.titledCount < input.activeCount) reasons.push('missing_listing_title');
+  if (input.distinctTitleCount < MIN_AREA_LISTINGS_FOR_INDEX) reasons.push('not_enough_distinct_titles');
+  if (!input.taxonomyValid) reasons.push('invalid_taxonomy');
+  const indexable = reasons.length === 0;
+  return { indexable, robots: { index: indexable, follow: true }, reasons };
+}
+
 export function buildAreaMetadata(area: Area, summary: string, evaluation: AreaSeoEvaluation): Metadata {
   const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
   const title = normalizeSiteBrandText(area.meta_title || `Bất động sản ${area.name}`);

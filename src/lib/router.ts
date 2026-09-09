@@ -16,7 +16,7 @@ export type Page =
   | {
       name: 'listings';
       listingType?: 'mua_ban' | 'cho_thue';
-      areaId?: string; typeId?: string; district?: string; ward?: string; keyword?: string;
+      areaId?: string; typeId?: string; typeIds?: string[]; typePathSlug?: string; district?: string; ward?: string; keyword?: string;
       locationSource?: 'explicit' | 'inferred';
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
@@ -142,6 +142,7 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
             listingType: page.listingType,
             areaSlug: area.slug,
             districtSlug: district?.slug,
+            propertyTypeSlug: page.typePathSlug,
           });
           areaOnPath = true;
           districtOnPath = Boolean(district);

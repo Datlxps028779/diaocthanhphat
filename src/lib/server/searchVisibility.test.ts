@@ -50,6 +50,34 @@ describe('buildSearchVisibilityCandidates', () => {
     });
   });
 
+  it('đồng bộ landing group nha/dat với sitemap khi đủ inventory', () => {
+    const properties = Array.from({ length: 5 }, (_, index) => ({
+      id: `group-${index}`,
+      slug: `dat-${index}`,
+      public_code: index + 1,
+      listing_type: 'mua_ban' as const,
+      district: 'Thuận An',
+      district_id: 'district-1',
+      area_id: 'area-1',
+      property_type_id: 'type-dat-nen',
+      title: `Đất nền Thuận An ${index}`,
+      is_active: true,
+      updated_at: `2026-09-0${index + 1}T00:00:00.000Z`,
+      areas: { slug: 'binh-duong' },
+    }));
+    const candidates = buildSearchVisibilityCandidates(sources({
+      properties,
+      areas: [{ id: 'area-1', name: 'Bình Dương', slug: 'binh-duong', description: 'Mô tả khu vực thật.', created_at: null }],
+      districts: [{ id: 'district-1', area_id: 'area-1', name: 'Thuận An', slug: 'binh-duong-thuan-an' }],
+      propertyTypes: [{ id: 'type-dat-nen', name: 'Đất nền', slug: 'dat-nen' }],
+    }));
+    expect(candidates.find(item => item.sourceKey === 'area_listing:mua_ban:area-1:district-1:dat')).toMatchObject({
+      eligible: true,
+      canonicalPath: '/mua-ban/binh-duong/thuan-an/dat',
+      contentUpdatedAt: '2026-09-05T00:00:00.000Z',
+    });
+  });
+
   it('không cho draft news hoặc system/inactive managed page vào URL eligible', () => {
     const candidates = buildSearchVisibilityCandidates(sources({
       news: [

@@ -32,6 +32,7 @@ export interface AdvisorTurnResult {
   safetyNote?: string;
   knowledgeSource?: AiChatKnowledge['knowledge_type'];
   handoffRequired?: boolean;
+  ambiguity?: string[];
 }
 
 type LeadPayload = Parameters<typeof submitLead>[0];
@@ -209,7 +210,7 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
 
   const f = intent.filters;
   const hasConcreteFilter = f.minPrice != null || f.maxPrice != null || !!f.district
-    || !!f.ward || !!f.areaId || !!f.typeId || f.minArea != null || f.maxArea != null;
+    || !!f.ward || !!f.areaId || !!f.typeId || Boolean(f.typeIds?.length) || f.minArea != null || f.maxArea != null;
   const mustNotAnswer = mustNotAnswerHit(input, kb);
   const handoffRequired = Boolean(kb?.handoff_required) || Boolean(sensitive) || asksForUnsupportedFact(input) || mustNotAnswer || detectHandoffTriggers(input);
 
@@ -250,6 +251,7 @@ export function buildAdvisorTurn(input: string, taxonomy: SearchTaxonomy, opts?:
       matched: intent.matched,
       stage: 'showing_matches',
       ...(note ? { safetyNote: safetyNoteFor(kb) } : {}),
+      ...(intent.ambiguity?.length ? { ambiguity: intent.ambiguity } : {}),
       ...(kb ? { knowledgeSource: kb.knowledge_type ?? 'priority_qa' } : {}),
       ...(handoffRequired ? { handoffRequired: true } : {}),
     };

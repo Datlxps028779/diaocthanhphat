@@ -23,9 +23,12 @@ export function AdminClient({ initialTab, forceStaff = false, forceOwner = false
   const [permissions, setPermissions] = useState<StaffPermission[]>([]);
   const [permissionsChecked, setPermissionsChecked] = useState(false);
   const [entered, setEntered] = useState(false); // đã bấm login thành công
+  // Supabase tạo object User mới khi refresh token. Chỉ user ID mới là identity
+  // ổn định; dùng nó để không tháo AdminPanel và làm mất modal/draft đang làm dở.
+  const userId = user?.id;
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRole(null);
       setRoleChecked(true);
       setPermissions([]);
@@ -56,7 +59,7 @@ export function AdminClient({ initialTab, forceStaff = false, forceOwner = false
       setPermissions([]);
       setPermissionsChecked(true);
     });
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     if (!authLoading && !user && forceOwner) window.location.replace('/quyen-chu-he-thong');

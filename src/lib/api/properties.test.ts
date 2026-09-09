@@ -78,6 +78,12 @@ describe('Public property filter contract', () => {
     );
   });
 
+  it('carries grouped property type IDs as an IN operation', () => {
+    expect(publicPropertyFilterOperations({ typeIds: ['type-house', 'type-land'] })).toContainEqual({
+      method: 'in', column: 'property_type_id', value: ['type-house', 'type-land'],
+    });
+  });
+
   it('uses sale price unless the route is explicitly rental', () => {
     expect(publicPropertyFilterOperations({ minPrice: 1 })[0]).toEqual({
       method: 'gte', column: 'price', value: 1,
