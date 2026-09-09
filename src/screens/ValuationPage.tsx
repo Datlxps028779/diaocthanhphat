@@ -95,7 +95,8 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
+    <main id="main-content">
+      <div className="max-w-3xl mx-auto px-4 py-6">
       <Breadcrumb items={[{ label: 'Trang chủ', onClick: () => onNavigate({ name: 'home' }) }, { label: 'Định giá BĐS' }]} />
 
       <div className="flex items-center gap-3 mb-2 mt-4">
@@ -197,5 +198,6 @@ export function ValuationPage({ onNavigate }: { onNavigate: (p: Page) => void })
         </div>
       )}
     </div>
+    </main>
   );
 }
