@@ -107,14 +107,60 @@ export async function adminGetAllNews(): Promise<NewsArticle[]> {
     .order('id', { ascending: false });
   return (data ?? []) as NewsArticle[];
 }
+
+export type NewsPublicationResult = {
+  ok: boolean;
+  mode: 'observe' | 'enforce';
+  result?: {
+    id: string;
+    slug: string;
+    category: string;
+    is_published: boolean;
+    published_at: string | null;
+    content_version: number;
+    event_id: string | null;
+    changed: boolean;
+  };
+  quality_gate: Record<string, unknown>;
+  paths: string[];
+};
+
+async function publicationHeaders(): Promise<HeadersInit> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    Authorization: `Bearer ${session?.access_token ?? ''}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+export async function setNewsPublicationState(
+  id: string,
+  publish: boolean,
+  expectedContentVersion: number,
+): Promise<NewsPublicationResult> {
+  const response = await fetch(`/api/admin/news/${encodeURIComponent(id)}/publish`, {
+    method: 'POST',
+    headers: await publicationHeaders(),
+    body: JSON.stringify({ publish, expectedContentVersion }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(json.error ?? 'Không thể cập nhật trạng thái xuất bản.') as Error & { code?: string; quality_gate?: unknown };
+    error.code = json.code;
+    error.quality_gate = json.quality_gate;
+    throw error;
+  }
+  return json as NewsPublicationResult;
+}
+
 // Client writes contain editorial fields only; generated structured data remains server-owned.
-export type NewsWrite = Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views' | 'schema_markup'>;
+export type NewsWrite = Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views' | 'schema_markup' | 'content_version'>;
 
 export async function createNews(n: NewsWrite): Promise<NewsArticle> {
   // Slug auto từ tiêu đề (+ hậu tố chống trùng). Chỉ dùng slug nhập tay khi admin
   // chủ động điền — còn lại luôn sinh tự động để đảm bảo chuẩn SEO.
   const slug = (n.slug && n.slug.trim()) || buildUniqueSlug(n.title);
-  const publicationPayload = ensureNewsPublicationTimestamp(undefined, n);
+  const publicationPayload = ensureNewsPublicationTimestamp(undefined, { ...n, is_published: false });
   const { schema_markup: _schemaMarkup, ...safePayload } = publicationPayload as NewsWrite & { schema_markup?: unknown };
   const { data, error } = await supabase.from('news').insert({ ...safePayload, slug }).select().single();
   if (error) throw error;
@@ -122,7 +168,7 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
   await revalidateNewsContent('create', [{ current: newsRevalidationSnapshot(article) }]);
   return article;
 }
-export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schema_markup'>>): Promise<NewsArticle> {
+export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schema_markup' | 'content_version'>>): Promise<NewsArticle> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
     .select('id,slug,category,is_published,published_at')
@@ -130,7 +176,7 @@ export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schem
     .maybeSingle();
   if (previousError) throw previousError;
   const publicationPatch = ensureNewsPublicationTimestamp(previousData, n);
-  const { schema_markup: _schemaMarkup, ...safePatch } = publicationPatch as typeof n & { schema_markup?: unknown };
+  const { schema_markup: _schemaMarkup, is_published: _isPublished, ...safePatch } = publicationPatch as typeof n & { schema_markup?: unknown; is_published?: boolean };
   const { data, error } = await supabase
     .from('news')
     .update({ ...safePatch, updated_at: new Date().toISOString() })

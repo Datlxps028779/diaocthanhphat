@@ -14,8 +14,8 @@ import {
   type NewsLocationFields,
 } from '../../../lib/newsLocationSelection';
 import {
-  adminGetAllNews, createNews, updateNews, deleteNews, bulkUpdateNews, bulkDeleteNews, getNewsCategories,
-  newsRevalidationSnapshot, revalidateNewsContent,
+  adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
+  newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState,
 } from '../../../lib/api';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
@@ -467,6 +467,8 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           return valid.length ? valid : null;
         })(),
       });
+    } catch (error) {
+      setError((error as { message?: string }).message ?? 'Không lưu được bài viết.');
     } finally { setSaving(false); }
   };
 
@@ -964,30 +966,25 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const blockedSelectedPublication = () => articles
     .filter(article => selected.has(article.id) && !article.is_published)
     .find(article => !editorialFor(article).canPublish);
-  const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidateNewsContent>[1]) => {
-    try {
-      await revalidateNewsContent(action, targets);
-    } catch (error) {
-      console.error('[AdminPanel] Đã lưu Tin tức nhưng chưa làm mới cache:', error);
-      alert('Đã lưu dữ liệu nhưng chưa làm mới được cache công khai. Hãy thử lưu lại hoặc liên hệ quản trị viên.');
+  const runBoundaryBulkPublication = async (publish: boolean) => {
+    const targets = articles.filter(article => selected.has(article.id));
+    if (targets.length > 60) {
+      alert('Mỗi lần chỉ được xử lý tối đa 60 bài để giữ bounded operation.');
+      return;
     }
-  };
-  const runBulk = async (
-    fn: () => Promise<number>,
-    label: string,
-    targets: Parameters<typeof revalidateNewsContent>[1],
-  ) => {
     setBulkBusy(true);
     try {
-      const n = await fn();
-      if (n > 0) await warnRevalidation('bulk', targets);
+      for (const article of targets) {
+        await setNewsPublicationState(article.id, publish, article.content_version ?? 1);
+      }
       clearSelection();
       await load();
-      console.info(`[AdminPanel] Bulk ${label}: ${n} bài`);
-    } catch (e) {
-      console.error(`[AdminPanel] Bulk ${label} thất bại:`, e);
-      alert(`Thao tác hàng loạt thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
-    } finally { setBulkBusy(false); }
+    } catch (error) {
+      console.error(`[AdminPanel] Bulk ${publish ? 'đăng' : 'ẩn'} News thất bại:`, error);
+      alert(`Thao tác hàng loạt thất bại: ${(error as { message?: string }).message ?? 'Lỗi không xác định'}`);
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   if (creating || editing) {
@@ -998,16 +995,22 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         categories={categories}
         onSave={async (payload) => {
           if (creating) {
-            const saved = await createNews(payload as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
-            await warnRevalidation('create', [{ current: newsRevalidationSnapshot(saved) }]);
+            const requestedPublished = Boolean(payload.is_published);
+            const saved = await createNews({ ...payload, is_published: false } as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
+            if (requestedPublished) {
+              await setNewsPublicationState(saved.id, true, saved.content_version ?? 1);
+            }
           } else if (editing) {
-            const saved = await updateNews(editing.id, payload);
-            await warnRevalidation('update', [{
-              previous: newsRevalidationSnapshot(editing),
-              current: newsRevalidationSnapshot(saved),
-            }]);
+            const requestedPublished = Boolean(payload.is_published);
+            const { is_published: _requestedPublished, ...editorialPayload } = payload;
+            const saved = await updateNews(editing.id, editorialPayload);
+            if (requestedPublished !== Boolean(editing.is_published)) {
+              await setNewsPublicationState(saved.id, requestedPublished, saved.content_version ?? 1);
+            }
           }
-          await load(); setEditing(null); setCreating(false);
+          await load();
+          setEditing(null);
+          setCreating(false);
         }}
         onCancel={() => { setEditing(null); setCreating(false); }}
       />
@@ -1035,26 +1038,12 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
               alert(`Không thể đăng "${blocked.title}": ${editorialFor(blocked).citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
               return;
             }
-            runBulk(
-              () => bulkUpdateNews(selectedIds(), { is_published: true }),
-              'đăng',
-              articles.filter(article => selected.has(article.id)).map(article => ({
-                previous: newsRevalidationSnapshot(article),
-                current: newsRevalidationSnapshot({ ...article, is_published: true }),
-              })),
-            );
+            runBoundaryBulkPublication(true);
           }}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Đăng
           </button>
-          <button disabled={bulkBusy} onClick={() => runBulk(
-            () => bulkUpdateNews(selectedIds(), { is_published: false }),
-            'ẩn',
-            articles.filter(article => selected.has(article.id)).map(article => ({
-              previous: newsRevalidationSnapshot(article),
-              current: newsRevalidationSnapshot({ ...article, is_published: false }),
-            })),
-          )}
+          <button disabled={bulkBusy} onClick={() => runBoundaryBulkPublication(false)}
             className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <XCircle className="w-3.5 h-3.5" />Chuyển nháp
           </button>
@@ -1158,15 +1147,11 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                           return;
                         }
                         try {
-                          const saved = await updateNews(a.id, { is_published: nextPublished });
-                          await warnRevalidation(saved.is_published ? 'publish' : 'unpublish', [{
-                            previous: newsRevalidationSnapshot(a),
-                            current: newsRevalidationSnapshot(saved),
-                          }]);
-                          await load();
+                          const result = await setNewsPublicationState(a.id, nextPublished, a.content_version ?? 1);
+                          if (result.result?.changed) await load();
                         } catch (error) {
                           console.error('[AdminPanel] Cập nhật trạng thái Tin tức thất bại:', error);
-                          alert(`Cập nhật trạng thái thất bại: ${(error as Error).message}`);
+                          alert(`Cập nhật trạng thái thất bại: ${(error as { message?: string }).message ?? 'Lỗi không xác định'}`);
                         }
                       }}
                         className={`p-1.5 rounded-lg transition-colors ${a.is_published ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}>
@@ -1195,7 +1180,9 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         const previous = articles.find(article => article.id === confirmDelete);
         try {
           await deleteNews(confirmDelete);
-          if (previous) await warnRevalidation('delete', [{ previous: newsRevalidationSnapshot(previous) }]);
+          if (previous) {
+            await revalidateNewsContent('delete', [{ previous: newsRevalidationSnapshot(previous) }]);
+          }
           setConfirmDelete(null);
           await load();
         } catch (error) {
@@ -1208,7 +1195,17 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           onConfirm={() => {
             const targets = articles.filter(article => selected.has(article.id)).map(article => ({ previous: newsRevalidationSnapshot(article) }));
             setConfirmBulkDelete(false);
-            runBulk(() => bulkDeleteNews(selectedIds()), 'xóa', targets);
+            bulkDeleteNews(selectedIds()).then(async count => {
+              if (count > 0) {
+                await revalidateNewsContent('bulk', targets);
+              }
+              clearSelection();
+              await load();
+              return count;
+            }).catch(error => {
+              console.error('[AdminPanel] Bulk xóa thất bại:', error);
+              alert(`Thao tác hàng loạt thất bại: ${(error as { message?: string }).message ?? 'Lỗi không xác định'}`);
+            });
           }}
           onCancel={() => setConfirmBulkDelete(false)} />
       )}

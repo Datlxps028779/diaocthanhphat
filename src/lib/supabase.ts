@@ -363,7 +363,7 @@ export type NewsArticle = {
   reviewer_name?: string | null;
   reviewer_role?: string | null;
   source_note?: string | null;
-  is_published: boolean; views: number;
+  is_published: boolean; views: number; content_version?: number;
   meta_title: string | null; meta_description: string | null;
   focus_keywords: string | null; schema_markup: Record<string, unknown> | null;
   related_ids: string[] | null;
