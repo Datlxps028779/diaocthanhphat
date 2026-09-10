@@ -17,6 +17,7 @@ import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
   newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState, formatNewsPublicationError,
 } from '../../../lib/api';
+import { collectNewsAdminSaveIssues, formatNewsIssueList } from '../../../lib/newsAdminSaveIssues';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata } from '../../../lib/seo';
@@ -82,7 +83,7 @@ function newsSlug(title: string): string {
 // Dựng NewsArticle tạm từ form state để tái dùng builder public (buildNewsMetadata +
 // Tạo object tạm từ form để dùng chung metadata và preview public.
 // Các field không có trong form (id, views, related_ids...) → giá trị tạm an toàn.
-function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now: string): NewsArticle {
+function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now: string, options?: { keepIncomplete?: boolean }): NewsArticle {
   const slug = form.slug.trim() || newsSlug(form.title) || 'slug';
   return {
     id: article?.id ?? 'draft',
@@ -115,15 +116,15 @@ function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now
     ward_id: form.ward_id || null,
     neighborhood_id: form.neighborhood_id || null,
     faq: (() => {
-      const valid = form.faq
-        .map(it => ({ question: it.question.trim(), answer: it.answer.trim() }))
-        .filter(it => it.question && it.answer);
+      const mapped = form.faq.map(it => ({ question: it.question.trim(), answer: it.answer.trim() }));
+      if (options?.keepIncomplete) return mapped;
+      const valid = mapped.filter(it => it.question && it.answer);
       return valid.length ? valid : null;
     })(),
     citations: (() => {
-      const valid = form.citations
-        .map(c => ({ title: c.title.trim(), url: c.url.trim() }))
-        .filter(c => c.url && /^https?:\/\//i.test(c.url));
+      const mapped = form.citations.map(c => ({ title: c.title.trim(), url: c.url.trim() }));
+      if (options?.keepIncomplete) return mapped;
+      const valid = mapped.filter(c => c.url && /^https?:\/\//i.test(c.url));
       return valid.length ? valid : null;
     })(),
     created_at: article?.created_at ?? now,
@@ -413,14 +414,22 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   };
 
   const handleSave = async (forceDraft = false) => {
-    if (!form.title.trim()) { setError('Vui lòng nhập tiêu đề bài viết.'); return; }
-    if (!forceDraft && form.is_published && !readiness.canPublish) {
-      setError(`Bài chưa đủ chuẩn để đăng công khai: ${readiness.errors[0]?.message ?? 'thiếu thông tin SEO/GEO bắt buộc.'}`);
-      return;
-    }
-    const isPublicationTransition = form.is_published && !article?.is_published;
-    if (!forceDraft && isPublicationTransition && !editorialQuality.canPublish) {
-      setError(`Bài chưa đủ nguồn đã kiểm tra để đăng công khai: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
+    const publish = !forceDraft && form.is_published;
+    const snapshot = formToNewsArticle(form, article, nowRef.current, { keepIncomplete: true });
+    const { blocking, warnings } = collectNewsAdminSaveIssues({
+      article: snapshot,
+      existingArticles: allArticles,
+      currentId: article?.id ?? null,
+      publish,
+    });
+    if (blocking.length > 0) {
+      setError(formatNewsIssueList(
+        publish
+          ? 'Bài viết chưa đủ điều kiện để lưu/đăng. Sửa toàn bộ mục dưới đây rồi lưu lại:'
+          : 'Không lưu được nháp. Sửa các mục dưới đây:',
+        blocking,
+        { warnings: publish ? warnings : [] },
+      ));
       return;
     }
     setSaving(true);
@@ -484,7 +493,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
 
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 p-6">
-          {error && <div className="whitespace-pre-line rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {error && <div className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề *</label>
             <input value={form.title} onChange={e => set('title', e.target.value)}
@@ -824,16 +833,24 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             )}
             <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${editorialQuality.canPublish ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
               <div className="font-bold">Nguồn tham khảo: {editorialQuality.validCitationCount}/2 hợp lệ</div>
-              <p className="mt-0.5 leading-relaxed">
-                {editorialQuality.canPublish
-                  ? 'Đủ nguồn để biên tập viên đối chiếu trước khi đăng.'
-                  : editorialQuality.citationIssues[0]?.message}
-              </p>
+              {editorialQuality.canPublish ? (
+                <p className="mt-0.5 leading-relaxed">Đủ nguồn để biên tập viên đối chiếu trước khi đăng.</p>
+              ) : (
+                <ul className="mt-1 list-decimal space-y-1 pl-4 leading-relaxed">
+                  {editorialQuality.citationIssues.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             {editorialQuality.faqIssues.length > 0 && (
               <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 <div className="font-bold">FAQ cần bổ sung</div>
-                <p className="mt-0.5 leading-relaxed">{editorialQuality.faqIssues[0]?.message}</p>
+                <ul className="mt-1 list-decimal space-y-1 pl-4 leading-relaxed">
+                  {editorialQuality.faqIssues.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
@@ -965,7 +982,16 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const selectedIds = () => Array.from(selected);
   const blockedSelectedPublication = () => articles
     .filter(article => selected.has(article.id) && !article.is_published)
-    .find(article => !editorialFor(article).canPublish);
+    .map(article => ({
+      article,
+      ...collectNewsAdminSaveIssues({
+        article,
+        existingArticles: articles,
+        currentId: article.id,
+        publish: true,
+      }),
+    }))
+    .find(item => item.blocking.length > 0);
   const runBoundaryBulkPublication = async (publish: boolean) => {
     const targets = articles.filter(article => selected.has(article.id));
     if (targets.length > 60) {
@@ -1035,7 +1061,11 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           <button disabled={bulkBusy} onClick={() => {
             const blocked = blockedSelectedPublication();
             if (blocked) {
-              alert(`Không thể đăng "${blocked.title}": ${editorialFor(blocked).citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
+              alert(formatNewsIssueList(
+                `Không thể đăng "${blocked.article.title}". Sửa toàn bộ mục dưới đây:`,
+                blocked.blocking,
+                { warnings: blocked.warnings },
+              ));
               return;
             }
             runBoundaryBulkPublication(true);
@@ -1141,10 +1171,21 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                       <button onClick={() => setEditing(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={async () => {
                         const nextPublished = !a.is_published;
-                        const editorialQuality = editorialFor(a);
-                        if (nextPublished && !editorialQuality.canPublish) {
-                          alert(`Không thể đăng: ${editorialQuality.citationIssues[0]?.message ?? 'thiếu nguồn tham khảo.'}`);
-                          return;
+                        if (nextPublished) {
+                          const { blocking, warnings } = collectNewsAdminSaveIssues({
+                            article: a,
+                            existingArticles: articles,
+                            currentId: a.id,
+                            publish: true,
+                          });
+                          if (blocking.length > 0) {
+                            alert(formatNewsIssueList(
+                              `Không thể đăng "${a.title}". Sửa toàn bộ mục dưới đây:`,
+                              blocking,
+                              { warnings },
+                            ));
+                            return;
+                          }
                         }
                         try {
                           const result = await setNewsPublicationState(a.id, nextPublished, a.content_version ?? 1);

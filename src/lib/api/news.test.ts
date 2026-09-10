@@ -103,7 +103,7 @@ describe('formatNewsPublicationError', () => {
     expect(formatted).toContain('3. Bắt buộc có khu vực thật của bài viết.');
   });
 
-  it('cắt tối đa 8 lỗi và báo số còn lại', () => {
+  it('mặc định liệt kê toàn bộ lỗi cổng chất lượng', () => {
     const issues = Array.from({ length: 10 }, (_, index) => ({
       code: `ISSUE_${index}`,
       field: 'x',
@@ -113,9 +113,34 @@ describe('formatNewsPublicationError', () => {
       quality_gate: { issues },
     });
     const formatted = formatNewsPublicationError(error);
+    expect(formatted).toContain('1. Lỗi 1');
+    expect(formatted).toContain('10. Lỗi 10');
+    expect(formatted).not.toContain('… và');
+  });
+
+  it('vẫn cắt khi caller truyền maxIssues', () => {
+    const issues = Array.from({ length: 10 }, (_, index) => ({
+      code: `ISSUE_${index}`,
+      field: 'x',
+      message: `Lỗi ${index + 1}`,
+    }));
+    const error = Object.assign(new Error('Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.'), {
+      quality_gate: { issues },
+    });
+    const formatted = formatNewsPublicationError(error, { maxIssues: 8 });
     expect(formatted).toContain('8. Lỗi 8');
     expect(formatted).not.toContain('9. Lỗi 9');
     expect(formatted).toContain('… và 2 mục nữa.');
+  });
+
+  it('dịch lỗi trùng slug news_slug_key', () => {
+    const formatted = formatNewsPublicationError({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "news_slug_key"',
+      details: 'Key (slug)=(bai-moi) already exists.',
+    });
+    expect(formatted).toContain('Slug "bai-moi" đã tồn tại');
+    expect(formatted).toContain('news_slug_key');
   });
 
   it('giữ message gốc khi không có quality_gate', () => {

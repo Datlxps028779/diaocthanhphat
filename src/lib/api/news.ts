@@ -1,6 +1,7 @@
 import { supabase, type NewsArticle, type NewsListItem, type NewsPageResult } from '../supabase';
 import { buildUniqueSlug } from '../slug';
 import { newsRevalidationSnapshot, revalidateNewsContent } from './contentRevalidation';
+import { formatNewsIssueList } from '../newsAdminSaveIssues';
 
 export const NEWS_PER_PAGE = 12;
 
@@ -153,8 +154,8 @@ export async function setNewsPublicationState(
   return json as NewsPublicationResult;
 }
 
+
 const DEFAULT_PUBLICATION_ERROR = 'Không thể cập nhật trạng thái xuất bản.';
-const MAX_QUALITY_ISSUE_LINES = 8;
 
 function compactErrorText(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
@@ -180,25 +181,35 @@ function qualityIssueMessages(qualityGate: unknown): string[] {
   return messages;
 }
 
-/** Ghép quality_gate.issues để admin thấy đúng chỗ bài bị chặn, không chỉ câu chung. */
+function uniqueConstraintSlugMessage(error: { message?: unknown; code?: unknown; details?: unknown }): string | null {
+  const code = compactErrorText(error.code);
+  const message = compactErrorText(error.message);
+  const details = compactErrorText(error.details);
+  const blob = `${code} ${message} ${details}`;
+  if (code !== '23505' && !/news_slug_key|duplicate key value violates unique constraint/i.test(blob)) return null;
+  if (!/news_slug_key|\(slug\)/i.test(blob)) return null;
+  const slug = details.match(/Key \(slug\)=\(([^)]+)\)/i)?.[1]
+    || message.match(/Key \(slug\)=\(([^)]+)\)/i)?.[1];
+  return slug
+    ? `Slug "${slug}" đã tồn tại (news_slug_key). Mỗi bài phải có URL /tin-tuc/... riêng — hãy đổi slug rồi lưu lại.`
+    : 'Slug bài viết đã tồn tại (news_slug_key). Mỗi bài phải có URL riêng — hãy đổi slug rồi lưu lại.';
+}
+
+/** Ghép toàn bộ quality_gate.issues / lỗi slug để admin sửa một lần, không chỉ câu chung. */
 export function formatNewsPublicationError(
   error: unknown,
   options?: { fallback?: string; maxIssues?: number },
 ): string {
   const fallback = compactErrorText(options?.fallback) || DEFAULT_PUBLICATION_ERROR;
   const err = error && typeof error === 'object'
-    ? error as { message?: unknown; quality_gate?: unknown }
+    ? error as { message?: unknown; code?: unknown; details?: unknown; quality_gate?: unknown }
     : null;
-  const headline = compactErrorText(err?.message) || fallback;
+  const headline = (err ? uniqueConstraintSlugMessage(err) : null)
+    || compactErrorText(err?.message)
+    || fallback;
   const issues = qualityIssueMessages(err?.quality_gate);
   if (issues.length === 0) return headline;
-
-  const maxIssues = Math.max(1, options?.maxIssues ?? MAX_QUALITY_ISSUE_LINES);
-  const shown = issues.slice(0, maxIssues);
-  const remaining = issues.length - shown.length;
-  const lines = [headline, ...shown.map((message, index) => `${index + 1}. ${message}`)];
-  if (remaining > 0) lines.push(`… và ${remaining} mục nữa.`);
-  return lines.join('\n');
+  return formatNewsIssueList(headline, issues, { maxIssues: options?.maxIssues });
 }
 
 // Client writes contain editorial fields only; generated structured data remains server-owned.
