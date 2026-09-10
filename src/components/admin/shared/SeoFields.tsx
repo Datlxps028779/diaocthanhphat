@@ -77,7 +77,7 @@ export function SeoFields({
           placeholder="bất động sản Bình Dương, nhà phố, đất nền..."
         />
         <p className={`mt-1 text-[10px] ${keywordCount >= 3 ? 'text-emerald-600' : keywordCount ? 'text-amber-600' : 'text-red-500'}`}>
-          {keywordCount ? `${keywordCount} nhóm từ khóa` : 'Bắt buộc có từ khóa'} — nên gồm chủ đề, địa danh, loại nhu cầu.
+          {keywordCount ? `${keywordCount} nhóm từ khóa` : 'Bắt buộc có từ khóa'} — tối thiểu 3 cụm; AIO được phép nhiều entity/câu hỏi, không kẹp 3–6.
         </p>
       </div>
 

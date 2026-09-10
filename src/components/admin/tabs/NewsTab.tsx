@@ -414,27 +414,34 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   };
 
   const handleSave = async (forceDraft = false) => {
-    const publish = !forceDraft && form.is_published;
-    const snapshot = formToNewsArticle(form, article, nowRef.current, { keepIncomplete: true });
+    const requestingPublish = !forceDraft && form.is_published;
+    // Cổng chất lượng chỉ chặn khi chuyển nháp → công khai. Bài đã đăng vẫn lưu được phần biên tập.
+    const checkQuality = requestingPublish && !article?.is_published;
+    const bodyHtml = sanitizeArticleHtml(form.content.replace(/<p>\s*<\/p>/g, '').trim());
+    const snapshot = formToNewsArticle(
+      { ...form, content: bodyHtml },
+      article,
+      nowRef.current,
+      { keepIncomplete: true },
+    );
     const { blocking, warnings } = collectNewsAdminSaveIssues({
       article: snapshot,
       existingArticles: allArticles,
       currentId: article?.id ?? null,
-      publish,
+      publish: checkQuality,
     });
     if (blocking.length > 0) {
       setError(formatNewsIssueList(
-        publish
-          ? 'Bài viết chưa đủ điều kiện để lưu/đăng. Sửa toàn bộ mục dưới đây rồi lưu lại:'
-          : 'Không lưu được nháp. Sửa các mục dưới đây:',
+        checkQuality
+          ? 'Bài viết chưa đủ điều kiện để đăng công khai. Sửa toàn bộ mục dưới đây rồi lưu lại:'
+          : 'Không lưu được bài viết. Sửa các mục dưới đây:',
         blocking,
-        { warnings: publish ? warnings : [] },
+        { warnings: checkQuality ? warnings : [] },
       ));
       return;
     }
     setSaving(true);
     setError('');
-    const bodyHtml = sanitizeArticleHtml(form.content.replace(/<p>\s*<\/p>/g, '').trim());
     try {
       await onSave({
         title: form.title.trim(),

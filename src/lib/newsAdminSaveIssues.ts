@@ -88,6 +88,10 @@ function toArticleRow(article: NewsSaveIssueArticle): ArticleRow {
   };
 }
 
+/**
+ * `publish: true` = đang chuyển sang công khai → gom cổng chất lượng.
+ * `publish: false` = lưu nháp / sửa bài đã đăng → chỉ chặn tiêu đề + slug trùng.
+ */
 export function collectNewsAdminSaveIssues(input: {
   article: NewsSaveIssueArticle;
   existingArticles: NewsSlugRecord[];

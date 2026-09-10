@@ -82,6 +82,21 @@ describe('collectNewsAdminSaveIssues', () => {
     ]);
   });
 
+  it('sửa bài đã đăng không bị cổng chất lượng chặn khi publish=false', () => {
+    const result = collectNewsAdminSaveIssues({
+      article: article({
+        id: 'published-1',
+        title: 'Tiêu đề bài viết đã đăng đủ dài cho SEO',
+        slug: 'bai-da-dang',
+        content: '<p>Nội dung ngắn.</p>',
+      }),
+      existingArticles: existing,
+      currentId: 'published-1',
+      publish: false,
+    });
+    expect(result.blocking).toEqual([]);
+  });
+
   it('gom slug trùng và toàn bộ lỗi cổng chất lượng trong một lần', () => {
     const result = collectNewsAdminSaveIssues({
       article: article({
@@ -101,7 +116,6 @@ describe('collectNewsAdminSaveIssues', () => {
     expect(text).toContain('Tiêu đề phải dài 20–180 ký tự');
     expect(text).toContain('Nội dung phải có ít nhất 900 từ');
     expect(text).toContain('Nội dung phải có ít nhất 4 H2');
-    expect(text).toContain('Cần 3–6 cụm từ khóa không trùng nhau');
     expect(text).toContain('Bắt buộc có khu vực thật');
     expect(text).toContain('Nội dung phải có ít nhất 2 liên kết nội bộ');
     expect(text).toContain('Cần 4–6 cặp FAQ');

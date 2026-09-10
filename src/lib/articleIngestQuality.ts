@@ -7,6 +7,10 @@ import {
 } from './contentReadiness';
 
 export const ARTICLE_INGEST_QUALITY_VERSION = 'article-ingest-v1';
+/** Tối thiểu để bài có tín hiệu chủ đề. Không kẹp trần 3–6: AIO cần cụm entity + câu hỏi. */
+export const MIN_FOCUS_KEYWORDS = 3;
+/** Cụm dài hơn là đoạn văn dán nhầm, không phải từ khóa. */
+export const MAX_FOCUS_KEYWORD_CHARS = 90;
 
 export interface ArticleIngestQualityItem {
   code: string;
@@ -131,9 +135,22 @@ export function evaluateArticleIngestQuality(
   if (metaDescription.length < 120 || metaDescription.length > 160) {
     issues.push(item('META_DESCRIPTION_LENGTH', 'meta_description', `Meta description phải dài 120–160 ký tự; hiện có ${metaDescription.length}.`));
   }
-  if (keywords.length < 3 || keywords.length > 6 || uniqueCount(keywords) !== keywords.length) {
-    issues.push(item('KEYWORD_COUNT', 'focus_keywords', 'Cần 3–6 cụm từ khóa không trùng nhau.'));
+  if (keywords.length < MIN_FOCUS_KEYWORDS || uniqueCount(keywords) !== keywords.length) {
+    issues.push(item(
+      'KEYWORD_COUNT',
+      'focus_keywords',
+      `Cần tối thiểu ${MIN_FOCUS_KEYWORDS} cụm từ khóa không trùng (chủ đề, entity, câu hỏi AIO); hiện có ${keywords.length}.`,
+    ));
   }
+  keywords.forEach((keyword, index) => {
+    if (keyword.length > MAX_FOCUS_KEYWORD_CHARS) {
+      issues.push(item(
+        'KEYWORD_PHRASE_TOO_LONG',
+        `focus_keywords.${index}`,
+        `Cụm từ khóa ${index + 1} dài ${keyword.length} ký tự (tối đa ${MAX_FOCUS_KEYWORD_CHARS}). Đây là đoạn văn, không phải từ khóa — hãy cắt thành một cụm ngắn.`,
+      ));
+    }
+  });
   if (!compact(row.geo_area)) {
     issues.push(item('GEO_AREA_REQUIRED', 'geo_area', 'Bắt buộc có khu vực thật của bài viết.'));
   }

@@ -137,6 +137,42 @@ describe('evaluateArticleIngestQuality', () => {
     ]));
   });
 
+  it('cho phép cụm từ khóa AIO nhiều hơn 6, chặn đoạn văn dán vào ô từ khóa', () => {
+    const aioKeywords = [
+      'Thị trường',
+      'tin tức bất động sản',
+      'doanh nghiệp bất động sản xoay dòng tiền',
+      'dòng tiền bất động sản',
+      'thị trường bất động sản 2026',
+      'tồn kho bất động sản',
+      'doanh nghiệp địa ốc',
+      'trái phiếu bất động sản',
+      'chuyển nhượng dự án',
+      'thanh khoản bất động sản',
+      'sức hấp thụ bất động sản',
+      'tài chính doanh nghiệp bất động sản',
+      'thị trường nhà đất',
+      'thị trường bất động sản Việt Nam',
+      'bất động sản Việt Nam 2026',
+      'doanh nghiệp bất động sản Việt Nam',
+      'thị trường nhà đất Việt Nam',
+      'nguồn cung bất động sản',
+      'thanh khoản bất động sản Việt Nam',
+      'doanh nghiệp bất động sản đang xoay tiền bằng cách nào',
+      'vì sao doanh nghiệp bất động sản thiếu dòng tiền',
+      'doanh nghiệp bất động sản lấy vốn ở đâu để làm dự án',
+      'thị trường bất động sản 2026 đang gặp vấn đề gì',
+    ].join(', ');
+    const ok = evaluateArticleIngestQuality(validRow({ focus_keywords: aioKeywords }));
+    expect(ok.issues.map(issue => issue.code)).not.toContain('KEYWORD_COUNT');
+    expect(ok.issues.map(issue => issue.code)).not.toContain('KEYWORD_PHRASE_TOO_LONG');
+
+    const stuffed = evaluateArticleIngestQuality(validRow({
+      focus_keywords: `${aioKeywords}, Doanh nghiệp bất động sản hiện chủ yếu xoay dòng tiền thông qua phát hành trái phiếu thanh lý tài sản khi vốn bị mắc kẹt trong hàng tồn kho`,
+    }));
+    expect(stuffed.issues.map(issue => issue.code)).toContain('KEYWORD_PHRASE_TOO_LONG');
+  });
+
   it('reports warnings for excessive links and citations from one domain', () => {
     const links = Array.from({ length: 5 }, (_, index) => `<a href="/tin-tuc/bai-${index}">Bài ${index}</a>`).join(' ');
     const content = completeContent().replace('</p>', ` ${links}</p>`);
