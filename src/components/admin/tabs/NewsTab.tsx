@@ -15,7 +15,7 @@ import {
 } from '../../../lib/newsLocationSelection';
 import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
-  newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState,
+  newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState, formatNewsPublicationError,
 } from '../../../lib/api';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
@@ -468,7 +468,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         })(),
       });
     } catch (error) {
-      setError((error as { message?: string }).message ?? 'Không lưu được bài viết.');
+      setError(formatNewsPublicationError(error, { fallback: 'Không lưu được bài viết.' }));
     } finally { setSaving(false); }
   };
 
@@ -484,7 +484,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
 
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 p-6">
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {error && <div className="whitespace-pre-line rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề *</label>
             <input value={form.title} onChange={e => set('title', e.target.value)}
@@ -981,7 +981,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
       await load();
     } catch (error) {
       console.error(`[AdminPanel] Bulk ${publish ? 'đăng' : 'ẩn'} News thất bại:`, error);
-      alert(`Thao tác hàng loạt thất bại: ${(error as { message?: string }).message ?? 'Lỗi không xác định'}`);
+      alert(formatNewsPublicationError(error, { fallback: 'Thao tác hàng loạt thất bại.' }));
     } finally {
       setBulkBusy(false);
     }
@@ -1151,7 +1151,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                           if (result.result?.changed) await load();
                         } catch (error) {
                           console.error('[AdminPanel] Cập nhật trạng thái Tin tức thất bại:', error);
-                          alert(`Cập nhật trạng thái thất bại: ${(error as { message?: string }).message ?? 'Lỗi không xác định'}`);
+                          alert(formatNewsPublicationError(error, { fallback: 'Cập nhật trạng thái thất bại.' }));
                         }
                       }}
                         className={`p-1.5 rounded-lg transition-colors ${a.is_published ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}>

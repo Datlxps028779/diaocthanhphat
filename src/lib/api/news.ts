@@ -153,6 +153,54 @@ export async function setNewsPublicationState(
   return json as NewsPublicationResult;
 }
 
+const DEFAULT_PUBLICATION_ERROR = 'Không thể cập nhật trạng thái xuất bản.';
+const MAX_QUALITY_ISSUE_LINES = 8;
+
+function compactErrorText(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function qualityIssueMessages(qualityGate: unknown): string[] {
+  if (!qualityGate || typeof qualityGate !== 'object') return [];
+  const issues = (qualityGate as { issues?: unknown }).issues;
+  if (!Array.isArray(issues)) return [];
+  const messages: string[] = [];
+  const seen = new Set<string>();
+  for (const issue of issues) {
+    const rawMessage = typeof issue === 'string'
+      ? issue
+      : issue && typeof issue === 'object'
+        ? (issue as { message?: unknown }).message
+        : '';
+    const message = compactErrorText(rawMessage);
+    if (!message || seen.has(message)) continue;
+    seen.add(message);
+    messages.push(message);
+  }
+  return messages;
+}
+
+/** Ghép quality_gate.issues để admin thấy đúng chỗ bài bị chặn, không chỉ câu chung. */
+export function formatNewsPublicationError(
+  error: unknown,
+  options?: { fallback?: string; maxIssues?: number },
+): string {
+  const fallback = compactErrorText(options?.fallback) || DEFAULT_PUBLICATION_ERROR;
+  const err = error && typeof error === 'object'
+    ? error as { message?: unknown; quality_gate?: unknown }
+    : null;
+  const headline = compactErrorText(err?.message) || fallback;
+  const issues = qualityIssueMessages(err?.quality_gate);
+  if (issues.length === 0) return headline;
+
+  const maxIssues = Math.max(1, options?.maxIssues ?? MAX_QUALITY_ISSUE_LINES);
+  const shown = issues.slice(0, maxIssues);
+  const remaining = issues.length - shown.length;
+  const lines = [headline, ...shown.map((message, index) => `${index + 1}. ${message}`)];
+  if (remaining > 0) lines.push(`… và ${remaining} mục nữa.`);
+  return lines.join('\n');
+}
+
 // Client writes contain editorial fields only; generated structured data remains server-owned.
 export type NewsWrite = Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views' | 'schema_markup' | 'content_version'>;
 

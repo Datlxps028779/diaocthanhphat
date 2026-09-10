@@ -13,7 +13,7 @@ vi.mock('@/lib/api/contentRevalidation', () => ({
   newsRevalidationSnapshot: vi.fn((article: unknown) => article),
 }));
 
-import { createNews, updateNews } from './news';
+import { createNews, formatNewsPublicationError, updateNews } from './news';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -79,5 +79,51 @@ describe('updateNews publication boundary', () => {
 
     const result = await updateNews('news-1', patch);
     expect(result.is_published).toBe(false);
+  });
+});
+
+describe('formatNewsPublicationError', () => {
+  it('ghép các lỗi cổng chất lượng để admin thấy đúng chỗ thiếu', () => {
+    const error = Object.assign(new Error('Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.'), {
+      code: 'QUALITY_GATE',
+      quality_gate: {
+        passed: false,
+        issues: [
+          { code: 'CONTENT_TOO_SHORT', field: 'content', message: 'Nội dung phải có ít nhất 900 từ; hiện có 120.' },
+          { code: 'H2_COUNT', field: 'content', message: 'Nội dung phải có ít nhất 4 H2 có chữ; hiện có 1.' },
+          { code: 'GEO_AREA_REQUIRED', field: 'geo_area', message: 'Bắt buộc có khu vực thật của bài viết.' },
+        ],
+      },
+    });
+
+    const formatted = formatNewsPublicationError(error);
+    expect(formatted).toContain('Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.');
+    expect(formatted).toContain('1. Nội dung phải có ít nhất 900 từ; hiện có 120.');
+    expect(formatted).toContain('2. Nội dung phải có ít nhất 4 H2 có chữ; hiện có 1.');
+    expect(formatted).toContain('3. Bắt buộc có khu vực thật của bài viết.');
+  });
+
+  it('cắt tối đa 8 lỗi và báo số còn lại', () => {
+    const issues = Array.from({ length: 10 }, (_, index) => ({
+      code: `ISSUE_${index}`,
+      field: 'x',
+      message: `Lỗi ${index + 1}`,
+    }));
+    const error = Object.assign(new Error('Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.'), {
+      quality_gate: { issues },
+    });
+    const formatted = formatNewsPublicationError(error);
+    expect(formatted).toContain('8. Lỗi 8');
+    expect(formatted).not.toContain('9. Lỗi 9');
+    expect(formatted).toContain('… và 2 mục nữa.');
+  });
+
+  it('giữ message gốc khi không có quality_gate', () => {
+    expect(formatNewsPublicationError(new Error('Bài viết đã thay đổi, vui lòng tải lại.')))
+      .toBe('Bài viết đã thay đổi, vui lòng tải lại.');
+  });
+
+  it('dùng fallback khi error rỗng', () => {
+    expect(formatNewsPublicationError(null)).toBe('Không thể cập nhật trạng thái xuất bản.');
   });
 });
