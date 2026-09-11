@@ -1,5 +1,12 @@
 # Documentation Changelog
 
+## 2026-09-11 — Batch A1 news publication boundary (production)
+
+- Recorded the owner-MFA news publication boundary as current production policy: public `is_published` changes only through `POST /api/admin/news/[id]/publish` → RPC `publish_news_article`. Editorial create/update always persist as drafts and no longer write `is_published` from the browser.
+- Production evidence: migration `20260909030000_news_publish_boundary.sql` is applied (`news.content_version` backfilled on 79 rows; `news_publication_events` exists). Vercel Production `NEWS_PUBLISH_BOUNDARY_MODE=enforce`.
+- Quality gate for draft→publish: at least 3 unique AIO focus-keyword phrases with no 3–6 cap (paragraph-length dumps over 90 characters are blocked), at least 2 relative internal links `href="/..."`, plus FAQ/citation floors. Admin lists every save/publish blocker in one alert, including duplicate slug.
+- 2026-09-11 runtime evidence: article `doanh-nghiep-bat-dong-san-xoay-dong-tien-khi-suc-mua-suy-yeu` republished successfully after enforce. P8 remains `PARTIAL` (Search Console/indexation, structured entity content, corpus-wide internal links, and image/semantic HTML cleanup are still open). P10 draft-first is AI Listing, not this news batch.
+
 ## 2026-08-17 — Discovery-first browsing and retention UX
 
 - Reorganized public discovery around real user intent rather than adding new conversion CTA work: homepage now offers a local-only “Tiếp tục xem” rail for returning visitors, configured property/area/news sections collapse when no real content is available, and personalized recommendations remain progressive and hidden until sufficient behavior signals exist.
