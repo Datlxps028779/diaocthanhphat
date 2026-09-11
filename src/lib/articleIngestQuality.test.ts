@@ -137,6 +137,16 @@ describe('evaluateArticleIngestQuality', () => {
     ]));
   });
 
+  it('giải thích rõ khi từ khóa đủ số lượng nhưng bị trùng', () => {
+    const result = evaluateArticleIngestQuality(validRow({
+      focus_keywords: 'giá nhà Dĩ An, bất động sản Dĩ An, giá nhà Dĩ An',
+    }));
+    const issue = result.issues.find(item => item.code === 'KEYWORD_COUNT');
+
+    expect(issue?.message).toContain('Có 3 cụm từ khóa nhưng chỉ 2 cụm không trùng');
+    expect(issue?.message).toContain('đang lặp 1 cụm');
+  });
+
   it('cho phép cụm từ khóa AIO nhiều hơn 6, chặn đoạn văn dán vào ô từ khóa', () => {
     const aioKeywords = [
       'Thị trường',

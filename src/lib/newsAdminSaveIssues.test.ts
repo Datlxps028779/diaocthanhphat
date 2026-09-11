@@ -4,6 +4,7 @@ import {
   collectNewsRepublishReadiness,
   findNewsSlugConflict,
   formatNewsIssueList,
+  newsIssueEditTarget,
 } from './newsAdminSaveIssues';
 import type { NewsArticle } from './supabase';
 
@@ -122,6 +123,16 @@ describe('collectNewsAdminSaveIssues', () => {
     expect(text).toContain('Cần 4–6 cặp FAQ');
     expect(text).toContain('Cần 2–6 nguồn tham khảo');
     expect(result.blocking.length).toBeGreaterThan(8);
+  });
+});
+
+describe('newsIssueEditTarget', () => {
+  it('maps blockers to the nearest editable field', () => {
+    expect(newsIssueEditTarget('Cần 4–6 cặp FAQ; hiện có 0.')).toBe('faq');
+    expect(newsIssueEditTarget('Có 48 cụm từ khóa nhưng chỉ 26 cụm không trùng; đang lặp 22 cụm.')).toBe('focus_keywords');
+    expect(newsIssueEditTarget('Nội dung phải có ít nhất 4 H2 có chữ; hiện có 0.')).toBe('content');
+    expect(newsIssueEditTarget('Nguồn 1 phải có tiêu đề và URL HTTP(S) hợp lệ.')).toBe('citations');
+    expect(newsIssueEditTarget('Thông báo không xác định')).toBeNull();
   });
 });
 

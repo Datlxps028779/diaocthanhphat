@@ -1,7 +1,7 @@
 # Batch A2 — News corpus quality readiness
 
 **Ngày:** 2026-09-11  
-**Trạng thái:** local DONE 2026-09-11. Chưa push.
+**Trạng thái:** A2 baseline đã được manual redeploy và hậu kiểm production 2026-09-11. Follow-up actionable blocker đang chờ push production.
 **Phụ thuộc:** Batch A1 DONE (boundary enforce + quality gate + bài mẫu đăng lại thành công).  
 **Không làm:** Search Console/GA4 (DEFERRED), sitemap shard, đổi `NEWS_PUBLISH_BOUNDARY_MODE`, đổi rule từ khóa AIO, tự rewrite nội dung bài.
 
@@ -60,3 +60,27 @@ Không tự chèn link, không tự publish, không đụng bài đang live.
 - [x] Admin hiện đủ blocker một lần khi xem bài đã đăng (không cần ẩn bài mới thấy).
 - [x] Không đổi gate, không đổi enforce, không mutate content.
 - [x] Verify-gate + graphify nếu có sửa `src/` / `app/`.
+
+
+## Follow-up — blocker phải dễ sửa (2026-09-11)
+
+Phát hiện khi hậu kiểm production: quality gate chặn đúng các cụm từ khóa bị trùng,
+nhưng câu báo lỗi cũ chỉ hiển thị tổng số cụm nên người dùng khó hiểu vì sao `48 > 3`
+vẫn bị chặn. Follow-up giữ nguyên rule, chỉ làm rõ chẩn đoán và rút ngắn đường sửa.
+
+- [x] Tách message thiếu số lượng và message bị trùng keyword.
+- [x] Hiển thị tổng số cụm, số cụm không trùng và số cụm bị lặp.
+- [x] Thêm `Sửa mục này` trong danh sách blocker để focus/scroll tới field tương ứng.
+- [x] Gắn target cho title, slug, excerpt, image, GEO, FAQ, citations, content và SEO fields.
+- [x] Test quality message và mapping blocker → field.
+- [x] Full Vitest, typecheck, build, diff check, graphify và verify receipt.
+- [ ] Commit follow-up scoped.
+- [ ] Push/deploy đúng production target.
+- [ ] Hậu kiểm Chrome production: message duplicate keyword và nút `Sửa mục này`.
+
+## Công việc kế tiếp sau follow-up
+
+1. Không rewrite hàng loạt 77 bài live; chỉ dùng blocker để owner xử lý theo ưu tiên.
+2. Sau khi production pass, đo lại nhóm lỗi theo code và chọn nhóm có tác động lớn nhất.
+3. Chỉ sau đó mới mở Horizon 4 TODO #3: canonical, internal links, sitemap và JSON-LD;
+   không làm sitemap shard khi inventory vẫn chỉ 172 URL.

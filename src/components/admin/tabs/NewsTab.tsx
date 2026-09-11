@@ -17,7 +17,7 @@ import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
   newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState, formatNewsPublicationError,
 } from '../../../lib/api';
-import { collectNewsAdminSaveIssues, collectNewsRepublishReadiness, formatNewsIssueList } from '../../../lib/newsAdminSaveIssues';
+import { collectNewsAdminSaveIssues, collectNewsRepublishReadiness, formatNewsIssueList, newsIssueEditTarget } from '../../../lib/newsAdminSaveIssues';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata } from '../../../lib/seo';
@@ -381,6 +381,18 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     currentId: article?.id ?? null,
   });
 
+  const focusNewsIssue = (message: string) => {
+    const target = newsIssueEditTarget(message);
+    if (!target || typeof document === 'undefined') return;
+    const field = document.querySelector<HTMLElement>(`[data-news-field=\"${target}\"]`);
+    if (!field) return;
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const focusable = field.matches('input, textarea, select, [contenteditable=\"true\"]')
+      ? field
+      : field.querySelector<HTMLElement>('input, textarea, select, [contenteditable=\"true\"]');
+    focusable?.focus();
+  };
+
   useEffect(() => {
     const temp = formToNewsArticle(form, article, nowRef.current);
     const meta = buildNewsMetadata(temp);
@@ -504,13 +516,13 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           {error && <div className="max-h-72 overflow-y-auto whitespace-pre-line rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề *</label>
-            <input value={form.title} onChange={e => set('title', e.target.value)}
+            <input data-news-field="title" value={form.title} onChange={e => set('title', e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-700">Slug URL</label>
-              <input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="Để trống sẽ tự sinh"
+              <input data-news-field="slug" value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="Để trống sẽ tự sinh"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               <PublicUrlPreview path={publicPath} />
             </div>
@@ -525,10 +537,10 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-700">Tác giả</label>
-              <input value={form.author} onChange={e => set('author', e.target.value)}
+              <input data-news-field="author" value={form.author} onChange={e => set('author', e.target.value)}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
             </div>
-            <div>
+            <div data-news-field="image_url">
               <label className="mb-1 block text-xs font-semibold text-gray-700">Ảnh đại diện bài viết</label>
               <ImageUrlInput value={form.image_url} onChange={url => set('image_url', url)} placeholder="Tải ảnh lên hoặc chọn từ thư viện" folder="news" isAdmin />
             </div>
@@ -584,7 +596,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
                 <Sparkles className="h-3.5 w-3.5" /> Tự sinh từ nội dung
               </button>
             </div>
-            <textarea value={form.excerpt} onChange={e => set('excerpt', e.target.value)} rows={3}
+            <textarea data-news-field="excerpt" value={form.excerpt} onChange={e => set('excerpt', e.target.value)} rows={3}
               className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
           </div>
 
@@ -602,17 +614,17 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Khu vực mục tiêu *</label>
-                <input value={form.geo_area} onChange={e => set('geo_area', e.target.value)} placeholder="VD: Dĩ An, Bình Dương"
+                <input data-news-field="geo_area" value={form.geo_area} onChange={e => set('geo_area', e.target.value)} placeholder="VD: Dĩ An, Bình Dương"
                   className="w-full rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Entity/chủ thể chính *</label>
-                <input value={form.geo_entity} onChange={e => set('geo_entity', e.target.value)} placeholder="VD: tuyến Vành đai 3, khu công nghiệp VSIP"
+                <input data-news-field="geo_entity" value={form.geo_entity} onChange={e => set('geo_entity', e.target.value)} placeholder="VD: tuyến Vành đai 3, khu công nghiệp VSIP"
                   className="w-full rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Ghi chú GEO/AEO</label>
-                <textarea value={form.geo_notes} onChange={e => set('geo_notes', e.target.value)} rows={2} placeholder="Các địa danh, hạ tầng, pháp lý, nguồn dữ liệu thật cần được AI hiểu đúng..."
+                <textarea data-news-field="geo_notes" value={form.geo_notes} onChange={e => set('geo_notes', e.target.value)} rows={2} placeholder="Các địa danh, hạ tầng, pháp lý, nguồn dữ liệu thật cần được AI hiểu đúng..."
                   className="w-full resize-none rounded-lg border border-blue-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
             </div>
@@ -628,7 +640,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             onChange={location => setForm(formState => ({ ...formState, ...location }))}
           />
 
-          <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+          <div data-news-field="faq" className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-violet-700">FAQ (AEO / AI search)</p>
@@ -661,7 +673,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             </div>
           </div>
 
-          <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
+          <div data-news-field="citations" className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
             <div className="mb-3">
               <p className="text-xs font-bold uppercase tracking-wide text-sky-700">Nguồn tham khảo (E-E-A-T / GEO)</p>
               <p className="mt-1 text-[11px] text-sky-700/80">Nguồn thật, uy tín (cổng thông tin tỉnh/huyện, quy hoạch, báo lớn). Hiển thị công khai cuối bài. Chỉ nguồn có URL http(s) hợp lệ mới được lưu.</p>
@@ -688,7 +700,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
             </div>
           </div>
 
-          <div>
+          <div data-news-field="content">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
               <label className="block text-xs font-semibold text-gray-700">Nội dung đầy đủ</label>
               <div className="flex flex-wrap items-center gap-2">
@@ -833,11 +845,30 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
               </p>
             )}
             {republish.blocking.length > 0 ? (
-              <ol className="list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-red-700">
-                {republish.blocking.map((message, index) => (
-                  <li key={`block-${index}`}>{message}</li>
-                ))}
-              </ol>
+              <>
+                <p className="mb-2 text-[11px] text-red-700/80">Bấm <strong>Sửa mục này</strong> để nhảy thẳng tới trường cần chỉnh.</p>
+                <ol className="list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-red-700">
+                  {republish.blocking.map((message, index) => {
+                    const target = newsIssueEditTarget(message);
+                    return (
+                      <li key={`block-${index}`}>
+                        <div className="flex items-start gap-2">
+                          <span className="min-w-0 flex-1">{message}</span>
+                          {target && (
+                            <button
+                              type="button"
+                              onClick={() => focusNewsIssue(message)}
+                              className="flex-shrink-0 rounded-md border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-700 hover:bg-red-50"
+                            >
+                              Sửa mục này
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </>
             ) : (
               <p className="text-xs leading-relaxed text-emerald-700">Không còn mục chặn đăng công khai.</p>
             )}

@@ -135,11 +135,18 @@ export function evaluateArticleIngestQuality(
   if (metaDescription.length < 120 || metaDescription.length > 160) {
     issues.push(item('META_DESCRIPTION_LENGTH', 'meta_description', `Meta description phải dài 120–160 ký tự; hiện có ${metaDescription.length}.`));
   }
-  if (keywords.length < MIN_FOCUS_KEYWORDS || uniqueCount(keywords) !== keywords.length) {
+  const uniqueKeywordCount = uniqueCount(keywords);
+  if (keywords.length < MIN_FOCUS_KEYWORDS) {
     issues.push(item(
       'KEYWORD_COUNT',
       'focus_keywords',
       `Cần tối thiểu ${MIN_FOCUS_KEYWORDS} cụm từ khóa không trùng (chủ đề, entity, câu hỏi AIO); hiện có ${keywords.length}.`,
+    ));
+  } else if (uniqueKeywordCount !== keywords.length) {
+    issues.push(item(
+      'KEYWORD_COUNT',
+      'focus_keywords',
+      `Có ${keywords.length} cụm từ khóa nhưng chỉ ${uniqueKeywordCount} cụm không trùng; đang lặp ${keywords.length - uniqueKeywordCount} cụm. Hãy giữ tối thiểu ${MIN_FOCUS_KEYWORDS} cụm không trùng.`,
     ));
   }
   keywords.forEach((keyword, index) => {

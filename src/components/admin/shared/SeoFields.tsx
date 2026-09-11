@@ -40,6 +40,7 @@ export function SeoFields({
       <div>
         <label className="mb-1 block text-xs font-semibold text-gray-700">Tiêu đề SEO</label>
         <input
+          data-news-field="meta_title"
           value={value.meta_title}
           onChange={e => set('meta_title', e.target.value)}
           maxLength={70}
@@ -55,6 +56,7 @@ export function SeoFields({
       <div>
         <label className="mb-1 block text-xs font-semibold text-gray-700">Meta description</label>
         <textarea
+          data-news-field="meta_description"
           value={value.meta_description}
           onChange={e => set('meta_description', e.target.value)}
           rows={2}
@@ -71,6 +73,7 @@ export function SeoFields({
       <div>
         <label className="mb-1 block text-xs font-semibold text-gray-700">Focus keywords</label>
         <input
+          data-news-field="focus_keywords"
           value={value.focus_keywords}
           onChange={e => set('focus_keywords', e.target.value)}
           className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"

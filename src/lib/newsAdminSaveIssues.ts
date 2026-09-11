@@ -35,6 +35,48 @@ function compact(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 }
 
+export type NewsIssueEditTarget =
+  | 'title'
+  | 'slug'
+  | 'excerpt'
+  | 'author'
+  | 'image_url'
+  | 'geo_area'
+  | 'geo_entity'
+  | 'geo_notes'
+  | 'faq'
+  | 'citations'
+  | 'content'
+  | 'meta_title'
+  | 'meta_description'
+  | 'focus_keywords';
+
+/**
+ * Maps a user-facing blocker to the nearest editable field. The quality gate
+ * remains code/message-driven; this helper only improves the admin correction
+ * path and safely returns null for messages without a known target.
+ */
+export function newsIssueEditTarget(message: string): NewsIssueEditTarget | null {
+  const text = compact(message).toLocaleLowerCase('vi');
+
+  if (/slug|url bài viết/.test(text)) return 'slug';
+  if (/tiêu đề phải|tiêu đề bài viết/.test(text)) return 'title';
+  if (/tóm tắt/.test(text)) return 'excerpt';
+  if (/ảnh đại diện/.test(text)) return 'image_url';
+  if (/meta title|tiêu đề seo/.test(text)) return 'meta_title';
+  if (/meta description/.test(text)) return 'meta_description';
+  if (/từ khóa|keyword/.test(text)) return 'focus_keywords';
+  if (/khu vực thật/.test(text)) return 'geo_area';
+  if (/entity|chủ thể chính/.test(text)) return 'geo_entity';
+  if (/ngữ cảnh địa phương|geo\/aeo/.test(text)) return 'geo_notes';
+  if (/faq trong nội dung|h2|nội dung|liên kết nội bộ|ảnh trong nội dung|h1/.test(text)) return 'content';
+  if (/faq|câu hỏi/.test(text)) return 'faq';
+  if (/nguồn tham khảo|url nguồn|url http|nguồn \d+|citation/.test(text)) return 'citations';
+  if (/tác giả/.test(text)) return 'author';
+
+  return null;
+}
+
 function addUnique(issues: string[], seen: Set<string>, message: string) {
   const text = compact(message);
   if (!text || seen.has(text)) return;
