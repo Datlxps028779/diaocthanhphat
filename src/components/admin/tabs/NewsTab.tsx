@@ -17,7 +17,7 @@ import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
   newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState, formatNewsPublicationError,
 } from '../../../lib/api';
-import { collectNewsAdminSaveIssues, formatNewsIssueList } from '../../../lib/newsAdminSaveIssues';
+import { collectNewsAdminSaveIssues, collectNewsRepublishReadiness, formatNewsIssueList } from '../../../lib/newsAdminSaveIssues';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata } from '../../../lib/seo';
@@ -30,7 +30,7 @@ import { autofillNewsFaq, autofillNewsGeo, autofillNewsExcerpt } from '../../../
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { isHtmlContent, markdownToHtml } from '../../../lib/markdown';
-import { evaluateNewsReadiness, countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
+import { countInternalLinks, countImagesWithoutAlt, plainTextFromContent, countWords } from '../../../lib/contentReadiness';
 import { sanitizeArticleHtml } from '../../../lib/sanitizeHtml';
 import { evaluateNewsEditorialQuality } from '../../../lib/newsEditorialQuality';
 import { clampSeoTitle } from '../../../lib/seoText';
@@ -371,24 +371,15 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
 
   const resolvedSlug = form.slug.trim() || newsSlug(form.title);
   const publicPath = resolvedSlug ? `/tin-tuc/${resolvedSlug}` : '';
-  const readiness = evaluateNewsReadiness({
-    title: form.title,
-    slug: resolvedSlug,
-    excerpt: form.excerpt,
-    content: form.content,
-    imageUrl: form.image_url,
-    metaTitle: form.meta_title,
-    metaDescription: form.meta_description,
-    focusKeywords: form.focus_keywords,
-    geoArea: form.geo_area,
-    geoEntity: form.geo_entity,
-    relatedCount: form.related_ids.length,
-  });
   const wordCount = countWords(plainTextFromContent(form.content));
   const internalLinkCount = countInternalLinks(form.content);
   const missingAltCount = countImagesWithoutAlt(form.content);
-  const readinessDisplay = [...readiness.errors, ...readiness.warnings, ...readiness.passes].slice(0, 10);
-  const editorialQuality = evaluateNewsEditorialQuality(formToNewsArticle(form, article, nowRef.current));
+  const formSnapshot = formToNewsArticle(form, article, nowRef.current);
+  const republish = collectNewsRepublishReadiness({
+    article: formSnapshot,
+    existingArticles: allArticles,
+    currentId: article?.id ?? null,
+  });
 
   useEffect(() => {
     const temp = formToNewsArticle(form, article, nowRef.current);
@@ -493,7 +484,11 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
       <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white px-6 py-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{article ? 'Sửa bài viết' : 'Viết bài mới'}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">Tối ưu metadata và trạng thái index.</p>
+          <p className={`mt-0.5 text-xs ${republish.ready ? 'text-emerald-700' : 'text-red-600'}`}>
+            Cổng đăng SEO–GEO–AIO: {republish.ready
+              ? (article?.is_published ? 'Đăng lại được' : 'Đăng được')
+              : `${republish.blocking.length} mục đang chặn`}
+          </p>
         </div>
         <button onClick={onCancel}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
       </div>
@@ -817,45 +812,35 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Trạng thái public-ready</p>
-                <p className="text-sm font-black text-gray-900">{readiness.status === 'ready' ? 'Đủ chuẩn để đăng' : readiness.status === 'needs-work' ? 'Còn điểm cần chỉnh' : 'Đang bị chặn'}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Cổng đăng SEO–GEO–AIO</p>
+                <p className="text-sm font-black text-gray-900">{republish.ready ? 'Đăng lại được' : `${republish.blocking.length} mục đang chặn`}</p>
               </div>
-              <div className={`rounded-full px-3 py-1 text-xs font-bold ${readiness.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : readiness.status === 'needs-work' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
-                {readiness.score}/100
+              <div className={`rounded-full px-3 py-1 text-xs font-bold ${republish.ready ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {republish.ready ? 'Pass' : 'Chặn'}
               </div>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-              <div className={`h-full rounded-full ${readiness.status === 'ready' ? 'bg-emerald-500' : readiness.status === 'needs-work' ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${readiness.score}%` }} />
-            </div>
-            <div className="mt-3 space-y-2">
-              {readinessDisplay.map(item => (
-                <div key={item.key} className={`rounded-lg border px-3 py-2 text-xs ${item.level === 'error' ? 'border-red-100 bg-red-50 text-red-700' : item.level === 'warning' ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700'}`}>
-                  <div className="font-bold">{item.label}</div>
-                  <div className="mt-0.5 leading-relaxed">{item.message}</div>
-                </div>
-              ))}
-            </div>
-            {readiness.errors.length > 0 && (
-              <p className="mt-3 text-[11px] font-semibold text-red-600">{readiness.errors.length} lỗi bắt buộc phải sửa trước khi đăng công khai.</p>
+            {article?.is_published && (
+              <p className="mb-3 text-[11px] leading-relaxed text-gray-500">
+                {republish.ready
+                  ? 'Bài đang live và đủ điều kiện nếu ẩn rồi đăng lại.'
+                  : 'Bài đang live. Lưu biên tập không bị cổng chặn. Ẩn rồi đăng lại thì phải sửa hết mục dưới.'}
+              </p>
             )}
-            <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${editorialQuality.canPublish ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
-              <div className="font-bold">Nguồn tham khảo: {editorialQuality.validCitationCount}/2 hợp lệ</div>
-              {editorialQuality.canPublish ? (
-                <p className="mt-0.5 leading-relaxed">Đủ nguồn để biên tập viên đối chiếu trước khi đăng.</p>
-              ) : (
-                <ul className="mt-1 list-decimal space-y-1 pl-4 leading-relaxed">
-                  {editorialQuality.citationIssues.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            {editorialQuality.faqIssues.length > 0 && (
-              <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                <div className="font-bold">FAQ cần bổ sung</div>
-                <ul className="mt-1 list-decimal space-y-1 pl-4 leading-relaxed">
-                  {editorialQuality.faqIssues.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+            {republish.blocking.length > 0 ? (
+              <ol className="list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-red-700">
+                {republish.blocking.map((message, index) => (
+                  <li key={`block-${index}`}>{message}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-xs leading-relaxed text-emerald-700">Không còn mục chặn đăng công khai.</p>
+            )}
+            {republish.warnings.length > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div className="font-bold">Thiếu sót nên sửa (không chặn)</div>
+                <ul className="mt-1 list-disc space-y-1 pl-4 leading-relaxed">
+                  {republish.warnings.map((message, index) => (
+                    <li key={`warn-${index}`}>{message}</li>
                   ))}
                 </ul>
               </div>
@@ -909,7 +894,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'source-review' | 'faq-review'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'source-review' | 'faq-review' | 'republish-review'>('all');
   // Danh mục động từ DB (news_categories). Fallback danh sách chuẩn khi chưa nạp/lỗi.
   const [categories, setCategories] = useState<string[]>(CATEGORIES_FALLBACK);
   // Modal "Tạo bài bằng AI"
@@ -965,22 +950,30 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
     [articles],
   );
   const editorialFor = (article: NewsArticle) => editorialById.get(article.id) ?? evaluateNewsEditorialQuality(article);
+  const republishById = useMemo(() => {
+    const existing = articles.map(item => ({ id: item.id, slug: item.slug, title: item.title }));
+    return new Map(articles.map(item => [item.id, collectNewsRepublishReadiness({
+      article: item,
+      existingArticles: existing,
+      currentId: item.id,
+    })]));
+  }, [articles]);
+  const republishFor = (article: NewsArticle) => republishById.get(article.id)
+    ?? collectNewsRepublishReadiness({ article, existingArticles: articles, currentId: article.id });
   const publishedCount = articles.filter(a => a.is_published).length;
   const draftCount = articles.length - publishedCount;
   const sourceReviewCount = articles.filter(a => a.is_published && editorialFor(a).citationStatus === 'needs-review').length;
   const faqReviewCount = articles.filter(a => a.is_published && editorialFor(a).faqStatus === 'needs-review').length;
+  const republishReviewCount = articles.filter(a => a.is_published && !republishFor(a).ready).length;
   const filtered = articles
-    .filter(a =>
-      statusFilter === 'all'
-        ? true
-        : statusFilter === 'published'
-          ? a.is_published
-          : statusFilter === 'draft'
-            ? !a.is_published
-            : statusFilter === 'source-review'
-              ? a.is_published && editorialFor(a).citationStatus === 'needs-review'
-              : a.is_published && editorialFor(a).faqStatus === 'needs-review',
-    )
+    .filter(a => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'published') return a.is_published;
+      if (statusFilter === 'draft') return !a.is_published;
+      if (statusFilter === 'source-review') return a.is_published && editorialFor(a).citationStatus === 'needs-review';
+      if (statusFilter === 'faq-review') return a.is_published && editorialFor(a).faqStatus === 'needs-review';
+      return a.is_published && !republishFor(a).ready;
+    })
     .sort(compareNewsByPublishedAt);
   const allIds = filtered.map(a => a.id);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
@@ -1099,6 +1092,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
           { key: 'draft', label: 'Nháp', count: draftCount },
           { key: 'source-review', label: 'Thiếu nguồn', count: sourceReviewCount },
           { key: 'faq-review', label: 'Rà soát FAQ', count: faqReviewCount },
+          { key: 'republish-review', label: 'Chưa sẵn sàng đăng lại', count: republishReviewCount },
         ] as const).map(f => (
           <button key={f.key} onClick={() => { setStatusFilter(f.key); clearSelection(); }}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium border transition-colors ${
@@ -1164,6 +1158,18 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                               </>
                             );
                           })()}
+                          {a.is_published && (() => {
+                            const republish = republishFor(a);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setEditing(a)}
+                                className={`rounded px-1.5 py-0.5 text-[10px] ${republish.ready ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
+                              >
+                                {republish.ready ? 'Sẵn sàng đăng lại' : `${republish.blocking.length} lỗi đăng lại`}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1219,6 +1225,7 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
                 : statusFilter === 'published' ? 'Không có bài đã đăng nào'
                 : statusFilter === 'source-review' ? 'Không có bài nào thiếu nguồn'
                 : statusFilter === 'faq-review' ? 'Không có bài nào cần rà soát FAQ'
+                : statusFilter === 'republish-review' ? 'Mọi bài đã đăng đều sẵn sàng đăng lại'
                 : 'Chưa có bài viết nào'}
             </div>
           )}

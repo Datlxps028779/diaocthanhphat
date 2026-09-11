@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectNewsAdminSaveIssues,
+  collectNewsRepublishReadiness,
   findNewsSlugConflict,
   formatNewsIssueList,
 } from './newsAdminSaveIssues';
@@ -137,3 +138,74 @@ describe('formatNewsIssueList', () => {
     expect(formatted).toContain('- Bài hơi dài');
   });
 });
+
+describe('collectNewsRepublishReadiness', () => {
+  it('bài thiếu H2/link/FAQ chưa sẵn sàng đăng lại dù đang published', () => {
+    const result = collectNewsRepublishReadiness({
+      article: article({
+        id: 'live-1',
+        title: 'Tiêu đề bài viết đã đăng đủ dài cho SEO',
+        slug: 'bai-live',
+        is_published: true,
+        content: '<p>Đoạn mở đầu này đủ dài để mô tả trực tiếp vấn đề nhưng toàn bài vẫn còn quá ngắn.</p>',
+      }),
+      existingArticles: [],
+      currentId: 'live-1',
+    });
+    expect(result.ready).toBe(false);
+    const joined = result.blocking.join('\n');
+    expect(joined).toContain('Nội dung phải có ít nhất 4 H2');
+    expect(joined).toContain('Nội dung phải có ít nhất 2 liên kết nội bộ');
+    expect(joined).toContain('Cần 4–6 cặp FAQ');
+    expect(result.blocking.length).toBeGreaterThan(3);
+  });
+
+  it('bài đủ cổng thì ready=true', () => {
+    const words = Array.from({ length: 940 }, (_, index) => `nội-dung-${index}`).join(' ');
+    const content = [
+      '<p><strong>Trả lời ngắn:</strong> Dữ liệu trong bài được tổng hợp từ nguồn đã kiểm chứng để người đọc hiểu rõ bối cảnh và giới hạn trước khi đưa ra quyết định.</p>',
+      '<h2>Bối cảnh thị trường tại khu vực</h2>',
+      `<p>${words}</p>`,
+      '<h2>Dữ liệu và phạm vi tổng hợp</h2>',
+      '<p>Xem thêm <a href="/du-lieu-gia">dữ liệu giá bất động sản</a> và cách hệ thống tổng hợp mẫu.</p>',
+      '<h2>Những yếu tố người mua cần kiểm tra</h2>',
+      '<ul><li>Kiểm tra pháp lý và hiện trạng.</li><li>Đối chiếu thông tin quy hoạch.</li></ul>',
+      '<p>Tham khảo <a href="/khu-vuc/di-an">thông tin khu vực Dĩ An</a> trước khi khảo sát thực tế.</p>',
+      '<h2>Kết luận và bước tiếp theo</h2>',
+      '<p>Người đọc có thể xem <a href="/tin-tuc">các bài phân tích liên quan</a> và xác minh lại nguồn trước khi quyết định.</p>',
+    ].join('');
+    const result = collectNewsRepublishReadiness({
+      article: article({
+        id: 'live-ok',
+        title: 'Giá nhà Dĩ An năm 2026: dữ liệu và lưu ý khi tham khảo',
+        slug: 'gia-nha-di-an-2026',
+        excerpt: 'Dữ liệu giá nhà Dĩ An cần được đọc cùng số lượng mẫu, thời điểm cập nhật và tình trạng pháp lý trước khi dùng để so sánh hoặc ra quyết định.',
+        content,
+        image_url: 'https://images.example.com/news/di-an.jpg',
+        author: 'Ban biên tập',
+        meta_title: 'Giá nhà Dĩ An 2026: dữ liệu và lưu ý cần biết',
+        meta_description: 'Tổng hợp dữ liệu giá nhà Dĩ An năm 2026, phạm vi mẫu, nguồn tham khảo và các lưu ý pháp lý cần kiểm tra trước khi ra quyết định.',
+        focus_keywords: 'giá nhà Dĩ An, bất động sản Dĩ An, kinh nghiệm mua nhà',
+        geo_area: 'Dĩ An, Bình Dương',
+        geo_entity: 'thị trường nhà ở Dĩ An',
+        geo_notes: 'Bài chỉ sử dụng dữ liệu nguồn có ngày cập nhật và nêu rõ giá đăng tin không phải giá giao dịch thực tế.',
+        faq: [
+          { question: 'Giá trong bài có phải giá giao dịch thực tế không?', answer: 'Không. Bài viết phân biệt rõ giá đăng tin và giá giao dịch, đồng thời nêu phạm vi dữ liệu để người đọc đối chiếu.' },
+          { question: 'Dữ liệu được cập nhật vào thời điểm nào?', answer: 'Thời điểm cập nhật được ghi rõ trong phần nguồn và phạm vi dữ liệu của bài viết để tránh hiểu sai bối cảnh.' },
+          { question: 'Người mua cần kiểm tra thông tin gì trước tiên?', answer: 'Người mua nên kiểm tra pháp lý, quy hoạch, hiện trạng tài sản và so sánh nhiều nguồn trước khi đưa ra quyết định.' },
+          { question: 'Có nên dùng một mức giá để đại diện toàn khu vực không?', answer: 'Không nên. Mức giá còn phụ thuộc vị trí, loại tài sản, diện tích, pháp lý và thời điểm ghi nhận của từng mẫu.' },
+        ],
+        citations: [
+          { title: 'Cổng thông tin dữ liệu địa phương', url: 'https://example.gov.vn/du-lieu' },
+          { title: 'Dữ liệu tin đăng Chọn Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
+        ],
+        is_published: true,
+      }),
+      existingArticles: [],
+      currentId: 'live-ok',
+    });
+    expect(result.ready).toBe(true);
+    expect(result.blocking).toEqual([]);
+  });
+});
+

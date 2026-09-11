@@ -133,6 +133,21 @@ export function collectNewsAdminSaveIssues(input: {
   return { blocking, warnings };
 }
 
+/** Cùng rule với POST publish. Dùng để hiện sẵn sàng đăng lại, không mutate bài live. */
+export function collectNewsRepublishReadiness(input: {
+  article: NewsSaveIssueArticle;
+  existingArticles: NewsSlugRecord[];
+  currentId?: string | null;
+}): { ready: boolean; blocking: string[]; warnings: string[] } {
+  const { blocking, warnings } = collectNewsAdminSaveIssues({
+    article: input.article,
+    existingArticles: input.existingArticles,
+    currentId: input.currentId,
+    publish: true,
+  });
+  return { ready: blocking.length === 0, blocking, warnings };
+}
+
 export function formatNewsIssueList(
   headline: string,
   issues: string[],

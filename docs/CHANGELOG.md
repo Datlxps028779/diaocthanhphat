@@ -1,5 +1,12 @@
 # Documentation Changelog
 
+## 2026-09-11 — Batch A2 news corpus republish readiness
+
+- Added Admin filter “Chưa sẵn sàng đăng lại”, per-article badges, and an editor gate list that evaluates published news with the same A1 quality rules (`collectNewsRepublishReadiness`). Opening a live article shows every blocker once; saving editorial updates on a published article remains unblocked.
+- Did not change the publication gate, `NEWS_PUBLISH_BOUNDARY_MODE`, or mutate live content.
+- Production read-only `supabase/manual_a2_news_quality_corpus_dry_run.sql` (user-run): 80 news rows (79 published, 1 draft), all with `content_version`; 4 publication events from the A1 sample loop; news freshness jobs 70/70 succeeded; structured location 18/79 `area_id`, 0 district/neighborhood. SQL proxy: 38 published articles with fewer than 2 relative `href="/..."` in `news.content`, 48 citation counts outside 2–6, 40 FAQ counts outside 4–6, 9 with fewer than 3 keywords. Postgres `H2_COUNT` is not trusted (`\b` is backspace in POSIX regex).
+- Chrome local 2026-09-11: `/quantrihethong/news` after owner MFA showed filter “Chưa sẵn sàng đăng lại 77”. P8 remains `PARTIAL`.
+
 ## 2026-09-11 — Batch A1 news publication boundary (production)
 
 - Recorded the owner-MFA news publication boundary as current production policy: public `is_published` changes only through `POST /api/admin/news/[id]/publish` → RPC `publish_news_article`. Editorial create/update always persist as drafts and no longer write `is_published` from the browser.
