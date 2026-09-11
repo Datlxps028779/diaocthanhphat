@@ -5,7 +5,7 @@
 -- Approximates src/lib/articleIngestQuality.ts + countInternalLinks()
 -- (href="/..." in news.content). Not a 1:1 port of every HTML edge case.
 -- Postgres POSIX: do NOT use \b (that is backspace, not a word boundary).
--- H2_COUNT from this script is only a tag count of '<h2' / '<H2', not the TS gate.
+-- H2_COUNT from this script is only a tag count, not the TS gate; it is informational only.
 -- =============================================================================
 
 BEGIN TRANSACTION READ ONLY;
@@ -43,10 +43,10 @@ WITH news_metrics AS (
     ), 0) AS content_absolute_site_hrefs,
     coalesce((
       SELECT count(*)
-      FROM regexp_matches(coalesce(n.content, ''), '<h2\b', 'gi')
+      FROM regexp_matches(coalesce(n.content, ''), '<h2[[:space:]>]', 'gi')
     ), 0) AS h2_count,
     coalesce(array_length(regexp_split_to_array(
-      btrim(regexp_replace(coalesce(n.content, ''), '<[^>]+>', ' ', 'g')),
+      nullif(btrim(regexp_replace(coalesce(n.content, ''), '<[^>]+>', ' ', 'g')), ''),
       '\s+'
     ), 1), 0) AS approx_word_count,
     coalesce(array_length(ARRAY(
@@ -63,7 +63,7 @@ flagged AS (
       CASE WHEN title_len < 20 OR title_len > 180 THEN 'TITLE_LENGTH' END,
       CASE WHEN excerpt_len < 80 OR excerpt_len > 300 THEN 'EXCERPT_LENGTH' END,
       CASE WHEN approx_word_count < 900 THEN 'CONTENT_TOO_SHORT' END,
-      CASE WHEN h2_count < 4 THEN 'H2_COUNT' END,
+      -- H2_COUNT is informational only: the TS gate requires non-empty, unique H2 text.
       CASE WHEN image_url_len = 0 THEN 'FEATURED_IMAGE_REQUIRED' END,
       CASE WHEN meta_title_len < 30 OR meta_title_len > 65 THEN 'META_TITLE_LENGTH' END,
       CASE WHEN meta_description_len < 120 OR meta_description_len > 160 THEN 'META_DESCRIPTION_LENGTH' END,

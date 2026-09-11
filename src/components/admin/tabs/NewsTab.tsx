@@ -405,6 +405,12 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
   };
 
   const handleSave = async (forceDraft = false) => {
+    if (forceDraft && article?.is_published && typeof window !== 'undefined') {
+      const confirmed = window.confirm(
+        'Bài viết đang công khai. Lưu nháp sẽ ẩn bài khỏi website và cần đạt lại toàn bộ cổng SEO–GEO–AIO trước khi đăng lại. Tiếp tục?',
+      );
+      if (!confirmed) return;
+    }
     const requestingPublish = !forceDraft && form.is_published;
     // Cổng chất lượng chỉ chặn khi chuyển nháp → công khai. Bài đã đăng vẫn lưu được phần biên tập.
     const checkQuality = requestingPublish && !article?.is_published;
@@ -874,7 +880,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         <button onClick={onCancel} className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50">Hủy</button>
         <button onClick={() => handleSave(true)} disabled={saving}
           className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60">
-          <Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu nháp'}
+          <Save className="h-4 w-4" />{saving ? 'Đang lưu...' : article?.is_published ? 'Ẩn & lưu nháp' : 'Lưu nháp'}
         </button>
         <button onClick={() => handleSave(false)} disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-red-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
@@ -1073,7 +1079,13 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Đăng
           </button>
-          <button disabled={bulkBusy} onClick={() => runBoundaryBulkPublication(false)}
+          <button disabled={bulkBusy} onClick={() => {
+            const selectedPublished = articles.filter(article => selected.has(article.id) && article.is_published).length;
+            if (selectedPublished > 0 && typeof window !== 'undefined' && !window.confirm(
+              `Bạn sắp ẩn ${selectedPublished} bài đang công khai. Các bài này phải đạt lại cổng SEO–GEO–AIO trước khi đăng lại. Tiếp tục?`,
+            )) return;
+            runBoundaryBulkPublication(false);
+          }}
             className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <XCircle className="w-3.5 h-3.5" />Chuyển nháp
           </button>

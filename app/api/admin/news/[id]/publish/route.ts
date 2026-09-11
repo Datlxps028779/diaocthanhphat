@@ -183,10 +183,19 @@ export async function POST(
     });
   }
 
-  const { data, error } = await client.rpc('publish_news_article', {
+  const boundaryClient = adminClient();
+  if (!boundaryClient) {
+    return NextResponse.json(
+      { error: 'Server publication boundary chưa được cấu hình.', code: 'SERVER_BOUNDARY_UNAVAILABLE' },
+      { status: 503 },
+    );
+  }
+
+  const { data, error } = await boundaryClient.rpc('publish_news_article_server', {
     p_news_id: id,
     p_expected_content_version: body.expectedContentVersion,
     p_publish: body.publish,
+    p_actor_id: auth.userId,
     p_quality_report: report,
     p_affected_paths: paths,
   });

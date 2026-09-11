@@ -160,26 +160,43 @@ describe('POST /api/admin/news/[id]/publish', () => {
   it('gọi RPC optimistic và revalidate cả image sitemap khi transition thành công', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
     const result = [{ id: ARTICLE_ID, slug: 'bai-viet-dat-chuan', category: 'Thị trường', is_published: true, published_at: '2026-09-09T00:00:00Z', content_version: 3, event_id: 'event-1', changed: true }];
-    const client = readClient(article(), result);
+    const client = readClient(article());
+    const boundaryClient = readClient(article(), result);
+    const boundaryFrom = boundaryClient.from;
+    boundaryClient.from = vi.fn((table: string) => table === 'seo_freshness_jobs'
+      ? { upsert: vi.fn(async () => ({ error: null })) }
+      : boundaryFrom(table));
     callerClientMock.mockReturnValue(client);
-    adminClientMock.mockReturnValue({ from: vi.fn(() => ({ upsert: vi.fn(async () => ({ error: null })) })) });
+    adminClientMock.mockReturnValue(boundaryClient);
 
     const response = await POST(request({ publish: true, expectedContentVersion: 3 }), { params: { id: ARTICLE_ID } });
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(client.rpc).toHaveBeenCalledWith('publish_news_article', expect.objectContaining({
+    expect(boundaryClient.rpc).toHaveBeenCalledWith('publish_news_article_server', expect.objectContaining({
       p_news_id: ARTICLE_ID,
       p_expected_content_version: 3,
       p_publish: true,
+      p_actor_id: 'owner-1',
     }));
     expect(json.paths).toContain('/sitemap-images.xml');
     expect(revalidatePathMock).toHaveBeenCalledWith('/tin-tuc/bai-viet-dat-chuan');
   });
 
+  it('trả 503 nếu server publication boundary chưa cấu hình service role', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
+    callerClientMock.mockReturnValue(readClient(article()));
+    adminClientMock.mockReturnValue(null);
+
+    const response = await POST(request({ publish: true, expectedContentVersion: 3 }), { params: { id: ARTICLE_ID } });
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('SERVER_BOUNDARY_UNAVAILABLE');
+  });
+
   it('trả 409 khi optimistic version đã cũ', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
-    callerClientMock.mockReturnValue(readClient(article(), null, { code: '40001', message: 'stale' }));
+    callerClientMock.mockReturnValue(readClient(article()));
+    adminClientMock.mockReturnValue(readClient(article(), null, { code: '40001', message: 'stale' }));
 
     const response = await POST(request({ publish: true, expectedContentVersion: 2 }), { params: { id: ARTICLE_ID } });
     expect(response.status).toBe(409);

@@ -1,5 +1,12 @@
 # Documentation Changelog
 
+## 2026-09-11 — News publication boundary hardening prepared
+
+- Prepared migration `20260911010000_harden_news_publication_server_boundary.sql` and read-only preflight `supabase/manual_news_publication_server_boundary_dry_run.sql`. The publication transition RPC is moved to a service-role-only server function; the old authenticated RPC is revoked, while the authenticated owner identity is passed explicitly for the audit event.
+- Updated the Admin route to call the server-only RPC and return a clear 503 when `SUPABASE_SERVICE_ROLE_KEY` is unavailable. **Do not deploy this route before the user runs the migration in production.**
+- Added confirmation and explicit “Ẩn & lưu nháp” wording for taking a live article offline, plus confirmation before bulk “Chuyển nháp”.
+- Corrected the A2 SQL proxy: H2 uses a PostgreSQL-safe tag pattern and is informational only; empty content now measures as zero words.
+
 ## 2026-09-11 — Batch A2 news corpus republish readiness
 
 - Added Admin filter “Chưa sẵn sàng đăng lại”, per-article badges, and an editor gate list that evaluates published news with the same A1 quality rules (`collectNewsRepublishReadiness`). Opening a live article shows every blocker once; saving editorial updates on a published article remains unblocked.
