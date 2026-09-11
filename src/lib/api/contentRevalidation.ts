@@ -10,18 +10,19 @@ import type {
   RevalidationTarget,
 } from '../server/contentRevalidation';
 
-export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published'>): NewsRevalidationSnapshot {
+export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published'> & Partial<Pick<NewsArticle, 'updated_at'>>): NewsRevalidationSnapshot {
   return {
     id: article.id,
     slug: article.slug,
     category: article.category,
     is_published: article.is_published,
+    updated_at: article.updated_at ?? null,
   };
 }
 
 export function propertyRevalidationSnapshot(
   property: Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>
-    & Partial<Pick<Property, 'district_id' | 'property_type_id'>>,
+    & Partial<Pick<Property, 'district_id' | 'property_type_id' | 'updated_at'>>,
 ): PropertyRevalidationSnapshot {
   return {
     id: property.id,
@@ -34,6 +35,7 @@ export function propertyRevalidationSnapshot(
     area_id: property.area_id,
     neighborhood_slug: property.neighborhood_slug,
     is_active: property.is_active,
+    updated_at: property.updated_at ?? null,
   };
 }
 

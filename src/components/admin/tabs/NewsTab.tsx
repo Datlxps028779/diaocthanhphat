@@ -15,7 +15,7 @@ import {
 } from '../../../lib/newsLocationSelection';
 import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
-  newsRevalidationSnapshot, revalidateNewsContent, setNewsPublicationState, formatNewsPublicationError,
+  setNewsPublicationState, formatNewsPublicationError,
 } from '../../../lib/api';
 import { collectNewsAdminSaveIssues, collectNewsRepublishReadiness, formatNewsIssueList, newsIssueEditTarget } from '../../../lib/newsAdminSaveIssues';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
@@ -1275,12 +1275,8 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
         </div>
       )}
       {confirmDelete && <ConfirmDialog message="Xóa bài viết này?" onConfirm={async () => {
-        const previous = articles.find(article => article.id === confirmDelete);
         try {
           await deleteNews(confirmDelete);
-          if (previous) {
-            await revalidateNewsContent('delete', [{ previous: newsRevalidationSnapshot(previous) }]);
-          }
           setConfirmDelete(null);
           await load();
         } catch (error) {
@@ -1291,12 +1287,8 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
       {confirmBulkDelete && (
         <ConfirmDialog message={`Xóa ${selected.size} bài viết đã chọn? Thao tác không thể hoàn tác.`}
           onConfirm={() => {
-            const targets = articles.filter(article => selected.has(article.id)).map(article => ({ previous: newsRevalidationSnapshot(article) }));
             setConfirmBulkDelete(false);
             bulkDeleteNews(selectedIds()).then(async count => {
-              if (count > 0) {
-                await revalidateNewsContent('bulk', targets);
-              }
               clearSelection();
               await load();
               return count;

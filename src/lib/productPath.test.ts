@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildProductPath, parseProductCode, PRODUCT_CODE_RE } from './productPath';
+import { buildProductPath, isCanonicalProductSource, parseProductCode, PRODUCT_CODE_RE } from './productPath';
 
 describe('buildProductPath', () => {
   const base = {
@@ -53,6 +53,27 @@ describe('buildProductPath', () => {
   it('giữ dấu gạch giữa từ khi district có nhiều từ (Hớn Quản → hon-quan)', () => {
     expect(buildProductPath({ ...base, district: 'Hớn Quản', areas: { slug: 'binh-phuoc' } }))
       .toBe('/mua-ban/binh-phuoc/hon-quan/ban-nha-dep-an-phu-pr1009');
+  });
+});
+
+describe('isCanonicalProductSource', () => {
+  const canonical = {
+    id: 'uuid-1', slug: 'ban-nha-dep-an-phu', public_code: 1009,
+    listing_type: 'mua_ban' as const, district: 'Dĩ An', areas: { slug: 'binh-duong' },
+  };
+
+  it('chấp nhận đúng nguồn đủ thành phần canonical', () => {
+    expect(isCanonicalProductSource(canonical)).toBe(true);
+  });
+
+  it.each([
+    ['slug thiếu', { slug: null }],
+    ['slug malformed', { slug: 'ban-nha-' }],
+    ['area thiếu', { areas: null }],
+    ['public code thiếu', { public_code: null }],
+    ['listing type sai', { listing_type: 'khac' }],
+  ])('%s thì không đủ điều kiện index', (_label, patch) => {
+    expect(isCanonicalProductSource({ ...canonical, ...patch } as typeof canonical)).toBe(false);
   });
 });
 

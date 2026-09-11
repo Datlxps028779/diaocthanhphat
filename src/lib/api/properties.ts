@@ -729,7 +729,7 @@ export async function createProperty(p: PropertyWrite): Promise<Property> {
 export async function updateProperty(id: string, p: Partial<Omit<Property, 'schema_markup'>>): Promise<Property> {
   const { data: previousData, error: previousError } = await supabase
     .from('properties')
-    .select('id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active')
+    .select('id,slug,public_code,listing_type,district,district_id,property_type_id,area_id,neighborhood_slug,is_active,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -754,7 +754,7 @@ export async function updateProperty(id: string, p: Partial<Omit<Property, 'sche
 export async function deleteProperty(id: string): Promise<void> {
   const { data: previousData, error: previousError } = await supabase
     .from('properties')
-    .select('id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active')
+    .select('id,slug,public_code,listing_type,district,district_id,property_type_id,area_id,neighborhood_slug,is_active,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -766,7 +766,7 @@ export async function deleteProperty(id: string): Promise<void> {
 }
 
 // ─── Bulk operations (Sprint 3c) ──────────────────────────────────────────────
-const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active';
+const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,district_id,property_type_id,area_id,neighborhood_slug,is_active,updated_at';
 
 async function getPropertyRevalidationRows(ids: string[]): Promise<PropertyRevalidationSnapshotRow[]> {
   if (ids.length === 0) return [];
@@ -775,7 +775,7 @@ async function getPropertyRevalidationRows(ids: string[]): Promise<PropertyReval
   return (data ?? []) as PropertyRevalidationSnapshotRow[];
 }
 
-type PropertyRevalidationSnapshotRow = Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>;
+type PropertyRevalidationSnapshotRow = Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'district_id' | 'property_type_id' | 'area_id' | 'neighborhood_slug' | 'is_active' | 'updated_at'>;
 
 // Cập nhật/xóa nhiều BĐS trong 1 câu (.in) thay vì lặp N request. Trả số dòng ảnh
 // hưởng để UI báo lại. Whitelist cột cập nhật để tránh set nhầm field nhạy cảm.

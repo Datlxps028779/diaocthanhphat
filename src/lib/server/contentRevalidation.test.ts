@@ -33,6 +33,16 @@ describe('parseContentRevalidationInput', () => {
 });
 
 describe('collectContentRevalidationPaths', () => {
+  it('purge URL cũ có slug malformed an toàn khi bài bị ẩn', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'news',
+      action: 'unpublish',
+      targets: [{ previous: { id: 'n-malformed', slug: 'bai-viet-', category: 'Thị trường', is_published: true } }],
+    }, lookups);
+    expect(paths).toContain('/tin-tuc/bai-viet-');
+    expect(paths.some(path => path.includes('?') || path.includes('#') || path.includes('//'))).toBe(false);
+  });
+
   it('purge route public cũ và mới khi Tin tức đổi slug/category/publish', () => {
     const paths = collectContentRevalidationPaths({
       entity: 'news',
@@ -42,7 +52,7 @@ describe('collectContentRevalidationPaths', () => {
         current: { id: 'n1', slug: 'bai-moi', category: 'Thị trường', is_published: true },
       }],
     }, lookups);
-    expect(paths).toEqual(['/', '/kien-thuc', '/sitemap.xml', '/tin-tuc', '/tin-tuc/bai-cu', '/tin-tuc/bai-moi', '/tin-tuc/danh-muc/thi-truong']);
+    expect(paths).toEqual(['/', '/kien-thuc', '/sitemap-images.xml', '/sitemap.xml', '/tin-tuc', '/tin-tuc/bai-cu', '/tin-tuc/bai-moi', '/tin-tuc/danh-muc/thi-truong']);
   });
 
   it('purge home/list/detail và route khu vực cho Sản phẩm active', () => {

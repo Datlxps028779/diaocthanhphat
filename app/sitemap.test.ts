@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import sitemap, { shouldIncludeAreaListingType, shouldIncludeCompositeAreaListing } from './sitemap';
+import sitemap, { buildNewsSitemapEntries, shouldIncludeAreaListingType, shouldIncludeCompositeAreaListing } from './sitemap';
 
 describe('public sitemap', () => {
   it('always emits the approved canonical origin, never the deployment origin', async () => {
@@ -10,6 +10,16 @@ describe('public sitemap', () => {
     expect(entries.some(entry => entry.url.includes('vercel.app'))).toBe(false);
   });
 
+  it('does not emit malformed News slugs or UUID fallbacks', () => {
+    const entries = buildNewsSitemapEntries([
+      { id: 'valid-id', slug: 'bai-viet-hop-le', updated_at: '2026-09-11T00:00:00.000Z' },
+      { id: 'bad-id', slug: 'bai-viet-' },
+      { id: 'missing-id', slug: null },
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].url).toBe('https://chonhaviet.com/tin-tuc/bai-viet-hop-le');
+  });
   it('only indexes a grouped property type route with enough distinct titled inventory', () => {
     const area = { name: 'Bình Dương', slug: 'binh-duong', description: 'Mô tả khu vực.' };
     const rows = Array.from({ length: 5 }, (_, index) => ({

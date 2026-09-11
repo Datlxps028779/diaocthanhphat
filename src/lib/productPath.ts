@@ -2,7 +2,7 @@
 // /{lt}/{areaSlug}/{districtSlug?}/{slug}-pr{public_code}. public_code độc lập tiêu đề/
 // khu vực → link không vỡ khi đổi slug, chỉ 301 về canonical mới nhất. Thuần, test được.
 import { listingTypeToSlug, type ListingType } from './areaPath';
-import { buildSlug } from './slug';
+import { buildSlug, isValidSlug } from './slug';
 
 // Đuôi định danh ổn định ở segment cuối. Group 1 = số public_code.
 export const PRODUCT_CODE_RE = /-pr(\d+)$/;
@@ -15,6 +15,16 @@ export interface ProductPathInput {
   listing_type?: ListingType | string | null;
   district?: string | null;
   areas?: { slug?: string | null } | null;
+}
+
+
+export function isCanonicalProductSource(p: ProductPathInput): boolean {
+  return Boolean(
+    typeof p.public_code === 'number' && Number.isSafeInteger(p.public_code) && p.public_code > 0
+      && isValidSlug(p.slug)
+      && isValidSlug(p.areas?.slug)
+      && (p.listing_type === 'mua_ban' || p.listing_type === 'cho_thue'),
+  );
 }
 
 // URL cũ khi thiếu dữ liệu dựng path mới (tin chưa backfill public_code, thiếu areas.slug,

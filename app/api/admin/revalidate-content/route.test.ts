@@ -116,6 +116,7 @@ describe('POST /api/admin/revalidate-content', () => {
     expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual([
       '/',
       '/kien-thuc',
+      '/sitemap-images.xml',
       '/sitemap.xml',
       '/tin-tuc',
       '/tin-tuc/bai-cu',

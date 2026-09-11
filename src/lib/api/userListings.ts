@@ -14,7 +14,7 @@ function canonicalListingTitle<T extends { title: string; city?: string | null; 
   };
 }
 
-const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,area_id,neighborhood_slug,is_active';
+const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,district_id,property_type_id,area_id,neighborhood_slug,is_active,updated_at';
 type LinkedProperty = Pick<UserListing, 'property_id'>;
 type PropertyRevalidationRow = Parameters<typeof propertyRevalidationSnapshot>[0];
 
@@ -29,6 +29,16 @@ async function getPropertyRevalidationRow(propertyId: string | null | undefined)
   const { data, error } = await supabase.from('properties').select(PROPERTY_REVALIDATION_SELECT).eq('id', propertyId).maybeSingle();
   if (error) throw error;
   return data as PropertyRevalidationRow | null;
+}
+
+async function getPropertyRevalidationRows(propertyIds: string[]): Promise<PropertyRevalidationRow[]> {
+  if (propertyIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('properties')
+    .select(PROPERTY_REVALIDATION_SELECT)
+    .in('id', [...new Set(propertyIds)]);
+  if (error) throw error;
+  return (data ?? []) as PropertyRevalidationRow[];
 }
 
 
@@ -204,7 +214,7 @@ export async function rejectUserListingSeoDraft(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function approveUserListing(id: string): Promise<void> {
+async function approveUserListingRpc(id: string): Promise<string> {
   const { data, error } = await supabase
     .rpc('approve_user_listing', { p_listing_id: id })
     .single();
@@ -213,7 +223,12 @@ export async function approveUserListing(id: string): Promise<void> {
   if (!hasApprovedPropertyId(data)) {
     throw new Error('Duyệt tin không trả về property_id hợp lệ.');
   }
-  const property = await getPropertyRevalidationRow(data.property_id);
+  return data.property_id;
+}
+
+export async function approveUserListing(id: string): Promise<void> {
+  const propertyId = await approveUserListingRpc(id);
+  const property = await getPropertyRevalidationRow(propertyId);
   if (property) {
     await revalidatePropertyContent('publish', [{ current: propertyRevalidationSnapshot(property) }]);
   }
@@ -270,19 +285,54 @@ export async function adminSetExpiry(id: string, expiresAtISO: string | null): P
 // Trả số tin duyệt thành công.
 export async function bulkApproveUserListings(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
-  const results = await Promise.allSettled(ids.map(id => approveUserListing(id)));
-  const ok = results.filter(r => r.status === 'fulfilled').length;
+  // The approval RPC remains one-per-listing so its lifecycle lock stays atomic,
+  // but public propagation is deliberately batched once after all approvals.
+  // This prevents N concurrent full Search Visibility syncs and keeps one user
+  // action represented by one freshness/audit wave.
+  const results = await Promise.allSettled(ids.map(approveUserListingRpc));
+  const approvedPropertyIds = results
+    .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+    .map(result => result.value);
+  const ok = approvedPropertyIds.length;
   if (ok < ids.length) console.error(`[api] bulkApprove: ${ids.length - ok}/${ids.length} tin thất bại`);
+
+  const properties = await Promise.all(approvedPropertyIds.map(getPropertyRevalidationRow));
+  const targets = properties
+    .filter((property): property is NonNullable<typeof property> => Boolean(property))
+    .map(property => ({ current: propertyRevalidationSnapshot(property) }));
+  if (targets.length > 0) await revalidatePropertyContent('bulk', targets);
   return ok;
 }
 
-// Từ chối hàng loạt là update thuần → gộp 1 câu .in().
+// Từ chối hàng loạt vẫn gộp update, nhưng phải purge cả public Product path
+// của các property liên kết. Nếu bỏ bước này, listing bị reject có thể còn nằm
+// trong cache/sitemap cho tới lần revalidate định kỳ tiếp theo.
 export async function bulkRejectUserListings(ids: string[], reason: string): Promise<number> {
   if (ids.length === 0) return 0;
+  const { data: links, error: linksError } = await supabase
+    .from('user_listings')
+    .select('property_id')
+    .in('id', ids);
+  if (linksError) throw linksError;
+  const propertyIds = (links ?? [])
+    .map(row => (row as { property_id?: unknown }).property_id)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const previousRows = await getPropertyRevalidationRows(propertyIds);
+
   const { error, count } = await supabase
     .from('user_listings')
     .update({ status: 'rejected', reject_reason: reason, ai_seo_draft: null }, { count: 'exact' })
     .in('id', ids);
   if (error) throw error;
+
+  const currentRows = await getPropertyRevalidationRows(propertyIds);
+  if (previousRows.length > 0) {
+    await revalidatePropertyContent('bulk', previousRows.map(previous => ({
+      previous: propertyRevalidationSnapshot(previous),
+      current: currentRows.find(current => current.id === previous.id)
+        ? propertyRevalidationSnapshot(currentRows.find(current => current.id === previous.id)!)
+        : undefined,
+    })));
+  }
   return count ?? ids.length;
 }

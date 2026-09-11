@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 import { adminClient, callerClient, requireOwner } from '@/lib/server/requireAdmin';
 import {
   buildNewsPublicationQualityReport,
@@ -8,6 +6,8 @@ import {
   newsPublishBoundaryMode,
 } from '@/lib/server/newsPublishing';
 import type { NewsArticle } from '@/lib/supabase';
+import { propagatePublicIndexing } from '@/lib/server/publicIndexing';
+import { isSafePublicSlugSegment } from '@/lib/slug';
 
 export const runtime = 'nodejs';
 
@@ -46,27 +46,12 @@ function errorCode(error: { code?: string; message?: string } | null | undefined
 
 async function affectedPaths(article: Pick<NewsArticle, 'slug' | 'category'>, token: string) {
   const paths = new Set(['/','/tin-tuc','/kien-thuc','/sitemap.xml','/sitemap-images.xml']);
-  if (article.slug) paths.add(`/tin-tuc/${article.slug}`);
+  if (isSafePublicSlugSegment(article.slug)) paths.add(`/tin-tuc/${article.slug.trim()}`);
   const client = callerClient(token);
   const { data } = await client.from('news_categories').select('slug').eq('label', article.category).maybeSingle();
   if (data?.slug) paths.add(`/tin-tuc/danh-muc/${data.slug}`);
   return [...paths].sort();
 }
-
-async function queueFreshness(paths: string[], result: PublicationResult) {
-  const admin = adminClient();
-  if (!admin || paths.length === 0 || !result.event_id) return;
-  const fingerprint = createHash('sha256').update(result.event_id).digest('hex');
-  const rows = paths.map(path => ({
-    dedupe_key: `${fingerprint}:${path}`.slice(0, 320),
-    event_kind: 'news',
-    event_action: result.is_published ? 'publish' : 'unpublish',
-    path,
-  }));
-  const { error } = await admin.from('seo_freshness_jobs').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true });
-  if (error) throw error;
-}
-
 
 async function observeLegacyPublish({
   client,
@@ -75,6 +60,7 @@ async function observeLegacyPublish({
   mode,
   report,
   paths,
+  actorId,
 }: {
   client: ReturnType<typeof callerClient>;
   article: NewsArticle;
@@ -82,6 +68,7 @@ async function observeLegacyPublish({
   mode: ReturnType<typeof newsPublishBoundaryMode>;
   report: ReturnType<typeof buildNewsPublicationQualityReport>;
   paths: string[];
+  actorId: string;
 }) {
   const previousPublished = Boolean(article.is_published);
   const nextPublishedAt = publish
@@ -131,8 +118,30 @@ async function observeLegacyPublish({
     event_id: null,
     changed: true,
   };
-  for (const path of paths) revalidatePath(path);
-  return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths });
+  const propagation = await propagatePublicIndexing({
+    content: {
+      entity: 'news',
+      action: publish ? 'publish' : 'unpublish',
+      targets: [{
+        previous: {
+          id: article.id,
+          slug: article.slug,
+          category: article.category,
+          is_published: previousPublished,
+        },
+        current: {
+          id: updated.id,
+          slug: updated.slug,
+          category: updated.category,
+          is_published: updated.is_published,
+        },
+      }],
+    },
+    lookups: { areaSlugs: new Map(), categorySlugs: new Map() },
+    actorId,
+    paths,
+  });
+  return NextResponse.json({ ok: true, mode, result, quality_gate: report, ...propagation });
 }
 
 export async function POST(
@@ -180,6 +189,7 @@ export async function POST(
       mode,
       report,
       paths,
+      actorId: auth.userId,
     });
   }
 
@@ -209,12 +219,24 @@ export async function POST(
   if (!result) return NextResponse.json({ error: 'Boundary không trả kết quả hợp lệ.', code: 'INVALID_RESULT' }, { status: 503 });
   if (!result.changed) return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths });
 
-  for (const path of paths) revalidatePath(path);
-  try {
-    await queueFreshness(paths, result);
-  } catch (queueError) {
-    console.error('[news-publish] đã đổi trạng thái nhưng chưa enqueue freshness:', queueError);
-  }
+  const propagation = await propagatePublicIndexing({
+    content: {
+      entity: 'news',
+      action: body.publish ? 'publish' : 'unpublish',
+      targets: [{
+        current: {
+          id: result.id,
+          slug: result.slug,
+          category: result.category,
+          is_published: result.is_published,
+        },
+      }],
+    },
+    lookups: { areaSlugs: new Map(), categorySlugs: new Map() },
+    actorId: auth.userId,
+    paths,
+    eventKey: result.event_id,
+  });
 
-  return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths });
+  return NextResponse.json({ ok: true, mode, result, quality_gate: report, ...propagation });
 }

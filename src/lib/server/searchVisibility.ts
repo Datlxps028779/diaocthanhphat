@@ -3,7 +3,8 @@ import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '../prop
 import { evaluateAreaSeo, evaluateCompositeAreaSeo, getAreaDetails } from '../areaSeo';
 import { evaluateNeighborhoodSeo } from '../neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '../newsCategories';
-import { buildProductPath } from '../productPath';
+import { buildProductPath, isCanonicalProductSource } from '../productPath';
+import { isValidSlug } from '../slug';
 
 export const SEARCH_VISIBILITY_CANONICAL_ORIGIN = 'https://chonhaviet.com';
 
@@ -124,10 +125,6 @@ const STATIC_PATHS = [
 
 const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 
-function validSlug(value: string | null | undefined): value is string {
-  return Boolean(value?.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.trim()));
-}
-
 function canonicalAuditUrl(path: string | null): string | null {
   if (!path) return null;
   if (!/^\/[A-Za-z0-9/_-]*$/.test(path) || path.includes('//')) return null;
@@ -188,7 +185,7 @@ function buildAreaCandidates(
   propertyTypes: SearchVisibilityPropertyType[] = [],
 ): SearchVisibilityCandidate[] {
   const sourceKey = `area:${area.id}`;
-  if (!validSlug(area.slug) || !area.name?.trim()) {
+  if (!isValidSlug(area.slug) || !area.name?.trim()) {
     return [excluded(sourceKey, 'area', area.id, 'MISSING_REQUIRED_SOURCE', 'Khu vực thiếu slug hoặc tên hợp lệ.', area.updated_at ?? area.created_at)];
   }
 
@@ -255,7 +252,7 @@ function buildAreaCandidates(
 
 function buildNeighborhoodCandidate(neighborhood: SearchVisibilityNeighborhood, properties: SearchVisibilityProperty[]): SearchVisibilityCandidate {
   const sourceKey = `neighborhood:${neighborhood.id}`;
-  if (!validSlug(neighborhood.slug) || !neighborhood.name?.trim()) {
+  if (!isValidSlug(neighborhood.slug) || !neighborhood.name?.trim()) {
     return excluded(sourceKey, 'neighborhood', neighborhood.id, 'MISSING_REQUIRED_SOURCE', 'Khu dân cư thiếu slug hoặc tên hợp lệ.', neighborhood.updated_at ?? neighborhood.created_at);
   }
   const matching = properties.filter(property => property.neighborhood_slug === neighborhood.slug && property.is_active);
@@ -288,10 +285,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
       continue;
     }
     const path = buildProductPath(property);
-    const hasCanonicalParts = Boolean(
-      property.public_code && validSlug(property.slug) && validSlug(property.areas?.slug)
-      && (property.listing_type === 'mua_ban' || property.listing_type === 'cho_thue'),
-    );
+    const hasCanonicalParts = isCanonicalProductSource(property);
     candidates.push(hasCanonicalParts
       ? eligible(key, 'property', property.id, path, property.updated_at)
       : excluded(key, 'property', property.id, 'MISSING_REQUIRED_SOURCE', 'Tin active thiếu thành phần URL canonical.', property.updated_at, path));
@@ -304,7 +298,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
     const key = `news:${article.id}`;
     if (!article.is_published) {
       candidates.push(excluded(key, 'news', article.id, 'UNPUBLISHED_NEWS', 'Bài viết chưa published.', article.updated_at));
-    } else if (!validSlug(article.slug)) {
+    } else if (!isValidSlug(article.slug)) {
       candidates.push(excluded(key, 'news', article.id, 'MISSING_REQUIRED_SOURCE', 'Bài viết published thiếu slug hợp lệ.', article.updated_at));
     } else {
       candidates.push(eligible(key, 'news', article.id, `/tin-tuc/${article.slug}`, article.updated_at));
@@ -313,7 +307,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
 
   const staticCategories = new Set(NEWS_CATEGORY_SLUGS);
   for (const category of sources.newsCategories) {
-    if (!validSlug(category.slug) || staticCategories.has(category.slug)) continue;
+    if (!isValidSlug(category.slug) || staticCategories.has(category.slug)) continue;
     candidates.push(eligible(`news_category:${category.id ?? category.slug}`, 'news_category', category.id ?? null, `/tin-tuc/danh-muc/${category.slug}`, category.updated_at ?? null));
   }
 
@@ -321,7 +315,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
     const key = `managed_page:${page.id}`;
     if (!page.is_active || page.is_system) {
       candidates.push(excluded(key, 'managed_page', page.id, 'UNSUPPORTED_ENTITY', page.is_system ? 'Trang hệ thống không được public sitemap.' : 'Trang quản lý không active.', page.updated_at));
-    } else if (!validSlug(page.slug)) {
+    } else if (!isValidSlug(page.slug)) {
       candidates.push(excluded(key, 'managed_page', page.id, 'MISSING_REQUIRED_SOURCE', 'Trang public thiếu slug hợp lệ.', page.updated_at));
     } else {
       candidates.push(eligible(key, 'managed_page', page.id, `/trang/${page.slug}`, page.updated_at));

@@ -6,7 +6,7 @@ import {
   adminGetPropertiesPage, getAreas, getPropertyTypes, createProperty, updateProperty, deleteProperty,
   getDistricts, getWards, getNeighborhoods, bulkUpdateProperties, bulkDeleteProperties,
   adminGetPropertyEngagement,
-  propertyRevalidationSnapshot, revalidatePropertyContent, type AdminPropertyFilters,
+  type AdminPropertyFilters,
 } from '../../../lib/api';
 import { ImageUpload, ImageUrlInput } from '../../ImageUpload';
 import { PropertyPanoramaManager, type PendingPanoramaUpload } from '../../PropertyPanoramaManager';
@@ -136,23 +136,13 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   });
   const clearSelection = () => setSelected(new Set());
 
-  const warnRevalidation = async (action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk', targets: Parameters<typeof revalidatePropertyContent>[1]) => {
-    try {
-      await revalidatePropertyContent(action, targets);
-    } catch (error) {
-      console.error('[AdminPanel] Đã lưu BĐS nhưng chưa làm mới cache:', error);
-      alert('Đã lưu dữ liệu nhưng chưa làm mới được cache công khai. Hãy thử lưu lại hoặc liên hệ quản trị viên.');
-    }
-  };
   const runBulk = async (
     fn: () => Promise<number>,
     label: string,
-    targets: Parameters<typeof revalidatePropertyContent>[1],
   ) => {
     setBulkBusy(true);
     try {
       const n = await fn();
-      if (n > 0) await warnRevalidation('bulk', targets);
       clearSelection();
       await load(); onStatsRefresh?.();
       console.info(`[AdminPanel] Bulk ${label}: ${n} BĐS`);
@@ -162,19 +152,12 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
     } finally { setBulkBusy(false); }
   };
   const selectedIds = () => Array.from(selected);
-  const selectedPropertyTargets = (patch: Partial<Pick<Property, 'is_active' | 'is_hot' | 'is_featured'>>) =>
-    properties.filter(property => selected.has(property.id)).map(property => ({
-      previous: propertyRevalidationSnapshot(property),
-      current: propertyRevalidationSnapshot({ ...property, ...patch }),
-    }));
-
   const handleSave = async ({ data, pendingPanoramas }: { data: Partial<Property>; pendingPanoramas: PendingPanoramaUpload[] }) => {
     setSaving(true);
     try {
       const validPanoramas = pendingPanoramas.filter(item => item.status === 'valid');
       if (creating) {
         const saved = await createProperty(data as Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types'>);
-        await warnRevalidation('create', [{ current: propertyRevalidationSnapshot(saved) }]);
         const uploadedIds: string[] = [];
         const failures: { name: string; message: string }[] = [];
         for (const [index, item] of validPanoramas.entries()) {
@@ -193,11 +176,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           return;
         }
       } else if (editing) {
-        const saved = await updateProperty(editing.id, data);
-        await warnRevalidation('update', [{
-          previous: propertyRevalidationSnapshot(editing),
-          current: propertyRevalidationSnapshot(saved),
-        }]);
+        await updateProperty(editing.id, data);
         if (pendingPanoramas.length > 0) {
           const uploadedIds: string[] = [];
           const failures: { name: string; message: string }[] = [];
@@ -229,10 +208,8 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
   };
 
   const handleDelete = async (id: string) => {
-    const previous = properties.find(property => property.id === id);
     try {
       await deleteProperty(id);
-      if (previous) await warnRevalidation('delete', [{ previous: propertyRevalidationSnapshot(previous) }]);
       setConfirmDelete(null);
       await load(); onStatsRefresh?.();
     } catch (error) {
@@ -310,7 +287,6 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           <button disabled={bulkBusy} onClick={() => runBulk(
             () => bulkUpdateProperties(selectedIds(), { is_active: true }),
             'hiện',
-            selectedPropertyTargets({ is_active: true }),
           )}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <CheckCircle className="w-3.5 h-3.5" />Hiện
@@ -318,7 +294,6 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           <button disabled={bulkBusy} onClick={() => runBulk(
             () => bulkUpdateProperties(selectedIds(), { is_active: false }),
             'ẩn',
-            selectedPropertyTargets({ is_active: false }),
           )}
             className="flex items-center gap-1 text-xs font-medium bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <XCircle className="w-3.5 h-3.5" />Ẩn
@@ -326,7 +301,6 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           <button disabled={bulkBusy} onClick={() => runBulk(
             () => bulkUpdateProperties(selectedIds(), { is_hot: true }),
             'gắn HOT',
-            selectedPropertyTargets({ is_hot: true }),
           )}
             className="flex items-center gap-1 text-xs font-medium bg-red-600 hover:bg-red-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Flame className="w-3.5 h-3.5" />HOT
@@ -334,7 +308,6 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
           <button disabled={bulkBusy} onClick={() => runBulk(
             () => bulkUpdateProperties(selectedIds(), { is_featured: true }),
             'gắn nổi bật',
-            selectedPropertyTargets({ is_featured: true }),
           )}
             className="flex items-center gap-1 text-xs font-medium bg-amber-500 hover:bg-amber-400 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
             <Star className="w-3.5 h-3.5" />Nổi bật
@@ -404,11 +377,7 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
                     <td className="px-4 py-3 text-center hidden sm:table-cell">
                       <button onClick={async () => {
                         try {
-                          const saved = await updateProperty(p.id, { is_active: !p.is_active });
-                          await warnRevalidation(saved.is_active ? 'publish' : 'unpublish', [{
-                            previous: propertyRevalidationSnapshot(p),
-                            current: propertyRevalidationSnapshot(saved),
-                          }]);
+                          await updateProperty(p.id, { is_active: !p.is_active });
                           await load();
                         } catch (error) {
                           console.error('[AdminPanel] Cập nhật trạng thái BĐS thất bại:', error);
@@ -469,9 +438,8 @@ export function PropertiesTab({ onStatsRefresh, focusEditId, onFocusHandled }: {
       {confirmBulkDelete && (
         <ConfirmDialog message={`Xóa ${selected.size} bất động sản đã chọn? Thao tác không thể hoàn tác.`}
           onConfirm={() => {
-            const targets = properties.filter(property => selected.has(property.id)).map(property => ({ previous: propertyRevalidationSnapshot(property) }));
             setConfirmBulkDelete(false);
-            runBulk(() => bulkDeleteProperties(selectedIds()), 'xóa', targets);
+            runBulk(() => bulkDeleteProperties(selectedIds()), 'xóa');
           }}
           onCancel={() => setConfirmBulkDelete(false)} />
       )}

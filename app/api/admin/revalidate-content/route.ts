@@ -1,12 +1,7 @@
-import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
-import { adminClient, callerClient, requireOwner } from '@/lib/server/requireAdmin';
-import {
-  collectContentRevalidationPaths,
-  parseContentRevalidationInput,
-  type RevalidationLookups,
-} from '@/lib/server/contentRevalidation';
+import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
+import { parseContentRevalidationInput, type RevalidationLookups } from '@/lib/server/contentRevalidation';
+import { propagatePublicIndexing } from '@/lib/server/publicIndexing';
 
 export const runtime = 'nodejs';
 
@@ -37,24 +32,6 @@ async function loadLookups(token: string): Promise<RevalidationLookups> {
   };
 }
 
-async function queueFreshnessJobs(
-  input: NonNullable<ReturnType<typeof parseContentRevalidationInput>['input']>,
-  paths: string[],
-): Promise<number> {
-  const admin = adminClient();
-  if (!admin || paths.length === 0) return 0;
-  const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-  const rows = paths.map(path => ({
-    dedupe_key: `${fingerprint}:${path}`.slice(0, 320),
-    event_kind: input.entity,
-    event_action: input.action,
-    path,
-  }));
-  const { error } = await admin.from('seo_freshness_jobs').upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true });
-  if (error) throw error;
-  return rows.length;
-}
-
 // trong payload. Route này yêu cầu owner MFA như chính các mutation CMS, tránh mở
 // một quyền purge cache mới cho staff khi staff không được phép sửa News/Sản phẩm.
 export async function POST(req: NextRequest) {
@@ -67,17 +44,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const lookups = await loadLookups(auth.token);
-    const paths = collectContentRevalidationPaths(parsed.input, lookups);
-    let queuedCount = 0;
-    try {
-      queuedCount = await queueFreshnessJobs(parsed.input, paths);
-    } catch (queueError) {
-      // Queue is an operational retry aid; preserve the existing synchronous
-      // revalidation path if the optional queue migration is not deployed yet.
-      console.error('[revalidate-content] không ghi được freshness queue:', queueError);
-    }
-    for (const path of paths) revalidatePath(path);
-    return NextResponse.json({ ok: true, paths, queuedCount });
+    const propagation = await propagatePublicIndexing({
+      content: parsed.input,
+      lookups,
+      actorId: auth.userId,
+    });
+    return NextResponse.json({ ok: true, ...propagation, queuedCount: propagation.freshness.queuedCount });
   } catch (error) {
     console.error('[revalidate-content] thất bại:', error);
     return NextResponse.json({ error: 'Đã lưu dữ liệu nhưng chưa làm mới được cache.' }, { status: 503 });

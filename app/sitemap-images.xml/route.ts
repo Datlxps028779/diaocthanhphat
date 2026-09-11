@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildSeoImageGallery } from '@/lib/propertyImages';
-import { buildProductPath } from '@/lib/productPath';
-import { getSiteUrl } from '@/lib/siteUrl';
+import { buildProductPath, isCanonicalProductSource } from '@/lib/productPath';
+import { isValidSlug } from '@/lib/slug';
+import { PUBLIC_CANONICAL_ORIGIN } from '@/lib/siteUrl';
 
 export const revalidate = 3600;
 
-const SITE_URL = getSiteUrl();
+const SITE_URL = PUBLIC_CANONICAL_ORIGIN;
 
 type SitemapImage = { loc: string; caption: string };
 type SitemapEntry = { loc: string; images: SitemapImage[] };
@@ -47,10 +48,12 @@ export async function GET() {
       ]);
 
       for (const p of (properties.data ?? []) as unknown as Array<{ id: string; slug?: string | null; title: string; image_url?: string | null; images?: string[] | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | null }>) {
+        const areaRelation = Array.isArray(p.areas) ? p.areas[0] : p.areas;
+        if (!isCanonicalProductSource({ ...p, areas: areaRelation })) continue;
         const images = buildSeoImageGallery(p.image_url, p.images, { max: 10 });
         if (!images.length) continue;
         entries.push({
-          loc: `${SITE_URL}${buildProductPath(p)}`,
+          loc: `${SITE_URL}${buildProductPath({ ...p, areas: areaRelation })}`,
           images: images.map((loc, index) => ({ loc, caption: `${p.title}${index ? ` - ảnh ${index + 1}` : ''}` })),
         });
       }
@@ -58,7 +61,8 @@ export async function GET() {
       for (const a of (news.data ?? []) as Array<{ id: string; slug?: string | null; title: string; image_url?: string | null }>) {
         const images = buildSeoImageGallery(a.image_url, null, { max: 1 });
         if (!images.length) continue;
-        const seg = a.slug?.trim() || a.id;
+        const seg = a.slug?.trim();
+        if (!isValidSlug(seg)) continue;
         entries.push({
           loc: `${SITE_URL}/tin-tuc/${seg}`,
           images: images.map(loc => ({ loc, caption: a.title })),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAgentProfileSlug, buildSlug, buildUniqueSlug } from './slug';
+import { buildAgentProfileSlug, buildSlug, buildUniqueSlug, isSafePublicSlugSegment, isValidSlug } from './slug';
 
 describe('buildSlug', () => {
   it('bỏ dấu tiếng Việt và chuyển về chữ thường có gạch nối', () => {
@@ -45,5 +45,33 @@ describe('buildUniqueSlug', () => {
     const a = buildUniqueSlug('Cùng một tiêu đề');
     const b = buildUniqueSlug('Cùng một tiêu đề');
     expect(a).not.toBe(b);
+  });
+});
+
+describe('isValidSlug', () => {
+  it('accepts the canonical lower-case ASCII slug shape', () => {
+    expect(isValidSlug('tin-tuc-binh-duong-2026')).toBe(true);
+    expect(isValidSlug('')).toBe(false);
+    expect(isValidSlug('Tin-Tuc')).toBe(false);
+    expect(isValidSlug('tin tuc')).toBe(false);
+    expect(isValidSlug('tin-tuc/2026')).toBe(false);
+    expect(isValidSlug('tin-tuc-')).toBe(false);
+    expect(isValidSlug('-tin-tuc')).toBe(false);
+    expect(isValidSlug(null)).toBe(false);
+  });
+});
+
+
+describe('isSafePublicSlugSegment', () => {
+  it('accepts a legacy malformed segment only for cache purge', () => {
+    expect(isSafePublicSlugSegment('bai-viet-')).toBe(true);
+    expect(isSafePublicSlugSegment('Tin-Tuc')).toBe(true);
+  });
+
+  it('rejects path delimiters and query/hash injection', () => {
+    expect(isSafePublicSlugSegment('tin-tuc/2026')).toBe(false);
+    expect(isSafePublicSlugSegment('tin-tuc?x=1')).toBe(false);
+    expect(isSafePublicSlugSegment('tin-tuc#section')).toBe(false);
+    expect(isSafePublicSlugSegment('-tin-tuc')).toBe(false);
   });
 });

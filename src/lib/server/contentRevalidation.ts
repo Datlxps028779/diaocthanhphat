@@ -1,6 +1,7 @@
 import { buildProductPath } from '../productPath';
 import { buildAreaListingPath } from '../areaPath';
 import { propertyTypeSeoGroupFromSlug } from '../propertyTypeGroups';
+import { isSafePublicSlugSegment, isValidSlug } from '../slug';
 
 export type RevalidationEntity = 'news' | 'property' | 'area' | 'neighborhood' | 'route';
 export type RevalidationAction = 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'bulk';
@@ -10,6 +11,7 @@ export type NewsRevalidationSnapshot = {
   slug: string | null;
   category: string | null;
   is_published: boolean;
+  updated_at?: string | null;
 };
 
 export type PropertyRevalidationSnapshot = {
@@ -23,6 +25,7 @@ export type PropertyRevalidationSnapshot = {
   area_id: string | null;
   neighborhood_slug?: string | null;
   is_active: boolean;
+  updated_at?: string | null;
 };
 
 export type AreaRevalidationSnapshot = {
@@ -67,7 +70,6 @@ export type ContentRevalidationInput =
 
 
 const ACTIONS = new Set<RevalidationAction>(['create', 'update', 'delete', 'publish', 'unpublish', 'bulk']);
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 
 function asTrimmedString(value: unknown, max = 200): string | null {
@@ -83,7 +85,7 @@ function optionalText(value: unknown, max = 200): string | null {
 
 function optionalSlug(value: unknown): string | null {
   const slug = optionalText(value, 220);
-  return slug && SLUG_RE.test(slug) ? slug : null;
+  return isValidSlug(slug) ? slug : null;
 }
 
 function optionalId(value: unknown): string | null {
@@ -93,6 +95,12 @@ function optionalId(value: unknown): string | null {
 
 function optionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
+}
+
+function optionalTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? value : null;
 }
 
 function parseNewsSnapshot(value: unknown): NewsRevalidationSnapshot | null {
@@ -106,6 +114,7 @@ function parseNewsSnapshot(value: unknown): NewsRevalidationSnapshot | null {
     slug: optionalSlug(record.slug),
     category: optionalText(record.category, 120),
     is_published: isPublished,
+    updated_at: optionalTimestamp(record.updated_at),
   };
 }
 
@@ -130,6 +139,7 @@ function parsePropertySnapshot(value: unknown): PropertyRevalidationSnapshot | n
     area_id: optionalId(record.area_id),
     neighborhood_slug: optionalSlug(record.neighborhood_slug),
     is_active: isActive,
+    updated_at: optionalTimestamp(record.updated_at),
   };
 }
 
@@ -234,7 +244,8 @@ function addNewsPaths(paths: Set<string>, snapshot: NewsRevalidationSnapshot, lo
   paths.add('/tin-tuc');
   paths.add('/kien-thuc');
   paths.add('/sitemap.xml');
-  if (snapshot.slug) paths.add(`/tin-tuc/${snapshot.slug}`);
+  paths.add('/sitemap-images.xml');
+  if (isSafePublicSlugSegment(snapshot.slug)) paths.add(`/tin-tuc/${snapshot.slug.trim()}`);
   const categorySlug = snapshot.category ? lookups.categorySlugs.get(snapshot.category) : undefined;
   if (categorySlug) paths.add(`/tin-tuc/danh-muc/${categorySlug}`);
 }

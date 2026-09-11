@@ -230,7 +230,7 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
 export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schema_markup' | 'content_version'>>): Promise<NewsArticle> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
-    .select('id,slug,category,is_published,published_at')
+    .select('id,slug,category,is_published,published_at,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -253,7 +253,7 @@ export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schem
 export async function deleteNews(id: string): Promise<void> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
-    .select('id,slug,category,is_published')
+    .select('id,slug,category,is_published,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -265,8 +265,8 @@ export async function deleteNews(id: string): Promise<void> {
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────
-const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published,published_at';
-type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'published_at'>;
+const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published,published_at,updated_at';
+type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'published_at' | 'updated_at'>;
 
 async function getNewsRevalidationRows(ids: string[]): Promise<NewsRevalidationSnapshotRow[]> {
   if (ids.length === 0) return [];

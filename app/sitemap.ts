@@ -5,8 +5,9 @@ import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
 import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
 import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '@/lib/propertyTypeGroups';
-import { buildProductPath } from '@/lib/productPath';
+import { buildProductPath, isCanonicalProductSource } from '@/lib/productPath';
 import type { Area } from '@/lib/supabase';
+import { isValidSlug } from '@/lib/slug';
 
 // This is the sitemap submitted to Search Console, so it must never emit a preview
 // or deployment origin even when generated during a preview build.
@@ -33,6 +34,23 @@ const PRIMARY_SEO_GROUPS: readonly PropertyTypeSeoGroup[] = ['nha', 'dat'];
 const SITEMAP_PAGE_SIZE = 1000;
 
 type QueryPageResult<T> = { data: T[] | null; error: { message?: string } | null };
+
+type NewsSitemapSource = { id: string; slug?: string | null; updated_at?: string | null };
+
+export function buildNewsSitemapEntries(news: NewsSitemapSource[]): MetadataRoute.Sitemap {
+  return news.flatMap((article) => {
+    const slug = article.slug?.trim();
+    // Search Visibility excludes malformed News slugs. Keep sitemap in the same
+    // policy instead of falling back to a raw slug or UUID that is not canonical.
+    if (!isValidSlug(slug)) return [];
+    return [{
+      url: `${SITE_URL}/tin-tuc/${slug}`,
+      lastModified: article.updated_at ? new Date(article.updated_at) : undefined,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    }];
+  });
+}
 
 async function fetchAllRows<T>(loadPage: (from: number, to: number) => PromiseLike<QueryPageResult<T>>): Promise<T[]> {
   const rows: T[] = [];
@@ -117,9 +135,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [...STATIC];
 
   try {
-    // Lấy đủ field để buildProductPath dựng URL mới /{lt}/{areaSlug}/{districtSlug?}/
-    // {slug}-pr{code}. Tin thiếu public_code/areas.slug/listing_type → fallback URL cũ
-    // (buildProductPath tự xử lý). Fallback select gọn nếu cột mới chưa tồn tại.
+    // Chỉ đưa Product đủ thành phần canonical vào sitemap: /{lt}/{areaSlug}/
+    // {districtSlug?}/{slug}-pr{code}. Nguồn thiếu một phần canonical bị loại,
+    // không fallback sang URL legacy/ID vì Search Visibility cũng loại nguồn đó.
     let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | Array<{ slug?: string | null }> | null }> = [];
     try {
       propRows = await fetchAllRows(from => sb.from('properties')
@@ -134,6 +152,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
     for (const p of propRows) {
       const areaRelation = Array.isArray(p.areas) ? p.areas[0] : p.areas;
+      if (!isCanonicalProductSource({ ...p, areas: areaRelation })) continue;
       entries.push({
         url: `${SITE_URL}${buildProductPath({ ...p, areas: areaRelation })}`,
         lastModified: p.updated_at ? new Date(p.updated_at) : undefined,
@@ -254,15 +273,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
 
     const news = await sb.from('news').select('id,slug,updated_at').eq('is_published', true).limit(5000);
-    for (const n of (news.data ?? []) as Array<{ id: string; slug?: string | null; updated_at?: string | null }>) {
-      const seg = (n.slug && String(n.slug).trim()) || n.id;
-      entries.push({
-        url: `${SITE_URL}/tin-tuc/${seg}`,
-        lastModified: n.updated_at ? new Date(n.updated_at) : undefined,
-        changeFrequency: 'weekly',
-        priority: 0.6,
-      });
-    }
+    entries.push(...buildNewsSitemapEntries((news.data ?? []) as NewsSitemapSource[]));
 
     // Danh mục tin tức động (news_categories): thêm các slug chưa có trong STATIC (STATIC
     // đã liệt 5 slug gốc). Danh mục admin thêm mới sẽ vào sitemap sau revalidate.
