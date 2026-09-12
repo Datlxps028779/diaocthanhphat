@@ -77,6 +77,46 @@ function toRow(candidate: SearchVisibilityCandidate): Record<string, unknown> {
   };
 }
 
+export function staleSearchVisibilitySourceKeys(
+  existing: Array<{ source_key: string; updated_at?: string | null }>,
+  candidates: SearchVisibilityCandidate[],
+): string[] {
+  const current = new Set(candidates.map(candidate => candidate.sourceKey));
+  return existing
+    .map(row => row.source_key)
+    .filter(sourceKey => Boolean(sourceKey) && !current.has(sourceKey));
+}
+
+async function retireStaleRegistryRows(
+  client: VisibilityDatabase,
+  candidates: SearchVisibilityCandidate[],
+  syncStartedAt: string,
+): Promise<number> {
+  const existing = await client.from('search_visibility_urls')
+    .select('source_key,updated_at')
+    .limit(50000);
+  if (existing.error) throw new SearchVisibilitySyncError('AUDIT_WRITE', 'Không đọc được registry hiện tại để dọn URL đã xoá.');
+
+  const stale = staleSearchVisibilitySourceKeys(
+    (existing.data ?? []) as Array<{ source_key: string; updated_at?: string | null }>,
+    candidates,
+  );
+  let removed = 0;
+  for (let index = 0; index < stale.length; index += 500) {
+    const batch = stale.slice(index, index + 500);
+    // Only retire rows that predate this sync snapshot. A concurrent newer sync
+    // may have inserted a key absent from our older source snapshot; the timestamp
+    // guard prevents this run from deleting that newer row.
+    const deletion = await client.from('search_visibility_urls')
+      .delete({ count: 'exact' })
+      .in('source_key', batch)
+      .lt('updated_at', syncStartedAt);
+    if (deletion.error) throw new SearchVisibilitySyncError('AUDIT_WRITE', 'Không dọn được registry URL đã xoá.');
+    removed += Number(deletion.count ?? batch.length);
+  }
+  return removed;
+}
+
 export function validateSearchVisibilityCandidates(candidates: SearchVisibilityCandidate[]): void {
   const invalid = candidates.filter(candidate => {
     const sourceKeyValid = /^[a-z_]+:[A-Za-z0-9:_-]{1,240}$/.test(candidate.sourceKey);
@@ -367,6 +407,7 @@ export async function inspectSearchVisibilityBatch(actorId: string): Promise<Sea
 // Server-only sync. This deliberately has no Google API dependency: it stores only
 // deterministic eligibility evidence from the same public-source policy as sitemap.
 export async function syncSearchVisibilityAudit(actorId: string): Promise<SearchVisibilitySyncResult> {
+  const syncStartedAt = new Date().toISOString();
   const client = adminClient() as unknown as VisibilityDatabase | null;
   if (!client) throw new SearchVisibilitySyncError('SERVER_CONFIG', 'Chưa cấu hình quyền server để đồng bộ audit URL.');
 
@@ -384,13 +425,14 @@ export async function syncSearchVisibilityAudit(actorId: string): Promise<Search
     const summary = summarizeSearchVisibility(candidates);
     const upsert = await client.from('search_visibility_urls').upsert(candidates.map(toRow), { onConflict: 'source_key' });
     if (upsert.error) throw classifySearchVisibilityPersistenceError(upsert.error);
+    const staleRemoved = await retireStaleRegistryRows(client, candidates, syncStartedAt);
     const finish = await client.from('search_visibility_runs').update({
       status: 'succeeded',
       requested_count: candidates.length,
       processed_count: candidates.length,
       succeeded_count: candidates.length,
       finished_at: new Date().toISOString(),
-      metadata: { summary },
+      metadata: { summary, staleRemoved },
     }).eq('id', runResult.data.id);
     if (finish.error) throw new SearchVisibilitySyncError('RUN_FINALIZE', 'Đã lưu audit URL nhưng không hoàn tất được lượt đồng bộ.');
     return { runId: runResult.data.id, summary };
