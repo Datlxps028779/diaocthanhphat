@@ -13,7 +13,14 @@ vi.mock('@/lib/api/contentRevalidation', () => ({
   newsRevalidationSnapshot: vi.fn((article: unknown) => article),
 }));
 
-import { createNews, formatNewsPublicationError, updateNews } from './news';
+import {
+  createNews,
+  formatNewsPublicationError,
+  formatSavedButUnpublishedError,
+  isSavedButUnpublishedError,
+  markSavedButUnpublishedError,
+  updateNews,
+} from './news';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -143,6 +150,24 @@ describe('formatNewsPublicationError', () => {
     expect(formatted).toContain('news_slug_key');
   });
 
+  it('phân biệt nội dung đã lưu nhưng publication chưa hoàn tất', () => {
+    const formatted = formatSavedButUnpublishedError({
+      message: 'Không thể cập nhật trạng thái xuất bản.',
+      code: 'PUBLISH_FAILED',
+      request_id: 'req-news-456',
+    });
+    expect(formatted).toContain('Đã lưu nội dung, nhưng chưa thể cập nhật trạng thái xuất bản.');
+    expect(formatted).toContain('Mã hỗ trợ: req-news-456.');
+  });
+
+  it('hiển thị mã hỗ trợ khi lỗi server có request_id', () => {
+    expect(formatNewsPublicationError({
+      message: 'Không thể cập nhật trạng thái xuất bản.',
+      code: 'PUBLISH_FAILED',
+      request_id: 'req-news-123',
+    })).toContain('Mã hỗ trợ: req-news-123.');
+  });
+
   it('giữ message gốc khi không có quality_gate', () => {
     expect(formatNewsPublicationError(new Error('Bài viết đã thay đổi, vui lòng tải lại.')))
       .toBe('Bài viết đã thay đổi, vui lòng tải lại.');
@@ -150,5 +175,20 @@ describe('formatNewsPublicationError', () => {
 
   it('dùng fallback khi error rỗng', () => {
     expect(formatNewsPublicationError(null)).toBe('Không thể cập nhật trạng thái xuất bản.');
+  });
+
+  it('đánh dấu partial success để form chỉ format thông báo một lần', () => {
+    const wrapped = markSavedButUnpublishedError({
+      code: 'PUBLISH_FAILED',
+      request_id: 'req-news-789',
+      message: 'Không thể cập nhật trạng thái xuất bản.',
+    });
+
+    expect(isSavedButUnpublishedError(wrapped)).toBe(true);
+    expect(formatSavedButUnpublishedError(wrapped)).toBe(
+      'Đã lưu nội dung, nhưng chưa thể cập nhật trạng thái xuất bản.\n'
+      + 'Cập nhật trạng thái xuất bản thất bại. Mã hỗ trợ: req-news-789.',
+    );
+    expect(formatNewsPublicationError(wrapped)).not.toContain('Đã lưu nội dung');
   });
 });

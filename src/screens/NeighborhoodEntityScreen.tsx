@@ -9,6 +9,7 @@ import { buildProductPath } from '../lib/productPath';
 import { districtDisplaySlug } from '../lib/areaPath';
 import { ReadableContent } from '../components/ReadableContent';
 import { formatPropertyPrice } from '../lib/listingPrice';
+import { buildNewsPath } from '../lib/newsPath';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -245,8 +246,8 @@ export function NeighborhoodEntityScreen(props: Props) {
             <div id="neighborhood-related-news" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:p-6">
               <h2 className="text-2xl font-black text-gray-900">Bài viết về {n.name}</h2>
               <div className="mt-4 divide-y divide-gray-100">
-                {relatedNews.map(a => (
-                  <Link key={a.id} href={`/tin-tuc/${a.slug || a.id}`} className="group flex gap-3 py-3">
+                {relatedNews.filter(a => buildNewsPath(a)).map(a => (
+                  <Link key={a.id} href={buildNewsPath(a)!} className="group flex gap-3 py-3">
                     {a.image_url && <img src={a.image_url} alt={a.title} className="h-16 w-24 flex-shrink-0 rounded-lg object-cover" />}
                     <div className="min-w-0">
                       <h3 className="line-clamp-2 text-sm font-bold text-gray-800 transition-colors group-hover:text-red-600">{a.title}</h3>

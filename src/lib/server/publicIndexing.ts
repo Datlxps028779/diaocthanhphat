@@ -10,6 +10,7 @@ import {
   syncSearchVisibilityAudit,
   type SearchVisibilitySyncResult,
 } from './searchVisibilityService';
+import { refreshAiIndex, type AiIndexPropagation } from './aiIndexing';
 
 type PropagationLayerStatus = 'succeeded' | 'skipped' | 'degraded';
 
@@ -26,6 +27,7 @@ export type PublicIndexingPropagation = {
     summary: SearchVisibilitySyncResult['summary'] | null;
     error: string | null;
   };
+  aiIndex: AiIndexPropagation;
 };
 
 function publicImpact(input: ContentRevalidationInput): boolean {
@@ -35,7 +37,7 @@ function publicImpact(input: ContentRevalidationInput): boolean {
   if (input.entity === 'property') {
     return input.targets.some(target => Boolean(target.current?.is_active || target.previous?.is_active));
   }
-  return input.entity === 'area' || input.entity === 'neighborhood';
+  return input.entity === 'area' || input.entity === 'neighborhood' || input.entity === 'route';
 }
 
 async function queueFreshness(input: ContentRevalidationInput, paths: string[], eventKey?: string | null): Promise<number | null> {
@@ -121,5 +123,17 @@ export async function propagatePublicIndexing(input: {
     }
   }
 
-  return { paths, freshness, searchVisibility };
+  const hasPublicImpact = publicImpact(input.content);
+  const aiIndex = await refreshAiIndex({
+    content: input.content,
+    // AIO citations must be rebuilt only after deterministic Search Visibility
+    // succeeds; otherwise a stale registry can make the RAG projection cite an
+    // old or non-canonical URL.
+    shouldRefresh: hasPublicImpact && searchVisibility.status !== 'degraded',
+    skipReason: hasPublicImpact && searchVisibility.status === 'degraded'
+      ? 'AIO tạm hoãn vì Search Visibility chưa đồng bộ thành công.'
+      : null,
+  });
+
+  return { paths, freshness, searchVisibility, aiIndex };
 }

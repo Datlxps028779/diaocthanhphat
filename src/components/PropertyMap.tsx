@@ -3,6 +3,7 @@ import type { Property } from '../lib/supabase';
 import type { Page } from '../lib/router';
 import type { Map as LeafletMap } from 'leaflet';
 import { formatCompactPropertyPrice, getEffectiveListingPrice } from '../lib/listingPrice';
+import { buildProductPath } from '../lib/productPath';
 
 export interface MapBounds {
   north: number; south: number; east: number; west: number;
@@ -147,6 +148,7 @@ function popupHtml(p: Property): string {
         <button
           data-nav-id="${p.id}"
           data-nav-slug="${p.slug ?? ''}"
+          data-nav-path="${encodeURIComponent(buildProductPath(p))}"
           style="
             width:100%;background:${badgeBg};color:#fff;border:none;
             border-radius:8px;padding:9px;font-size:12px;font-weight:700;
@@ -360,7 +362,12 @@ function addMarkers(
       if (!el) return;
       const btn = el.querySelector<HTMLElement>('[data-nav-id]');
       if (btn) {
-        btn.onclick = () => onNavigate({ name: 'property', id: btn.dataset.navId!, slug: btn.dataset.navSlug || undefined });
+        btn.onclick = () => onNavigate({
+          name: 'property',
+          id: btn.dataset.navId!,
+          slug: btn.dataset.navSlug || undefined,
+          canonicalPath: btn.dataset.navPath ? decodeURIComponent(btn.dataset.navPath) : undefined,
+        });
       }
     });
 

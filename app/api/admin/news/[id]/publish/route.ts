@@ -36,6 +36,47 @@ function parseBody(value: unknown): { publish: boolean; expectedContentVersion: 
   return { publish: body.publish, expectedContentVersion: body.expectedContentVersion };
 }
 
+
+function safeRequestId(): string {
+  return crypto.randomUUID();
+}
+
+function publicationErrorMessage(code: string): string {
+  if (code === 'STALE_VERSION') return 'Bài viết đã thay đổi, vui lòng tải lại.';
+  if (code === 'NOT_ALLOWED') return 'Bạn không có quyền cập nhật trạng thái xuất bản bài viết này.';
+  if (code === 'NOT_FOUND') return 'Không tìm thấy bài viết.';
+  if (code === 'READ_FAILED') return 'Không đọc được bài viết từ máy chủ.';
+  if (code === 'INVALID_RESULT') return 'Máy chủ không trả về kết quả xuất bản hợp lệ.';
+  if (code === 'QUALITY_GATE') return 'Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.';
+  return 'Không thể cập nhật trạng thái xuất bản.';
+}
+
+function serverFailureResponse(
+  code: string,
+  status: number,
+  options?: { qualityGate?: ReturnType<typeof buildNewsPublicationQualityReport>; cause?: { code?: string; message?: string } },
+) {
+  const requestId = safeRequestId();
+  const cause = options?.cause;
+  console.error(`[news-publish:${requestId}]`, {
+    code,
+    causeCode: cause?.code,
+    causeMessage: cause?.message,
+  });
+  const body: {
+    error: string;
+    code: string;
+    request_id: string;
+    quality_gate?: ReturnType<typeof buildNewsPublicationQualityReport>;
+  } = {
+    error: publicationErrorMessage(code),
+    code,
+    request_id: requestId,
+  };
+  if (code === 'QUALITY_GATE' && options?.qualityGate) body.quality_gate = options.qualityGate;
+  return NextResponse.json(body, { status });
+}
+
 function errorCode(error: { code?: string; message?: string } | null | undefined) {
   if (error?.code === '40001') return 'STALE_VERSION';
   if (error?.code === '42501') return 'NOT_ALLOWED';
@@ -104,7 +145,7 @@ async function observeLegacyPublish({
     .select('id,slug,category,is_published,published_at')
     .single();
   if (error || !data) {
-    return NextResponse.json({ error: 'Không thể cập nhật trạng thái xuất bản.', code: 'PUBLISH_FAILED' }, { status: 503 });
+    return serverFailureResponse('PUBLISH_FAILED', 503, { cause: error ?? undefined });
   }
 
   const updated = data as Pick<PublicationResult, 'id' | 'slug' | 'category' | 'is_published' | 'published_at'>;
@@ -162,7 +203,7 @@ export async function POST(
     .select('*')
     .eq('id', id)
     .maybeSingle();
-  if (readError) return NextResponse.json({ error: 'Không đọc được bài viết.', code: 'READ_FAILED' }, { status: 503 });
+  if (readError) return serverFailureResponse('READ_FAILED', 503, { cause: readError });
   if (!article) return NextResponse.json({ error: 'Không tìm thấy bài viết.', code: 'NOT_FOUND' }, { status: 404 });
 
   const typedArticle = article as NewsArticle;
@@ -212,11 +253,14 @@ export async function POST(
   if (error) {
     const code = errorCode(error);
     const status = code === 'STALE_VERSION' ? 409 : code === 'NOT_ALLOWED' ? 403 : code === 'NOT_FOUND' ? 404 : code === 'QUALITY_GATE' ? 422 : 503;
-    return NextResponse.json({ error: code === 'STALE_VERSION' ? 'Bài viết đã thay đổi, vui lòng tải lại.' : 'Không thể cập nhật trạng thái xuất bản.', code }, { status });
+    return serverFailureResponse(code, status, {
+      qualityGate: report,
+      cause: error,
+    });
   }
 
   const result = (Array.isArray(data) ? data[0] : data) as PublicationResult | null;
-  if (!result) return NextResponse.json({ error: 'Boundary không trả kết quả hợp lệ.', code: 'INVALID_RESULT' }, { status: 503 });
+  if (!result) return serverFailureResponse('INVALID_RESULT', 503);
   if (!result.changed) return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths });
 
   const propagation = await propagatePublicIndexing({

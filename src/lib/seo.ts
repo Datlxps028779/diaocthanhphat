@@ -5,6 +5,7 @@ import { formatPropertyPrice as formatListingPropertyPrice, priceToVnd } from '.
 import { absoluteUrl, getSiteUrl, normalizePublicImageUrl, publicCanonicalUrl } from './siteUrl';
 import { stripHtml, isHtmlContent } from './markdown';
 import { buildProductPath } from './productPath';
+import { buildNewsPath } from './newsPath';
 import { parseLegacyPropertyVideo, youtubeEmbedUrl, youtubeThumbnailUrl } from './videoMedia';
 import { normalizeListingTitle } from './listingTitle';
 import { SITE_IDENTITY, normalizeSiteBrandText } from './siteIdentity';
@@ -303,7 +304,7 @@ function newsKeywordsFallback(a: NewsArticle): string {
 export function buildNewsMetadata(a: NewsArticle): Metadata {
   const title = clampSeoTitle(normalizeSiteBrandText(a.meta_title || a.title));
   const description = a.meta_description || a.excerpt || newsDescriptionFromBody(a.content) || a.title;
-  const path = `/tin-tuc/${a.slug || a.id}`;
+  const path = buildNewsPath(a) ?? '/tin-tuc';
   // og:title ưu tiên headline đầy đủ a.title (meta_title đã bị kẹp ~60 ký tự cho SEO
   // nên share ra FB/Zalo bị cụt giữa chữ). <title> bên dưới vẫn dùng title=meta_title.
   const ogTtl = ogTitle(a.title?.trim() || title);
@@ -333,7 +334,7 @@ export function buildNewsMetadata(a: NewsArticle): Metadata {
 }
 
 export function buildNewsJsonLd(a: NewsArticle, settings?: Record<string, string>): Record<string, unknown> {
-  const url = absoluteUrl(`/tin-tuc/${a.slug || a.id}`);
+  const url = absoluteUrl(buildNewsPath(a) ?? '/tin-tuc');
   const rawBody = a.content ?? '';
   const plainBody = rawBody ? (isHtmlContent(rawBody) ? stripHtml(rawBody) : rawBody).trim() : '';
   const wordCount = plainBody ? plainBody.split(/\s+/).filter(Boolean).length : 0;

@@ -193,6 +193,35 @@ describe('POST /api/admin/news/[id]/publish', () => {
     expect((await response.json()).code).toBe('SERVER_BOUNDARY_UNAVAILABLE');
   });
 
+  it('trả quality_gate chi tiết khi publication RPC từ chối vì quality gate', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
+    callerClientMock.mockReturnValue(readClient(article()));
+    adminClientMock.mockReturnValue(readClient(article(), null, { code: '23514', message: 'quality gate failed' }));
+    qualityMock.mockReturnValue({ passed: false, issues: [{ code: 'CONTENT_TOO_SHORT', message: 'Nội dung quá ngắn.' }], content_version: 3 });
+
+    const response = await POST(request({ publish: true, expectedContentVersion: 3 }), { params: { id: ARTICLE_ID } });
+    const json = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(json.code).toBe('QUALITY_GATE');
+    expect(json.error).toBe('Bài viết chưa đạt cổng chất lượng SEO–GEO–AIO.');
+    expect(json.quality_gate).toEqual(expect.objectContaining({ passed: false }));
+    expect(json.request_id).toEqual(expect.any(String));
+  });
+
+  it('trả mã hỗ trợ khi publication RPC lỗi không xác định', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
+    callerClientMock.mockReturnValue(readClient(article()));
+    adminClientMock.mockReturnValue(readClient(article(), null, { code: '08006', message: 'connection failed' }));
+
+    const response = await POST(request({ publish: true, expectedContentVersion: 3 }), { params: { id: ARTICLE_ID } });
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json.code).toBe('PUBLISH_FAILED');
+    expect(json.request_id).toEqual(expect.any(String));
+  });
+
   it('trả 409 khi optimistic version đã cũ', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
     callerClientMock.mockReturnValue(readClient(article()));

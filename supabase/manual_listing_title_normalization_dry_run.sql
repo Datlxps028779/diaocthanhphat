@@ -1,90 +1,88 @@
--- Read-only dry-run cho 20260912000000_listing_title_normalization.sql
--- Chỉ SELECT; không cập nhật title/slug.
+-- =============================================================================
+-- Horizon 1 — Listing title normalization dry-run (read-only)
+--
+-- This report proposes only lossless whitespace cleanup. Full Vietnamese
+-- sentence-case, protected-location and safe-typo normalization remains in
+-- src/lib/listingTitle.ts at application write boundaries; SQL must not invent
+-- a competing implementation before production evidence is reviewed.
+--
+-- Production must be run by the user after reviewing the SQL.
+-- =============================================================================
 
-WITH property_changes AS MATERIALIZED (
+BEGIN TRANSACTION READ ONLY;
+
+WITH source_rows AS (
   SELECT
-    p.id,
-    p.slug,
-    p.title AS current_title,
-    public.normalize_listing_title(p.title, p.city, p.district, p.ward) AS proposed_title,
-    p.is_active,
-    EXISTS (
-      SELECT 1 FROM public.property_verification_cases verification_case
-      WHERE verification_case.property_id = p.id AND verification_case.status = 'verified'
-    ) AS has_verified_case
-  FROM public.properties p
-), listing_changes AS MATERIALIZED (
+    'user_listing'::text AS record_type,
+    l.id AS record_id,
+    l.property_id,
+    l.status::text AS lifecycle_status,
+    l.updated_at,
+    l.title AS current_title
+  FROM public.user_listings AS l
+
+  UNION ALL
+
   SELECT
-    listing.id,
-    listing.property_id,
-    listing.slug,
-    listing.title AS current_title,
-    public.normalize_listing_title(listing.title, listing.city, listing.district, listing.ward) AS proposed_title,
-    listing.status,
-    EXISTS (
-      SELECT 1 FROM public.property_verification_cases verification_case
-      WHERE verification_case.property_id = listing.property_id AND verification_case.status = 'verified'
-    ) AS linked_verified_case
-  FROM public.user_listings listing
+    'property'::text AS record_type,
+    p.id AS record_id,
+    NULL::uuid AS property_id,
+    CASE WHEN p.is_active IS TRUE THEN 'active' ELSE 'inactive' END AS lifecycle_status,
+    p.updated_at,
+    p.title AS current_title
+  FROM public.properties AS p
+), proposed AS (
+  SELECT
+    source_rows.*,
+    CASE
+      WHEN NULLIF(btrim(current_title), '') IS NULL THEN NULL
+      ELSE regexp_replace(
+        regexp_replace(btrim(current_title), '\\s+', ' ', 'g'),
+        '\\s+([,.;:!?])',
+        '\\1',
+        'g'
+      )
+    END AS proposed_title
+  FROM source_rows
+), classified AS (
+  SELECT
+    proposed.*,
+    CASE
+      WHEN NULLIF(btrim(current_title), '') IS NULL THEN 'manual_review_missing_title'
+      WHEN proposed_title = current_title THEN 'already_canonical_format'
+      WHEN record_type = 'user_listing' AND lifecycle_status NOT IN ('pending', 'approved')
+        THEN 'manual_review_non_current_listing'
+      WHEN record_type = 'property' AND lifecycle_status <> 'active'
+        THEN 'manual_review_inactive_property'
+      ELSE 'safe_spacing_candidate'
+    END AS classification,
+    array_remove(ARRAY[
+      CASE WHEN current_title IS DISTINCT FROM btrim(current_title) THEN 'trim' END,
+      CASE WHEN current_title ~ '\\s{2,}' THEN 'collapse_whitespace' END,
+      CASE WHEN current_title ~ '\\s+([,.;:!?])' THEN 'remove_space_before_punctuation' END
+    ], NULL) AS proposed_corrections
+  FROM proposed
 )
-SELECT 'properties' AS source, count(*) AS total_rows,
-       count(*) FILTER (WHERE current_title IS DISTINCT FROM proposed_title) AS changed_rows,
-       count(*) FILTER (WHERE current_title IS DISTINCT FROM proposed_title AND has_verified_case) AS skipped_verified_rows
-FROM property_changes
-UNION ALL
-SELECT 'user_listings', count(*),
-       count(*) FILTER (WHERE current_title IS DISTINCT FROM proposed_title),
-       count(*) FILTER (WHERE current_title IS DISTINCT FROM proposed_title AND linked_verified_case)
-FROM listing_changes;
-
 SELECT
-  p.id,
-  p.slug,
-  p.verification_status,
-  EXISTS (
-    SELECT 1 FROM public.property_verification_cases verification_case
-    WHERE verification_case.property_id = p.id AND verification_case.status = 'verified'
-  ) AS has_verified_case,
-  p.title AS current_title,
-  public.normalize_listing_title(p.title, p.city, p.district, p.ward) AS proposed_title
-FROM public.properties p
-WHERE p.title IS DISTINCT FROM public.normalize_listing_title(p.title, p.city, p.district, p.ward)
-ORDER BY has_verified_case DESC, p.is_active DESC, p.updated_at DESC
-LIMIT 50;
+  now() AS measured_at,
+  'listing_title_normalization_dry_run' AS source,
+  classification,
+  record_type,
+  lifecycle_status,
+  property_id,
+  record_id,
+  updated_at,
+  current_title,
+  proposed_title,
+  current_title IS DISTINCT FROM proposed_title AS changed,
+  proposed_corrections,
+  'Candidate only. Do not update from this report until source evidence and a guarded apply scope are approved.' AS notes
+FROM classified
+WHERE classification <> 'already_canonical_format'
+ORDER BY
+  CASE WHEN classification LIKE 'manual_review_%' THEN 0 ELSE 1 END,
+  updated_at DESC NULLS LAST,
+  record_type,
+  record_id;
 
-SELECT
-  listing.id,
-  listing.property_id,
-  listing.slug,
-  listing.status,
-  listing.title AS current_title,
-  public.normalize_listing_title(listing.title, listing.city, listing.district, listing.ward) AS proposed_title
-FROM public.user_listings listing
-WHERE listing.title IS DISTINCT FROM public.normalize_listing_title(listing.title, listing.city, listing.district, listing.ward)
-ORDER BY listing.updated_at DESC
-LIMIT 50;
-
--- Riêng tập public đang hiển thị để đối chiếu browser/card.
-SELECT
-  p.id,
-  p.slug,
-  p.verification_status,
-  p.title AS current_title,
-  public.normalize_listing_title(p.title, p.city, p.district, p.ward) AS proposed_title
-FROM public.properties p
-WHERE p.is_active = true
-  AND p.title IS DISTINCT FROM public.normalize_listing_title(p.title, p.city, p.district, p.ward)
-ORDER BY p.created_at DESC
-LIMIT 50;
-
--- Contract/ACL/triggers sau migration.
-SELECT
-  to_regprocedure('public.normalize_listing_title(text,text,text,text)') AS normalize_function,
-  to_regprocedure('public.normalize_listing_title_row()') AS trigger_function,
-  has_function_privilege('anon', 'public.normalize_listing_title(text,text,text,text)'::regprocedure, 'EXECUTE') AS anon_can_execute,
-  has_function_privilege('authenticated', 'public.normalize_listing_title(text,text,text,text)'::regprocedure, 'EXECUTE') AS authenticated_can_execute;
-
-SELECT tgname, tgrelid::regclass AS table_name, pg_get_triggerdef(oid) AS definition
-FROM pg_trigger
-WHERE tgname IN ('trg_normalize_user_listing_title', 'trg_normalize_property_title')
-ORDER BY tgname;
+ROLLBACK;

@@ -1,3 +1,4 @@
+import { isSafePublicSlugSegment } from '../slug';
 import { supabase, type Area, type Neighborhood, type NewsArticle, type Property } from '../supabase';
 import type {
   ContentRevalidationInput,
@@ -6,6 +7,7 @@ import type {
   AreaRevalidationSnapshot,
   NeighborhoodRevalidationSnapshot,
   RouteRevalidationSnapshot,
+  PropertyRevalidationContext,
   RevalidationAction,
   RevalidationTarget,
 } from '../server/contentRevalidation';
@@ -23,6 +25,7 @@ export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug
 export function propertyRevalidationSnapshot(
   property: Pick<Property, 'id' | 'slug' | 'public_code' | 'listing_type' | 'district' | 'area_id' | 'neighborhood_slug' | 'is_active'>
     & Partial<Pick<Property, 'district_id' | 'property_type_id' | 'updated_at'>>,
+  context?: PropertyRevalidationContext,
 ): PropertyRevalidationSnapshot {
   return {
     id: property.id,
@@ -32,6 +35,8 @@ export function propertyRevalidationSnapshot(
     district: property.district,
     district_id: property.district_id,
     property_type_id: property.property_type_id,
+    area_slug: context?.area_slug ?? null,
+    property_type_slug: context?.property_type_slug ?? null,
     area_id: property.area_id,
     neighborhood_slug: property.neighborhood_slug,
     is_active: property.is_active,
@@ -108,7 +113,10 @@ export async function revalidateSiteWideContent(): Promise<string[]> {
     '/', '/danh-sach', '/mua-ban', '/cho-thue', '/khu-vuc', '/khu-dan-cu',
     '/tin-tuc', '/kien-thuc', '/ve-chung-toi', '/so-sanh', '/dinh-gia',
     '/du-lieu-gia', '/du-an', '/dau-tu',
-    ...(managedPages ?? []).map(page => `/trang/${page.slug}`),
+    ...(managedPages ?? [])
+      .map(page => page.slug)
+      .filter((slug): slug is string => isSafePublicSlugSegment(slug))
+      .map(slug => `/trang/${slug.trim()}`),
   ];
   return revalidateRouteContent('update', [...new Set(paths)].map(path => ({ current: routeRevalidationSnapshot(path) })));
 }

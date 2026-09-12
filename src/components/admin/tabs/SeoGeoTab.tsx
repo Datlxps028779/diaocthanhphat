@@ -9,6 +9,7 @@ import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
 import type { SearchConsoleAccessDiagnosis, SearchVisibilityAuditResponse } from '../../../lib/api/searchVisibility';
+import { getSearchConsoleUiState } from '../../../lib/searchConsoleUiState';
 import type { FreshnessQueueResponse } from '../../../lib/server/seoFreshnessObservability';
 
 const SCHEMA_SETTINGS: Array<Pick<SiteSetting, 'key' | 'label' | 'group_name' | 'type'> & { placeholder?: string }> = [
@@ -596,6 +597,17 @@ function SearchVisibilityCard({
 }) {
   const excluded = audit?.urls.filter(row => !row.eligible).slice(0, 4) ?? [];
   const lastRun = audit?.runs[0];
+  const searchConsoleState = audit
+    ? getSearchConsoleUiState(audit.searchConsole.configurationState, accessDiagnosis)
+    : 'not_configured';
+  const googleReady = searchConsoleState === 'ready';
+  const searchConsoleLabel = searchConsoleState === 'ready'
+    ? 'sẵn sàng'
+    : searchConsoleState === 'configured_not_verified'
+      ? 'đã cấu hình, chưa xác thực quyền'
+      : searchConsoleState === 'invalid'
+        ? 'cấu hình server chưa hợp lệ'
+        : 'chưa cấu hình server';
   const errorHint = error?.code === 'CANONICAL_CONSTRAINT'
     ? 'Constraint production đang sai regex. Hãy chạy migration sửa constraint, sau đó đồng bộ lại.'
     : error?.code === 'CANONICAL_POLICY'
@@ -645,7 +657,7 @@ function SearchVisibilityCard({
             <Metric label="Chủ đích loại trừ" value={audit.summary.excluded} tone="amber" />
           </div>
           <div className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
-            <strong>Search Console: {audit.searchConsole.configurationState === 'configured' ? 'đã cấu hình server' : audit.searchConsole.configurationState === 'invalid' ? 'cấu hình server chưa hợp lệ' : 'chưa cấu hình server'}.</strong>{' '}
+            <strong>Search Console: {searchConsoleLabel}.</strong>{' '}
             Google evidence: <strong>{audit.summary.googleEvidenceCount}</strong> URL. Sitemap được Google nhận không đảm bảo crawl/index; URL Inspection phản ánh phiên bản Google đã biết, không phải live test.
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -653,11 +665,11 @@ function SearchVisibilityCard({
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50">
               <ShieldCheck className="h-3.5 w-3.5" />{googleAction === 'diagnostic' ? 'Đang chẩn đoán…' : 'Chẩn đoán quyền'}
             </button>
-            <button type="button" onClick={onSubmitSitemap} disabled={loading || syncing || !!googleAction || audit.searchConsole.configurationState !== 'configured'}
+            <button type="button" onClick={onSubmitSitemap} disabled={loading || syncing || !!googleAction || !googleReady}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">
               <Globe2 className="h-3.5 w-3.5" />{googleAction === 'sitemap' ? 'Đang gửi sitemap…' : 'Gửi sitemap lên Search Console'}
             </button>
-            <button type="button" onClick={onInspectBatch} disabled={loading || syncing || !!googleAction || audit.searchConsole.configurationState !== 'configured'}
+            <button type="button" onClick={onInspectBatch} disabled={loading || syncing || !!googleAction || !googleReady}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">
               <Search className="h-3.5 w-3.5" />{googleAction === 'inspection' ? 'Đang kiểm tra…' : 'Kiểm tra tối đa 5 URL'}
             </button>
@@ -672,7 +684,7 @@ function SearchVisibilityCard({
               {accessDiagnosis.message}
             </div>
           )}
-          {audit.searchConsole.configurationState !== 'configured' && <p className="mt-2 text-[11px] leading-4 text-gray-500">Các thao tác Google đang khóa: chỉ owner cấu hình secrets server-side, cấp quyền Search Console rồi tải lại trang. Không nhập secret tại đây.</p>}
+          {searchConsoleState !== 'ready' && <p className="mt-2 text-[11px] leading-4 text-gray-500">{searchConsoleState === 'configured_not_verified' ? 'Các thao tác gửi/kiểm tra đang khóa cho tới khi owner chạy Chẩn đoán quyền và exact property được xác nhận. Chẩn đoán chỉ đọc.' : 'Các thao tác Google đang khóa: chỉ owner cấu hình secrets server-side, cấp quyền Search Console rồi tải lại trang. Không nhập secret tại đây.'}</p>}
           {excluded.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <p className="text-xs font-bold text-gray-700">Ưu tiên xử lý từ dữ liệu nguồn</p>

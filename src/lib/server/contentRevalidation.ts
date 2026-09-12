@@ -1,4 +1,4 @@
-import { buildProductPath } from '../productPath';
+import { buildProductPath, isCanonicalProductSource } from '../productPath';
 import { buildAreaListingPath } from '../areaPath';
 import { propertyTypeSeoGroupFromSlug } from '../propertyTypeGroups';
 import { isSafePublicSlugSegment, isValidSlug } from '../slug';
@@ -22,11 +22,16 @@ export type PropertyRevalidationSnapshot = {
   district: string | null;
   district_id?: string | null;
   property_type_id?: string | null;
+  /** Optional historical slug used when a taxonomy slug changes. */
+  area_slug?: string | null;
+  property_type_slug?: string | null;
   area_id: string | null;
   neighborhood_slug?: string | null;
   is_active: boolean;
   updated_at?: string | null;
 };
+
+export type PropertyRevalidationContext = Pick<PropertyRevalidationSnapshot, 'area_slug' | 'property_type_slug'>;
 
 export type AreaRevalidationSnapshot = {
   id: string;
@@ -136,6 +141,8 @@ function parsePropertySnapshot(value: unknown): PropertyRevalidationSnapshot | n
     district: optionalText(record.district, 120),
     district_id: optionalId(record.district_id),
     property_type_id: optionalId(record.property_type_id),
+    area_slug: optionalSlug(record.area_slug),
+    property_type_slug: optionalSlug(record.property_type_slug),
     area_id: optionalId(record.area_id),
     neighborhood_slug: optionalSlug(record.neighborhood_slug),
     is_active: isActive,
@@ -149,7 +156,7 @@ const ROUTE_PATHS = new Set([
   '/tin-tuc', '/kien-thuc', '/ve-chung-toi', '/so-sanh', '/dinh-gia',
   '/du-lieu-gia', '/du-an', '/dau-tu',
 ]);
-const PUBLIC_SLUG_PATH_RE = /^\/(?:trang|tin-tuc\/danh-muc)\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const PUBLIC_SLUG_PATH_RE = /^\/(?:trang|tin-tuc\/danh-muc|khu-vuc|khu-dan-cu|mua-ban|cho-thue)\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function isAllowedRoutePath(path: string): boolean {
   return ROUTE_PATHS.has(path) || PUBLIC_SLUG_PATH_RE.test(path);
@@ -247,7 +254,7 @@ function addNewsPaths(paths: Set<string>, snapshot: NewsRevalidationSnapshot, lo
   paths.add('/sitemap-images.xml');
   if (isSafePublicSlugSegment(snapshot.slug)) paths.add(`/tin-tuc/${snapshot.slug.trim()}`);
   const categorySlug = snapshot.category ? lookups.categorySlugs.get(snapshot.category) : undefined;
-  if (categorySlug) paths.add(`/tin-tuc/danh-muc/${categorySlug}`);
+  if (isSafePublicSlugSegment(categorySlug)) paths.add(`/tin-tuc/danh-muc/${categorySlug.trim()}`);
 }
 
 function addPropertyPaths(paths: Set<string>, snapshot: PropertyRevalidationSnapshot, lookups: RevalidationLookups) {
@@ -257,36 +264,43 @@ function addPropertyPaths(paths: Set<string>, snapshot: PropertyRevalidationSnap
   paths.add('/cho-thue');
   paths.add('/sitemap.xml');
   paths.add('/sitemap-images.xml');
-  if (snapshot.slug) paths.add(`/bat-dong-san/${snapshot.slug}`);
-  if (snapshot.neighborhood_slug) paths.add(`/khu-dan-cu/${snapshot.neighborhood_slug}`);
+  if (isSafePublicSlugSegment(snapshot.slug)) paths.add(`/bat-dong-san/${snapshot.slug.trim()}`);
+  if (isSafePublicSlugSegment(snapshot.neighborhood_slug)) paths.add(`/khu-dan-cu/${snapshot.neighborhood_slug.trim()}`);
 
-  const areaSlug = snapshot.area_id ? lookups.areaSlugs.get(snapshot.area_id) : undefined;
-  if (!areaSlug || !snapshot.listing_type) return;
-  paths.add(`/khu-vuc/${areaSlug}`);
+  const areaSlug = snapshot.area_slug ?? (snapshot.area_id ? lookups.areaSlugs.get(snapshot.area_id) : undefined);
+  if (!isSafePublicSlugSegment(areaSlug) || !snapshot.listing_type) return;
+  const safeAreaSlug = areaSlug.trim();
+  paths.add(`/khu-vuc/${safeAreaSlug}`);
   const listingBase = snapshot.listing_type === 'mua_ban' ? '/mua-ban' : '/cho-thue';
-  paths.add(`${listingBase}/${areaSlug}`);
+  paths.add(`${listingBase}/${safeAreaSlug}`);
   if (snapshot.district) {
     // buildProductPath dùng cùng slug builder với route khu vực, tránh tự nối URL khác format.
-    const canonical = buildProductPath({
+    const productSource = {
       id: snapshot.id,
       slug: snapshot.slug,
       public_code: snapshot.public_code,
       listing_type: snapshot.listing_type,
       district: snapshot.district,
-      areas: { slug: areaSlug },
-    });
-    paths.add(canonical);
-    const segments = canonical.split('/').filter(Boolean);
-    if (segments.length >= 3) paths.add(`/${segments.slice(0, -1).join('/')}`);
+      areas: { slug: safeAreaSlug },
+    };
+    if (isCanonicalProductSource(productSource)) {
+      const canonical = buildProductPath(productSource);
+      paths.add(canonical);
+      const segments = canonical.split('/').filter(Boolean);
+      if (segments.length >= 3) paths.add(`/${segments.slice(0, -1).join('/')}`);
+    }
 
-    const typeSlug = snapshot.property_type_id && lookups.propertyTypeSlugs?.get(snapshot.property_type_id);
+    const typeSlug = snapshot.property_type_slug
+      ?? (snapshot.property_type_id && lookups.propertyTypeSlugs?.get(snapshot.property_type_id));
     const groupSlug = propertyTypeSeoGroupFromSlug(typeSlug);
     const districtPath = snapshot.district_id ? lookups.districtSlugs?.get(snapshot.district_id) : undefined;
-    if ((groupSlug === 'nha' || groupSlug === 'dat') && districtPath?.areaId === snapshot.area_id) {
+    if ((groupSlug === 'nha' || groupSlug === 'dat')
+      && districtPath?.areaId === snapshot.area_id
+      && isSafePublicSlugSegment(districtPath.slug)) {
       paths.add(buildAreaListingPath({
         listingType: snapshot.listing_type,
-        areaSlug,
-        districtSlug: districtPath.slug,
+        areaSlug: safeAreaSlug,
+        districtSlug: districtPath.slug.trim(),
         propertyTypeSlug: groupSlug,
       }));
     }
@@ -297,10 +311,11 @@ function addPropertyPaths(paths: Set<string>, snapshot: PropertyRevalidationSnap
 function addAreaPaths(paths: Set<string>, snapshot: AreaRevalidationSnapshot, includeSitemap = true) {
   paths.add('/');
   paths.add('/khu-vuc');
-  if (snapshot.slug) {
-    paths.add(`/khu-vuc/${snapshot.slug}`);
-    paths.add(`/mua-ban/${snapshot.slug}`);
-    paths.add(`/cho-thue/${snapshot.slug}`);
+  if (isSafePublicSlugSegment(snapshot.slug)) {
+    const slug = snapshot.slug.trim();
+    paths.add(`/khu-vuc/${slug}`);
+    paths.add(`/mua-ban/${slug}`);
+    paths.add(`/cho-thue/${slug}`);
   }
   if (includeSitemap) paths.add('/sitemap.xml');
 }
@@ -308,9 +323,9 @@ function addAreaPaths(paths: Set<string>, snapshot: AreaRevalidationSnapshot, in
 function addNeighborhoodPaths(paths: Set<string>, snapshot: NeighborhoodRevalidationSnapshot, lookups: RevalidationLookups) {
   paths.add('/');
   paths.add('/khu-dan-cu');
-  if (snapshot.slug) paths.add(`/khu-dan-cu/${snapshot.slug}`);
+  if (isSafePublicSlugSegment(snapshot.slug)) paths.add(`/khu-dan-cu/${snapshot.slug.trim()}`);
   const areaSlug = snapshot.area_id ? lookups.areaSlugs.get(snapshot.area_id) : undefined;
-  if (areaSlug) paths.add(`/khu-vuc/${areaSlug}`);
+  if (isSafePublicSlugSegment(areaSlug)) paths.add(`/khu-vuc/${areaSlug.trim()}`);
   paths.add('/sitemap.xml');
 }
 

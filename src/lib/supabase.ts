@@ -189,7 +189,7 @@ export type MenuItem = {
   created_at: string;
   updated_at: string;
 };
-export type RagSourceTable = 'properties' | 'news' | 'neighborhoods' | 'areas' | 'price_stats' | 'ai_chat_knowledge' | 'admin_docs';
+export type RagSourceTable = 'properties' | 'news' | 'property_types' | 'news_categories' | 'neighborhoods' | 'areas' | 'price_stats' | 'managed_pages' | 'ai_chat_knowledge' | 'admin_docs';
 export type RagVisibility = 'public' | 'internal';
 export type RagChunk = {
   id: string;

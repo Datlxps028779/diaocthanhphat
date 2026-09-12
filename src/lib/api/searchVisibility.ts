@@ -49,8 +49,10 @@ export interface SearchVisibilityRun {
   finished_at: string | null;
 }
 
+export type SearchConsoleConfigurationState = 'not_configured' | 'configured' | 'invalid';
+
 export interface SearchVisibilityAuditResponse {
-  searchConsole: { configurationState: 'not_configured' | 'configured' | 'invalid' };
+  searchConsole: { configurationState: SearchConsoleConfigurationState };
   summary: SearchVisibilityAuditSummary;
   urls: SearchVisibilityUrlAudit[];
   runs: SearchVisibilityRun[];

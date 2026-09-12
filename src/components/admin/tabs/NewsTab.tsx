@@ -15,7 +15,8 @@ import {
 } from '../../../lib/newsLocationSelection';
 import {
   adminGetAllNews, createNews, updateNews, deleteNews, bulkDeleteNews, getNewsCategories,
-  setNewsPublicationState, formatNewsPublicationError,
+  setNewsPublicationState, formatNewsPublicationError, formatSavedButUnpublishedError,
+  markSavedButUnpublishedError, isSavedButUnpublishedError,
 } from '../../../lib/api';
 import { collectNewsAdminSaveIssues, collectNewsRepublishReadiness, formatNewsIssueList, newsIssueEditTarget } from '../../../lib/newsAdminSaveIssues';
 import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
@@ -493,7 +494,9 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
         })(),
       });
     } catch (error) {
-      setError(formatNewsPublicationError(error, { fallback: 'Không lưu được bài viết.' }));
+      setError(isSavedButUnpublishedError(error)
+        ? formatSavedButUnpublishedError(error)
+        : formatNewsPublicationError(error, { fallback: 'Không lưu được bài viết.' }));
     } finally { setSaving(false); }
   };
 
@@ -1061,14 +1064,27 @@ export function NewsTab({ focusEditId, onFocusHandled }: { focusEditId?: string;
             const requestedPublished = Boolean(payload.is_published);
             const saved = await createNews({ ...payload, is_published: false } as Omit<NewsArticle, 'id' | 'created_at' | 'updated_at' | 'views'>);
             if (requestedPublished) {
-              await setNewsPublicationState(saved.id, true, saved.content_version ?? 1);
+              try {
+                await setNewsPublicationState(saved.id, true, saved.content_version ?? 1);
+              } catch (error) {
+                await load().catch(() => undefined);
+                setEditing(saved);
+                setCreating(false);
+                throw markSavedButUnpublishedError(error);
+              }
             }
           } else if (editing) {
             const requestedPublished = Boolean(payload.is_published);
             const { is_published: _requestedPublished, ...editorialPayload } = payload;
             const saved = await updateNews(editing.id, editorialPayload);
             if (requestedPublished !== Boolean(editing.is_published)) {
-              await setNewsPublicationState(saved.id, requestedPublished, saved.content_version ?? 1);
+              try {
+                await setNewsPublicationState(saved.id, requestedPublished, saved.content_version ?? 1);
+              } catch (error) {
+                await load().catch(() => undefined);
+                setEditing(saved);
+                throw markSavedButUnpublishedError(error);
+              }
             }
           }
           await load();

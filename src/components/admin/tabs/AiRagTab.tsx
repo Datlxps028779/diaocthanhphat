@@ -4,7 +4,7 @@ import type { RagChunk, RagMatch, RagSourceTable, AdminDocument } from '../../..
 import {
   adminRefreshRagIndex, adminGetRagStats, adminGetRagRuns, adminGetRagChunks, testRagRetrieval,
   adminListDocuments, adminCreateDocument, adminUpdateDocument, adminDeleteDocument, adminCreateDocumentSignedUrl, uploadDocument,
-  type RagSourceStat,
+  isRagRefreshDeferred, RAG_DEFERRED_MESSAGE, type RagSourceStat,
 } from '../../../lib/api';
 import { parseDocument } from '../../../lib/documentParse';
 import type { RagIndexRun } from '../../../lib/supabase';
@@ -15,13 +15,16 @@ import type { RagIndexRun } from '../../../lib/supabase';
 const SOURCE_LABELS: Record<RagSourceTable, string> = {
   properties: 'Bất động sản',
   news: 'Tin tức',
+  property_types: 'Danh mục BĐS',
+  news_categories: 'Danh mục tin tức',
   neighborhoods: 'Khu dân cư',
   areas: 'Khu vực',
   price_stats: 'Dữ liệu giá',
+  managed_pages: 'Trang nội dung public',
   ai_chat_knowledge: 'Tri thức Q&A',
   admin_docs: 'Tài liệu nội bộ',
 };
-const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge'];
+const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'property_types', 'news_categories', 'neighborhoods', 'areas', 'price_stats', 'managed_pages', 'ai_chat_knowledge', 'admin_docs'];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -117,18 +120,30 @@ export function AiRagTab() {
     setDocBusy(null);
   };
 
-  const load = () => Promise.all([adminGetRagStats(), adminGetRagRuns(8)])
-    .then(([s, r]) => { setStats(s); setRuns(r); setLoading(false); });
+  const load = () => {
+    setLoading(true);
+    return Promise.all([adminGetRagStats(), adminGetRagRuns(8)])
+      .then(([s, r]) => { setStats(s); setRuns(r); })
+      .catch(e => { setMsg({ kind: 'err', text: (e as Error).message }); })
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const loadChunks = (source: RagSourceTable | '') => {
     setChunksLoading(true);
     setOpenChunk(null);
-    adminGetRagChunks(source || undefined, 50).then(c => { setChunks(c); setChunksLoading(false); });
+    adminGetRagChunks(source || undefined, 50)
+      .then(c => { setChunks(c); })
+      .catch(e => { setMsg({ kind: 'err', text: (e as Error).message }); setChunks([]); })
+      .finally(() => setChunksLoading(false));
   };
   useEffect(() => { loadChunks(chunkSource); }, [chunkSource]);
 
   const reindex = async (target?: RagSourceTable) => {
+    if (isRagRefreshDeferred()) {
+      setMsg({ kind: 'err', text: RAG_DEFERRED_MESSAGE });
+      return;
+    }
     setReindexing(target ?? 'all');
     setMsg(null);
     try {
@@ -155,6 +170,7 @@ export function AiRagTab() {
   };
 
   const totalChunks = stats.reduce((sum, s) => sum + s.chunk_count, 0);
+  const ragRefreshDeferred = isRagRefreshDeferred();
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" /></div>;
 
@@ -163,13 +179,20 @@ export function AiRagTab() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-red-600" />RAG / Tri thức AI</h2>
-          <p className="text-gray-500 text-sm mt-1">Kho tri thức AI đọc được — sinh tự động từ dữ liệu thật (BĐS, tin tức, khu dân cư, giá…). Đồng bộ lại mỗi khi nội dung đổi.</p>
+          <p className="text-gray-500 text-sm mt-1">Kho tri thức AI đọc được — sinh tự động từ dữ liệu thật (BĐS, tin tức, khu dân cư, giá…).</p>
         </div>
-        <button onClick={() => reindex()} disabled={reindexing !== null}
+        <button onClick={() => reindex()} disabled={reindexing !== null || ragRefreshDeferred}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40 flex-shrink-0">
           <RefreshCw className={`w-4 h-4 ${reindexing === 'all' ? 'animate-spin' : ''}`} />Đồng bộ tất cả
         </button>
       </div>
+
+      {ragRefreshDeferred && (
+        <div className="flex items-start gap-2 text-sm rounded-xl p-3 bg-amber-50 text-amber-800 border border-amber-200">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{RAG_DEFERRED_MESSAGE} SEO, Search và AIO live vẫn hoạt động độc lập.</span>
+        </div>
+      )}
 
       {msg && (
         <div className={`flex items-start gap-2 text-sm rounded-xl p-3 ${msg.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
@@ -195,7 +218,7 @@ export function AiRagTab() {
                     {stat ? `${stat.chunk_count} chunk · cập nhật ${fmtDate(stat.last_indexed_at)}` : 'Chưa có chunk'}
                   </p>
                 </div>
-                <button onClick={() => reindex(src)} disabled={reindexing !== null}
+                <button onClick={() => reindex(src)} disabled={reindexing !== null || ragRefreshDeferred}
                   className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 border border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-600 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0">
                   <RefreshCw className={`w-3 h-3 ${reindexing === src ? 'animate-spin' : ''}`} />Đồng bộ
                 </button>

@@ -1,5 +1,20 @@
 # Documentation Changelog
 
+## 2026-09-11 — Horizon 4 News canonical/source measurement
+
+- User-run production read-only summary measured 79 published News rows: 0 missing slugs, 0 duplicate slug groups, and 1 malformed slug (`f551d52c-3927-4d02-83a0-8cdb5996d365`) ending in a trailing hyphen. The row was not mutated.
+- Structured location remains shallow but internally consistent: 18 rows have `area_id`, none have district/ward/neighborhood IDs, and no hierarchy mismatch was found. Stored `schema_markup` is 75 objects and 4 null values; public JSON-LD still requires runtime verification.
+- Search Visibility is consistent for all 78 valid published News slugs: no missing registry row, canonical URL/path mismatch, published-but-ineligible row, or duplicate canonical URL. Latest eligibility sync succeeded on 2026-09-11.
+- Internal-link baseline remains 38/79 published articles below two relative links. Five articles contain external HTTP(S) links; no relative query/hash links or absolute-same-site-only risk was found. Existing articles remain unchanged for later editorial repair.
+- Local source fix aligns sitemap with Search Visibility: a shared lowercase canonical-slug validator now prevents missing/malformed News slugs from being emitted through raw-slug/ID fallback. Focused tests passed; full Vitest (192 files, 1495 tests), typecheck, and production build passed. Chrome thật đã mở `http://localhost:3000/sitemap.xml` sau production build: XML render thành công, 178 URL quan sát được dùng origin `https://chonhaviet.com`; không thấy `vercel.app`. Không kiểm admin/MFA, Google Search Console hoặc production deployment ở lượt local này.
+
+## 2026-09-11 — SEO Freshness Queue observability production verified
+
+- Production Admin `/quantrihethong/seo-geo` was opened in Chrome with owner/admin session after deploy. The read-only SEO Freshness Queue dashboard showed `232 succeeded`, with `pending`, `processing`, `failed`, and `dead_letter` at zero.
+- The user ran `supabase/manual_seo_freshness_queue_verify.sql`; the database result matched the dashboard: one `succeeded` status row with `job_count = 232`, oldest job `2026-09-09 09:07:54.750854+00`, and no rows for the other statuses.
+- Chrome refresh was exercised without creating jobs or mutating the queue. The transient disabled state was not separately captured because the read returned too quickly; the TODO remains open for that narrow evidence gap.
+- No production data, queue status, retry state, sitemap submission, Search Console inspection, or SEO settings were changed.
+
 ## 2026-09-11 — News publication boundary hardening prepared
 
 - Prepared migration `20260911010000_harden_news_publication_server_boundary.sql` and read-only preflight `supabase/manual_news_publication_server_boundary_dry_run.sql`. The publication transition RPC is moved to a service-role-only server function; the old authenticated RPC is revoked, while the authenticated owner identity is passed explicitly for the audit event.

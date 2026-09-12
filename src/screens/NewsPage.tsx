@@ -19,6 +19,7 @@ import { renderMarkdownContent, isHtmlContent, stripHtml } from '../lib/markdown
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickRelated, buildArticleDiscoveryPools } from '../lib/relatedNews';
 import { buildNewsImageAlt } from '../lib/propertyImages';
+import { buildNewsPath } from '../lib/newsPath';
 import { BlurFillImage } from '../components/BlurFillImage';
 import { useNeighborhoods, useAreas } from '../lib/hooks/useTaxonomy';
 import { autoLinkContent, type LinkTarget } from '../lib/autoLink';
@@ -85,7 +86,7 @@ function estimateReadTime(content: string) {
 }
 
 function articleHref(article: Pick<NewsArticle, 'id' | 'slug'>) {
-  return pageToHref({ name: 'news', slug: article.slug || article.id });
+  return buildNewsPath(article) ?? '/tin-tuc';
 }
 
 function asArray<T>(value: unknown): T[] {
@@ -298,10 +299,10 @@ function ArticleDetail({
     ...areas.map(a => ({ name: a.name, href: `/khu-vuc/${a.slug}`, group: 'place' as const })),
     // Loại chính bài đang đọc, nếu không bài sẽ tự link vào mình.
     ...linkableArticles
-      .filter(n => n.id !== article.id && n.title && (n.slug || n.id))
+      .filter(n => n.id !== article.id && n.title && buildNewsPath(n))
       .map(n => ({
         name: n.title,
-        href: pageToHref({ name: 'news', slug: n.slug || n.id }),
+        href: buildNewsPath(n)!,
         group: 'article' as const,
       })),
   ], [neighborhoods, areas, linkableArticles, article.id]);

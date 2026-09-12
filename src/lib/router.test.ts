@@ -197,6 +197,13 @@ describe('parseListingParams — đọc ngược query của Next searchParams',
     expect(parseListingParams(sp)).toEqual({ minArea: 50, maxArea: 100, bedrooms: '2', direction: 'Tây Bắc' });
   });
 
+  it('ưu tiên canonical product path khi caller đã có đủ dữ liệu nguồn', () => {
+    expect(pageToHref({
+      name: 'property', id: 'uuid-1', slug: 'nha-dep',
+      canonicalPath: '/mua-ban/binh-duong/di-an/nha-dep-pr1001',
+    })).toBe('/mua-ban/binh-duong/di-an/nha-dep-pr1001');
+  });
+
   it('trang 1 không lên URL, trang > 1 thì có', () => {
     expect(pageToHref({ name: 'listings', page: 1 })).toBe('/danh-sach');
     expect(pageToHref({ name: 'listings', page: 3 })).toBe('/danh-sach?page=3');

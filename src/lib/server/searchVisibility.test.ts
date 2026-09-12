@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
-import { classifySearchVisibilityPersistenceError, GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX, isFutureTimestamp, isRecoverableSitemapAuditFailure, isWithinSitemapCooldown, markEligibleUrlsSitemapSubmitted, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
+import { classifySearchVisibilityPersistenceError, GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX, isFutureTimestamp, isRecoverableSitemapAuditFailure, isWithinSitemapCooldown, markEligibleUrlsSitemapSubmitted, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, staleSearchVisibilitySourceKeys, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -13,6 +13,16 @@ function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibi
     ...overrides,
   };
 }
+
+describe('stale registry reconciliation', () => {
+  it('identifies deleted sources without retiring a current candidate', () => {
+    const candidates = [{ sourceKey: 'news:n2' }] as SearchVisibilityCandidate[];
+    expect(staleSearchVisibilitySourceKeys([
+      { source_key: 'news:n1', updated_at: '2026-09-10T00:00:00.000Z' },
+      { source_key: 'news:n2', updated_at: '2026-09-10T00:00:00.000Z' },
+    ], candidates)).toEqual(['news:n1']);
+  });
+});
 
 describe('buildSearchVisibilityCandidates', () => {
   it('chỉ cho property active có đủ phần URL canonical vào registry eligible', () => {

@@ -1,8 +1,12 @@
-import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType, type NewsCategoryRow, type NewsArticle } from '../supabase';
+import { supabase, type Area, type District, type Ward, type Neighborhood, type PropertyType, type NewsCategoryRow, type NewsArticle, type Property } from '../supabase';
 import type { TaxonomyGeo } from '../taxonomyGeo';
+import { isSafePublicSlugSegment } from '../slug';
+import { adminRefreshRagIndex } from './aiRag';
 import {
   areaRevalidationSnapshot,
   neighborhoodRevalidationSnapshot,
+  propertyRevalidationSnapshot,
+  revalidatePropertyContent,
   newsRevalidationSnapshot,
   revalidateAreaContent,
   revalidateNeighborhoodContent,
@@ -11,7 +15,8 @@ import {
   routeRevalidationSnapshot,
 } from './contentRevalidation';
 
-const NEWS_CATEGORY_REVALIDATION_SELECT = 'id,slug,category,is_published';
+const NEWS_CATEGORY_REVALIDATION_SELECT = 'id,slug,category,is_published,updated_at';
+const PROPERTY_REVALIDATION_SELECT = 'id,slug,public_code,listing_type,district,district_id,property_type_id,area_id,neighborhood_slug,is_active,updated_at';
 
 async function getNewsCategorySnapshots(label: string | null | undefined): Promise<NewsArticle[]> {
   if (!label) return [];
@@ -26,7 +31,7 @@ async function getNewsCategorySnapshots(label: string | null | undefined): Promi
 async function revalidateNewsCategoryRoutes(slugs: Array<string | null | undefined>): Promise<void> {
   const paths = [
     '/tin-tuc', '/kien-thuc', '/sitemap.xml',
-    ...slugs.filter((slug): slug is string => Boolean(slug)).map(slug => `/tin-tuc/danh-muc/${slug}`),
+    ...slugs.filter((slug): slug is string => isSafePublicSlugSegment(slug)).map(slug => `/tin-tuc/danh-muc/${slug.trim()}`),
   ];
   await revalidateRouteContent('update', [...new Set(paths)].map(path => ({ current: routeRevalidationSnapshot(path) })));
 }
@@ -46,6 +51,50 @@ export async function getTaxonomyGeo(entityIds: string[]): Promise<TaxonomyGeo[]
   }
   return (data ?? []) as TaxonomyGeo[];
 }
+async function getPropertySnapshotsByFilter(column: 'area_id' | 'district_id' | 'property_type_id', value: string): Promise<Property[]> {
+  const { data, error } = await supabase
+    .from('properties')
+    .select(PROPERTY_REVALIDATION_SELECT)
+    .eq(column, value);
+  if (error) throw error;
+  return (data ?? []) as Property[];
+}
+
+function mergePropertyRevalidationTargets(
+  previous: Property[],
+  current: Property[],
+  context?: { previous?: { area_slug?: string | null; property_type_slug?: string | null }; current?: { area_slug?: string | null; property_type_slug?: string | null } },
+) {
+  const targets = new Map<string, { previous?: ReturnType<typeof propertyRevalidationSnapshot>; current?: ReturnType<typeof propertyRevalidationSnapshot> }>();
+  previous.forEach(row => targets.set(row.id, { previous: propertyRevalidationSnapshot(row, context?.previous) }));
+  current.forEach(row => targets.set(row.id, {
+    ...targets.get(row.id),
+    current: propertyRevalidationSnapshot(row, context?.current),
+  }));
+  return [...targets.values()];
+}
+
+async function revalidatePropertyTaxonomySurface(
+  targets: ReturnType<typeof mergePropertyRevalidationTargets>,
+  areaIds: string[] = [],
+): Promise<void> {
+  if (targets.length) await revalidatePropertyContent('bulk', targets);
+  const uniqueAreaIds = [...new Set(areaIds.filter(Boolean))];
+  let areaPaths: string[] = [];
+  if (uniqueAreaIds.length > 0) {
+    const { data, error } = await supabase.from('areas').select('slug').in('id', uniqueAreaIds);
+    if (error) throw error;
+    areaPaths = (data ?? [])
+      .map(row => row.slug)
+      .filter((slug): slug is string => isSafePublicSlugSegment(slug))
+      .flatMap(slug => [`/khu-vuc/${slug.trim()}`, `/mua-ban/${slug.trim()}`, `/cho-thue/${slug.trim()}`]);
+  }
+  await revalidateRouteContent('update', [
+    '/khu-vuc', '/khu-dan-cu', '/danh-sach', '/mua-ban', '/cho-thue',
+    ...areaPaths,
+  ].map(path => ({ current: routeRevalidationSnapshot(path) })));
+}
+
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
   const { data } = await supabase.from('areas').select('*').order('order_index');
@@ -62,23 +111,45 @@ export async function getDistricts(areaId?: string): Promise<District[]> {
 export async function adminCreateDistrict(d: Omit<District, 'id' | 'created_at'>): Promise<void> {
   const { error } = await supabase.from('districts').insert(d);
   if (error) throw error;
+  await revalidatePropertyTaxonomySurface([], [d.area_id]);
 }
 export async function adminUpdateDistrict(id: string, d: Partial<District>): Promise<void> {
+  const { data: previousDistrict, error: previousDistrictError } = await supabase
+    .from('districts').select('area_id').eq('id', id).maybeSingle();
+  if (previousDistrictError) throw previousDistrictError;
+  const previous = await getPropertySnapshotsByFilter('district_id', id);
   const { error } = await supabase.from('districts').update(d).eq('id', id);
   if (error) throw error;
+  const current = await getPropertySnapshotsByFilter('district_id', id);
+  await revalidatePropertyTaxonomySurface(mergePropertyRevalidationTargets(previous, current), [previousDistrict?.area_id, d.area_id].filter((value): value is string => Boolean(value)));
 }
 export async function adminDeleteDistrict(id: string): Promise<void> {
+  const { data: previousDistrict, error: previousDistrictError } = await supabase
+    .from('districts').select('area_id').eq('id', id).maybeSingle();
+  if (previousDistrictError) throw previousDistrictError;
+  const previous = await getPropertySnapshotsByFilter('district_id', id);
   const { error } = await supabase.from('districts').delete().eq('id', id);
   if (error) throw error;
+  await revalidatePropertyTaxonomySurface(mergePropertyRevalidationTargets(previous, []), [previousDistrict?.area_id].filter((value): value is string => Boolean(value)));
 }
 export async function updateArea(id: string, a: Partial<Omit<Area, 'schema_markup'>>): Promise<void> {
   const { data: previous, error: previousError } = await supabase.from('areas').select('id,slug').eq('id', id).maybeSingle();
   if (previousError) throw previousError;
+  const previousProperties = previous?.slug && a.slug && a.slug !== previous.slug
+    ? await getPropertySnapshotsByFilter('area_id', id)
+    : [];
   const { schema_markup: _schemaMarkup, ...safePatch } = a as typeof a & { schema_markup?: unknown };
   const { error } = await supabase.from('areas').update(safePatch).eq('id', id);
   if (error) throw error;
   const { data: current, error: currentError } = await supabase.from('areas').select('id,slug').eq('id', id).maybeSingle();
   if (currentError) throw currentError;
+  if (previousProperties.length || (previous?.slug && current?.slug && previous.slug !== current.slug)) {
+    const currentProperties = await getPropertySnapshotsByFilter('area_id', id);
+    await revalidatePropertyContent('bulk', mergePropertyRevalidationTargets(previousProperties, currentProperties, {
+      previous: { area_slug: previous?.slug },
+      current: { area_slug: current?.slug },
+    }));
+  }
   await revalidateAreaContent('update', [{
     previous: previous ? areaRevalidationSnapshot(previous) : undefined,
     current: current ? areaRevalidationSnapshot(current) : undefined,
@@ -155,6 +226,37 @@ export async function getPropertyTypes(): Promise<PropertyType[]> {
   return data ?? [];
 }
 
+export async function adminCreatePropertyType(type: Omit<PropertyType, 'id' | 'created_at'>): Promise<void> {
+  const { error } = await supabase.from('property_types').insert(type);
+  if (error) throw error;
+  await revalidatePropertyTaxonomySurface([]);
+  await adminRefreshRagIndex('property_types');
+}
+
+export async function adminUpdatePropertyType(id: string, updates: Partial<PropertyType>): Promise<void> {
+  const { data: previousType, error: previousTypeError } = await supabase.from('property_types').select('slug').eq('id', id).maybeSingle();
+  if (previousTypeError) throw previousTypeError;
+  const previous = await getPropertySnapshotsByFilter('property_type_id', id);
+  const { error } = await supabase.from('property_types').update(updates).eq('id', id);
+  if (error) throw error;
+  const current = await getPropertySnapshotsByFilter('property_type_id', id);
+  const currentType = await supabase.from('property_types').select('slug').eq('id', id).maybeSingle();
+  if (currentType.error) throw currentType.error;
+  await revalidatePropertyTaxonomySurface(mergePropertyRevalidationTargets(previous, current, {
+    previous: { property_type_slug: previousType?.slug },
+    current: { property_type_slug: currentType.data?.slug },
+  }));
+  await adminRefreshRagIndex('property_types');
+}
+
+export async function adminDeletePropertyType(id: string): Promise<void> {
+  const previous = await getPropertySnapshotsByFilter('property_type_id', id);
+  const { error } = await supabase.from('property_types').delete().eq('id', id);
+  if (error) throw error;
+  await revalidatePropertyTaxonomySurface(mergePropertyRevalidationTargets(previous, []));
+  await adminRefreshRagIndex('property_types');
+}
+
 // ─── News Categories (Danh mục tin tức) ─────────────────────────────────────────
 export async function getNewsCategories(): Promise<NewsCategoryRow[]> {
   const { data } = await supabase.from('news_categories').select('*').order('order_index');
@@ -164,6 +266,7 @@ export async function adminCreateNewsCategory(c: Omit<NewsCategoryRow, 'id' | 'c
   const { data, error } = await supabase.from('news_categories').insert(c).select('slug').single();
   if (error) throw error;
   await revalidateNewsCategoryRoutes([data.slug]);
+  await adminRefreshRagIndex('news_categories');
 }
 export async function adminReorderNewsCategories(items: Array<{ id: string; order_index: number }>): Promise<void> {
   const results = await Promise.all(items.map(item =>
@@ -172,6 +275,7 @@ export async function adminReorderNewsCategories(items: Array<{ id: string; orde
   const failed = results.find(result => result.error);
   if (failed?.error) throw failed.error;
   await revalidateNewsCategoryRoutes([]);
+  await adminRefreshRagIndex('news_categories');
 }
 // Cập nhật danh mục. Nếu đổi label/slug so với giá trị cũ → gọi RPC rename_news_category
 // (atomic: đổi label/slug + cascade news.category cũ→mới), rồi update các trường còn lại
@@ -231,9 +335,13 @@ export async function adminUpdateNewsCategory(
     await revalidateNewsContent('update', [...targets.values()]);
   }
   await revalidateNewsCategoryRoutes([previousSlug, currentCategory?.slug]);
+  await adminRefreshRagIndex('news_categories');
 }
 // Xoá danh mục — CHẶN nếu còn bài viết mang nhãn này (tránh bài mồ côi khỏi route).
 export async function adminDeleteNewsCategory(id: string, label: string): Promise<void> {
+  const { data: previousCategory, error: previousCategoryError } = await supabase
+    .from('news_categories').select('slug').eq('id', id).maybeSingle();
+  if (previousCategoryError) throw previousCategoryError;
   const { count, error: countError } = await supabase
     .from('news').select('id', { count: 'exact', head: true }).eq('category', label);
   if (countError) throw countError;
@@ -242,5 +350,6 @@ export async function adminDeleteNewsCategory(id: string, label: string): Promis
   }
   const { error } = await supabase.from('news_categories').delete().eq('id', id);
   if (error) throw error;
-  await revalidateNewsCategoryRoutes([]);
+  await revalidateNewsCategoryRoutes([previousCategory?.slug]);
+  await adminRefreshRagIndex('news_categories');
 }

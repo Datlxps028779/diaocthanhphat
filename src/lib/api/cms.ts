@@ -1,5 +1,6 @@
 import { supabase, type Property, type FeaturedSection, type FeaturedSectionItem, type PageSection, type ManagedPage, type PageBlock } from '../supabase';
 import { revalidateHomeContent, revalidateNeighborhoodContent, revalidateRouteContent, routeRevalidationSnapshot, neighborhoodRevalidationSnapshot } from './contentRevalidation';
+import { isSafePublicSlugSegment } from '../slug';
 
 async function revalidatePageBlockContent(pageSlug: string): Promise<void> {
   if (pageSlug.startsWith('khu-dan-cu:')) {
@@ -10,12 +11,14 @@ async function revalidatePageBlockContent(pageSlug: string): Promise<void> {
       .eq('slug', neighborhoodSlug)
       .maybeSingle();
     if (error) throw error;
-    if (data) {
+    if (data && isSafePublicSlugSegment(data.slug)) {
       await revalidateNeighborhoodContent('update', [{ current: neighborhoodRevalidationSnapshot(data) }]);
     }
     return;
   }
-  await revalidateRouteContent('update', [{ current: routeRevalidationSnapshot(`/trang/${pageSlug}`) }]);
+  if (isSafePublicSlugSegment(pageSlug)) {
+    await revalidateRouteContent('update', [{ current: routeRevalidationSnapshot(`/trang/${pageSlug.trim()}`) }]);
+  }
 }
 
 // ─── Featured Sections (public) ───────────────────────────────────────────────
@@ -168,8 +171,8 @@ export async function adminUpdateManagedPage(id: string, updates: Partial<Manage
   const { data: current, error: currentError } = await supabase.from('managed_pages').select('slug').eq('id', id).maybeSingle();
   if (currentError) throw currentError;
   const paths = [previous?.slug, current?.slug]
-    .filter((slug): slug is string => Boolean(slug))
-    .map(slug => ({ current: routeRevalidationSnapshot(`/trang/${slug}`) }));
+    .filter((slug): slug is string => isSafePublicSlugSegment(slug))
+    .map(slug => ({ current: routeRevalidationSnapshot(`/trang/${slug.trim()}`) }));
   if (paths.length) await revalidateRouteContent('update', paths);
 }
 
@@ -178,8 +181,8 @@ export async function adminDeleteManagedPage(id: string): Promise<void> {
   if (previousError) throw previousError;
   const { error } = await supabase.from('managed_pages').delete().eq('id', id);
   if (error) throw error;
-  if (previous?.slug) {
-    await revalidateRouteContent('delete', [{ previous: routeRevalidationSnapshot(`/trang/${previous.slug}`) }]);
+  if (isSafePublicSlugSegment(previous?.slug)) {
+    await revalidateRouteContent('delete', [{ previous: routeRevalidationSnapshot(`/trang/${previous.slug.trim()}`) }]);
   }
 }
 

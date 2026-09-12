@@ -411,7 +411,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       policyVersion: RANKING_POLICY_VERSION,
       resultSource: p.matchReasons.length ? 'advisor_rpc' : 'catalogue_fallback',
     });
-    onNavigate?.({ name: 'property', id: p.id, slug: p.slug ?? undefined });
+    onNavigate?.({ name: 'property', id: p.id, slug: p.slug ?? undefined, canonicalPath: p.path });
     setOpen(false);
   };
 

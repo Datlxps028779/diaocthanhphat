@@ -22,7 +22,7 @@ export type Page =
       bedrooms?: string; direction?: string; legal?: string;
       isFeatured?: boolean; isHot?: boolean; sort?: string; page?: number;
     }
-  | { name: 'property'; id: string; slug?: string }
+  | { name: 'property'; id: string; slug?: string; canonicalPath?: string }
   | { name: 'projects'; areaId?: string; phase?: string }
   | { name: 'invest' }
   | { name: 'regions'; areaId?: string }
@@ -112,7 +112,7 @@ export function parseProjectParams(sp: RawSearchParams): { area?: string; phase?
 export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
   switch (page.name) {
     case 'home': return '/';
-    case 'property': return `/bat-dong-san/${(page.slug && page.slug.trim()) || page.id}`;
+    case 'property': return page.canonicalPath || `/bat-dong-san/${(page.slug && page.slug.trim()) || page.id}`;
     case 'news':
       if (page.slug) return `/tin-tuc/${page.slug}`;
       if (page.articleId) return `/tin-tuc/${page.articleId}`;

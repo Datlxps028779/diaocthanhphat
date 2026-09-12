@@ -1,4 +1,5 @@
 import { supabase, type AiChatKnowledge } from '../supabase';
+import { adminRefreshRagIndex } from './aiRag';
 
 // ─── AI Chat Knowledge (kho Hỏi–Đáp admin soạn cho Trợ lý BĐS) ──────────────────
 // Public đọc câu đang bật (chat công khai dùng anon key). Admin CRUD (RLS is_admin()).
@@ -28,6 +29,7 @@ export async function createAiChatKnowledge(
 ): Promise<void> {
   const { error } = await supabase.from('ai_chat_knowledge').insert(input);
   if (error) throw error;
+  await adminRefreshRagIndex('ai_chat_knowledge');
 }
 
 export async function updateAiChatKnowledge(id: string, input: Partial<AiChatKnowledge>): Promise<void> {
@@ -36,9 +38,11 @@ export async function updateAiChatKnowledge(id: string, input: Partial<AiChatKno
     .update({ ...input, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
+  await adminRefreshRagIndex('ai_chat_knowledge');
 }
 
 export async function deleteAiChatKnowledge(id: string): Promise<void> {
   const { error } = await supabase.from('ai_chat_knowledge').delete().eq('id', id);
   if (error) throw error;
+  await adminRefreshRagIndex('ai_chat_knowledge');
 }

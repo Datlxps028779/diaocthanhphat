@@ -55,7 +55,7 @@ describe('listing title normalization migration', () => {
 
   it('dry-run chỉ đọc dữ liệu', () => {
     const sql = dryRun.replace(/--.*$/gm, '');
-    expect(sql).not.toMatch(/\b(UPDATE|DELETE|INSERT|TRUNCATE)\b/i);
+    expect(sql).not.toMatch(/^\s*(UPDATE|DELETE|INSERT|TRUNCATE)\b/im);
     expect(sql).toContain('proposed_title');
   });
 

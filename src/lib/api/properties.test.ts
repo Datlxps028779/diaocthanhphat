@@ -5,6 +5,8 @@ import {
   normalizeAdminPropertyLimit,
   normalizeAdminPropertyPage,
   publicPropertyFilterOperations,
+  publicPropertySortOperations,
+  usesRankedPropertySearch,
   sanitizeAdminPropertyKeyword,
 } from './properties';
 
@@ -48,6 +50,15 @@ describe('Admin property catalogue filter guards', () => {
 });
 
 describe('Public property filter contract', () => {
+  it('dùng search RPC cho sort giá hỗn hợp để lấy đúng giá bán/giá thuê', () => {
+    expect(usesRankedPropertySearch({ sort: 'price_asc' })).toBe(true);
+    expect(usesRankedPropertySearch({ sort: 'price_desc' })).toBe(true);
+    expect(usesRankedPropertySearch({ listingType: 'all', sort: 'price_asc' })).toBe(true);
+    expect(usesRankedPropertySearch({ listingType: 'mua_ban', sort: 'price_asc' })).toBe(false);
+    expect(usesRankedPropertySearch({ listingType: 'cho_thue', sort: 'price_desc' })).toBe(false);
+    expect(usesRankedPropertySearch({ typeIds: ['house', 'land'], sort: 'price_asc' })).toBe(false);
+  });
+
   it('uses monthly rental price and carries every public filter to list/map queries', () => {
     const operations = publicPropertyFilterOperations({
       listingType: 'cho_thue', areaId: 'area-1', typeId: 'type-1', city: 'Bình Dương',
@@ -84,10 +95,33 @@ describe('Public property filter contract', () => {
     });
   });
 
-  it('uses sale price unless the route is explicitly rental', () => {
-    expect(publicPropertyFilterOperations({ minPrice: 1 })[0]).toEqual({
-      method: 'gte', column: 'price', value: 1,
-    });
+  it('uses the effective price field for mixed sale/rental routes', () => {
+    expect(publicPropertyFilterOperations({ minPrice: 1, maxPrice: 5 })).toEqual([
+      {
+        method: 'or',
+        value: '(and(listing_type.eq.mua_ban,price.gte.1),and(listing_type.eq.cho_thue,price_per_month.gte.1))',
+      },
+      {
+        method: 'or',
+        value: '(and(listing_type.eq.mua_ban,price.lte.5),and(listing_type.eq.cho_thue,price_per_month.lte.5))',
+      },
+    ]);
+  });
+
+  it('keeps explicit sale and rental price columns unchanged', () => {
+    expect(publicPropertyFilterOperations({ listingType: 'mua_ban', minPrice: 1 })
+      .find(item => item.column === 'price'))
+      .toEqual({ method: 'gte', column: 'price', value: 1 });
+    expect(publicPropertyFilterOperations({ listingType: 'cho_thue', minPrice: 1 })
+      .find(item => item.column === 'price_per_month'))
+      .toEqual({ method: 'gte', column: 'price_per_month', value: 1 });
+  });
+
+  it('preserves requested sort for grouped property types', () => {
+    expect(publicPropertySortOperations({ typeIds: ['house', 'land'], sort: 'price_asc' }))
+      .toEqual([{ column: 'price', ascending: true }, { column: 'id', ascending: true }]);
+    expect(publicPropertySortOperations({ typeIds: ['house', 'land'], sort: 'views' }))
+      .toEqual([{ column: 'views', ascending: false }, { column: 'id', ascending: false }]);
   });
 
   it('sanitizes PostgREST structure from public keyword filters', () => {

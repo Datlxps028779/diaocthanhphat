@@ -122,6 +122,45 @@ describe('collectContentRevalidationPaths', () => {
     expect(paths).toContain('/sitemap.xml');
   });
 
+  it('purge URL khu vực cũ khi taxonomy area slug đổi', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'property', action: 'update', targets: [{
+        previous: {
+          id: 'p-area', slug: 'nha-area', public_code: 402, listing_type: 'mua_ban',
+          district: 'Thuận An', area_id: 'area-1', area_slug: 'binh-duong-cu', is_active: true,
+        },
+        current: {
+          id: 'p-area', slug: 'nha-area', public_code: 402, listing_type: 'mua_ban',
+          district: 'Thuận An', area_id: 'area-1', area_slug: 'binh-duong', is_active: true,
+        },
+      }],
+    }, lookups);
+    expect(paths).toContain('/mua-ban/binh-duong-cu/thuan-an/nha-area-pr402');
+    expect(paths).toContain('/mua-ban/binh-duong/thuan-an/nha-area-pr402');
+  });
+
+  it('purge SEO group route cũ khi property type slug đổi', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'property', action: 'update', targets: [{
+        previous: {
+          id: 'p-type', slug: 'nha-type', public_code: 403, listing_type: 'mua_ban',
+          district: 'Thuận An', district_id: 'district-1', property_type_id: 'type-1',
+          property_type_slug: 'nha-pho', area_id: 'area-1', is_active: true,
+        },
+        current: {
+          id: 'p-type', slug: 'nha-type', public_code: 403, listing_type: 'mua_ban',
+          district: 'Thuận An', district_id: 'district-1', property_type_id: 'type-1',
+          property_type_slug: 'dat-nen', area_id: 'area-1', is_active: true,
+        },
+      }],
+    }, {
+      ...lookups,
+      districtSlugs: new Map([['district-1', { areaId: 'area-1', slug: 'thuan-an' }]]),
+    });
+    expect(paths).toContain('/mua-ban/binh-duong/thuan-an/nha');
+    expect(paths).toContain('/mua-ban/binh-duong/thuan-an/dat');
+  });
+
   it('purge route tĩnh và route public theo slug, từ chối route tùy ý', () => {
     expect(collectContentRevalidationPaths({
       entity: 'route', action: 'update', targets: [{ current: { path: '/tin-tuc' } }],
@@ -130,8 +169,32 @@ describe('collectContentRevalidationPaths', () => {
       entity: 'route', action: 'update', targets: [{ current: { path: '/trang/gioi-thieu' } }],
     }).error).toBeUndefined();
     expect(parseContentRevalidationInput({
+      entity: 'route', action: 'update', targets: [{ current: { path: '/mua-ban/binh-duong' } }],
+    }).error).toBeUndefined();
+    expect(parseContentRevalidationInput({
+      entity: 'route', action: 'update', targets: [{ current: { path: '/khu-dan-cu/tan-binh' } }],
+    }).error).toBeUndefined();
+    expect(parseContentRevalidationInput({
       entity: 'route', action: 'update', targets: [{ current: { path: '/xoa-cache-tuy-y' } }],
     }).error).toBe('Thông tin taxonomy không hợp lệ.');
+  });
+
+
+  it('không tạo dynamic path từ slug unsafe của Product hoặc taxonomy', () => {
+    const paths = collectContentRevalidationPaths({
+      entity: 'property', action: 'update', targets: [{ current: {
+        id: 'p-unsafe', slug: 'nha/xoa-cache?x#hash', public_code: 501,
+        listing_type: 'mua_ban', district: 'Dĩ An', area_id: 'area-1',
+        neighborhood_slug: 'khu/xau', is_active: true,
+      } }],
+    }, {
+      ...lookups,
+      areaSlugs: new Map([['area-1', 'binh-duong?bad']]),
+    });
+    expect(paths.every(path => !/[?#]/.test(path))).toBe(true);
+    expect(paths).not.toContain('/bat-dong-san/nha/xoa-cache?x#hash');
+    expect(paths).not.toContain('/khu-dan-cu/khu/xau');
+    expect(paths).not.toContain('/khu-vuc/binh-duong?bad');
   });
 
   it('không tạo path detail cho draft/hidden content chưa public', () => {

@@ -124,6 +124,9 @@ export type NewsPublicationResult = {
   };
   quality_gate: Record<string, unknown>;
   paths: string[];
+  freshness?: { status: 'succeeded' | 'skipped' | 'degraded'; queuedCount: number; error: string | null };
+  searchVisibility?: { status: 'succeeded' | 'skipped' | 'degraded'; runId: string | null; error: string | null };
+  aiIndex?: { status: 'succeeded' | 'skipped' | 'degraded'; target: string | null; indexedCount: number; error: string | null };
 };
 
 async function publicationHeaders(): Promise<HeadersInit> {
@@ -146,9 +149,10 @@ export async function setNewsPublicationState(
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(json.error ?? 'Không thể cập nhật trạng thái xuất bản.') as Error & { code?: string; quality_gate?: unknown };
+    const error = new Error(json.error ?? 'Không thể cập nhật trạng thái xuất bản.') as Error & { code?: string; quality_gate?: unknown; request_id?: string };
     error.code = json.code;
     error.quality_gate = json.quality_gate;
+    error.request_id = json.request_id;
     throw error;
   }
   return json as NewsPublicationResult;
@@ -202,14 +206,51 @@ export function formatNewsPublicationError(
 ): string {
   const fallback = compactErrorText(options?.fallback) || DEFAULT_PUBLICATION_ERROR;
   const err = error && typeof error === 'object'
-    ? error as { message?: unknown; code?: unknown; details?: unknown; quality_gate?: unknown }
+    ? error as { message?: unknown; code?: unknown; details?: unknown; quality_gate?: unknown; request_id?: unknown }
     : null;
   const headline = (err ? uniqueConstraintSlugMessage(err) : null)
     || compactErrorText(err?.message)
     || fallback;
+  const requestId = compactErrorText(err?.request_id);
+  const headlineWithSupportCode = requestId
+    ? `${headline} Mã hỗ trợ: ${requestId}.`
+    : headline;
   const issues = qualityIssueMessages(err?.quality_gate);
-  if (issues.length === 0) return headline;
-  return formatNewsIssueList(headline, issues, { maxIssues: options?.maxIssues });
+  if (issues.length === 0) return headlineWithSupportCode;
+  return formatNewsIssueList(headlineWithSupportCode, issues, { maxIssues: options?.maxIssues });
+}
+
+export function formatSavedButUnpublishedError(error: unknown): string {
+  return `Đã lưu nội dung, nhưng chưa thể cập nhật trạng thái xuất bản.\n${formatNewsPublicationError(error, {
+    fallback: 'Cập nhật trạng thái xuất bản thất bại.',
+  })}`;
+}
+
+type SavedButUnpublishedError = Error & {
+  savedButUnpublished?: boolean;
+  code?: string;
+  quality_gate?: unknown;
+  request_id?: string;
+};
+
+/**
+ * Preserve the publication failure details while telling the form that the
+ * editorial save already succeeded. The form must format this exactly once.
+ */
+export function markSavedButUnpublishedError(error: unknown): SavedButUnpublishedError {
+  const wrapped = new Error('Cập nhật trạng thái xuất bản thất bại.') as SavedButUnpublishedError;
+  if (error && typeof error === 'object') {
+    const source = error as Record<string, unknown>;
+    if (typeof source.code === 'string') wrapped.code = source.code;
+    if ('quality_gate' in source) wrapped.quality_gate = source.quality_gate;
+    if (typeof source.request_id === 'string') wrapped.request_id = source.request_id;
+  }
+  wrapped.savedButUnpublished = true;
+  return wrapped;
+}
+
+export function isSavedButUnpublishedError(error: unknown): error is SavedButUnpublishedError {
+  return Boolean(error && typeof error === 'object' && (error as { savedButUnpublished?: unknown }).savedButUnpublished === true);
 }
 
 // Client writes contain editorial fields only; generated structured data remains server-owned.

@@ -825,7 +825,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                         <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
                           {viewportProps.map((p, index) => (
                             <button key={p.id}
-                              onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
+                              onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined, canonicalPath: buildPropertyPath(p) }); scrollTop(); }}
                               className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                               <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                                 <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
@@ -856,7 +856,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                       <div className="space-y-2">
                         {viewportProps.map((p, index) => (
                           <button key={p.id}
-                            onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
+                            onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined, canonicalPath: buildPropertyPath(p) }); scrollTop(); }}
                             className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
                             <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                               <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />

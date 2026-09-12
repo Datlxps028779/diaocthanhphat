@@ -59,6 +59,11 @@ export interface PublicPropertyFilterOperation {
   value: unknown;
 }
 
+export interface PublicPropertySortOperation {
+  column: string;
+  ascending: boolean;
+}
+
 export function publicPropertyFilterOperations(filters?: PropertyFilters): PublicPropertyFilterOperation[] {
   const operations: PublicPropertyFilterOperation[] = [];
   if (filters?.listingType && filters.listingType !== 'all') operations.push({ method: 'eq', column: 'listing_type', value: filters.listingType });
@@ -77,9 +82,23 @@ export function publicPropertyFilterOperations(filters?: PropertyFilters): Publi
       value: `title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`,
     });
   }
-  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
-  if (filters?.minPrice !== undefined) operations.push({ method: 'gte', column: priceColumn, value: filters.minPrice });
-  if (filters?.maxPrice !== undefined) operations.push({ method: 'lte', column: priceColumn, value: filters.maxPrice });
+  const explicitListingType = filters?.listingType && filters.listingType !== 'all'
+    ? filters.listingType
+    : undefined;
+  const priceColumn = explicitListingType === 'cho_thue' ? 'price_per_month' : 'price';
+  const mixedPriceOperation = (operator: 'gte' | 'lte', value: number): PublicPropertyFilterOperation => ({
+    method: 'or',
+    // Khi trang hỗn hợp mua/thuê, mỗi loại phải dùng đúng trường giá của nó.
+    // PostgREST giữ toàn bộ biểu thức trong một OR; operation này vẫn AND với
+    // keyword và các filter khác vì applyPublicPropertyFilters gọi .or() nối tiếp.
+    value: `(and(listing_type.eq.mua_ban,price.${operator}.${value}),and(listing_type.eq.cho_thue,price_per_month.${operator}.${value}))`,
+  });
+  if (filters?.minPrice !== undefined) operations.push(
+    explicitListingType ? { method: 'gte', column: priceColumn, value: filters.minPrice } : mixedPriceOperation('gte', filters.minPrice),
+  );
+  if (filters?.maxPrice !== undefined) operations.push(
+    explicitListingType ? { method: 'lte', column: priceColumn, value: filters.maxPrice } : mixedPriceOperation('lte', filters.maxPrice),
+  );
   if (filters?.minArea !== undefined) operations.push({ method: 'gte', column: 'area_sqm', value: filters.minArea });
   if (filters?.maxArea !== undefined) operations.push({ method: 'lte', column: 'area_sqm', value: filters.maxArea });
   if (filters?.bedrooms && filters.bedrooms !== 'all') operations.push({ method: 'gte', column: 'bedrooms', value: parseInt(filters.bedrooms) });
@@ -99,8 +118,58 @@ function applyPublicPropertyFilters(query: any, filters?: PropertyFilters): any 
   return query;
 }
 
+export function publicPropertySortOperations(filters?: PropertyFilters): PublicPropertySortOperation[] {
+  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
+  if (filters?.sort === 'price_asc') return [
+    { column: priceColumn, ascending: true },
+    { column: 'id', ascending: true },
+  ];
+  if (filters?.sort === 'price_desc') return [
+    { column: priceColumn, ascending: false },
+    { column: 'id', ascending: false },
+  ];
+  if (filters?.sort === 'views') return [
+    { column: 'views', ascending: false },
+    { column: 'id', ascending: false },
+  ];
+  // `relevance` is only rankable by search_property_matches. A grouped type
+  // fallback has no equivalent text rank, so keep deterministic newest order.
+  return [
+    { column: 'created_at', ascending: false },
+    { column: 'id', ascending: false },
+  ];
+}
+
+/**
+ * Mixed sale/rental price sorting needs the same effective-price expression as
+ * the search RPC (sale → `price`, rental → `price_per_month`).  PostgREST
+ * cannot express that CASE expression through a normal `.order()` call, so
+ * route those requests through `search_property_matches` instead of silently
+ * sorting rental rows by their sale-price column.
+ *
+ * Grouped property-type URLs are intentionally excluded: those are resolved
+ * with a direct `IN` query because the RPC accepts one property type only.
+ */
+export function usesRankedPropertySearch(filters?: PropertyFilters): boolean {
+  if (filters?.keyword || filters?.sort === 'relevance') return true;
+  const explicitListingType = filters?.listingType && filters.listingType !== 'all'
+    ? filters.listingType
+    : undefined;
+  const mixedPriceSort = !explicitListingType
+    && !filters?.typeIds?.length
+    && (filters?.sort === 'price_asc' || filters?.sort === 'price_desc');
+  return mixedPriceSort;
+}
+
+function applyPublicPropertySort(query: any, filters?: PropertyFilters): any {
+  for (const operation of publicPropertySortOperations(filters)) {
+    query = query.order(operation.column, { ascending: operation.ascending });
+  }
+  return query;
+}
+
 function buildPropertyQuery(filters?: PropertyFilters) {
-  let q = applyPublicPropertyFilters(
+  const q = applyPublicPropertyFilters(
     supabase
       .from('properties')
       .select(PUBLIC_PROPERTY_SELECT, { count: 'exact' })
@@ -108,19 +177,13 @@ function buildPropertyQuery(filters?: PropertyFilters) {
     filters,
   );
 
-  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
-  // nếu không đổi trang có thể lặp hoặc bỏ sót tin.
-  if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
-  else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
-  else if (filters?.sort === 'views') q = q.order('views', { ascending: false }).order('id', { ascending: false });
-  else q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
-
-  return q;
+  // Nếu không đổi trang có thể lặp hoặc bỏ sót tin.
+  return applyPublicPropertySort(q, filters);
 }
 
 export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
-  if (filters?.keyword || filters?.sort === 'relevance') {
-    return getRankedPropertyMatches(filters);
+  if (usesRankedPropertySearch(filters)) {
+    return getRankedPropertyMatches(filters ?? {});
   }
 
   const limit = filters?.limit ?? 20;
@@ -171,13 +234,13 @@ async function getRankedPropertyMatches(
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
   if (filters?.typeIds?.length) {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 20;
-    const { data, error, count } = await applyPublicPropertyFilters(
-      supabase.from('properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
+    const { data, error, count } = await applyPublicPropertySort(
+      applyPublicPropertyFilters(
+        supabase.from('properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
+        filters,
+      ),
       filters,
-    ).order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
+    ).range((page - 1) * limit, page * limit - 1);
     if (error) throw new PropertySearchUnavailableError();
     return { data: (data ?? []) as Property[], total: count ?? 0 };
   }
@@ -297,7 +360,7 @@ export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise
   const q = applyPublicPropertyFilters(
     supabase
       .from('properties')
-      .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, area_sqm, bedrooms, direction, legal_status, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, listing_type')
+      .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, area_sqm, bedrooms, direction, legal_status, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, listing_type, slug, public_code, areas(slug)')
       .eq('is_active', true)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null),
