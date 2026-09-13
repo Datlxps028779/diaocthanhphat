@@ -307,8 +307,9 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
   for (const neighborhood of sources.neighborhoods) candidates.push(buildNeighborhoodCandidate(neighborhood, sources.properties));
 
   // Property type pages: chỉ index khi đủ listings và distinct signals
-  console.log('[buildSearchVisibilityCandidates] Processing property types:', sources.propertyTypes?.length ?? 0);
-  for (const propertyType of sources.propertyTypes ?? []) {
+  const propertyTypesArray = sources.propertyTypes ?? [];
+  console.log('[buildSearchVisibilityCandidates] Processing property types:', propertyTypesArray.length);
+  for (const propertyType of propertyTypesArray) {
     const key = `property_type:${propertyType.id}`;
     if (!isValidSlug(propertyType.slug) || !propertyType.name?.trim()) {
       candidates.push(excluded(key, 'property_type', propertyType.id, 'MISSING_REQUIRED_SOURCE', 'Property type thiếu slug hoặc tên hợp lệ.', null));

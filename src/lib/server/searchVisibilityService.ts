@@ -123,7 +123,7 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
   const error = results.find(result => result.error)?.error;
   if (error) throw new SearchVisibilitySyncError('SOURCE_READ', `Không tải được nguồn URL public: ${error.message}`);
 
-  // Debug: temporarily throw to see counts in error message
+  // Debug: check if propertyTypes is actually being passed
   const counts = {
     properties: properties.data?.length ?? 0,
     areas: areas.data?.length ?? 0,
@@ -134,11 +134,14 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
     newsCategories: newsCategories.data?.length ?? 0,
     managedPages: managedPages.data?.length ?? 0,
   };
+
+  console.log('[readSources] Loaded counts:', counts);
+
   if (counts.propertyTypes === 0) {
     throw new SearchVisibilitySyncError('SOURCE_READ', `DEBUG: propertyTypes loaded = 0. All counts: ${JSON.stringify(counts)}`);
   }
 
-  return {
+  const sources: SearchVisibilitySources = {
     properties: (properties.data ?? []) as unknown as SearchVisibilitySources['properties'],
     areas: (areas.data ?? []) as unknown as SearchVisibilitySources['areas'],
     districts: (districts.data ?? []) as unknown as NonNullable<SearchVisibilitySources['districts']>,
@@ -148,6 +151,10 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
     newsCategories: (newsCategories.data ?? []) as unknown as SearchVisibilitySources['newsCategories'],
     managedPages: (managedPages.data ?? []) as unknown as SearchVisibilitySources['managedPages'],
   };
+
+  console.log('[readSources] sources.propertyTypes length after assignment:', sources.propertyTypes?.length);
+
+  return sources;
 }
 
 export interface SearchVisibilitySyncResult {
