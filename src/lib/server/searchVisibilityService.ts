@@ -402,7 +402,19 @@ export async function syncSearchVisibilityAudit(actorId: string): Promise<Search
   if (runResult.error || !runResult.data) throw new SearchVisibilitySyncError('RUN_CREATE', 'Không khởi tạo được lượt đồng bộ audit URL.');
 
   try {
-    const candidates = buildSearchVisibilityCandidates(await readSources(client));
+    const sources = await readSources(client);
+    const debugSourceCounts = {
+      properties: sources.properties.length,
+      areas: sources.areas.length,
+      districts: sources.districts?.length ?? 0,
+      propertyTypes: sources.propertyTypes?.length ?? 0,
+      neighborhoods: sources.neighborhoods.length,
+      news: sources.news.length,
+      newsCategories: sources.newsCategories.length,
+      managedPages: sources.managedPages.length,
+    };
+
+    const candidates = buildSearchVisibilityCandidates(sources);
     validateSearchVisibilityCandidates(candidates);
     const summary = summarizeSearchVisibility(candidates);
     const upsert = await client.from('search_visibility_urls').upsert(candidates.map(toRow), { onConflict: 'source_key' });
@@ -413,7 +425,7 @@ export async function syncSearchVisibilityAudit(actorId: string): Promise<Search
       processed_count: candidates.length,
       succeeded_count: candidates.length,
       finished_at: new Date().toISOString(),
-      metadata: { summary },
+      metadata: { summary, debugSourceCounts },
     }).eq('id', runResult.data.id);
     if (finish.error) throw new SearchVisibilitySyncError('RUN_FINALIZE', 'Đã lưu audit URL nhưng không hoàn tất được lượt đồng bộ.');
     return { runId: runResult.data.id, summary };
