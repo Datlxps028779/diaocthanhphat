@@ -279,8 +279,10 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
   ];
 
   // News category pages: đọc từ news_categories thực tế
+  console.log('[buildSearchVisibilityCandidates] Processing news categories:', sources.newsCategories.length);
   for (const category of sources.newsCategories) {
     const key = `news_category:${category.id ?? category.slug}`;
+    console.log(`[newsCategory] id=${category.id}, slug=${category.slug}`);
     if (!category.slug?.trim()) {
       candidates.push(excluded(key, 'news_category', category.id ?? null, 'MISSING_REQUIRED_SOURCE', 'News category thiếu slug.', category.updated_at ?? null));
       continue;
@@ -305,6 +307,7 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
   for (const neighborhood of sources.neighborhoods) candidates.push(buildNeighborhoodCandidate(neighborhood, sources.properties));
 
   // Property type pages: chỉ index khi đủ listings và distinct signals
+  console.log('[buildSearchVisibilityCandidates] Processing property types:', sources.propertyTypes?.length ?? 0);
   for (const propertyType of sources.propertyTypes ?? []) {
     const key = `property_type:${propertyType.id}`;
     if (!isValidSlug(propertyType.slug) || !propertyType.name?.trim()) {
@@ -322,6 +325,8 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
       distinctAreas: areaIds.size,
       distinctDistricts: districtIds.size,
     });
+
+    console.log(`[propertyType:${propertyType.slug}] listings=${rows.length}, areas=${areaIds.size}, districts=${districtIds.size}, indexable=${evaluation.indexable}`);
 
     if (!evaluation.indexable) {
       candidates.push(excluded(key, 'property_type', propertyType.id, 'QUALITY_GATE_FAILED', evaluation.reasons.join(', '), null));
