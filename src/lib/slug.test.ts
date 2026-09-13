@@ -26,6 +26,14 @@ describe('buildSlug', () => {
     const long = 'a'.repeat(200);
     expect(buildSlug(long).length).toBeLessThanOrEqual(80);
   });
+
+  it('không để dấu gạch ngang ở cuối khi cắt tiêu đề dài', () => {
+    const long = `${'a'.repeat(79)} b`;
+    const slug = buildSlug(long);
+    expect(slug.length).toBe(79);
+    expect(slug).not.toMatch(/-$/);
+    expect(isValidSlug(slug)).toBe(true);
+  });
 });
 
 describe('buildAgentProfileSlug', () => {

@@ -66,6 +66,54 @@ describe('findNewsSlugConflict', () => {
   });
 });
 
+describe('collectNewsAdminSaveIssues slug format', () => {
+  const baseArticle = {
+    id: 'a1',
+    title: 'Bài viết hợp lệ',
+    slug: 'bai-viet-hop-le-',
+    excerpt: null,
+    content: '<p>Nội dung</p>',
+    image_url: null,
+    category: 'Thị trường',
+    author: 'Ban biên tập',
+    author_type: 'Organization' as const,
+    author_role: null,
+    published_at: null,
+    as_of_date: null,
+    reviewer_name: null,
+    reviewer_role: null,
+    source_note: null,
+    meta_title: null,
+    meta_description: null,
+    focus_keywords: null,
+    geo_area: '',
+    geo_entity: '',
+    geo_notes: '',
+    faq: [],
+    citations: [],
+  };
+
+  it('blocks malformed manual slugs before any write', () => {
+    const result = collectNewsAdminSaveIssues({
+      article: baseArticle,
+      existingArticles: [],
+      currentId: 'a1',
+      publish: false,
+    });
+    expect(result.blocking.some(issue => issue.includes('Slug URL không hợp lệ'))).toBe(true);
+  });
+
+  it('accepts a canonical slug', () => {
+    const result = collectNewsAdminSaveIssues({
+      article: { ...baseArticle, slug: 'bai-viet-hop-le' },
+      existingArticles: [],
+      currentId: 'a1',
+      publish: false,
+    });
+    expect(result.blocking).toEqual([]);
+  });
+});
+
 describe('collectNewsAdminSaveIssues', () => {
   const existing = [
     { id: 'a1', slug: 'bai-moi', title: 'Bài đã có cùng slug' },
@@ -219,4 +267,3 @@ describe('collectNewsRepublishReadiness', () => {
     expect(result.blocking).toEqual([]);
   });
 });
-

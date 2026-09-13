@@ -30,7 +30,11 @@ export function buildSlug(title: string): string {
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
     .substring(0, 80);
-  return s || FALLBACK;
+  // Truncation can expose a separator that was not at the end before the
+  // length limit was applied. Trim again after slicing so generated slugs
+  // always satisfy the public slug contract.
+  const bounded = s.replace(/-+$/, '');
+  return bounded || FALLBACK;
 }
 
 // Slug hồ sơ mới dùng base readable; database thêm mã ID random ổn định khi tạo profile.

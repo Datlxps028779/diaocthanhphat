@@ -1,6 +1,7 @@
 import type { ArticleRow } from './apiIngest';
 import { evaluateArticleIngestQuality } from './articleIngestQuality';
 import { evaluateNewsEditorialQuality } from './newsEditorialQuality';
+import { isValidSlug } from './slug';
 import type { NewsArticle } from './supabase';
 
 export type NewsSlugRecord = Pick<NewsArticle, 'id' | 'slug' | 'title'>;
@@ -148,6 +149,13 @@ export function collectNewsAdminSaveIssues(input: {
 
   if (!title) addUnique(blocking, seen, 'Vui lòng nhập tiêu đề bài viết.');
   if (!slug) addUnique(blocking, seen, 'Slug URL đang trống. Nhập slug hoặc để hệ thống sinh từ tiêu đề.');
+  if (slug && !isValidSlug(slug)) {
+    addUnique(
+      blocking,
+      seen,
+      'Slug URL không hợp lệ. Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang ở giữa; không có dấu gạch ngang ở đầu/cuối hoặc hai dấu liên tiếp.',
+    );
+  }
 
   const conflict = findNewsSlugConflict(slug, input.existingArticles, input.currentId ?? input.article.id);
   if (conflict) {

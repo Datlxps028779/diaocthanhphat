@@ -1,5 +1,5 @@
 import { supabase, type NewsArticle, type NewsListItem, type NewsPageResult } from '../supabase';
-import { buildUniqueSlug } from '../slug';
+import { buildUniqueSlug, isValidSlug } from '../slug';
 import { newsRevalidationSnapshot, revalidateNewsContent } from './contentRevalidation';
 import { formatNewsIssueList } from '../newsAdminSaveIssues';
 
@@ -219,6 +219,7 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
   // Slug auto từ tiêu đề (+ hậu tố chống trùng). Chỉ dùng slug nhập tay khi admin
   // chủ động điền — còn lại luôn sinh tự động để đảm bảo chuẩn SEO.
   const slug = (n.slug && n.slug.trim()) || buildUniqueSlug(n.title);
+  if (!isValidSlug(slug)) throw new Error('Slug URL không hợp lệ.');
   const publicationPayload = ensureNewsPublicationTimestamp(undefined, { ...n, is_published: false });
   const { schema_markup: _schemaMarkup, ...safePayload } = publicationPayload as NewsWrite & { schema_markup?: unknown };
   const { data, error } = await supabase.from('news').insert({ ...safePayload, slug }).select().single();
@@ -235,6 +236,9 @@ export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schem
     .maybeSingle();
   if (previousError) throw previousError;
   const publicationPatch = ensureNewsPublicationTimestamp(previousData, n);
+  if (publicationPatch.slug !== undefined && !isValidSlug(publicationPatch.slug)) {
+    throw new Error('Slug URL không hợp lệ.');
+  }
   const { schema_markup: _schemaMarkup, is_published: _isPublished, ...safePatch } = publicationPatch as typeof n & { schema_markup?: unknown; is_published?: boolean };
   const { data, error } = await supabase
     .from('news')

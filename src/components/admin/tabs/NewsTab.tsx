@@ -22,6 +22,7 @@ import { NEWS_CATEGORIES } from '../../../lib/newsCategories';
 import { generateArticleAI } from '../../../lib/api/articleGen';
 import { buildNewsMetadata } from '../../../lib/seo';
 import { compareNewsByPublishedAt, newsPublishedAt } from '../../../lib/newsOrdering';
+import { buildSlug } from '../../../lib/slug';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ImageUrlInput } from '../../ImageUpload';
 import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
@@ -67,24 +68,11 @@ type NewsFormState = SeoFieldsValue & {
   citations: { title: string; url: string }[];
 };
 
-function newsSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 100);
-}
-
 // Dựng NewsArticle tạm từ form state để tái dùng builder public (buildNewsMetadata +
 // Tạo object tạm từ form để dùng chung metadata và preview public.
 // Các field không có trong form (id, views, related_ids...) → giá trị tạm an toàn.
 function formToNewsArticle(form: NewsFormState, article: NewsArticle | null, now: string, options?: { keepIncomplete?: boolean }): NewsArticle {
-  const slug = form.slug.trim() || newsSlug(form.title) || 'slug';
+  const slug = form.slug.trim() || buildSlug(form.title);
   return {
     id: article?.id ?? 'draft',
     title: form.title.trim(),
@@ -369,7 +357,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     setForm(f => ({ ...f, ...value }));
   };
 
-  const resolvedSlug = form.slug.trim() || newsSlug(form.title);
+  const resolvedSlug = form.slug.trim() || buildSlug(form.title);
   const publicPath = resolvedSlug ? `/tin-tuc/${resolvedSlug}` : '';
   const wordCount = countWords(plainTextFromContent(form.content));
   const internalLinkCount = countInternalLinks(form.content);
@@ -454,7 +442,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
     try {
       await onSave({
         title: form.title.trim(),
-        slug: form.slug.trim() || newsSlug(form.title),
+        slug: form.slug.trim() || buildSlug(form.title),
         category: form.category,
         author: form.author.trim() || 'Ban biên tập',
         author_type: form.author_type,
@@ -902,7 +890,7 @@ function NewsForm({ article, allArticles, categories, onSave, onCancel }: { arti
           <SeoFields
             value={form}
             onChange={setSeo}
-            basePath={`/tin-tuc/${form.slug || newsSlug(form.title) || 'slug'}`}
+            basePath={`/tin-tuc/${form.slug || buildSlug(form.title)}`}
           />
         </aside>
       </div>
