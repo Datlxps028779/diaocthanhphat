@@ -22,7 +22,7 @@ export const PUBLIC_PROPERTY_SELECT = 'id, title, description, price, price_unit
 
 export type PropertyWrite = Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types' | 'schema_markup'>;
 
-export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, views, areas(id,name,slug), property_types(id,name,slug)';
+export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, views, updated_at, areas(id,name,slug), property_types(id,name,slug)';
 
 export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
   'contact_name',

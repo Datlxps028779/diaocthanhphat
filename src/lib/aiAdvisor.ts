@@ -5,9 +5,10 @@ import type { submitLead } from './api/leads';
 import { isValidVnPhone } from './phone';
 import { advisorMatchReasonLabels, type AdvisorMatchReasonCode } from './rankingPolicy';
 import { formatPropertyPrice } from './listingPrice';
+import { publicCanonicalUrl } from './siteUrl';
 
 export type AdvisorStage = 'welcome' | 'collecting_need' | 'showing_matches' | 'collecting_contact' | 'submitted';
-export interface AdvisorCitation { title: string; source_url: string | null }
+export interface AdvisorCitation { title: string; source_url: string | null; updated_at?: string | null }
 export interface AdvisorMessage { role: 'user' | 'assistant' | 'staff' | 'system'; text: string; chips?: string[]; citations?: AdvisorCitation[] }
 export interface AdvisorPropertySummary {
   id: string;
@@ -19,6 +20,8 @@ export interface AdvisorPropertySummary {
   legal: string | null;
   area: string | null;
   path: string;
+  canonicalUrl: string;
+  updatedAt: string | null;
   matchReasonCodes: AdvisorMatchReasonCode[];
   matchReasons: string[];
 }
@@ -302,6 +305,8 @@ export function summarizePropertyForAdvisor(p: Property & { matchReasons?: Advis
     legal: p.legal_status,
     area: p.area_sqm ? `${p.area_sqm} m²` : null,
     path: buildPropertyPath(p),
+    canonicalUrl: publicCanonicalUrl(buildPropertyPath(p)),
+    updatedAt: p.updated_at ?? null,
     matchReasonCodes,
     matchReasons: advisorMatchReasonLabels(matchReasonCodes),
   };

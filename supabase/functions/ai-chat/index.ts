@@ -10,17 +10,6 @@ import { callClaude } from "../_shared/anthropic.ts";
 // để client fallback về engine rule-based (web không bao giờ chết).
 
 interface ChatTurn { role: "user" | "assistant"; text: string }
-interface RagMatch {
-  chunk_id: string;
-  source_table: string;
-  source_id: string;
-  source_slug: string | null;
-  source_url: string | null;
-  title: string;
-  content: string;
-  metadata: Record<string, unknown>;
-  score: number;
-}
 
 // Guardrail KHÓA CỨNG: nối sau system prompt của admin nên admin không thể tắt luật
 // không-bịa dù chỉnh prompt. Đây là lớp bảo vệ cuối cùng chống bịa số liệu.
@@ -29,8 +18,8 @@ QUY TẮC BẮT BUỘC (KHÔNG ĐƯỢC VI PHẠM, ưu tiên cao hơn mọi ch�
 - TUYỆT ĐỐI KHÔNG bịa số liệu, lãi suất, tỷ lệ tăng giá, phần trăm, tên dự án, quy hoạch hay cam kết lợi nhuận. Nếu thiếu dữ liệu xác thực, nói rõ chưa đủ dữ liệu và mời để lại số điện thoại.
 - KHÔNG tự tạo danh sách bất động sản, giá cụ thể hay mã tin — hệ thống sẽ tự tìm tin thật từ cơ sở dữ liệu, bạn chỉ cần hiểu nhu cầu và phản hồi.
 - Chỉ trả lời bằng tiếng Việt, thân thiện, xưng "em" gọi khách "anh/chị".
-- CHỈ dùng dữ kiện (vị trí, giá, đặc điểm dự án/khu vực) từ mục "DỮ LIỆU TRUY XUẤT" bên dưới. KHÔNG dùng kiến thức ngoài mục đó cho số liệu/vị trí/giá. Nếu mục đó trống hoặc không chứa thông tin khách hỏi, đặt "insufficient_evidence": true, nói rõ chưa đủ dữ liệu và mời để lại SĐT.
-- "citations" chỉ được lấy TỪ các mục trong "DỮ LIỆU TRUY XUẤT" mà em thực sự dùng — cấm bịa nguồn. Nếu không dùng dữ kiện nào thì để mảng rỗng.
+- Không có dữ kiện listing live trong request này. KHÔNG trả lời giá, vị trí, mã tin hoặc đặc điểm listing cụ thể; chỉ xác nhận/chuẩn hóa nhu cầu để lớp web truy xuất dữ liệu thật. Nếu khách hỏi dữ kiện listing cụ thể, đặt "insufficient_evidence": true và nói rõ hệ thống sẽ tìm tin public phù hợp.
+- "citations" luôn là mảng rỗng ở lớp này. Link canonical và thời điểm cập nhật chỉ được gắn sau khi lớp live search trả về listing thật.
 
 ĐỊNH DẠNG ĐẦU RA: chỉ trả về DUY NHẤT một object JSON hợp lệ (không kèm giải thích, không markdown), theo schema:
 {
@@ -39,8 +28,8 @@ QUY TẮC BẮT BUỘC (KHÔNG ĐƯỢC VI PHẠM, ưu tiên cao hơn mọi ch�
   "handoff": true/false (true nếu khách muốn đi xem, đặt cọc, gọi lại, hỏi đầu tư/pháp lý sâu/quy hoạch, hoặc để lại số điện thoại),
   "sensitive": "legal" | "loan" | "investment" | null,
   "safety_note": "lưu ý an toàn nếu có, ngược lại chuỗi rỗng",
-  "insufficient_evidence": true/false (true nếu mục DỮ LIỆU TRUY XUẤT không đủ để trả lời phần dữ kiện khách hỏi),
-  "citations": [ { "source_table": "…", "source_id": "…", "title": "…" } ] (chỉ các mục đã dùng, lấy nguyên từ DỮ LIỆU TRUY XUẤT; mảng rỗng nếu không dùng)
+  "insufficient_evidence": true/false (true nếu khách yêu cầu dữ kiện listing cụ thể mà lớp này chưa có),
+  "citations": [] (lớp live search sẽ bổ sung nguồn canonical sau khi có listing thật)
 }`;
 
 Deno.serve(async (req: Request) => {
@@ -79,17 +68,10 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(url, serviceKey);
 
-    // RAG query CÓ NGỮ CẢNH: ghép tin nhắn mới + vài lượt khách gần nhất để câu hỏi
-    // nối mạch ("còn căn nào rẻ hơn?") vẫn kéo đúng chunk của khu/chủ đề đang nói.
-    // Cắt ≤500 ký tự để không làm loãng rank lexical.
-    const recentUserContext = history
-      .filter(t => t.role === "user")
-      .slice(-2)
-      .map(t => t.text)
-      .join(" ");
-    const retrievalQuery = `${message} ${recentUserContext}`.trim().slice(0, 500);
-
-    const [{ data: settingRows }, { data: kbRows }, { data: ragRows }] = await Promise.all([
+    // P3: đây là lớp hiểu ngôn ngữ, không phải lớp truy xuất listing. Listing cards
+    // luôn được lấy từ live public RPC ở web client; không đọc RAG projection trong
+    // request này để RAG deferred không làm stale hoặc làm sai provenance.
+    const [{ data: settingRows }, { data: kbRows }] = await Promise.all([
       db.from("site_settings").select("key, value").in("key", ["ai_system_prompt", "ai_tone_profile"]),
       db.from("ai_chat_knowledge")
         .select("topic, answer, guardrail")
@@ -97,17 +79,9 @@ Deno.serve(async (req: Request) => {
         .in("knowledge_type", ["priority_qa", "background"])
         .order("priority", { ascending: false })
         .limit(30),
-      // RAG: kéo chunk liên quan TỪ DỮ LIỆU THẬT trước khi gọi Claude (retrieve-then-generate).
-      db.rpc("match_rag_chunks", { query: retrievalQuery, match_count: 5, filter_source_types: null, filter_visibility: "public" }),
     ]);
 
-    const rag = (ragRows ?? []) as RagMatch[];
-    const ragBlock = rag.length
-      ? "\n\nDỮ LIỆU TRUY XUẤT (chỉ dùng nội dung dưới đây, kèm nguồn — cấm dùng kiến thức ngoài cho số liệu/vị trí/giá):\n" +
-        rag.map((c, i) =>
-          `[${i + 1}] (source_table: ${c.source_table}, source_id: ${c.source_id}, title: ${c.title})\n${c.content.slice(0, 1200)}`
-        ).join("\n\n")
-      : "\n\nDỮ LIỆU TRUY XUẤT: (trống — không tìm thấy dữ liệu nội bộ liên quan)";
+    const liveListingBoundary = `\n\nNGUỒN TIN ĐĂNG LIVE (do lớp web truy xuất sau khi hiểu ý định):\n- Không có listing, giá, mã tin hoặc vị trí cụ thể trong request này.\n- Không được tự tạo hoặc suy đoán dữ kiện listing.\n- Khi khách hỏi tìm BĐS, chỉ xác nhận/chuẩn hóa nhu cầu; web sẽ lấy tin public đang hoạt động và hiển thị link canonical cùng thời điểm cập nhật.`;
 
     const settings = new Map((settingRows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
     const adminPrompt = (settings.get("ai_system_prompt") as string | undefined)?.trim()
@@ -125,7 +99,7 @@ Deno.serve(async (req: Request) => {
         kb.map(k => `• ${k.topic}: ${k.answer}${k.guardrail ? ` [Lưu ý: ${k.guardrail}]` : ""}`).join("\n")
       : "";
 
-    const system = `${adminPrompt}${toneBlock}${kbBlock}${ragBlock}\n${HARD_GUARDRAIL}`;
+    const system = `${adminPrompt}${toneBlock}${kbBlock}${liveListingBoundary}\n${HARD_GUARDRAIL}`;
 
     const historyBlock = history.length
       ? "Lịch sử hội thoại gần đây:\n" +
@@ -150,20 +124,10 @@ Deno.serve(async (req: Request) => {
 
     const sensitive = ["legal", "loan", "investment"].includes(parsed.sensitive) ? parsed.sensitive : null;
 
-    // Citations: chỉ giữ nguồn KHỚP với chunk đã retrieve (chống model bịa nguồn).
-    // Đối chiếu theo source_id thật trong rag; title lấy từ chunk gốc, không tin model.
-    const ragById = new Map(rag.map(c => [String(c.source_id), c]));
-    const rawCitations = Array.isArray(parsed.citations) ? parsed.citations : [];
-    const citations = rawCitations
-      .map((c: { source_id?: unknown }) => ragById.get(String(c?.source_id ?? "")))
-      .filter((c: RagMatch | undefined): c is RagMatch => !!c)
-      .filter((c: RagMatch, i: number, arr: RagMatch[]) => arr.findIndex(x => x.source_id === c.source_id) === i)
-      .map((c: RagMatch) => ({
-        source_table: c.source_table,
-        source_id: c.source_id,
-        title: c.title,
-        source_url: isSafeHttpUrl(c.source_url) ? c.source_url : null,
-      }));
+    // Citation listing được tạo ở lớp live search sau khi RPC trả về các tin thật.
+    // Edge function không có live listing context nên tuyệt đối không nhận citation
+    // do model tự sinh để tránh source bịa hoặc URL không canonical.
+    const citations: Array<{ source_table: string; source_id: string; title: string; source_url: string | null }> = [];
 
     return json({
       ok: true,
@@ -172,7 +136,7 @@ Deno.serve(async (req: Request) => {
       handoff: parsed.handoff === true,
       sensitive,
       safety_note: typeof parsed.safety_note === "string" ? parsed.safety_note.trim() : "",
-      insufficient_evidence: parsed.insufficient_evidence === true || rag.length === 0,
+      insufficient_evidence: parsed.insufficient_evidence === true,
       citations,
     });
   } catch {
@@ -180,15 +144,6 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-function isSafeHttpUrl(value: unknown): value is string {
-  if (typeof value !== "string" || !value.trim()) return false;
-  try {
-    const url = new URL(value);
-    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
-  } catch {
-    return false;
-  }
-}
 
 function extractJson(raw: string): Record<string, any> | null {
   const start = raw.indexOf("{");

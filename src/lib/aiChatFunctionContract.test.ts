@@ -8,9 +8,11 @@ const functionSource = readFileSync(
 );
 
 describe('ai-chat evidence safety contract', () => {
-  it('normalizes citations to HTTP(S) source URLs only', () => {
-    expect(functionSource).toContain('isSafeHttpUrl(c.source_url) ? c.source_url : null');
-    expect(functionSource).toContain('url.protocol === "http:" || url.protocol === "https:"');
+  it('keeps RAG deferred out of the public AIO runtime', () => {
+    expect(functionSource).not.toContain('match_rag_chunks');
+    expect(functionSource).not.toContain('RagMatch');
+    expect(functionSource).toContain('const citations:');
+    expect(functionSource).toContain('Citation listing được tạo ở lớp live search');
   });
 
   it('does not expose internal exception messages to the public endpoint', () => {

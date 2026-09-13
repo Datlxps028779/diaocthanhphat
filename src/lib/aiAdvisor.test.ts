@@ -81,6 +81,12 @@ describe('buildAdvisorTurn', () => {
 });
 
 describe('advisor helpers', () => {
+  it('summary listing có canonical URL production và thời điểm cập nhật', () => {
+    const summary = summarizePropertyForAdvisor(property({ public_code: 1, areas: { id: 'area-bd', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '2026-01-01' } }));
+    expect(summary.canonicalUrl).toBe('https://chonhaviet.com/mua-ban/binh-duong/di-an/nha-pho-di-an-pr1');
+    expect(summary.updatedAt).toBe('2026-01-01');
+  });
+
   it('formatAdvisorBudget format giá', () => {
     expect(formatAdvisorBudget({ maxPrice: 3 })).toBe('Dưới 3 tỷ');
     expect(formatAdvisorBudget({ minPrice: 5, maxPrice: 10, listingType: 'cho_thue' })).toBe('5–10 triệu/tháng');
@@ -106,7 +112,7 @@ describe('advisor helpers', () => {
   });
 
   it('summarizePropertyForAdvisor chỉ hiện các lý do khớp có nguồn từ SQL', () => {
-    const summary = summarizePropertyForAdvisor(property());
+    const summary = summarizePropertyForAdvisor(property({ public_code: 1, areas: { id: 'area-bd', name: 'Bình Dương', slug: 'binh-duong', description: null, image_url: null, order_index: 1, created_at: '2026-01-01' } }));
     const explained = summarizePropertyForAdvisor({
       ...property(),
       matchReasons: ['location', 'budget', 'legal'],

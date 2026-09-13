@@ -345,11 +345,27 @@ Audit tĩnh sau khi đóng evidence P2 phát hiện một điểm chưa phù h�
   (`getAdvisorMatches`/`search_property_matches`), nhưng phần hiểu câu hỏi và
   trả lời có citation vẫn còn phụ thuộc RAG.
 
-Vì vậy **P3 chưa đạt và chưa được đánh dấu hoàn tất**. Bước kỹ thuật tiếp theo là
-thiết kế/đấu nối evidence live/public cho `ai-chat` (hoặc fallback rule-based an
-toàn), sau đó bổ sung contract test để bảo đảm public AIO không gọi
-`match_rag_chunks` và không trả private/admin source. Không rebuild/backfill RAG
-trong bước này.
+**Đã triển khai P3 ngày 12/09/2026.** `ai-chat` hiện chỉ làm lớp hiểu ngôn ngữ
+và đọc knowledge entries đang bật; không còn gọi `match_rag_chunks`, không nhận
+citation do model tự sinh, và không dùng RAG projection làm nguồn listing. Lớp
+web tiếp tục truy xuất listing live qua `getAdvisorMatches`/
+`search_property_matches` trên dữ liệu public `is_active = true`, sau đó gắn
+canonical URL production và `updated_at` vào kết quả/citation hiển thị. Không có
+listing phù hợp thì trả lời trung thực, không tạo sản phẩm/ID/giá giả.
+
+Đã bổ sung contract test cho boundary không-RAG và test canonical/freshness của
+advisor summary. Verify gate đạt: typecheck, **199 files / 1.549 tests**, production
+build thành công (có cảnh báo DNS Supabase khi prerender local), Chrome thật đã
+mở `/`, `/mua-ban`, `/cho-thue`, `/tin-tuc`, `/robots.txt`, `/sitemap.xml`: public
+routes HTTP 200; canonical production, `index, follow`, JSON-LD và HTML links
+crawlable hiện diện. Không rebuild/backfill RAG và không gọi `refresh_rag_index`.
+
+**Gate P3: đạt cho runtime/public-source boundary.** Google/OpenAI crawler vẫn
+chỉ đọc được các context đã xuất bản trên public canonical HTML/JSON-LD/sitemap;
+không thể đọc hội thoại cá nhân hóa như một trang SEO. Các follow-up owner-gated
+(Search Console evidence, production Edge Function live-call và authenticated
+admin UI) vẫn được ghi riêng, không suy diễn thành bằng chứng crawler đã index.
+
 
 ## P2 follow-up finding — public Product eligibility boundary — 2026-09-12
 

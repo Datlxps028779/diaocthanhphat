@@ -319,7 +319,11 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
         const resultReply = (cards.length
           ? `Em tìm được ${cards.length} tin phù hợp nhất theo các tiêu chí nhu cầu đã nêu. Anh/chị có thể xem chi tiết hoặc để lại thông tin để tư vấn viên hỗ trợ.`
           : 'Hiện chưa có tin thật sự phù hợp với các tiêu chí nhu cầu. Anh/chị có thể nới khoảng giá/khu vực hoặc để lại thông tin để tư vấn viên tìm giúp.') + loanHint;
-        setMessages(prev => [...prev, { role: 'assistant', text: resultReply }]);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: resultReply,
+          citations: cards.map(card => ({ title: card.title, source_url: card.canonicalUrl, updated_at: card.updatedAt })),
+        }]);
         await persistOngoingMessage('assistant', resultReply);
       } catch {
         if (seq !== requestSeq.current) return;
@@ -361,6 +365,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       setMessages(prev => [...prev, {
         role: 'assistant',
         text: resultReply,
+        citations: cards.map(card => ({ title: card.title, source_url: card.canonicalUrl, updated_at: card.updatedAt })),
       }]);
       await persistOngoingMessage('assistant', resultReply);
     } catch {
@@ -536,7 +541,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
                         <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Nguồn</p>
                         {m.citations.map((c, ci) => (
                           <a key={ci} href={c.source_url ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-red-600 hover:underline">
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" /><span className="truncate">{c.title}</span>
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" /><span className="truncate">{c.title}{c.updated_at ? ` · cập nhật ${new Date(c.updated_at).toLocaleDateString('vi-VN')}` : ''}</span>
                           </a>
                         ))}
                       </div>
@@ -578,6 +583,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
                         <p className="font-bold text-gray-900 text-xs line-clamp-2">{p.title}</p>
                         <p className="text-red-600 font-black text-sm mt-0.5">{p.priceText}</p>
                         <p className="text-[11px] text-gray-500 truncate">{p.location}</p>
+                        <p className="text-[10px] text-gray-400 truncate">Nguồn công khai · {p.updatedAt ? `cập nhật ${new Date(p.updatedAt).toLocaleDateString('vi-VN')}` : 'chưa có thời điểm cập nhật'}</p>
                         <div className="flex gap-1 mt-1 text-[10px] text-gray-500 flex-wrap">
                           {p.matchReasons.map(reason => <span key={reason} className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">{reason}</span>)}
                           {p.area && <span className="bg-gray-50 px-1.5 py-0.5 rounded">{p.area}</span>}
