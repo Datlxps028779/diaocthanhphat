@@ -2,7 +2,7 @@ import { buildAreaListingPath, type ListingType } from '../areaPath';
 import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '../propertyTypeGroups';
 import { evaluateAreaSeo, evaluateCompositeAreaSeo, getAreaDetails } from '../areaSeo';
 import { evaluateNeighborhoodSeo } from '../neighborhoodSeo';
-import { NEWS_CATEGORY_SLUGS } from '../newsCategories';
+import { evaluatePropertyTypeSeo } from '../propertyTypeSeo';
 import { buildProductPath, isCanonicalProductSource } from '../productPath';
 import { isValidSlug } from '../slug';
 
@@ -15,6 +15,7 @@ export type SearchVisibilityEntityType =
   | 'area'
   | 'area_listing'
   | 'neighborhood'
+  | 'property_type'
   | 'news_category'
   | 'managed_page';
 
@@ -275,8 +276,17 @@ function staticSourceKey(path: string): string {
 export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources): SearchVisibilityCandidate[] {
   const candidates: SearchVisibilityCandidate[] = [
     ...STATIC_PATHS.map(path => eligible(staticSourceKey(path), 'static', null, path, null)),
-    ...NEWS_CATEGORY_SLUGS.map(slug => eligible(`news_category:static:${slug}`, 'news_category', null, `/tin-tuc/danh-muc/${slug}`, null)),
   ];
+
+  // News category pages: đọc từ news_categories thực tế
+  for (const category of sources.newsCategories) {
+    const key = `news_category:${category.id ?? category.slug}`;
+    if (!category.slug?.trim()) {
+      candidates.push(excluded(key, 'news_category', category.id ?? null, 'MISSING_REQUIRED_SOURCE', 'News category thiếu slug.', category.updated_at ?? null));
+      continue;
+    }
+    candidates.push(eligible(key, 'news_category', category.id ?? null, `/tin-tuc/danh-muc/${category.slug}`, category.updated_at ?? null));
+  }
 
   for (const property of sources.properties) {
     const key = `property:${property.id}`;
@@ -294,6 +304,33 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
   for (const area of sources.areas) candidates.push(...buildAreaCandidates(area, sources.properties, sources.districts, sources.propertyTypes));
   for (const neighborhood of sources.neighborhoods) candidates.push(buildNeighborhoodCandidate(neighborhood, sources.properties));
 
+  // Property type pages: chỉ index khi đủ listings và distinct signals
+  for (const propertyType of sources.propertyTypes ?? []) {
+    const key = `property_type:${propertyType.id}`;
+    if (!isValidSlug(propertyType.slug) || !propertyType.name?.trim()) {
+      candidates.push(excluded(key, 'property_type', propertyType.id, 'MISSING_REQUIRED_SOURCE', 'Property type thiếu slug hoặc tên hợp lệ.', null));
+      continue;
+    }
+
+    const rows = sources.properties.filter(property => property.is_active && property.property_type_id === propertyType.id);
+    const areaIds = new Set(rows.map(property => property.area_id).filter((value): value is string => Boolean(value?.trim())));
+    const districtIds = new Set(rows.map(property => property.district_id).filter((value): value is string => Boolean(value?.trim())));
+
+    const evaluation = evaluatePropertyTypeSeo({
+      propertyType: { id: propertyType.id, name: propertyType.name, slug: propertyType.slug },
+      activeListings: rows.length,
+      distinctAreas: areaIds.size,
+      distinctDistricts: districtIds.size,
+    });
+
+    if (!evaluation.indexable) {
+      candidates.push(excluded(key, 'property_type', propertyType.id, 'QUALITY_GATE_FAILED', evaluation.reasons.join(', '), null));
+    } else {
+      const latestUpdated = rows.map(property => property.updated_at).filter((value): value is string => !!value).sort().at(-1) ?? null;
+      candidates.push(eligible(key, 'property_type', propertyType.id, `/loai-nha-dat/${propertyType.slug}`, latestUpdated));
+    }
+  }
+
   for (const article of sources.news) {
     const key = `news:${article.id}`;
     if (!article.is_published) {
@@ -303,12 +340,6 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
     } else {
       candidates.push(eligible(key, 'news', article.id, `/tin-tuc/${article.slug}`, article.updated_at));
     }
-  }
-
-  const staticCategories = new Set(NEWS_CATEGORY_SLUGS);
-  for (const category of sources.newsCategories) {
-    if (!isValidSlug(category.slug) || staticCategories.has(category.slug)) continue;
-    candidates.push(eligible(`news_category:${category.id ?? category.slug}`, 'news_category', category.id ?? null, `/tin-tuc/danh-muc/${category.slug}`, category.updated_at ?? null));
   }
 
   for (const page of sources.managedPages) {

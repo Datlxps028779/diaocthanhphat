@@ -41,3 +41,32 @@ testsprite_tests/tmp/config.json
 # Verify receipt — local machine state
 .claude/.verify-receipt.json
 .claude/.verify-receipt.selftest-bak
+# Thêm vào .gitignore để dọn working tree
+.agents/
+.codex/
+.next-prod-build/
+.npm-cache/
+graphify-out/
+bds-seo-toolkit/
+anh_da_can_chinh/
+anh_in_lai/
+
+# Verify artifacts (tạm thời)
+.claude/*.png
+.claude/*.jpg
+.claude/*.mjs
+.claude/*.json
+.claude/BATCH_*.md
+.claude/chrome-*.png
+.claude/news-*.png
+.claude/p1-*.png
+.claude/p2-*.png
+.claude/rag-*.png
+.claude/unified-*.png
+
+# Build temps
+deno.lock
+testsprite-plan.json
+AGENTS.md
+TestSprite-setup.md
+supabase/.temp/

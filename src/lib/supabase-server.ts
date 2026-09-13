@@ -362,6 +362,128 @@ export async function serverGetPropertyTypesBySlugs(slugs: readonly string[]): P
   }
 }
 
+export async function serverGetAllPropertyTypes(): Promise<PropertyType[]> {
+  try {
+    const { data } = await serverClient()
+      .from('property_types')
+      .select('id,name,slug,icon,created_at')
+      .order('name');
+    return (data ?? []) as PropertyType[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetPropertyTypeBySlug(slug: string): Promise<PropertyType | null> {
+  try {
+    const sb = serverClient();
+    const { data } = await sb
+      .from('property_types')
+      .select('id,name,slug,icon,created_at')
+      .eq('slug', slug)
+      .maybeSingle();
+    return (data as PropertyType | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function serverGetPropertyTypeListings(
+  propertyTypeId: string,
+  limit = 12,
+  scope: { listingType?: 'mua_ban' | 'cho_thue'; areaId?: string } = {}
+): Promise<Property[]> {
+  try {
+    const sb = serverClient();
+    let q = sb
+      .from('properties')
+      .select(PROPERTY_SELECT)
+      .eq('is_active', true)
+      .eq('property_type_id', propertyTypeId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
+    if (scope.listingType) q = q.eq('listing_type', scope.listingType);
+    if (scope.areaId) q = q.eq('area_id', scope.areaId);
+    const { data } = await q;
+    return (data ?? []) as unknown as Property[];
+  } catch {
+    return [];
+  }
+}
+
+export async function serverGetPropertyTypeStats(propertyTypeId: string): Promise<{
+  activeCount: number;
+  distinctAreas: number;
+  distinctDistricts: number;
+  avgPrice: number | null;
+  topAreas: Array<{ name: string; count: number }>;
+}> {
+  try {
+    const sb = serverClient();
+
+    // Count active listings
+    const { count: activeCount } = await sb
+      .from('properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .eq('property_type_id', propertyTypeId);
+
+    // Get distinct areas and districts
+    const { data: listings } = await sb
+      .from('properties')
+      .select('area_id,district_id,price,areas!inner(name)')
+      .eq('is_active', true)
+      .eq('property_type_id', propertyTypeId);
+
+    const areaSet = new Set<string>();
+    const districtSet = new Set<string>();
+    const areaCounts = new Map<string, { name: string; count: number }>();
+    let priceSum = 0;
+    let priceCount = 0;
+
+    for (const item of listings ?? []) {
+      if (item.area_id) areaSet.add(item.area_id);
+      if (item.district_id) districtSet.add(item.district_id);
+
+      const areaName = (item.areas as any)?.name;
+      if (areaName && typeof areaName === 'string') {
+        const existing = areaCounts.get(item.area_id);
+        if (existing) {
+          existing.count++;
+        } else {
+          areaCounts.set(item.area_id, { name: areaName, count: 1 });
+        }
+      }
+
+      if (typeof item.price === 'number' && item.price > 0) {
+        priceSum += item.price;
+        priceCount++;
+      }
+    }
+
+    const topAreas = Array.from(areaCounts.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      activeCount: activeCount ?? 0,
+      distinctAreas: areaSet.size,
+      distinctDistricts: districtSet.size,
+      avgPrice: priceCount > 0 ? priceSum / priceCount : null,
+      topAreas,
+    };
+  } catch {
+    return {
+      activeCount: 0,
+      distinctAreas: 0,
+      distinctDistricts: 0,
+      avgPrice: null,
+      topAreas: [],
+    };
+  }
+}
+
 // Taxonomy 3 cấp cho trang khu dân cư (nhóm theo tỉnh, hiện nhãn đủ cấp). Một lượt
 // gọi 3 bảng nhỏ, rẻ hơn join lồng và dùng lại được cho resolveNeighborhoodLocation.
 export async function serverGetLocationTaxonomy(): Promise<LocationTaxonomy> {
