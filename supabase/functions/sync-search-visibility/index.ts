@@ -17,7 +17,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !supabaseKey) {
+    const syncSecret = Deno.env.get('SEARCH_VISIBILITY_SYNC_SECRET');
+    if (!supabaseUrl || !supabaseKey || !syncSecret) {
       throw new Error('Missing Supabase runtime configuration');
     }
 
@@ -27,13 +28,13 @@ Deno.serve(async (req) => {
 
     console.log('[sync-search-visibility] Starting eligibility sync...');
 
-    // Call the production app's internal sync route using the runtime secret.
+    // Call the production app's internal sync route using a dedicated secret.
     const apiUrl = 'https://chonhaviet.com/api/admin/search-visibility';
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
+        'Authorization': `Bearer ${syncSecret}`,
       },
       body: JSON.stringify({ action: 'sync' }),
     });
