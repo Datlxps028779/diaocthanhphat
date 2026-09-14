@@ -399,13 +399,13 @@ export async function inspectSearchVisibilityBatch(actorId: string): Promise<Sea
 
 // Server-only sync. This deliberately has no Google API dependency: it stores only
 // deterministic eligibility evidence from the same public-source policy as sitemap.
-export async function syncSearchVisibilityAudit(actorId: string): Promise<SearchVisibilitySyncResult> {
+export async function syncSearchVisibilityAudit(actorId: string | null): Promise<SearchVisibilitySyncResult> {
   const client = adminClient() as unknown as VisibilityDatabase | null;
   if (!client) throw new SearchVisibilitySyncError('SERVER_CONFIG', 'Chưa cấu hình quyền server để đồng bộ audit URL.');
 
   const runResult = await client.from('search_visibility_runs').insert({
     run_type: 'eligibility_sync',
-    actor_kind: 'owner',
+    actor_kind: actorId ? 'owner' : 'system',
     actor_id: actorId,
     status: 'running',
   }).select('id').single();

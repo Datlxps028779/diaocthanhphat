@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     && Boolean(syncSecret)
     && authorization === `Bearer ${syncSecret}`;
   const auth = isInternalSync
-    ? { ok: true as const, userId: 'search-visibility-auto-sync', token: syncSecret! }
+    ? { ok: true as const, userId: null, token: syncSecret! }
     : await requireOwner(req);
   if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
@@ -120,8 +120,8 @@ export async function POST(req: NextRequest) {
       : action === 'diagnose_access'
         ? await diagnoseSearchVisibilityAccess()
         : action === 'submit_sitemap'
-          ? await submitSearchVisibilitySitemap(auth.userId)
-          : await inspectSearchVisibilityBatch(auth.userId);
+          ? await submitSearchVisibilitySitemap(auth.userId!)
+          : await inspectSearchVisibilityBatch(auth.userId!);
     return NextResponse.json({ ok: true, action, ...result });
   } catch (error) {
     console.error(`[search-visibility] ${action} thất bại:`, error instanceof Error ? error.message : error);
