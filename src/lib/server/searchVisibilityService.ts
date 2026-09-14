@@ -77,6 +77,34 @@ function toRow(candidate: SearchVisibilityCandidate): Record<string, unknown> {
   };
 }
 
+export function findCanonicalConflicts(
+  candidates: SearchVisibilityCandidate[],
+  existingRows: Array<{ source_key: string; canonical_url: string | null }>,
+): Array<{ canonicalUrl: string; sourceKeys: string[] }> {
+  const sourceKeysByUrl = new Map<string, Set<string>>();
+  const add = (canonicalUrl: string, sourceKey: string) => {
+    const sourceKeys = sourceKeysByUrl.get(canonicalUrl) ?? new Set<string>();
+    sourceKeys.add(sourceKey);
+    sourceKeysByUrl.set(canonicalUrl, sourceKeys);
+  };
+
+  for (const row of existingRows) {
+    if (row.canonical_url) add(row.canonical_url, row.source_key);
+  }
+  const existingCanonicalBySourceKey = new Map(
+    existingRows.map(row => [row.source_key, row.canonical_url]),
+  );
+  for (const candidate of candidates) {
+    if (!candidate.canonicalUrl) continue;
+    if (existingCanonicalBySourceKey.get(candidate.sourceKey) === candidate.canonicalUrl) continue;
+    add(candidate.canonicalUrl, candidate.sourceKey);
+  }
+
+  return [...sourceKeysByUrl.entries()]
+    .filter(([, sourceKeys]) => sourceKeys.size > 1)
+    .map(([canonicalUrl, sourceKeys]) => ({ canonicalUrl, sourceKeys: [...sourceKeys].sort() }));
+}
+
 export function validateSearchVisibilityCandidates(candidates: SearchVisibilityCandidate[]): void {
   const invalid = candidates.filter(candidate => {
     const sourceKeyValid = /^[a-z_]+:[A-Za-z0-9:_-]{1,240}$/.test(candidate.sourceKey);
@@ -122,24 +150,6 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
   const results = [properties, areas, districts, propertyTypes, neighborhoods, news, newsCategories, managedPages];
   const error = results.find(result => result.error)?.error;
   if (error) throw new SearchVisibilitySyncError('SOURCE_READ', `Không tải được nguồn URL public: ${error.message}`);
-
-  // Debug: check if propertyTypes is actually being passed
-  const counts = {
-    properties: properties.data?.length ?? 0,
-    areas: areas.data?.length ?? 0,
-    districts: districts.data?.length ?? 0,
-    propertyTypes: propertyTypes.data?.length ?? 0,
-    neighborhoods: neighborhoods.data?.length ?? 0,
-    news: news.data?.length ?? 0,
-    newsCategories: newsCategories.data?.length ?? 0,
-    managedPages: managedPages.data?.length ?? 0,
-  };
-
-  console.log('[readSources] Loaded counts:', counts);
-
-  if (counts.propertyTypes === 0) {
-    throw new SearchVisibilitySyncError('SOURCE_READ', `DEBUG: propertyTypes loaded = 0. All counts: ${JSON.stringify(counts)}`);
-  }
 
   const sources: SearchVisibilitySources = {
     properties: (properties.data ?? []) as unknown as SearchVisibilitySources['properties'],
@@ -417,6 +427,18 @@ export async function syncSearchVisibilityAudit(actorId: string): Promise<Search
     const candidates = buildSearchVisibilityCandidates(sources);
     validateSearchVisibilityCandidates(candidates);
     const summary = summarizeSearchVisibility(candidates);
+    const existingRegistry = await client.from('search_visibility_urls')
+      .select('source_key,canonical_url')
+      .not('canonical_url', 'is', null)
+      .limit(5000);
+    if (existingRegistry.error) throw new SearchVisibilitySyncError('SOURCE_READ', 'Không đọc được registry canonical hiện tại để kiểm tra xung đột.');
+    const canonicalConflicts = findCanonicalConflicts(candidates, existingRegistry.data ?? []);
+    if (canonicalConflicts.length) {
+      const details = canonicalConflicts.slice(0, 5)
+        .map(conflict => `${conflict.canonicalUrl} <- ${conflict.sourceKeys.join(', ')}`)
+        .join('; ');
+      throw new SearchVisibilitySyncError('CANONICAL_POLICY', `Phát hiện canonical URL trùng trước khi ghi registry: ${details}`);
+    }
     const upsert = await client.from('search_visibility_urls').upsert(candidates.map(toRow), { onConflict: 'source_key' });
     if (upsert.error) throw classifySearchVisibilityPersistenceError(upsert.error);
     const finish = await client.from('search_visibility_runs').update({

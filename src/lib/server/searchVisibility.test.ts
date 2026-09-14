@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildSearchVisibilityCandidates, summarizeSearchVisibility, SEARCH_VISIBILITY_CANONICAL_ORIGIN, type SearchVisibilityCandidate, type SearchVisibilitySources } from './searchVisibility';
-import { classifySearchVisibilityPersistenceError, GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX, isFutureTimestamp, isRecoverableSitemapAuditFailure, isWithinSitemapCooldown, markEligibleUrlsSitemapSubmitted, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
+import { classifySearchVisibilityPersistenceError, findCanonicalConflicts, GOOGLE_ACCEPTED_AUDIT_FAILURE_PREFIX, isFutureTimestamp, isRecoverableSitemapAuditFailure, isWithinSitemapCooldown, markEligibleUrlsSitemapSubmitted, SEARCH_VISIBILITY_SOURCE_SELECTS, SEARCH_VISIBILITY_SITEMAP_COOLDOWN_MS, SearchVisibilitySyncError, validateSearchVisibilityCandidates } from './searchVisibilityService';
 
 function sources(overrides: Partial<SearchVisibilitySources> = {}): SearchVisibilitySources {
   return {
@@ -156,6 +156,48 @@ describe('buildSearchVisibilityCandidates', () => {
     for (const candidate of candidates.filter(item => item.canonicalPath)) {
       expect(candidate.canonicalUrl).toBe(`${SEARCH_VISIBILITY_CANONICAL_ORIGIN}${candidate.canonicalPath}`);
     }
+  });
+
+  it('phát hiện duplicate canonical non-null giữa candidate và registry nhưng bỏ qua null', () => {
+    const candidate = (sourceKey: string, canonicalUrl: string | null): SearchVisibilityCandidate => ({
+      sourceKey,
+      entityType: 'news',
+      entityId: sourceKey,
+      canonicalPath: canonicalUrl ? '/tin-tuc/trung' : null,
+      canonicalUrl,
+      eligible: Boolean(canonicalUrl),
+      reasonCode: canonicalUrl ? 'ELIGIBLE' : 'MISSING_REQUIRED_SOURCE',
+      reasonDetail: canonicalUrl ? null : 'missing',
+      contentUpdatedAt: null,
+    });
+
+    expect(findCanonicalConflicts(
+      [candidate('news:new', 'https://chonhaviet.com/tin-tuc/trung'), candidate('news:null', null)],
+      [{ source_key: 'news:old', canonical_url: 'https://chonhaviet.com/tin-tuc/trung' }, { source_key: 'news:none', canonical_url: null }],
+    )).toEqual([{
+      canonicalUrl: 'https://chonhaviet.com/tin-tuc/trung',
+      sourceKeys: ['news:new', 'news:old'],
+    }]);
+  });
+
+  it('không báo conflict khi cùng source key giữ nguyên canonical URL', () => {
+    const item: SearchVisibilityCandidate = {
+      sourceKey: 'news:stable', entityType: 'news', entityId: 'stable',
+      canonicalPath: '/tin-tuc/stable', canonicalUrl: 'https://chonhaviet.com/tin-tuc/stable',
+      eligible: true, reasonCode: 'ELIGIBLE', reasonDetail: null, contentUpdatedAt: null,
+    };
+
+    expect(findCanonicalConflicts([item], [{ source_key: item.sourceKey, canonical_url: item.canonicalUrl }])).toEqual([]);
+  });
+
+  it('phát hiện duplicate đã tồn tại trong registry và sắp xếp source key deterministic', () => {
+    expect(findCanonicalConflicts([], [
+      { source_key: 'news:z', canonical_url: 'https://chonhaviet.com/tin-tuc/trung' },
+      { source_key: 'news:a', canonical_url: 'https://chonhaviet.com/tin-tuc/trung' },
+    ])).toEqual([{
+      canonicalUrl: 'https://chonhaviet.com/tin-tuc/trung',
+      sourceKeys: ['news:a', 'news:z'],
+    }]);
   });
 
   it('blocks malformed canonical candidates before an audit upsert', () => {

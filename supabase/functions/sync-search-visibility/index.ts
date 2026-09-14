@@ -31,9 +31,8 @@ Deno.serve(async (req) => {
 
     console.log('[sync-search-visibility] Starting eligibility sync...');
 
-    // Call the app's sync API endpoint
-    // This reuses existing TypeScript logic in /api/public-indexing
-    const apiUrl = `${supabaseUrl.replace('.supabase.co', '.vercel.app')}/api/public-indexing`;
+    // Call the production app's existing admin sync route.
+    const apiUrl = 'https://chonhaviet.com/api/admin/search-visibility';
 
     const response = await fetch(apiUrl, {
       method: 'POST',
