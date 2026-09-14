@@ -100,12 +100,19 @@ function actionFromRequest(body: unknown): SearchVisibilityAction | null {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireOwner(req);
-  if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
-
   const body = await req.json().catch(() => ({}));
   const action = actionFromRequest(body);
   if (!action) return NextResponse.json({ error: 'Thao tác Search Visibility không hợp lệ.', code: 'UNKNOWN' }, { status: 400 });
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const authorization = req.headers.get('authorization');
+  const isInternalSync = action === 'sync'
+    && Boolean(serviceRoleKey)
+    && authorization === `Bearer ${serviceRoleKey}`;
+  const auth = isInternalSync
+    ? { ok: true as const, userId: 'search-visibility-auto-sync', token: serviceRoleKey! }
+    : await requireOwner(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.msg }, { status: auth.status });
 
   try {
     const result = action === 'sync'

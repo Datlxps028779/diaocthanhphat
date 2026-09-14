@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.seo-freshness-worker]
 verify_jwt = false
+
+[functions.sync-search-visibility]
+verify_jwt = false

@@ -15,30 +15,25 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify authorization (service_role only for cron jobs)
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing Supabase runtime configuration');
     }
 
-    // Create Supabase client with service_role
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // Create Supabase client with service_role for the internal sync boundary.
     const supabase = createClient(supabaseUrl, supabaseKey);
+    void supabase;
 
     console.log('[sync-search-visibility] Starting eligibility sync...');
 
-    // Call the production app's existing admin sync route.
+    // Call the production app's internal sync route using the runtime secret.
     const apiUrl = 'https://chonhaviet.com/api/admin/search-visibility';
-
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        'Authorization': `Bearer ${supabaseKey}`,
       },
       body: JSON.stringify({ action: 'sync' }),
     });
