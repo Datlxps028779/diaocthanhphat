@@ -200,6 +200,32 @@ describe('buildSearchVisibilityCandidates', () => {
     }]);
   });
 
+  it('ưu tiên news category có ID thật khi trùng slug với row static legacy', () => {
+    const candidates = buildSearchVisibilityCandidates(sources({
+      newsCategories: [
+        { id: 'static:thi-truong', slug: 'thi-truong', updated_at: null },
+        { id: '3b0b75e9-767f-4643-8cbc-26804e28c44d', slug: 'thi-truong', updated_at: '2026-09-14T00:00:00.000Z' },
+      ],
+    }));
+
+    expect(candidates.filter(item => item.canonicalPath === '/tin-tuc/danh-muc/thi-truong')).toHaveLength(1);
+    expect(candidates.find(item => item.canonicalPath === '/tin-tuc/danh-muc/thi-truong')?.sourceKey)
+      .toBe('news_category:3b0b75e9-767f-4643-8cbc-26804e28c44d');
+  });
+
+
+  it('giữ duplicate giữa các news category ID thật để conflict detector chặn lại', () => {
+    const candidates = buildSearchVisibilityCandidates(sources({
+      newsCategories: [
+        { id: 'category-a', slug: 'thi-truong', updated_at: null },
+        { id: 'category-b', slug: 'thi-truong', updated_at: null },
+      ],
+    }));
+
+    expect(candidates.filter(item => item.canonicalPath === '/tin-tuc/danh-muc/thi-truong')).toHaveLength(2);
+  });
+
+
   it('blocks malformed canonical candidates before an audit upsert', () => {
     const malformed: SearchVisibilityCandidate = {
       sourceKey: 'news:bad', entityType: 'news', entityId: 'bad', eligible: true, reasonCode: 'ELIGIBLE', reasonDetail: null,

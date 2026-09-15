@@ -162,8 +162,6 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
     managedPages: (managedPages.data ?? []) as unknown as SearchVisibilitySources['managedPages'],
   };
 
-  console.log('[readSources] sources.propertyTypes length after assignment:', sources.propertyTypes?.length);
-
   return sources;
 }
 

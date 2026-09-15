@@ -278,7 +278,14 @@ export function buildSearchVisibilityCandidates(sources: SearchVisibilitySources
     ...STATIC_PATHS.map(path => eligible(staticSourceKey(path), 'static', null, path, null)),
   ];
 
+  const realCategorySlugs = new Set(
+    sources.newsCategories
+      .filter(category => category.slug?.trim() && !(category.id?.startsWith('static:') ?? false))
+      .map(category => category.slug as string),
+  );
   for (const category of sources.newsCategories) {
+    const isLegacy = category.id?.startsWith('static:') ?? false;
+    if (isLegacy && category.slug && realCategorySlugs.has(category.slug)) continue;
     const key = `news_category:${category.id ?? category.slug}`;
     if (!category.slug?.trim()) {
       candidates.push(excluded(key, 'news_category', category.id ?? null, 'MISSING_REQUIRED_SOURCE', 'News category thiếu slug.', category.updated_at ?? null));
