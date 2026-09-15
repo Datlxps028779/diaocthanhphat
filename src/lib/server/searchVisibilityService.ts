@@ -136,16 +136,31 @@ export function classifySearchVisibilityPersistenceError(error: PersistenceError
   return new SearchVisibilitySyncError('AUDIT_WRITE', 'Không lưu được audit URL. Kiểm tra dữ liệu registry hoặc cấu hình server rồi thử lại.');
 }
 
+const SEARCH_VISIBILITY_PAGE_SIZE = 1000;
+
+type SourceQueryResult = { data: unknown[] | null; error: { message?: string } | null };
+
+async function readAllSourceRows(client: VisibilityDatabase, table: string, select: string): Promise<SourceQueryResult> {
+  const rows: unknown[] = [];
+  for (let from = 0; ; from += SEARCH_VISIBILITY_PAGE_SIZE) {
+    const result = await (client.from(table).select(select).range(from, from + SEARCH_VISIBILITY_PAGE_SIZE - 1) as PromiseLike<SourceQueryResult>);
+    if (result.error) return result;
+    const page = result.data ?? [];
+    rows.push(...page);
+    if (page.length < SEARCH_VISIBILITY_PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
 async function readSources(client: VisibilityDatabase): Promise<SearchVisibilitySources> {
   const [properties, areas, districts, propertyTypes, neighborhoods, news, newsCategories, managedPages] = await Promise.all([
-    client.from('properties').select(SEARCH_VISIBILITY_SOURCE_SELECTS.properties),
-    client.from('areas').select(SEARCH_VISIBILITY_SOURCE_SELECTS.areas),
-    client.from('districts').select(SEARCH_VISIBILITY_SOURCE_SELECTS.districts),
-    client.from('property_types').select(SEARCH_VISIBILITY_SOURCE_SELECTS.propertyTypes),
-    client.from('neighborhoods').select(SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods),
-    client.from('news').select(SEARCH_VISIBILITY_SOURCE_SELECTS.news),
-    client.from('news_categories').select(SEARCH_VISIBILITY_SOURCE_SELECTS.newsCategories),
-    client.from('managed_pages').select(SEARCH_VISIBILITY_SOURCE_SELECTS.managedPages),
+    readAllSourceRows(client, 'properties', SEARCH_VISIBILITY_SOURCE_SELECTS.properties),
+    readAllSourceRows(client, 'areas', SEARCH_VISIBILITY_SOURCE_SELECTS.areas),
+    readAllSourceRows(client, 'districts', SEARCH_VISIBILITY_SOURCE_SELECTS.districts),
+    readAllSourceRows(client, 'property_types', SEARCH_VISIBILITY_SOURCE_SELECTS.propertyTypes),
+    readAllSourceRows(client, 'neighborhoods', SEARCH_VISIBILITY_SOURCE_SELECTS.neighborhoods),
+    readAllSourceRows(client, 'news', SEARCH_VISIBILITY_SOURCE_SELECTS.news),
+    readAllSourceRows(client, 'news_categories', SEARCH_VISIBILITY_SOURCE_SELECTS.newsCategories),
+    readAllSourceRows(client, 'managed_pages', SEARCH_VISIBILITY_SOURCE_SELECTS.managedPages),
   ]);
   const results = [properties, areas, districts, propertyTypes, neighborhoods, news, newsCategories, managedPages];
   const error = results.find(result => result.error)?.error;

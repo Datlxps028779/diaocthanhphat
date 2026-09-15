@@ -4,11 +4,20 @@ import { supabase, type RagChunk, type RagIndexRun, type RagMatch, type RagSourc
 // Kho chunk sinh TỪ DỮ LIỆU THẬT qua RPC refresh_rag_index (thuần SQL, không LLM).
 // Chat retrieve qua match_rag_chunks. Đọc/ghi đều guard RLS/is_admin ở DB.
 
-// Admin: reindex toàn bộ (target=null) hoặc 1 nguồn. Trả số chunk đã dựng.
+// Admin: reindex toàn bộ (target=null) hoặc 1 nguồn qua server owner-MFA boundary.
 export async function adminRefreshRagIndex(target?: RagSourceTable): Promise<number> {
-  const { data, error } = await supabase.rpc('refresh_rag_index', target ? { target } : {});
-  if (error) throw error;
-  return (data as number) ?? 0;
+  const { data: { session } } = await supabase.auth.getSession();
+  const response = await fetch('/api/admin/ai-rag', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(target ? { target } : {}),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error ?? 'Không đồng bộ được dữ liệu RAG.');
+  return (json.chunkCount as number) ?? 0;
 }
 
 // Admin: thống kê chunk theo nguồn (đếm + lần index gần nhất) để hiển thị bảng trạng thái.
