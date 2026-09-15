@@ -76,7 +76,7 @@ Rà soát → đo evidence thật → lập plan/TODO → chủ sản phẩm duy
 
 ## 4. Chuỗi công việc bắt buộc hiện tại
 
-### A — Đóng Search Visibility/entity expansion đang lỗi (`BLOCKED`, ưu tiên số 1)
+### A — Đóng Search Visibility/entity expansion đã hoàn tất (`DONE`, ưu tiên số 1)
 
 **Mục đích:** tự động tạo registry URL cho intent tìm kiếm như “mua đất + khu vực”, “mua nhà + khu vực”, “thuê nhà + khu vực” để người dùng click được và AIO có URL canonical đọc được.
 
@@ -92,13 +92,13 @@ Rà soát → đo evidence thật → lập plan/TODO → chủ sản phẩm duy
 
 **TODO theo thứ tự:**
 
-- [ ] Chạy một read-only diagnostic production trả về toàn bộ candidate canonical URL theo `entity_type`, `source_key`, `canonical_path`, `canonical_url`, kèm nhóm duplicate **chỉ với URL non-null**.
-- [ ] Phân biệt 4 loại lỗi: duplicate candidate mới, stale row trong registry, constraint/schema policy, hoặc lỗi classify message.
-- [ ] Không sửa dữ liệu production và không chạy full rebuild cho đến khi biết nhóm duplicate cụ thể.
-- [ ] Nếu là code defect: viết test regression đúng dữ liệu gây lỗi, sửa tối thiểu, test/build/graphify/verify.
-- [ ] Nếu là data/registry defect: viết dry-run và SQL remediation riêng; chủ sản phẩm tự chạy SQL.
-- [ ] Sau sync thành công, user chạy read-only verify: property_type rows, news_category `entity_id`, summary theo entity, latest run status.
-- [ ] Chỉ đánh dấu DONE sau khi production registry và latest run đều PASS.
+- [x] Chạy một read-only diagnostic production trả về toàn bộ candidate canonical URL theo `entity_type`, `source_key`, `canonical_path`, `canonical_url`, kèm nhóm duplicate **chỉ với URL non-null**.
+- [x] Phân biệt 4 loại lỗi: duplicate candidate mới, stale row trong registry, constraint/schema policy, hoặc lỗi classify message.
+- [x] Không sửa dữ liệu production và không chạy full rebuild cho đến khi biết nhóm duplicate cụ thể.
+- [x] Nếu là code defect: viết test regression đúng dữ liệu gây lỗi, sửa tối thiểu, test/build/graphify/verify.
+- [x] Nếu là data/registry defect: viết dry-run và SQL remediation riêng; chủ sản phẩm tự chạy SQL.
+- [x] Sau sync thành công, user chạy read-only verify: property_type rows, news_category `entity_id`, summary theo entity, latest run status.
+- [x] Chỉ đánh dấu DONE sau khi production registry và latest run đều PASS.
 
 **Không được làm:** bulk delete registry, đổi unique constraint, nới quality gate, hoặc gọi Google để “che” lỗi.
 

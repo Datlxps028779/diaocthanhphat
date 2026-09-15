@@ -1,6 +1,6 @@
 # TODO triển khai Phase 1 — Chẩn đoán Search Visibility canonical conflict
 
-> **Trạng thái:** `PENDING_APPROVAL`
+> **Trạng thái:** `DONE`
 >
 > **Mục tiêu:** xác định chính xác nguyên nhân `syncSearchVisibilityAudit()` thất bại trước khi sửa code hoặc dữ liệu production.
 >
@@ -131,14 +131,14 @@ Sau khi local verification pass:
 
 Chỉ thực hiện sau khi diagnostic đã xác định nguyên nhân và người dùng chủ động chạy thao tác production:
 
-- [ ] Latest `eligibility_sync` có status `succeeded`.
-- [ ] Registry có row `property_type` cho các loại đủ quality gate.
-- [ ] Canonical path và canonical URL của property type đúng policy.
-- [ ] Registry `news_category` hiện tại có `entity_id` đúng source ID.
-- [ ] Duplicate non-null canonical URL bằng 0.
-- [ ] Các row stale/legacy được phân loại, không xóa mù.
-- [ ] Summary theo entity khớp source production.
-- [ ] Chỉ cập nhật TODO điều hành sang `DONE` khi có đủ production evidence.
+- [x] Latest `eligibility_sync` có status `succeeded`.
+- [x] Registry có row `property_type` cho các loại đủ quality gate.
+- [x] Canonical path và canonical URL của property type đúng policy.
+- [x] Registry `news_category` hiện tại có `entity_id` đúng source ID.
+- [x] Duplicate non-null canonical URL bằng 0.
+- [x] Các row stale/legacy được phân loại, không xóa mù.
+- [x] Summary theo entity khớp source production.
+- [x] Chỉ cập nhật TODO điều hành sang `DONE` khi có đủ production evidence.
 
 ## 6. Không được làm trong TODO này
 
