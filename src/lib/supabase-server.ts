@@ -62,7 +62,7 @@ export async function serverGetPropertyByIdOrSlug(idOrSlug: string): Promise<Pro
     // Lọc is_active: tin đã ẩn/từ chối/xóa → null → trang gọi notFound() (404),
     // không render thành trang sống (tránh Google index tin đã gỡ). Chuẩn SEO.
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq(col, idOrSlug)
       .eq('is_active', true)
@@ -79,7 +79,7 @@ export async function serverGetPropertyByPublicCode(code: number): Promise<Prope
   try {
     const sb = serverClient();
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('public_code', code)
       .eq('is_active', true)
@@ -112,7 +112,7 @@ export async function serverGetFeaturedProperties(): Promise<Property[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true).eq('is_featured', true)
       .order('created_at', { ascending: false }).limit(12);
@@ -126,7 +126,7 @@ export async function serverGetHotProperties(): Promise<Property[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true).eq('is_hot', true)
       .order('views', { ascending: false }).limit(8);
@@ -140,7 +140,7 @@ export async function serverGetRecentProperties(limit = 8): Promise<Property[]> 
   try {
     const sb = serverClient();
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .order('created_at', { ascending: false }).limit(limit);
@@ -183,7 +183,7 @@ export async function serverGetNewsContextualProperties(
     const district = districtResult.data as Pick<District, 'id' | 'name'> | null;
     const ward = wardResult.data as Pick<Ward, 'id' | 'name'> | null;
     const neighborhood = neighborhoodResult.data as Pick<Neighborhood, 'id' | 'name' | 'slug'> | null;
-    const recent = () => sb.from('properties')
+    const recent = () => sb.from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .eq('area_id', areaId)
@@ -227,7 +227,7 @@ export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', li
   try {
     const sb = serverClient();
     let q = sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT, { count: 'exact' })
       .eq('is_active', true)
       .order('created_at', { ascending: false })
@@ -271,7 +271,7 @@ export async function serverGetAreaListings(areaId: string, limit = 12, scope: S
   try {
     const sb = serverClient();
     let q = sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .eq('area_id', areaId)
@@ -300,7 +300,7 @@ export async function serverGetAreaStats(areaId: string, scope: ServerAreaListin
   try {
     const sb = serverClient();
     let q = sb
-      .from('properties')
+      .from('public_properties')
       .select('district, property_type_id, title, updated_at, area_id, district_id', { count: 'exact' })
       .eq('is_active', true)
       .eq('area_id', areaId)
@@ -396,7 +396,7 @@ export async function serverGetPropertyTypeListings(
   try {
     const sb = serverClient();
     let q = sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .eq('property_type_id', propertyTypeId)
@@ -424,14 +424,14 @@ export async function serverGetPropertyTypeStats(propertyTypeId: string): Promis
 
     // Count active listings
     const { count: activeCount } = await sb
-      .from('properties')
+      .from('public_properties')
       .select('id', { count: 'exact', head: true })
       .eq('is_active', true)
       .eq('property_type_id', propertyTypeId);
 
     // Get distinct areas and districts
     const { data: listings } = await sb
-      .from('properties')
+      .from('public_properties')
       .select('area_id,district_id,price,areas!inner(name)')
       .eq('is_active', true)
       .eq('property_type_id', propertyTypeId);
@@ -518,7 +518,7 @@ export async function serverGetNeighborhoodListings(slug: string, limit = 12): P
   try {
     const sb = serverClient();
     const { data } = await sb
-      .from('properties')
+      .from('public_properties')
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .eq('neighborhood_slug', slug)
@@ -534,7 +534,7 @@ export async function serverGetNeighborhoodStats(slug: string): Promise<{ proper
   try {
     const sb = serverClient();
     const { data, count } = await sb
-      .from('properties')
+      .from('public_properties')
       .select('property_type_id', { count: 'exact' })
       .eq('is_active', true)
       .eq('neighborhood_slug', slug)

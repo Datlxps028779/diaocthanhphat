@@ -140,12 +140,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // không fallback sang URL legacy/ID vì Search Visibility cũng loại nguồn đó.
     let propRows: Array<{ id: string; slug?: string | null; updated_at?: string | null; public_code?: number | null; listing_type?: string | null; district?: string | null; areas?: { slug?: string | null } | Array<{ slug?: string | null }> | null }> = [];
     try {
-      propRows = await fetchAllRows(from => sb.from('properties')
+      propRows = await fetchAllRows(from => sb.from('public_properties')
         .select('id,slug,updated_at,public_code,listing_type,district,areas(slug)')
         .eq('is_active', true)
         .range(from, from + SITEMAP_PAGE_SIZE - 1));
     } catch {
-      propRows = await fetchAllRows(from => sb.from('properties')
+      propRows = await fetchAllRows(from => sb.from('public_properties')
         .select('id,updated_at')
         .eq('is_active', true)
         .range(from, from + SITEMAP_PAGE_SIZE - 1));
@@ -165,7 +165,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       fetchAllRows(from => sb.from('areas').select('id,name,slug,description,created_at').range(from, from + SITEMAP_PAGE_SIZE - 1)),
       fetchAllRows(from => sb.from('districts').select('id,area_id,name,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
       fetchAllRows(from => sb.from('property_types').select('id,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
-      fetchAllRows(from => sb.from('properties').select('id,area_id,district_id,district,property_type_id,listing_type,title,updated_at').eq('is_active', true).not('area_id', 'is', null).range(from, from + SITEMAP_PAGE_SIZE - 1)),
+      fetchAllRows(from => sb.from('public_properties').select('id,area_id,district_id,district,property_type_id,listing_type,title,updated_at').eq('is_active', true).not('area_id', 'is', null).range(from, from + SITEMAP_PAGE_SIZE - 1)),
     ]);
     const areaProps = areaPropsRows as AreaSitemapListing[];
     const districts = districtsRows as Array<{ id: string; area_id: string | null; name: string; slug: string }>;
@@ -251,7 +251,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const [nbRes, nbPropsRes] = await Promise.all([
       sb.from('neighborhoods').select('name,slug,description,created_at').limit(5000),
-      sb.from('properties').select('id,neighborhood_slug,property_type_id').eq('is_active', true).not('neighborhood_slug', 'is', null).limit(5000),
+      sb.from('public_properties').select('id,neighborhood_slug,property_type_id').eq('is_active', true).not('neighborhood_slug', 'is', null).limit(5000),
     ]);
     const nbProps = (nbPropsRes.data ?? []) as Array<{ id: string; neighborhood_slug: string | null; property_type_id: string | null }>;
     for (const nb of (nbRes.data ?? []) as Array<{ name: string; slug: string; description: string | null; created_at?: string | null }>) {

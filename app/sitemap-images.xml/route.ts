@@ -43,7 +43,7 @@ export async function GET() {
     try {
       const sb = createClient(url, key, { auth: { persistSession: false } });
       const [properties, news] = await Promise.all([
-        sb.from('properties').select('id,slug,title,image_url,images,public_code,listing_type,district,areas(slug)').eq('is_active', true).limit(5000),
+        sb.from('public_properties').select('id,slug,title,image_url,images,public_code,listing_type,district,areas(slug)').eq('is_active', true).limit(5000),
         sb.from('news').select('id,slug,title,image_url').eq('is_published', true).limit(5000),
       ]);
 

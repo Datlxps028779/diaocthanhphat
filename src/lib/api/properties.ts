@@ -102,7 +102,7 @@ function applyPublicPropertyFilters(query: any, filters?: PropertyFilters): any 
 function buildPropertyQuery(filters?: PropertyFilters) {
   let q = applyPublicPropertyFilters(
     supabase
-      .from('properties')
+      .from('public_properties')
       .select(PUBLIC_PROPERTY_SELECT, { count: 'exact' })
       .eq('is_active', true),
     filters,
@@ -143,7 +143,7 @@ export async function getPublicPropertiesByIds(ids: string[]): Promise<Property[
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   if (uniqueIds.length === 0) return [];
   const { data, error } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true)
     .in('id', uniqueIds);
@@ -174,7 +174,7 @@ async function getRankedPropertyMatches(
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const { data, error, count } = await applyPublicPropertyFilters(
-      supabase.from('properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
+      supabase.from('public_properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
       filters,
     ).order('created_at', { ascending: false }).order('id', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
@@ -209,7 +209,7 @@ async function getRankedPropertyMatches(
   if (rows.length === 0) return { data: [], total: 0 };
   const ids = rows.map(r => r.id);
   const { data, error: detailError } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(propertySelect)
     .eq('is_active', true)
     .in('id', ids);
@@ -272,7 +272,7 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
   const ids = rows.map(r => r.id);
   const metadata = new Map(rows.map(r => [r.id, mapAdvisorMatchMetadata(r)]));
   const { data, error: detailError } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(ADVISOR_PROPERTY_SELECT)
     .eq('is_active', true)
     .in('id', ids);
@@ -296,7 +296,7 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
 export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise<Property[]> {
   const q = applyPublicPropertyFilters(
     supabase
-      .from('properties')
+      .from('public_properties')
       .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, area_sqm, bedrooms, direction, legal_status, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, listing_type')
       .eq('is_active', true)
       .not('latitude', 'is', null)
@@ -313,7 +313,7 @@ export async function getComps(filters: { areaId?: string; typeId?: string; list
   { price: number; price_unit: string; area_sqm: number | null }[]
 > {
   let q = supabase
-    .from('properties')
+    .from('public_properties')
     .select('price, price_unit, area_sqm')
     .eq('is_active', true)
     .not('area_sqm', 'is', null)
@@ -330,7 +330,7 @@ export async function getPropertyOptions(limit = 300): Promise<
   { id: string; title: string; price: number; price_unit: string; price_label: string | null; area_sqm: number | null }[]
 > {
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select('id, title, price, price_unit, price_label, area_sqm')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
@@ -340,7 +340,7 @@ export async function getPropertyOptions(limit = 300): Promise<
 
 export async function getFeaturedProperties(): Promise<Property[]> {
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_featured', true)
     .order('created_at', { ascending: false }).limit(12);
@@ -349,7 +349,7 @@ export async function getFeaturedProperties(): Promise<Property[]> {
 
 export async function getHotProperties(): Promise<Property[]> {
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_hot', true)
     .order('views', { ascending: false }).limit(8);
@@ -358,7 +358,7 @@ export async function getHotProperties(): Promise<Property[]> {
 
 export async function getRecentProperties(limit = 8): Promise<Property[]> {
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true)
     .order('created_at', { ascending: false }).limit(limit);
@@ -369,7 +369,7 @@ export async function getPropertyById(id: string): Promise<Property | null> {
   // Pure read — KHÔNG tăng view ở đây. Tăng view được tách ra incrementPropertyView
   // và bắn 1 lần khi mount ở tầng UI, để không phụ thuộc cache/refetch của React Query.
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('id', id)
     .eq('is_active', true)
@@ -383,7 +383,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function getPropertyByIdOrSlug(idOrSlug: string): Promise<Property | null> {
   const col = UUID_RE.test(idOrSlug) ? 'id' : 'slug';
   const { data } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq(col, idOrSlug)
     .eq('is_active', true)
@@ -551,7 +551,7 @@ export async function getRelatedProperties(property: Property, limit = 6): Promi
   const candidateLimit = Math.max(24, Math.min(60, limit * 8));
   const select = PUBLIC_PROPERTY_SELECT;
   const baseQuery = () => supabase
-    .from('properties')
+    .from('public_properties')
     .select(select)
     .eq('is_active', true)
     .eq('listing_type', property.listing_type)
