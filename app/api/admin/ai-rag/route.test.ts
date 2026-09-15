@@ -80,7 +80,7 @@ describe('/api/admin/ai-rag', () => {
     expect(adminClientMock).not.toHaveBeenCalled();
   });
 
-  it.each([null, 42, false, [], {}, '', ' news ', 'property_types', 'news_categories', 'managed_pages'].map(value => [value]))('từ chối target không hợp lệ: %j', async target => {
+  it.each([null, 42, false, [], {}, '', ' news ', 'admin_docs'].map(value => [value]))('từ chối target không hợp lệ: %j', async target => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
 
     const response = await POST(request({ target }));
@@ -100,7 +100,7 @@ describe('/api/admin/ai-rag', () => {
     expect(adminClientMock).not.toHaveBeenCalled();
   });
 
-  it.each(['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge'])('giữ target %s khi gọi RPC server', async target => {
+  it.each(['properties', 'news', 'property_types', 'news_categories', 'neighborhoods', 'areas', 'price_stats', 'managed_pages', 'ai_chat_knowledge'])('giữ target %s khi gọi RPC server', async target => {
     requireOwnerMock.mockResolvedValue({ ok: true, token: 'owner-token', userId: 'owner-1' });
     const rpc = vi.fn().mockResolvedValue({ data: 1, error: null });
     adminClientMock.mockReturnValue({ rpc });

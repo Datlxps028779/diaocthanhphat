@@ -15,13 +15,16 @@ import type { RagIndexRun } from '../../../lib/supabase';
 const SOURCE_LABELS: Record<RagSourceTable, string> = {
   properties: 'Bất động sản',
   news: 'Tin tức',
+  property_types: 'Loại bất động sản',
+  news_categories: 'Danh mục tin tức',
   neighborhoods: 'Khu dân cư',
   areas: 'Khu vực',
   price_stats: 'Dữ liệu giá',
+  managed_pages: 'Trang quản trị nội dung',
   ai_chat_knowledge: 'Tri thức Q&A',
   admin_docs: 'Tài liệu nội bộ',
 };
-const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'neighborhoods', 'areas', 'price_stats', 'ai_chat_knowledge'];
+const SOURCE_ORDER: RagSourceTable[] = ['properties', 'news', 'property_types', 'news_categories', 'neighborhoods', 'areas', 'price_stats', 'managed_pages', 'ai_chat_knowledge'];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';

@@ -6,9 +6,12 @@ export const runtime = 'nodejs';
 const REFRESHABLE_SOURCES = new Set([
   'properties',
   'news',
+  'property_types',
+  'news_categories',
   'neighborhoods',
   'areas',
   'price_stats',
+  'managed_pages',
   'ai_chat_knowledge',
 ]);
 
