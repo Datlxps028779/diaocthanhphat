@@ -46,6 +46,15 @@ describe('news publication quality report', () => {
     expect(isPublishQualityAccepted(report)).toBe(true);
   });
 
+  it('giữ FAQ thiếu ở warning nhưng không chặn publication boundary', () => {
+    const report = buildNewsPublicationQualityReport(article({ faq: [] }));
+    expect(report.passed).toBe(true);
+    expect(report.issues.map(issue => issue.code)).not.toContain('FAQ_COUNT');
+    expect(report.warnings.map(issue => issue.code)).toContain('FAQ_COUNT');
+    expect(report.quality_status).toBe('warning');
+    expect(isPublishQualityAccepted(report)).toBe(true);
+  });
+
   it('chặn bài thiếu nội dung, GEO và nguồn', () => {
     const report = buildNewsPublicationQualityReport(article({
       content: '<p>Ngắn.</p>',

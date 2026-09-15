@@ -78,12 +78,27 @@ function contentFingerprint(article: NewsArticle) {
   })).digest('hex');
 }
 
+const NON_BLOCKING_PUBLICATION_ISSUES = new Set([
+  'FAQ_COUNT',
+  'FAQ_QUESTION_FORMAT',
+  'FAQ_ANSWER_LENGTH',
+  'FAQ_DUPLICATE',
+]);
+
 export function buildNewsPublicationQualityReport(article: NewsArticle): NewsPublicationQualityReport {
   const quality = evaluateArticleIngestQuality(toArticleRow(article), { rawContent: article.content ?? '' });
-  const qualityStatus = quality.passed ? (quality.warnings.length ? 'warning' : 'pass') : 'blocked';
+  const faqIssues = quality.issues.filter(issue => NON_BLOCKING_PUBLICATION_ISSUES.has(issue.code));
+  const blockingIssues = quality.issues.filter(issue => !NON_BLOCKING_PUBLICATION_ISSUES.has(issue.code));
+  const warnings = [...quality.warnings, ...faqIssues];
+  const passed = blockingIssues.length === 0;
+  const qualityStatus = passed ? (warnings.length ? 'warning' : 'pass') : 'blocked';
   const slug = compact(article.slug);
   return {
     ...quality,
+    passed,
+    issues: blockingIssues,
+    warnings,
+    score: Math.max(0, 100 - blockingIssues.length * 8 - warnings.length * 2),
     quality_status: qualityStatus,
     quality_version: quality.version,
     content_version: article.content_version ?? 0,

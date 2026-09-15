@@ -147,6 +147,25 @@ describe('collectNewsAdminSaveIssues', () => {
     expect(result.blocking).toEqual([]);
   });
 
+  it('không chặn publication chỉ vì FAQ thiếu hoặc chưa hoàn chỉnh', () => {
+    const result = collectNewsAdminSaveIssues({
+      article: article({
+        title: 'Bài viết có citation hợp lệ nhưng chưa biên tập FAQ',
+        slug: 'bai-viet-co-citation-hop-le',
+        faq: [],
+        citations: [
+          { title: 'Nguồn 1', url: 'https://example.com/1' },
+          { title: 'Nguồn 2', url: 'https://example.org/2' },
+        ],
+      }),
+      existingArticles: [],
+      currentId: 'draft-faq-warning',
+      publish: true,
+    });
+    expect(result.blocking.map(issue => issue)).not.toContain('Cần 4–6 cặp FAQ; hiện có 0.');
+    expect(result.warnings.join('\n')).toContain('Cần 4–6 cặp FAQ; hiện có 0.');
+  });
+
   it('gom slug trùng và toàn bộ lỗi cổng chất lượng trong một lần', () => {
     const result = collectNewsAdminSaveIssues({
       article: article({
@@ -168,8 +187,9 @@ describe('collectNewsAdminSaveIssues', () => {
     expect(text).toContain('Nội dung phải có ít nhất 4 H2');
     expect(text).toContain('Bắt buộc có khu vực thật');
     expect(text).toContain('Nội dung phải có ít nhất 2 liên kết nội bộ');
-    expect(text).toContain('Cần 4–6 cặp FAQ');
+    expect(text).not.toContain('Cần 4–6 cặp FAQ');
     expect(text).toContain('Cần 2–6 nguồn tham khảo');
+    expect(result.warnings.join('\n')).toContain('Cần 4–6 cặp FAQ');
     expect(result.blocking.length).toBeGreaterThan(8);
   });
 });
@@ -199,7 +219,7 @@ describe('formatNewsIssueList', () => {
 });
 
 describe('collectNewsRepublishReadiness', () => {
-  it('bài thiếu H2/link/FAQ chưa sẵn sàng đăng lại dù đang published', () => {
+  it('bài thiếu H2/link chưa sẵn sàng đăng lại nhưng FAQ chỉ là warning', () => {
     const result = collectNewsRepublishReadiness({
       article: article({
         id: 'live-1',
@@ -215,8 +235,9 @@ describe('collectNewsRepublishReadiness', () => {
     const joined = result.blocking.join('\n');
     expect(joined).toContain('Nội dung phải có ít nhất 4 H2');
     expect(joined).toContain('Nội dung phải có ít nhất 2 liên kết nội bộ');
-    expect(joined).toContain('Cần 4–6 cặp FAQ');
-    expect(result.blocking.length).toBeGreaterThan(3);
+    expect(joined).not.toContain('Cần 4–6 cặp FAQ');
+    expect(result.warnings.join('\n')).toContain('Cần 4–6 cặp FAQ');
+    expect(result.blocking.length).toBeGreaterThan(2);
   });
 
   it('bài đủ cổng thì ready=true', () => {

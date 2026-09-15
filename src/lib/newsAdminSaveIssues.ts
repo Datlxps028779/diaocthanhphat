@@ -85,6 +85,17 @@ function addUnique(issues: string[], seen: Set<string>, message: string) {
   issues.push(text);
 }
 
+const NON_BLOCKING_PUBLICATION_ISSUES = new Set([
+  'FAQ_COUNT',
+  'FAQ_QUESTION_FORMAT',
+  'FAQ_ANSWER_LENGTH',
+  'FAQ_DUPLICATE',
+]);
+
+function isNonBlockingPublicationIssue(code: unknown): boolean {
+  return typeof code === 'string' && NON_BLOCKING_PUBLICATION_ISSUES.has(code);
+}
+
 export function normalizeNewsSlug(value: unknown): string {
   return compact(value).toLocaleLowerCase('vi');
 }
@@ -171,7 +182,10 @@ export function collectNewsAdminSaveIssues(input: {
   const quality = evaluateArticleIngestQuality(toArticleRow(input.article), {
     rawContent: input.article.content ?? '',
   });
-  for (const issue of quality.issues) addUnique(blocking, seen, issue.message);
+  for (const issue of quality.issues) {
+    if (isNonBlockingPublicationIssue(issue.code)) addUnique(warnings, seen, issue.message);
+    else addUnique(blocking, seen, issue.message);
+  }
   for (const warning of quality.warnings) addUnique(warnings, seen, warning.message);
 
   const editorial = evaluateNewsEditorialQuality({
@@ -179,6 +193,7 @@ export function collectNewsAdminSaveIssues(input: {
     faq: input.article.faq,
   });
   for (const issue of editorial.citationIssues) addUnique(blocking, seen, issue.message);
+  for (const issue of editorial.faqIssues) addUnique(warnings, seen, issue.message);
 
   return { blocking, warnings };
 }
