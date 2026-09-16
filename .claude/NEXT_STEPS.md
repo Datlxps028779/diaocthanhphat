@@ -1,3 +1,66 @@
+# Tiến độ hiện tại
+
+## Phê duyệt commit UI — 2026-09-16
+
+Người dùng đã cho phép commit local toàn bộ chỉnh sửa UI vừa hoàn tất (menu/search, timeline, drawer, khối địa phương, editor CMS và khoảng cách bài viết lớn). Các ghi chú “chưa được phê duyệt commit” bên dưới là trạng thái của vòng kiểm chứng trước đó. Chưa được push/deploy; dự kiến bàn giao cùng phase trang địa phương/FAQ/báo cáo tự sinh sau khi phase mới được duyệt và kiểm chứng. Không đưa các file cấu hình cá nhân hoặc audit ngoài phạm vi vào commit UI.
+
+## CSS bài viết lớn trang chủ — 2026-09-16
+
+- [x] Gộp mô tả vào cùng khối padding với tiêu đề/ngày đăng tại `src/LandingPage.tsx`; khoảng cách tiêu đề → metadata 8px, metadata → mô tả 12px, clamp 2 dòng. Giữ nguyên ảnh, nội dung và bố cục 3 cột.
+- [x] Chrome thật cổng 3103: 7 viewport 1920/1440/1280/1024/768/390/320 không overflow, khoảng cách đúng; ảnh tải được, tab có bài/rỗng và link bài viết đạt, pageErrors 0. Build riêng 54/54 đạt; cập nhật preview 3103, giữ nguyên admin 3102.
+- Bằng chứng: `/tmp/chonhaviet-news-spacing-report.json`, `/tmp/chonhaviet-news-spacing-{build,browser,graphify,receipt}.log`, screenshot `/tmp/chonhaviet-news-spacing-loaded-1440.png`. Snapshot đang phục vụ được ghi trong `/tmp/chonhaviet-news-spacing-dir.txt`; snapshot khu vực bên dưới là bản trước sửa CSS này.
+- Không ghi production, không SQL, chưa commit/push/deploy.
+
+## Thiết kế lại khối địa phương — 2026-09-16 (hoàn tất local, chưa push)
+
+Người dùng đã duyệt kế hoạch và yêu cầu “oke làm đi”. Chỉ làm lại `region_banners` theo ảnh mẫu: card khu vực + tab địa phương hiện tại → huyện, không dùng Bắc–Trung–Nam.
+
+- [x] Đo lại bằng GET public: 56 tin active, Bình Dương 28 (24 bán/4 thuê), Bình Phước 28 bán; 52 tin bán đủ giá/diện tích; 56 tin có district_id. Taxonomy có 4 tỉnh.
+- [x] Rà cấu hình: region_banners đã bật, order 4, updated_at 2026-09-16T04:27:12.059613+00:00. Giữ cấu hình người dùng đã đổi, không tự PATCH production.
+- [x] API GET batch `/api/public/location-stats`: chỉ đọc `public_properties`, lọc `is_active=true`, dùng anon; keyset + kiểm exact count + probe cuối, timeout/cap, cache khoảng 60s. Không trả row/ID tin/contact. Giá bán tách thuê; từng mean cần ít nhất 3 mẫu. GET public độc lập đối chiếu đủ 56 tin và các phép tính min/mean/mean đơn giá đều khớp. Không coi kiểm count là transactional snapshot khi giá đổi đồng thời.
+- [x] Card ảnh + thông tin giá + CTA theo mẫu; 3 card theo cấu hình hiện tại, 4 tab taxonomy; directory huyện 3/2/1 cột. Tắt card không mất tab; rỗng/tắt hết vẫn theo empty_behavior. Editor dùng chung giữ nguyên logic lưu, bổ sung diễn giải. Tab đang chọn tự lộ đầy đủ bằng cuộn ngang, không ép nhảy trang.
+- [x] Chrome thật bản cuối tại `http://localhost:3103`: 7 viewport 1920/1440/1280/1024/768/390/320, không body overflow; kiểm tab đang chọn không bị cắt, keyboard, card/tab đồng bộ, CTA/link huyện, mở rộng/thu gọn. Loading/error/retry/ảnh hỏng/taxonomy rỗng/disabled card/empty_state/reduced-motion đạt; edge case chỉ dùng browser response fixtures, không ghi production. pageErrors = 0. Đã đọc screenshot desktop + mobile.
+- [x] Regression Chrome bản cuối: menu, cascade/URL tìm kiếm, timeline 10px ở 6 viewport, drawer Đã xem ở 7 viewport đạt. Build snapshot `/tmp/chonhaviet-location-final-5vvx686p` đạt 54/54; hash toàn bộ src/app khớp main. Cổng 3102 vẫn nguyên process/phiên admin; preview 3103 chỉ chứa public environment, không sao chép session admin.
+- [x] Full suite: 213 file đạt + 1 file bỏ qua; 1695 test đạt + 1 bỏ qua. Typecheck, diff-check và graphify update đạt; graphify vẫn cảnh báo thiếu SQL parser và một số edge metadata, không tự cài/thay môi trường. Verify receipt mới đã ghi trên 795 file sau hậu kiểm cuối.
+- [ ] Commit/push/deploy chưa được phê duyệt. Không thêm migration hoặc ghi DB production trong đợt thiết kế lại; lưu admin/read-back thật và UI production vẫn chưa kiểm.
+
+Bằng chứng local: `/tmp/chonhaviet-location-final-{build,browser,edge,menu,search,timeline,drawer,suite,receipt}.log`; `/tmp/chonhaviet-location-redesign-data-check.json`; screenshot `/tmp/chonhaviet-location-redesign-clean-{1440,390,320}.png`.
+
+Phần checklist dưới đây ghi lại vòng UI trước thiết kế lại; trạng thái hiển thị khu vực mới nhất là mục phía trên.
+
+## UI trang chủ — 2026-09-16
+
+Phạm vi: hoàn tất yêu cầu giao diện đã duyệt; không mở lại roadmap deferred.
+
+- [x] Timeline public: 12 khung giờ, ngày/tuần/lịch, polling; thẻ hai cột, chữ 10px, lề cân đối. Chrome regression trên bản tích hợp đạt.
+- [x] Đo dữ liệu ở vòng triển khai: 56 tin public, Bình Dương 28 / Bình Phước 28; 4 tỉnh, 53 huyện. Preflight ban đầu chưa có timeline; hậu kiểm hiện tại đã có timeline (xem mục SQL bên dưới). `region_banners` vẫn đang ẩn.
+- [x] Menu 15px, hero motion và reduced motion; Chrome 1920/1440/1280/1024/768/390/320, URL tìm kiếm và cascade tỉnh/huyện/xã đạt.
+- [x] Drawer Đã xem: tin public thật, focus Tab/Escape/backdrop, trả focus, khóa/khôi phục cuộn, lỗi mạng giữ history, prune tin unavailable, cùng tab/khác tab, reload/link và không refetch loop đạt Chrome; không mount trong admin.
+- [x] Khám phá tỉnh → huyện: dùng taxonomy thật, URL kèm tỉnh, trạng thái lỗi/rỗng và retry đã kiểm Chrome. Không tự bật section production.
+- [x] Editor tỉnh dùng chung: thêm/sửa/xóa/sắp xếp/ẩn thẻ, partial save, kiểm tra phiên bản, zero-row và lỗi cache đạt bằng Chrome fixture (không phải DB thật).
+- [x] Đã tạo SQL preflight/migration/verify. Người dùng đã gửi kết quả preflight, timeline trong SQL Editor, thông báo Success và kết quả verify; không còn yêu cầu chạy lại migration chỉ để thêm dòng đã tồn tại. Chưa có dry-run PostgreSQL riêng.
+- [x] Hậu kiểm DB production ngày 2026-09-16: GET chỉ đọc bằng anon xác nhận 11 section; timeline đúng label, hiển thị, order 3, settings {}; 10 section cũ giữ nguyên label/settings/visibility/order/updated_at so với preflight. Kết quả SQL người dùng cung cấp xác nhận RLS bật, policy INSERT/UPDATE yêu cầu is_admin(), SELECT công khai. Chỉ xác nhận trạng thái DB; không suy ra ai đã tạo timeline từ timestamp.
+- [x] Kiểm chứng Chrome local sau SQL với cấu hình DB thật trên preview 3103: timeline và region_banners hiển thị đúng; baseline không thay response cấu hình. Fixtures chỉ dành cho lỗi/edge case.
+- [ ] Authenticated save/read-back trên DB test riêng hoặc môi trường được phép — chưa có bằng chứng; browser fixture không chứng minh RLS. Frontend local đang dùng DB production, chỉ lưu thay đổi thật được người dùng duyệt, không ghi dữ liệu thử tùy ý.
+- [ ] Preset đặt khám phá ngay dưới timeline chưa áp trên DB thật. Cấu hình mới nhất: region_banners đã bật, order 4; timeline và featured_sections cùng order 3. Tôn trọng cấu hình đã lưu, không tự đổi thứ tự.
+- [x] Cổng kỹ thuật ở vòng triển khai trước SQL: full suite 209 file / 1642 test đạt, 1 bỏ qua; typecheck, production build riêng, graphify và diff-check đạt. Verify receipt đã ghi trên 786 file sau hậu kiểm Chrome bản cuối; không coi đó là bằng chứng admin DB thật hoặc UI sau SQL.
+- [x] Đã tạo preview bản tích hợp tại `http://localhost:3102` ở vòng triển khai; snapshot riêng, không đè `.next` đang dùng. Chưa tái xác nhận server còn chạy trong lượt rà TODO. Route harness admin chỉ nằm trong snapshot `/tmp`, không có trong source để deploy. Preview mặc định tôn trọng `region_banners` đang ẩn; test khám phá/admin dùng response fixture.
+- [ ] Commit/push/deploy — chưa được phê duyệt cho đợt UI này; mỗi push cần duyệt riêng.
+- [ ] Hậu kiểm UI production bằng browser thật sau deploy — chưa thực hiện cho đợt UI này.
+
+**Giới hạn đã ghi nhận:** API lưu nhiều section tuần tự, không phải giao dịch atomic; UI báo lỗi một phần và giữ draft. Trigger updated_at đã được xác nhận tồn tại, chưa có bằng chứng thực thi qua lưu admin thật. ACL được cung cấp có quyền TRUNCATE cho anon/authenticated (không chịu RLS); đây là lưu ý phân quyền riêng, chưa kiểm toán khả năng truy cập qua API, không thử thao tác phá dữ liệu và không tự thay quyền.
+
+**SQL thực tế:**
+- `supabase/manual_homepage_ui_config_preflight.sql`
+- `supabase/migrations/20260916100000_homepage_timeline_section.sql`
+- `supabase/manual_homepage_ui_config_verify.sql`
+
+**Sự cố quy trình đã thông báo:** tác vụ phụ gửi hai PATCH thử quyền lên `page_sections` production trái rào chắn chỉ đọc: anon trả 200 + `[]`, service-role trả 400 `22P02`. Không có bằng chứng ghi thành công; GET hậu kiểm thấy cả 10 row giữ timestamp ngày 08-08. Đã dừng thử quyền. Không coi đây là một phiên chỉ có request read-only; không lặp lại hoặc dùng production làm sandbox.
+
+## Ghi chép Gate 0 cũ
+
+Phần dưới là ghi chép ngày 2026-09-13, không phải xác nhận trạng thái hiện tại và không phải công việc kế tiếp của đợt UI. Không tự mở lại các đề xuất mở rộng tại đây.
+
 # Các bước tiếp theo - Gate 0 Reconciliation
 
 **Ngày:** 2026-09-13  

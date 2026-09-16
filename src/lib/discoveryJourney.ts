@@ -20,6 +20,7 @@ export type DiscoveryEventProps = {
 
 export type HomeDiscoverySection =
   | 'categories'
+  | 'timeline'
   | 'recently_viewed'
   | 'featured_sections'
   | 'region_banners'

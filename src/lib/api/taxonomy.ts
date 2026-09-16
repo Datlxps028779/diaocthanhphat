@@ -48,7 +48,8 @@ export async function getTaxonomyGeo(entityIds: string[]): Promise<TaxonomyGeo[]
 }
 // ─── Areas ────────────────────────────────────────────────────────────────────
 export async function getAreas(): Promise<Area[]> {
-  const { data } = await supabase.from('areas').select('*').order('order_index');
+  const { data, error } = await supabase.from('areas').select('*').order('order_index');
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -56,7 +57,8 @@ export async function getAreas(): Promise<Area[]> {
 export async function getDistricts(areaId?: string): Promise<District[]> {
   let q = supabase.from('districts').select('*').order('order_index');
   if (areaId) q = q.eq('area_id', areaId);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) throw error;
   return (data ?? []) as District[];
 }
 export async function adminCreateDistrict(d: Omit<District, 'id' | 'created_at'>): Promise<void> {

@@ -213,17 +213,84 @@ export async function adminSaveAllPageBlocks(_slug: string, blocks: Omit<PageBlo
   await Promise.all(slugs.map(revalidatePageBlockContent));
 }
 
-export async function getPageLayout(): Promise<PageSection[]> {
-  const { data } = await supabase.from('page_sections').select('*').order('order_index', { ascending: true });
-  return (data ?? []) as PageSection[];
+export type AdminPageSectionInput = {
+  id: string;
+  is_visible?: boolean;
+  order_index?: number;
+  settings?: Record<string, unknown>;
+  expected_updated_at?: string;
+};
+
+export class HomePageLayoutNoRowsError extends Error {
+  readonly code = 'PAGE_SECTIONS_NO_ROWS';
+  constructor() {
+    super('Chưa có cấu hình trang chủ trong page_sections.');
+    this.name = 'HomePageLayoutNoRowsError';
+  }
 }
 
-export async function adminSavePageLayout(sections: Pick<PageSection, 'id' | 'is_visible' | 'order_index' | 'settings'>[]): Promise<void> {
-  for (const s of sections) {
-    const { error } = await supabase.from('page_sections')
-      .update({ is_visible: s.is_visible, order_index: s.order_index, settings: s.settings })
-      .eq('id', s.id);
-    if (error) throw error;
+export class AdminPageLayoutError extends Error {
+  constructor(
+    message: string,
+    readonly stage: 'preflight' | 'write' | 'revalidation',
+    readonly persistedIds: string[] = [],
+    readonly failedId: string | null = null,
+  ) {
+    super(message);
+    this.name = 'AdminPageLayoutError';
   }
-  await revalidateHomeContent();
+}
+
+export async function getPageLayout(): Promise<PageSection[]> {
+  const { data, error } = await supabase.from('page_sections').select('*').order('order_index', { ascending: true });
+  if (error) throw error;
+  if (!data?.length) throw new HomePageLayoutNoRowsError();
+  return data as PageSection[];
+}
+
+// Các hàng được ghi tuần tự, không phải một giao dịch atomic.
+export async function adminSavePageLayout(sections: AdminPageSectionInput[]): Promise<PageSection[]> {
+  if (!sections.length) return [];
+  const ids = [...new Set(sections.map(section => section.id))];
+  if (ids.length !== sections.length) throw new AdminPageLayoutError('Danh sách lưu có section trùng.', 'preflight');
+  const { data, error } = await supabase.from('page_sections').select('*').in('id', ids);
+  if (error) throw new AdminPageLayoutError(`Không đọc được cấu hình: ${error.message}`, 'preflight');
+  const existing = new Map(((data ?? []) as PageSection[]).map(row => [row.id, row]));
+  for (const section of sections) {
+    const row = existing.get(section.id);
+    if (!row) throw new AdminPageLayoutError(`Không tìm thấy section ${section.id}.`, 'preflight', [], section.id);
+    if (section.expected_updated_at !== undefined && section.expected_updated_at !== row.updated_at) {
+      throw new AdminPageLayoutError(`Cấu hình ${section.id} đã thay đổi. Hãy tải lại trước khi lưu.`, 'preflight', [], section.id);
+    }
+  }
+  const persisted: PageSection[] = [];
+  for (const section of sections) {
+    const patch: Record<string, unknown> = {};
+    if (section.is_visible !== undefined) patch.is_visible = section.is_visible;
+    if (section.order_index !== undefined) patch.order_index = section.order_index;
+    if (section.settings !== undefined) patch.settings = section.settings;
+    if (!Object.keys(patch).length) continue;
+    patch.updated_at = new Date().toISOString();
+    const { data: updated, error: writeError } = await supabase.from('page_sections')
+      .update(patch).eq('id', section.id)
+      .eq('updated_at', existing.get(section.id)!.updated_at).select('*').single();
+    if (writeError || !updated || updated.id !== section.id) {
+      throw new AdminPageLayoutError(
+        `Không lưu được ${section.id}: ${writeError?.message ?? 'không có hàng được cập nhật; quyền ghi hoặc phiên bản đã thay đổi'}. Đã ghi: ${persisted.map(row => row.id).join(', ') || 'chưa có'}.`,
+        'write', persisted.map(row => row.id), section.id,
+      );
+    }
+    persisted.push(updated as PageSection);
+  }
+  if (persisted.length) {
+    try {
+      await revalidateHomeContent();
+    } catch (cause) {
+      throw new AdminPageLayoutError(
+        `Đã lưu cấu hình nhưng chưa làm mới cache trang chủ: ${cause instanceof Error ? cause.message : String(cause)}.`,
+        'revalidation', persisted.map(row => row.id),
+      );
+    }
+  }
+  return persisted;
 }

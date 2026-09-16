@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { getPublicPropertiesByIds } from '../lib/api/properties';
-import { getRecentlyViewed, pruneRecentlyViewed, toRecentProperty, type RecentProperty } from '../lib/recentlyViewed';
+import { getRecentlyViewed, pruneRecentlyViewedUnavailable, toRecentProperty, type RecentProperty } from '../lib/recentlyViewed';
 import { PropertyDiscoveryRail } from './discovery/PropertyDiscoveryRail';
 import type { DiscoverySurface } from '../lib/discoveryJourney';
 
@@ -33,7 +33,7 @@ export function RecentlyViewed({
       .then(properties => {
         if (!alive) return;
         const visibleIds = properties.map(property => property.id);
-        pruneRecentlyViewed(visibleIds, excludeId);
+        pruneRecentlyViewedUnavailable(ids, visibleIds);
         setItems(properties.map(toRecentProperty));
       })
       .catch(() => {

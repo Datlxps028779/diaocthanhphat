@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -33,14 +33,16 @@ import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
 import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
-import { RecentlyViewed } from './components/RecentlyViewed';
+import { PropertyTimeline } from './components/PropertyTimeline';
+import { LocationDiscovery } from './components/home/LocationDiscovery';
+import { getHomepageSectionOrder } from './lib/homeSectionOrder';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
 import { PropertyGallery } from './components/PropertyGallery';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt } from './lib/propertyImages';
 import { dedupeFeaturedSectionProperties } from './lib/featuredSectionDedupe';
-import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability, type HomeDiscoverySection } from './lib/discoveryJourney';
+import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability } from './lib/discoveryJourney';
 import { normalizeListingTitle } from './lib/listingTitle';
 import { buildTruthfulHeroSubtitle } from './lib/homeTruthfulCopy';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -129,7 +131,8 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   // Danh mục tin tức động từ DB (news_categories) — nguồn chân lý cho tab. Fallback
   // NEWS_CATEGORIES tĩnh khi chưa nạp. Xoá danh mục trong admin → tab tự biến mất.
   const { data: newsCategoryRows = [] } = useQuery({ queryKey: ['news-categories'], queryFn: () => getNewsCategories(), staleTime: 5 * 60_000 });
-  const { data: pageLayout = [] } = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
+  const layoutQuery = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
+  const pageLayout = layoutQuery.data ?? [];
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
   const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
 
@@ -257,18 +260,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </div>
         </section>
       );
-      case 'recently_viewed': return (
-        <section key="recently_viewed" className="bg-white py-2">
-          <div className="max-w-7xl mx-auto px-4">
-            <RecentlyViewed
-              title="Tiếp tục xem"
-              subtitle="Những bất động sản bạn đã mở trên thiết bị này."
-              surface="home"
-              source="home_continue_browsing"
-            />
-          </div>
-        </section>
-      );
+      case 'timeline': return <PropertyTimeline key="timeline" />;
       case 'for_you': return (
         <section key="for_you" className="relative isolate overflow-hidden bg-gradient-to-br from-white via-red-50/30 to-amber-50/20 pt-4 pb-2">
           <HomeSectionAtmosphere variant="warm" />
@@ -344,68 +336,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </React.Fragment>
         );
       }
-      case 'region_banners': {
-        const config = sectionConfig('region_banners');
-        const regionCards = [
-          { n: 1, dt: 'Bình Dương', ds: 'Thị trường trọng điểm', dd: 'Khám phá danh sách bất động sản đang hoạt động.', db: 'Trọng tâm', color: 'from-red-700 via-red-600 to-amber-500', di: 'https://images.pexels.com/photos/1732414/pexels-photo-1732414.jpeg', dslug: 'binh-duong' },
-          { n: 2, dt: 'Bình Phước', ds: 'Khu vực tiềm năng', dd: 'Khám phá dữ liệu và tin đăng đã được xác thực.', db: 'Khám phá', color: 'from-amber-600 via-orange-500 to-red-500', di: 'https://images.pexels.com/photos/2119714/pexels-photo-2119714.jpeg', dslug: 'binh-phuoc' },
-          { n: 3, dt: 'Đồng Nai', ds: 'Khu vực mở rộng', dd: 'Theo dõi các bất động sản phù hợp nhu cầu của bạn.', db: 'Mở rộng', color: 'from-slate-800 via-slate-700 to-red-800', di: 'https://images.pexels.com/photos/280229/pexels-photo-280229.jpeg', dslug: 'dong-nai' },
-        ].map(r => {
-          const title = sec('region_banners')(`region${r.n}_title`, r.dt);
-          const slug = sec('region_banners')(`region${r.n}_slug`, r.dslug);
-          const area = areas.find(item => item.slug === slug || item.name.toLocaleLowerCase('vi-VN') === title.toLocaleLowerCase('vi-VN'));
-          return area ? {
-            ...r,
-            area,
-            title,
-            subtitle: sec('region_banners')(`region${r.n}_subtitle`, r.ds),
-            desc: sec('region_banners')(`region${r.n}_desc`, r.dd),
-            badge: sec('region_banners')(`region${r.n}_badge`, r.db),
-            image: sec('region_banners')(`region${r.n}_image`, r.di),
-          } : null;
-        }).filter((card): card is NonNullable<typeof card> => card !== null);
-
-        if (regionCards.length === 0) {
-          if (config.emptyBehavior !== 'empty_state') return null;
-          return (
-            <section key="region_banners_empty" className="relative isolate overflow-hidden bg-white py-10">
-              <HomeSectionAtmosphere variant="ambient" />
-              <div className="relative z-10 max-w-7xl mx-auto px-4"><HomeSectionEmpty config={config} /></div>
-            </section>
-          );
-        }
-
-        return (
-          <section key="region_banners" className="relative isolate overflow-hidden bg-white py-12">
-            <HomeSectionAtmosphere variant="ambient" />
-            <div className="relative z-10 max-w-7xl mx-auto px-4">
-              <div className="mb-6 flex items-end justify-between gap-4">
-                <div>
-                  <p className="cnv-eyebrow text-red-600">Theo khu vực</p>
-                  <h2 className="cnv-section-title mt-1 text-slate-900">{sec('region_banners')('title', 'Khám phá theo khu vực')}</h2>
-                </div>
-                <Link href={pageToHref({ name: 'regions' })} className="hidden items-center gap-1 text-sm font-bold text-red-700 hover:text-red-800 sm:flex">
-                  Xem tất cả khu vực<ChevronRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                {regionCards.map(card => (
-                  <Link key={card.area.id} href={pageToHref({ name: 'listings', areaId: card.area.id })} className="group relative block h-52 overflow-hidden text-left">
-                    <Image src={card.image} alt={card.title} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className={`absolute inset-0 bg-gradient-to-t ${card.color} opacity-80 transition-opacity group-hover:opacity-90`} />
-                    <div className="absolute inset-0 flex flex-col justify-end p-5">
-                      <span className="mb-2 w-fit border border-white/25 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">{card.badge}</span>
-                      <h3 className="cnv-section-title text-white">{card.title}</h3>
-                      <p className="mt-1 text-xs font-semibold text-white/90">{card.subtitle}</p>
-                      <p className="mt-1 text-[11px] leading-4 text-white/70">{card.desc}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </section>
-        );
-      }
+      case 'region_banners': return <LocationDiscovery key="region_banners" settings={pageLayout.find(section => section.id === 'region_banners')?.settings ?? {}} />;
       case 'why_us': return (
         <section key="why_us" className="relative isolate overflow-hidden bg-slate-50 py-12">
           <HomeSectionAtmosphere variant="soft" />
@@ -577,13 +508,13 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                       </div>
                       <div className="p-5">
                         <h3 className="line-clamp-3 text-xl font-black leading-tight text-gray-900 transition-colors group-hover:text-red-600 md:text-2xl">{leadNews.title}</h3>
-                        <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
+                        <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                           <span>{new Date(leadNews.created_at).toLocaleDateString('vi-VN')}</span>
                           <span>•</span>
                           <span>{Math.max(1, Math.round((leadNews.content ?? leadNews.excerpt ?? '').split(/\s+/).length / 200))} phút đọc</span>
                         </div>
+                        {leadNews.excerpt && <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">{leadNews.excerpt}</p>}
                       </div>
-                      {leadNews.excerpt && <p className="line-clamp-2 px-5 py-4 text-sm leading-relaxed text-gray-600">{leadNews.excerpt}</p>}
                     </Link>
                   ) : (
                     <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
@@ -683,50 +614,18 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
     }
   };
 
-  const DEFAULT_SECTION_ORDER: HomeDiscoverySection[] = ['categories', 'recently_viewed', 'featured_sections', 'region_banners', 'for_you', 'news', 'why_us', 'testimonials', 'faq', 'cta', 'social_proof'];
-  const cmsOrder = pageLayout.filter(s => s.id !== 'hero' && s.is_visible).map(s => s.id as HomeDiscoverySection);
-  // FAQ là section mới thêm ở code, chưa có trong page_sections CMS. Nếu CMS chưa
-  // có row 'faq' nào thì tự chèn (trước 'cta') để hiển thị mà không cần migration;
-  // nếu admin đã thêm/ẩn row faq thì tôn trọng đúng cấu hình CMS.
-  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'faq')) {
-    const at = cmsOrder.indexOf('cta');
-    if (at >= 0) cmsOrder.splice(at, 0, 'faq'); else cmsOrder.push('faq');
-  }
-  // “Tiếp tục xem” cũng là rail client-only. Auto-chèn ngay sau category khi CMS
-  // chưa có row riêng; không có local history thì component tự ẩn hoàn toàn.
-  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'recently_viewed')) {
-    const at = cmsOrder.indexOf('categories');
-    if (at >= 0) cmsOrder.splice(at + 1, 0, 'recently_viewed'); else cmsOrder.unshift('recently_viewed');
-  }
-  // “Gợi ý dành cho bạn” chỉ xuất hiện khi đủ tín hiệu; đặt sau các điểm vào dữ liệu
-  // thật để khách mới vẫn có hành trình khám phá rõ ràng mà không có rail trống.
-  if (pageLayout.length > 0 && !pageLayout.some(s => s.id === 'for_you')) {
-    const regionAt = cmsOrder.indexOf('region_banners');
-    const featuredAt = cmsOrder.indexOf('featured_sections');
-    const at = regionAt >= 0 ? regionAt : featuredAt;
-    if (at >= 0) cmsOrder.splice(at + 1, 0, 'for_you'); else cmsOrder.push('for_you');
-  }
-  const [hasRecentlyViewed, setHasRecentlyViewed] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem('dtp_recently_viewed');
-      setHasRecentlyViewed(!!raw && JSON.parse(raw).length > 0);
-    } catch {
-      setHasRecentlyViewed(false);
-    }
-  }, []);
+  const configuredOrder = getHomepageSectionOrder(pageLayout);
   const hasEnoughTasteSignal = tasteProfileReady && hasEnoughSignal(tasteProfile);
   const availability: HomeDiscoveryAvailability = {
     featured_sections: featuredSections.length > 0 || sectionQueries.some(query => query.isLoading),
-    region_banners: areas.length > 0,
+    region_banners: true,
     news: news.length > 0,
     testimonials: testimonials.length > 0,
   };
-  const configuredOrder = pageLayout.length > 0 ? cmsOrder : DEFAULT_SECTION_ORDER;
   const orderedIds = getHomeDiscoveryOrder({
     configuredOrder,
     availability,
-    hasRecentlyViewed,
+    hasRecentlyViewed: false,
     hasEnoughTasteSignal,
   });
 
@@ -743,7 +642,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
 
       <main id="main-content">
         {/* ─── HERO (always first, not controlled by page builder) ─── */}
-      <section className="relative flex min-h-[520px] items-center justify-center overflow-hidden pt-14 md:min-h-[600px]">
+      <section className="relative flex min-h-[520px] items-center justify-center overflow-hidden pt-[var(--cnv-header-height)] md:min-h-[600px]">
         <div className="absolute inset-0">
           <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover animate-hero-zoom" />
           {/* Overlay mỏng để ảnh bìa sáng rõ. Ảnh do admin tải nên độ sáng không đoán
@@ -752,18 +651,18 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         </div>
 
         <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-12 text-center">
-          <div className="inline-flex items-center gap-2 bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4 shadow-lg shadow-black/20">
+          <div className="inline-flex animate-fade-in-up items-center gap-2 bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full mb-4 shadow-lg shadow-black/20">
             <MapPin className="w-3 h-3" />{sec('hero')('hero_label', 'Tập trung khu vực Bình Dương')}
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight mb-3 drop-shadow-[0_2px_14px_rgba(0,0,0,0.9)]">
+          <h1 className="animate-fade-in-up animation-delay-100 text-3xl md:text-5xl font-black text-white leading-tight mb-3 drop-shadow-[0_2px_14px_rgba(0,0,0,0.9)]">
             {sec('hero')('title', 'Tìm kiếm bất động sản tại Bình Dương')}
           </h1>
-          <p className="text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_10px_rgba(0,0,0,0.85)]">
+          <p className="animate-fade-in-up animation-delay-200 text-white/95 text-sm md:text-base mb-8 max-w-2xl mx-auto drop-shadow-[0_1px_10px_rgba(0,0,0,0.85)]">
             {buildTruthfulHeroSubtitle(sec('hero')('subtitle', ''), activeListingCount)}
           </p>
 
           {/* Search box */}
-          <div className="mx-auto max-w-4xl rounded-2xl bg-white p-3 shadow-card md:p-4">
+          <div className="animate-fade-in-up animation-delay-300 mx-auto max-w-4xl rounded-2xl bg-white p-3 shadow-card md:p-4">
             {/* Tabs kiểu gạch chân — nhẹ hơn khay xám, hợp tông sáng */}
             <div className="mb-3 flex items-center gap-6 border-b border-gray-100 px-1 md:mb-4">
               {LISTING_TYPE_TABS.map(tab => (
@@ -897,7 +796,9 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       </section>
 
       {/* ─── DYNAMIC SECTIONS (order + visibility from Page Builder) ─── */}
-      {orderedIds.map(id => renderSection(id))}
+      {layoutQuery.isPending ? <div role="status" className="mx-auto max-w-7xl px-4 py-10 text-sm text-slate-500">Đang tải nội dung trang chủ…</div>
+        : layoutQuery.isError && !layoutQuery.data ? <div role="alert" className="mx-auto max-w-7xl px-4 py-10 text-sm text-amber-800">Không tải được cấu hình trang chủ. <button onClick={() => void layoutQuery.refetch()} className="font-bold underline">Thử lại</button></div>
+        : orderedIds.map(id => renderSection(id))}
       </main>
 
       <Footer areas={areas} districts={allDistricts} propertyTypes={types} onNavigate={onNavigate} />

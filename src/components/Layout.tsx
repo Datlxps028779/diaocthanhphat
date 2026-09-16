@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
@@ -11,6 +11,7 @@ import { normalizePublicHref } from '../lib/siteUrl';
 import { useContent, useSetting, useMenu } from '../lib/cms';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
+const RecentlyViewedDrawer = dynamic(() => import('./RecentlyViewedDrawer').then(m => m.RecentlyViewedDrawer), { ssr: false });
 const AiSearchChat = dynamic(() => import('./AiSearchChat').then(m => m.AiSearchChat), { ssr: false });
 
 interface HeaderProps {
@@ -29,6 +30,22 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
   const [mobileSubmenuOpen, setMobileSubmenuOpen] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const mobileTrigger = useRef<HTMLButtonElement>(null);
+  const barsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const bars = barsRef.current;
+    if (!bars) return;
+    const resize = () => document.documentElement.style.setProperty('--cnv-header-height', `${bars.getBoundingClientRect().height}px`);
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(bars);
+    const outside = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) { setMobileOpen(false); setDesktopMenuOpen(null); setUserMenuOpen(false); }
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => { observer.disconnect(); document.removeEventListener('pointerdown', outside); };
+  }, []);
   const nav = useContent('navbar');
   const menu = useMenu();
   const siteName = useSetting('site_logo_text', 'Chợ Nhà Việt');
@@ -55,14 +72,20 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
     return true;
   };
 
-  const closeMenus = () => { setMobileOpen(false); setUserMenuOpen(false); setDesktopMenuOpen(null); };
+  const closeMenus = () => { setMobileOpen(false); setUserMenuOpen(false); setDesktopMenuOpen(null); setMobileSubmenuOpen(null); };
   void onNavigate; // giữ prop cho tương thích caller; điều hướng nay dùng <Link>
   const hrefFor = (item: NavigationItem) => item.href ?? (item.page ? pageToHref(item.page) : '#');
   // Menu item bật "mở tab mới" (admin cấu hình) → target=_blank + chống tabnabbing.
   const newTabProps = (item: NavigationItem) => item.openNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
+    <header ref={headerRef} onKeyDown={event => {
+      if (event.key !== 'Escape') return;
+      const trigger = (event.target as HTMLElement).closest('[data-desktop-menu]')?.querySelector<HTMLButtonElement>('button[aria-expanded]');
+      closeMenus();
+      if (mobileOpen) mobileTrigger.current?.focus(); else trigger?.focus();
+    }} className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
+      <div ref={barsRef}>
       {/* Top bar */}
       <div className="bg-red-600 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -76,7 +99,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
-        <Link href="/" onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
+        <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
           {logoUrl && !logoError ? (
             <img
               src={logoUrl}
@@ -89,23 +112,23 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
               <Home className="w-5 h-5 text-white" />
             </div>
           )}
-          <div className="hidden sm:block leading-tight">
+          <div className="hidden sm:block xl:hidden 2xl:block leading-tight">
             <div className="text-red-600 font-black text-base tracking-tight">{siteName}</div>
             <div className="text-gray-400 text-[10px] font-medium tracking-wide">{siteSub}</div>
           </div>
         </Link>
 
-        <nav className="hidden xl:flex items-center gap-1 flex-1 justify-center">
+        <nav aria-label="Điều hướng chính" className="hidden xl:flex items-center gap-1 flex-1 justify-center">
           {navItems.map(item => item.children ? (
-            <div key={item.key} className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)}>
+            <div key={item.key} data-desktop-menu className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDesktopMenuOpen(null); }}>
               <div className="flex items-center rounded-md">
                 {item.page || item.href ? (
                   <Link href={hrefFor(item)} onClick={closeMenus}
-                    className={`cnv-nav-type px-3 py-2 rounded-l-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
+                    className={`cnv-nav-type px-3.5 py-2.5 rounded-l-md transition-colors whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'}`}>
                     {item.label}
                   </Link>
                 ) : (
-                  <span className={`cnv-nav-type px-3 py-2 whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-medium' : 'text-gray-700'}`}>{item.label}</span>
+                  <span className={`cnv-nav-type px-3.5 py-2.5 whitespace-nowrap ${isActive(item) ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700'}`}>{item.label}</span>
                 )}
                 <button type="button" aria-label={`Mở menu ${item.label}`} aria-expanded={desktopMenuOpen === item.key}
                   onClick={() => setDesktopMenuOpen(desktopMenuOpen === item.key ? null : item.key)}
@@ -128,7 +151,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                       </div>
                     ) : (
                       <Link key={child.key} href={hrefFor(child)} onClick={closeMenus} {...newTabProps(child)}
-                        className="block px-4 py-2.5 text-[14px] text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
+                        className="block px-4 py-2.5 text-[15px] leading-6 text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors">
                         {child.label}
                       </Link>
                     ))}
@@ -196,6 +219,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
         <button
           type="button"
+          ref={mobileTrigger}
           className="xl:hidden flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label={mobileOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
@@ -205,9 +229,10 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
+      </div>
 
       {mobileOpen && (
-        <nav id="mobile-navigation" aria-label="Điều hướng di động" className="xl:hidden max-h-[calc(100vh-52px)] overflow-y-auto bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
+        <nav id="mobile-navigation" aria-label="Điều hướng di động" className="xl:hidden max-h-[calc(100dvh-var(--cnv-header-height))] overflow-y-auto bg-white border-t px-4 py-3 space-y-0.5 shadow-lg">
           {navItems.map(item => item.children ? (
             <div key={item.key}>
               <div className="flex items-center gap-1">
@@ -232,7 +257,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
                       <p className="px-3 pt-1.5 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{child.label}</p>
                       {child.children.map(grand => (
                         <Link key={grand.key} href={hrefFor(grand)} onClick={closeMenus} {...newTabProps(grand)}
-                          className="cnv-nav-type block px-3 py-2 rounded-lg text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          className="cnv-nav-type block px-3 py-2.5 rounded-lg text-[15px] leading-6 text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors">
                           {grand.label}
                         </Link>
                       ))}
@@ -545,6 +570,7 @@ export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }
 export function FloatingButtons({ onNavigate, profilePage = false }: { onNavigate?: (p: Page) => void; profilePage?: boolean }) {
   return (
     <>
+      <RecentlyViewedDrawer />
       <AiSearchChat onNavigate={onNavigate} profilePage={profilePage} />
     </>
   );

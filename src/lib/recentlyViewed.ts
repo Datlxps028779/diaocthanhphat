@@ -1,9 +1,10 @@
-// Lịch sử BĐS đã xem — lưu localStorage (không cần đăng nhập, không cần DB).
-// Lưu subset đủ để render card + link, tránh phải fetch lại khi hiển thị.
+// Lịch sử trên thiết bị chỉ là danh sách ứng viên; phải xác minh public trước khi render.
 import type { Property } from './supabase';
 
-const KEY = 'dtp_recently_viewed';
-const MAX = 8;
+export const RECENTLY_VIEWED_STORAGE_KEY = 'dtp_recently_viewed';
+export const RECENTLY_VIEWED_CHANGED_EVENT = 'dtp:recently-viewed-changed';
+export const RECENTLY_VIEWED_MAX = 8;
+const KEY = RECENTLY_VIEWED_STORAGE_KEY;
 
 export interface RecentProperty {
   id: string;
@@ -19,31 +20,57 @@ export interface RecentProperty {
   listing_type: string | null;
 }
 
+function normalize(value: unknown): RecentProperty[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item): item is RecentProperty => {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim() || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  }).slice(0, RECENTLY_VIEWED_MAX);
+}
+
 function read(): RecentProperty[] {
   if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as RecentProperty[]) : [];
-  } catch {
-    return [];
-  }
+  try { return normalize(JSON.parse(window.localStorage.getItem(KEY) ?? '[]')); } catch { return []; }
 }
 
 function write(list: RecentProperty[]): void {
   if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* storage may be blocked */ }
+  try {
+    const serialized = JSON.stringify(list);
+    if (window.localStorage.getItem(KEY) === serialized) return;
+    window.localStorage.setItem(KEY, serialized);
+    window.dispatchEvent(new CustomEvent(RECENTLY_VIEWED_CHANGED_EVENT));
+  } catch { /* Storage có thể bị chặn. */ }
+}
+
+export function subscribeRecentlyViewedChanged(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const onStorage = (event: StorageEvent) => { if (!event.key || event.key === KEY) listener(); };
+  window.addEventListener(RECENTLY_VIEWED_CHANGED_EVENT, listener);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(RECENTLY_VIEWED_CHANGED_EVENT, listener);
+    window.removeEventListener('storage', onStorage);
+  };
 }
 
 export function getRecentlyViewed(excludeId?: string): RecentProperty[] {
-  const list = read();
-  return excludeId ? list.filter((p) => p.id !== excludeId) : list;
+  return read().filter(item => item.id !== excludeId);
+}
+
+// Giữ các ID được ghi thêm trong lúc yêu cầu xác minh cũ đang chờ.
+export function pruneRecentlyViewedUnavailable(requestedIds: string[], availableIds: string[], excludeId?: string): RecentProperty[] {
+  const requested = new Set(requestedIds);
+  const available = new Set(availableIds);
+  const next = read().filter(item => !requested.has(item.id) || (available.has(item.id) && item.id !== excludeId));
+  write(next);
+  return next;
 }
 
 export function pruneRecentlyViewed(validIds: string[], excludeId?: string): RecentProperty[] {
-  const valid = new Set(validIds);
-  const next = read().filter(p => valid.has(p.id) && p.id !== excludeId);
-  write(next);
-  return next;
+  return pruneRecentlyViewedUnavailable(read().map(item => item.id), validIds, excludeId);
 }
 
 export function toRecentProperty(p: Property): RecentProperty {
@@ -55,10 +82,6 @@ export function toRecentProperty(p: Property): RecentProperty {
   };
 }
 
-// Ghi nhận 1 BĐS vừa xem: đưa lên đầu, khử trùng, giới hạn MAX mục.
 export function recordRecentlyViewed(p: Property): void {
-  if (typeof window === 'undefined') return;
-  const entry = toRecentProperty(p);
-  const next = [entry, ...read().filter((x) => x.id !== p.id)].slice(0, MAX);
-  write(next);
+  write(normalize([toRecentProperty(p), ...read().filter(item => item.id !== p.id)]));
 }
