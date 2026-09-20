@@ -18,6 +18,10 @@ export type Page =
       listingType?: 'mua_ban' | 'cho_thue';
       areaId?: string; typeId?: string; typeIds?: string[]; typePathSlug?: string; district?: string; ward?: string; keyword?: string;
       locationSource?: 'explicit' | 'inferred';
+      // Phạm vi landing địa phương do route sở hữu. Khi có, `localityPath` là URL
+      // đích thật (namespace /loai/, /gia/, /phuong-xa/) — pageToHref không dựng được
+      // dạng này nên nơi gọi phải điều hướng thẳng tới path đó.
+      localityPath?: string;
       minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
       bedrooms?: string; direction?: string; legal?: string;
       isFeatured?: boolean; isHot?: boolean; sort?: string; page?: number;
@@ -123,6 +127,25 @@ export function pageToHref(page: Page, taxonomy?: HrefTaxonomy): string {
       }
       return '/tin-tuc';
     case 'listings': {
+      // Landing địa phương: path namespace (/mua-ban/a/loai/t, /mua-ban/a/gia/b,
+      // /mua-ban/a/d/phuong-xa/w) nằm ngoài grammar của hàm này. Nơi gọi truyền
+      // localityPath đã dựng sẵn; ở đây chỉ ghép đúng các filter phụ vào query của
+      // CHÍNH path đó để không rơi về cây route cũ.
+      if (page.localityPath) {
+        const q = new URLSearchParams();
+        if (page.keyword) q.set('q', page.keyword);
+        if (page.sort) q.set('sort', page.sort);
+        if (page.minArea != null) q.set('minArea', String(page.minArea));
+        if (page.maxArea != null) q.set('maxArea', String(page.maxArea));
+        if (page.bedrooms) q.set('bedrooms', page.bedrooms);
+        if (page.direction) q.set('direction', page.direction);
+        if (page.legal) q.set('legal', page.legal);
+        if (page.isFeatured) q.set('featured', '1');
+        if (page.isHot) q.set('hot', '1');
+        if (page.page != null && page.page > 1) q.set('page', String(page.page));
+        const qs = q.toString();
+        return qs ? `${page.localityPath}?${qs}` : page.localityPath;
+      }
       // Sinh path SEO /{lt}/{areaSlug}/{districtSlug?} khi: có taxonomy + areaId map được
       // sang slug + listingType ∈ {mua_ban, cho_thue}. Ngược lại giữ base query cũ
       // (middleware lo 301). area/district đã lên path → không lặp lại ở query.

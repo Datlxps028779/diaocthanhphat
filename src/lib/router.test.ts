@@ -129,6 +129,45 @@ describe('pageToHref — listings filters', () => {
   });
 });
 
+describe('pageToHref — locality namespace path', () => {
+  it.each([
+    '/mua-ban/binh-duong/loai/dat-nen',
+    '/mua-ban/binh-duong/gia/tu-1-den-duoi-2-ty',
+    '/mua-ban/binh-duong/thuan-an/phuong-xa/an-phu',
+    '/cho-thue/binh-duong/loai/nha-rieng',
+  ])('keeps the namespace path %s and appends only extra filters', localityPath => {
+    expect(pageToHref({ name: 'listings', localityPath })).toBe(localityPath);
+    const href = pageToHref({ name: 'listings', localityPath, keyword: 'nhà', sort: 'price_asc', page: 3 });
+    const [path, qs] = href.split('?');
+    expect(path).toBe(localityPath);
+    const params = new URLSearchParams(qs);
+    expect(params.get('q')).toBe('nhà');
+    expect(params.get('sort')).toBe('price_asc');
+    expect(params.get('page')).toBe('3');
+  });
+
+  it('never repeats the scope dimensions in the query', () => {
+    // Phạm vi đã nằm trên path — nhắc lại area/ward/minPrice ở query là mời gọi
+    // query ghi đè path, đúng lỗi mà nhánh này sinh ra để tránh.
+    const href = pageToHref({
+      name: 'listings',
+      localityPath: '/mua-ban/binh-duong/thuan-an/phuong-xa/an-phu',
+      areaId: 'area-1',
+      district: 'Thuận An',
+      ward: 'An Phú',
+      minPrice: 1,
+      maxPrice: 2,
+      typeId: 'type-1',
+    });
+    expect(href).toBe('/mua-ban/binh-duong/thuan-an/phuong-xa/an-phu');
+  });
+
+  it('adds page 1 and empty filters as nothing at all', () => {
+    expect(pageToHref({ name: 'listings', localityPath: '/mua-ban/binh-duong/gia/duoi-1-ty', page: 1 }))
+      .toBe('/mua-ban/binh-duong/gia/duoi-1-ty');
+  });
+});
+
 
 describe('parseListingParams — đọc ngược query của Next searchParams', () => {
   it('bóc type/district/legal từ object searchParams', () => {

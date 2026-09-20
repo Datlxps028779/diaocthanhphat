@@ -3,16 +3,18 @@ import { createClient } from '@supabase/supabase-js';
 import { evaluateAreaSeo, evaluateCompositeAreaSeo, getAreaDetails } from '@/lib/areaSeo';
 import { evaluateNeighborhoodSeo } from '@/lib/neighborhoodSeo';
 import { NEWS_CATEGORY_SLUGS } from '@/lib/newsCategories';
-import { buildAreaListingPath, type ListingType } from '@/lib/areaPath';
-import { propertyTypeSlugsForSeoGroup, type PropertyTypeSeoGroup } from '@/lib/propertyTypeGroups';
+import type { ListingType } from '@/lib/areaPath';
+import type { PropertyTypeSeoGroup } from '@/lib/propertyTypeGroups';
 import { buildProductPath, isCanonicalProductSource } from '@/lib/productPath';
+import { buildLocalityCandidatesFromSnapshot } from '@/lib/localitySitemapGate';
 import type { Area } from '@/lib/supabase';
 import { isValidSlug } from '@/lib/slug';
+import { buildLocalityGeoAreaAllowlist } from '@/lib/localityNewsMatch';
+import { serverGetLocalityNews } from '@/lib/supabase-server';
 
 // This is the sitemap submitted to Search Console, so it must never emit a preview
 // or deployment origin even when generated during a preview build.
 const SITE_URL = 'https://chonhaviet.com';
-const AREA_LISTING_TYPES: ListingType[] = ['mua_ban', 'cho_thue'];
 
 // Sitemap động — Next tự phục vụ tại /sitemap.xml. Fetch server-side bằng anon key.
 // Revalidate 5 phút để landing/product mới xuất hiện nhanh nhưng không biến sitemap
@@ -30,7 +32,6 @@ export type AreaSitemapListing = {
   updated_at?: string | null;
 };
 
-const PRIMARY_SEO_GROUPS: readonly PropertyTypeSeoGroup[] = ['nha', 'dat'];
 const SITEMAP_PAGE_SIZE = 1000;
 
 type QueryPageResult<T> = { data: T[] | null; error: { message?: string } | null };
@@ -161,21 +162,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    const [areasRows, districtsRows, propertyTypesRows, areaPropsRows] = await Promise.all([
-      fetchAllRows(from => sb.from('areas').select('id,name,slug,description,created_at').range(from, from + SITEMAP_PAGE_SIZE - 1)),
-      fetchAllRows(from => sb.from('districts').select('id,area_id,name,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
-      fetchAllRows(from => sb.from('property_types').select('id,slug').range(from, from + SITEMAP_PAGE_SIZE - 1)),
-      fetchAllRows(from => sb.from('public_properties').select('id,area_id,district_id,district,property_type_id,listing_type,title,updated_at').eq('is_active', true).not('area_id', 'is', null).range(from, from + SITEMAP_PAGE_SIZE - 1)),
-    ]);
+    const areaPropsRows = await fetchAllRows(from => sb.from('public_properties').select('id,area_id,district_id,district,property_type_id,listing_type,title,updated_at').eq('is_active', true).not('area_id', 'is', null).range(from, from + SITEMAP_PAGE_SIZE - 1));
     const areaProps = areaPropsRows as AreaSitemapListing[];
-    const districts = districtsRows as Array<{ id: string; area_id: string | null; name: string; slug: string }>;
-    const propertyTypes = propertyTypesRows as Array<{ id: string; slug: string }>;
-    const propertyTypeIdsByGroup = new Map(PRIMARY_SEO_GROUPS.map(group => [
-      group,
-      new Set(propertyTypes
-        .filter(propertyType => propertyTypeSlugsForSeoGroup(group).includes(propertyType.slug))
-        .map(propertyType => propertyType.id)),
-    ]));
     const latestTimestamp = (rows: AreaSitemapListing[]): Date | undefined => {
       const timestamps = rows
         .map(row => row.updated_at)
@@ -198,56 +186,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if (latest) entry.lastModified = latest;
     }
 
-    for (const area of areasRows as Array<{ id: string; name: string; slug: string; description: string | null; created_at?: string | null }>) {
-      const rows = areaProps.filter(p => p.area_id === area.id);
-      const detail = getAreaDetails(area.slug);
-      const evaluation = evaluateAreaSeo({
-        area,
-        activeListings: rows,
-        districts: Array.from(new Set(rows.map(r => r.district).filter((v): v is string => !!v))),
-        propertyTypes: Array.from(new Set(rows.map(r => r.property_type_id).filter((v): v is string => !!v))),
-        hasDescription: Boolean(area.description?.trim() || detail?.description?.trim()),
-      });
-      if (evaluation.indexable) {
-        const lastModified = area.created_at ? new Date(area.created_at) : undefined;
-        entries.push({
-          url: `${SITE_URL}/khu-vuc/${area.slug}`,
-          lastModified,
-          changeFrequency: 'weekly',
-          priority: 0.65,
-        });
-        // Giữ URL area/listing hiện tại và chỉ bổ sung group landing mới đủ gate.
-        for (const listingType of AREA_LISTING_TYPES) {
-          if (!shouldIncludeAreaListingType(area, rows, listingType)) continue;
-          entries.push({
-            url: `${SITE_URL}${buildAreaListingPath({ listingType, areaSlug: area.slug })}`,
-            lastModified,
-            changeFrequency: 'daily',
-            priority: 0.72,
-          });
-        }
-        for (const district of districts.filter(item => item.area_id === area.id)) {
-          for (const listingType of AREA_LISTING_TYPES) {
-            for (const group of PRIMARY_SEO_GROUPS) {
-              const typeIds = propertyTypeIdsByGroup.get(group) ?? new Set<string>();
-              if (!shouldIncludeCompositeAreaListing(area, rows, district.id, listingType, group, typeIds)) continue;
-              const matching = rows.filter(row => row.district_id === district.id
-                && row.listing_type === listingType
-                && row.property_type_id !== null
-                && typeIds.has(row.property_type_id));
-              const timestamps = matching.map(row => row.updated_at).filter((value): value is string => !!value);
-              const latestInventory = timestamps.length ? new Date(Math.max(...timestamps.map(value => new Date(value).getTime()))) : undefined;
-              entries.push({
-                url: `${SITE_URL}${buildAreaListingPath({ listingType, areaSlug: area.slug, districtSlug: district.slug, propertyTypeSlug: group })}`,
-                lastModified: latestInventory ?? lastModified,
-                changeFrequency: 'daily',
-                priority: 0.76,
-              });
-            }
-          }
-        }
-      }
-    }
 
     const [nbRes, nbPropsRes] = await Promise.all([
       sb.from('neighborhoods').select('name,slug,description,created_at').limit(5000),
@@ -307,11 +245,47 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.45,
       });
     }
+
   } catch {
-    // Preserve the already-built static and product URLs on a partial taxonomy
-    // failure; a transient auxiliary query must not make Google see an empty sitemap.
-    return entries;
+    // Địa phương dùng snapshot độc lập bên dưới, kể cả khi nguồn phụ này lỗi.
   }
 
+  entries.push(...await buildLocalitySitemapEntries());
   return entries;
+}
+
+// Đọc snapshot đầy đủ rồi chỉ giữ candidate qua gate. Lỗi/không hoàn chỉnh → []:
+// sitemap không được công bố một phần phạm vi địa phương bằng dữ liệu cắt.
+// Import động để module sitemap vẫn nhẹ khi test chỉ cần phần tĩnh/product.
+export async function buildLocalitySitemapEntries(): Promise<MetadataRoute.Sitemap> {
+  try {
+    const { loadLocalitySnapshot } = await import('@/lib/server/localitySnapshot');
+    const snapshot = await loadLocalitySnapshot();
+    const localityEntries = buildLocalityCandidatesFromSnapshot(snapshot).map(candidate => ({
+      url: `${SITE_URL}${candidate.path}`,
+      lastModified: candidate.lastModified ? new Date(candidate.lastModified) : undefined,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    }));
+    const newsEntries = (await Promise.all(snapshot.areas.map(async area => {
+      if (!isValidSlug(area.slug) || !area.name?.trim()) return null;
+      const news = await serverGetLocalityNews({
+        areaId: area.id,
+        geoAreaAllowlist: buildLocalityGeoAreaAllowlist(area.name),
+        limit: 3,
+      });
+      if (!news.available || !news.indexable) return null;
+      const latest = news.latestUpdatedAt;
+
+      return {
+        url: `${SITE_URL}/khu-vuc/${area.slug}/tin-tuc`,
+        lastModified: latest ? new Date(latest) : undefined,
+        changeFrequency: 'weekly' as const,
+        priority: 0.65,
+      };
+    }))).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    return [...localityEntries, ...newsEntries];
+  } catch {
+    return [];
+  }
 }

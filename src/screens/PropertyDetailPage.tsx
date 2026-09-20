@@ -34,6 +34,7 @@ import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { formatUpdateDate } from '../lib/priceStatsFormat';
 import { formatPropertyPrice, formatFinancingAmount, subtractListingPriceValues } from '../lib/listingPrice';
+import { formatPropertyPricePerSqm } from '../lib/propertyCardModel';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
@@ -288,9 +289,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
   // Ưu tiên FAQ nhập tay; nếu chưa có thì tự-sinh từ dữ liệu thật.
   const faq = property.faq && property.faq.length > 0 ? property.faq : buildPropertyFaq(property);
 
-  const pricePerSqm = property.listing_type === 'cho_thue' || !property.area_sqm
-    ? null
-    : ((property.price_unit === 'triệu' ? property.price / 1000 : property.price) * 1000 / property.area_sqm).toFixed(0);
+  // Đơn vị và dấu "≈" do formatter dùng chung quyết định — không lặp lại ở nơi render.
+  const pricePerSqm = formatPropertyPricePerSqm(property);
 
   // Answer Block (AIO): câu tóm tắt trực tiếp từ dữ liệu thật, chỉ ghép field có giá trị.
   const answerText = (() => {
@@ -501,7 +501,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                 <div>
                   <p className="text-gray-500 text-xs mb-0.5">Mức giá</p>
                   <p className="text-3xl font-black text-red-600">{formatPropertyPrice(property)}</p>
-                  {pricePerSqm && <p className="text-gray-400 text-xs mt-0.5">≈ {pricePerSqm} triệu/m²</p>}
+                  {pricePerSqm && <p className="text-gray-400 text-xs mt-0.5">{pricePerSqm}</p>}
                   {property.listing_type !== 'cho_thue' && property.loan_support != null && property.loan_support > 0 && property.loan_support < property.price && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -727,7 +727,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                 <p className="text-2xl font-black text-red-600 mb-1">
                   {formatPropertyPrice(property)}
                 </p>
-                {pricePerSqm && <p className="text-gray-400 text-xs mb-4">≈ {pricePerSqm} triệu/m²</p>}
+                {pricePerSqm && <p className="text-gray-400 text-xs mb-4">{pricePerSqm}</p>}
                 <button onClick={openContact}
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
                   Yêu cầu tư vấn ngay

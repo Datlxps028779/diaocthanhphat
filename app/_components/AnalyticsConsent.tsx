@@ -25,6 +25,7 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
   const [aiOpen, setAiOpen] = useState(false);
   const pathname = usePathname();
   const isPrivateWorkspace = pathname === '/noi-bo' || pathname.startsWith('/noi-bo/') || pathname === '/quantrihethong' || pathname.startsWith('/quantrihethong/');
+  const suppressPublicOverlay = pathname === '/tin-tuc' || pathname === '/khu-vuc' || pathname.startsWith('/khu-vuc/');
   const loadOptionalAnalytics = mounted && !isPrivateWorkspace && status === 'granted';
   const loadGa = loadOptionalAnalytics && config.destinations.length > 0;
 
@@ -124,7 +125,7 @@ export function AnalyticsConsent({ environmentGaId }: AnalyticsConsentProps) {
         </Script>
       )}
 
-      {mounted && !isPrivateWorkspace && showNotice && (
+      {mounted && !isPrivateWorkspace && !suppressPublicOverlay && showNotice && (
         <section
           role="region"
           aria-label="Thông báo chính sách Cookie"

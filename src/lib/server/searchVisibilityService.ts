@@ -15,12 +15,25 @@ import {
   type SearchVisibilityCandidate,
   type SearchVisibilitySources,
 } from './searchVisibility';
+import type { LocalitySnapshot } from './localitySnapshot';
+import { readCompleteAuditRows, readRegistryVersion } from './searchVisibilityRegistry';
+
+const LOCALITY_SNAPSHOT_UNAVAILABLE_MESSAGE = 'Locality snapshot unavailable';
+
+// Nạp loader snapshot địa phương bằng import ĐỘNG: bản thân module snapshot gọi
+// reactCache()/unstable_cache() ở cấp module, nên import tĩnh sẽ kéo React + next/cache
+// vào mọi lần import service (và vỡ test double tối giản). Import động giữ service nhẹ
+// và vẫn dùng đúng loader thật khi chạy.
+async function loadLocalitySnapshotForAudit(): Promise<LocalitySnapshot> {
+  const { loadLocalitySnapshot } = await import('./localitySnapshot');
+  return loadLocalitySnapshot();
+}
 
 type PersistenceError = { message: string; code?: string; details?: string | null; hint?: string | null };
 
 export class SearchVisibilitySyncError extends Error {
   constructor(
-    readonly code: 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'GOOGLE_NOT_CONFIGURED' | 'GOOGLE_CONFIG_INVALID' | 'GOOGLE_AUTH' | 'GOOGLE_REQUEST' | 'GOOGLE_RESPONSE' | 'GOOGLE_DEFERRED',
+    readonly code: 'RECONCILE_REQUIRED' | 'STALE_SNAPSHOT' | 'SUPERSEDED' | 'CANONICAL_POLICY' | 'CANONICAL_CONSTRAINT' | 'SOURCE_READ' | 'AUDIT_WRITE' | 'RUN_CREATE' | 'RUN_FINALIZE' | 'SERVER_CONFIG' | 'GOOGLE_NOT_CONFIGURED' | 'GOOGLE_CONFIG_INVALID' | 'GOOGLE_AUTH' | 'GOOGLE_REQUEST' | 'GOOGLE_RESPONSE' | 'GOOGLE_DEFERRED',
     message: string,
   ) {
     super(message);
@@ -32,6 +45,7 @@ export type VisibilityDatabase = {
   // Supabase query builders are thenable and expose a large fluent API. Keep this
   // boundary structural so service tests can supply a small in-memory double.
   from: (table: string) => any;
+  rpc?: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PersistenceError | null }>;
 };
 
 export const SEARCH_VISIBILITY_SOURCE_SELECTS = {
@@ -42,23 +56,10 @@ export const SEARCH_VISIBILITY_SOURCE_SELECTS = {
   districts: 'id,area_id,name,slug',
   propertyTypes: 'id,name,slug',
   neighborhoods: 'id,name,slug,description,created_at',
-  news: 'id,slug,is_published,updated_at',
+  news: 'id,slug,is_published,area_id,geo_area,updated_at',
   newsCategories: 'id,slug,updated_at',
   managedPages: 'id,slug,is_active,is_system,updated_at',
 } as const;
-
-function sourceVersion(candidate: SearchVisibilityCandidate): string {
-  return createHash('sha256')
-    .update(JSON.stringify({
-      sourceKey: candidate.sourceKey,
-      canonicalPath: candidate.canonicalPath,
-      eligible: candidate.eligible,
-      reasonCode: candidate.reasonCode,
-      reasonDetail: candidate.reasonDetail,
-      contentUpdatedAt: candidate.contentUpdatedAt,
-    }))
-    .digest('hex');
-}
 
 function toRow(candidate: SearchVisibilityCandidate): Record<string, unknown> {
   return {
@@ -71,9 +72,6 @@ function toRow(candidate: SearchVisibilityCandidate): Record<string, unknown> {
     reason_code: candidate.reasonCode,
     reason_detail: candidate.reasonDetail,
     content_updated_at: candidate.contentUpdatedAt,
-    evaluated_at: new Date().toISOString(),
-    source_version: sourceVersion(candidate),
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -127,6 +125,10 @@ export function validateSearchVisibilityCandidates(candidates: SearchVisibilityC
 
 export function classifySearchVisibilityPersistenceError(error: PersistenceError): SearchVisibilitySyncError {
   const text = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+  if (error.code === 'PGRST202' || error.code === '42883') return new SearchVisibilitySyncError('RECONCILE_REQUIRED', 'Chưa có RPC reconcile registry. Cần áp migration trước khi đồng bộ; không dùng đường ghi cũ.');
+  if (text.includes('SV_RECONCILE_SUPERSEDED')) return new SearchVisibilitySyncError('SUPERSEDED', 'Lượt đồng bộ đã được thay thế bởi lượt mới hơn. Không ghi registry.');
+  if (text.includes('SV_RECONCILE_STALE_REGISTRY') || error.code === '40001') return new SearchVisibilitySyncError('STALE_SNAPSHOT', 'Snapshot registry đã thay đổi. Cần chạy lượt đồng bộ mới và đọc lại toàn bộ nguồn.');
+  if (text.includes('SV_RECONCILE_CANONICAL_CONFLICT')) return new SearchVisibilitySyncError('CANONICAL_POLICY', 'Có nhiều nguồn giữ cùng URL canonical. Lượt đồng bộ đã rollback, cần kiểm tra nguồn.');
   if (text.includes('search_visibility_url_absolute_canonical')) {
     return new SearchVisibilitySyncError('CANONICAL_CONSTRAINT', 'Constraint canonical trong production chưa khớp chính sách https://chonhaviet.com. Cần chạy migration sửa constraint trước khi đồng bộ lại.');
   }
@@ -136,18 +138,13 @@ export function classifySearchVisibilityPersistenceError(error: PersistenceError
   return new SearchVisibilitySyncError('AUDIT_WRITE', 'Không lưu được audit URL. Kiểm tra dữ liệu registry hoặc cấu hình server rồi thử lại.');
 }
 
-const SEARCH_VISIBILITY_PAGE_SIZE = 1000;
-
 type SourceQueryResult = { data: unknown[] | null; error: { message?: string } | null };
 
 async function readAllSourceRows(client: VisibilityDatabase, table: string, select: string): Promise<SourceQueryResult> {
-  const rows: unknown[] = [];
-  for (let from = 0; ; from += SEARCH_VISIBILITY_PAGE_SIZE) {
-    const result = await (client.from(table).select(select).range(from, from + SEARCH_VISIBILITY_PAGE_SIZE - 1) as PromiseLike<SourceQueryResult>);
-    if (result.error) return result;
-    const page = result.data ?? [];
-    rows.push(...page);
-    if (page.length < SEARCH_VISIBILITY_PAGE_SIZE) return { data: rows, error: null };
+  try {
+    return { data: await readCompleteAuditRows(client, table, select), error: null };
+  } catch {
+    return { data: null, error: { message: `Nguồn ${table} chưa đọc đầy đủ.` } };
   }
 }
 
@@ -166,6 +163,24 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
   const error = results.find(result => result.error)?.error;
   if (error) throw new SearchVisibilitySyncError('SOURCE_READ', `Không tải được nguồn URL public: ${error.message}`);
 
+  // Snapshot địa phương public HOÀN CHỈNH cho họ landing/report. Đọc bằng anon/public
+  // (loadLocalitySnapshot tự tạo client public), KHÔNG dùng admin client cho dữ liệu
+  // công khai. Snapshot thiếu/lỗi → ném lỗi rõ ràng và DỪNG lượt đồng bộ: không được
+  // âm thầm bỏ họ locality (báo audit 0 mục như thể đã kiểm tra) cũng không fallback
+  // sang mẫu thống kê bị cắt.
+  let locality: SearchVisibilitySources['locality'];
+  let localityNews: SearchVisibilitySources['localityNews'];
+  try {
+    const { loadLocalityNewsSnapshot } = await import('./localityNewsSnapshot');
+    [locality, localityNews] = await Promise.all([loadLocalitySnapshotForAudit(), loadLocalityNewsSnapshot()]);
+  } catch (localityError) {
+    const detail = localityError instanceof Error ? localityError.message : LOCALITY_SNAPSHOT_UNAVAILABLE_MESSAGE;
+    throw new SearchVisibilitySyncError(
+      'SOURCE_READ',
+      `Không tải được snapshot địa phương public nên không thể kiểm tra họ landing/report: ${detail}`,
+    );
+  }
+
   const sources: SearchVisibilitySources = {
     properties: (properties.data ?? []) as unknown as SearchVisibilitySources['properties'],
     areas: (areas.data ?? []) as unknown as SearchVisibilitySources['areas'],
@@ -175,6 +190,9 @@ async function readSources(client: VisibilityDatabase): Promise<SearchVisibility
     news: (news.data ?? []) as unknown as SearchVisibilitySources['news'],
     newsCategories: (newsCategories.data ?? []) as unknown as SearchVisibilitySources['newsCategories'],
     managedPages: (managedPages.data ?? []) as unknown as SearchVisibilitySources['managedPages'],
+    locality,
+    localityNews,
+    localityNewsAvailable: true,
   };
 
   return sources;
@@ -435,34 +453,30 @@ export async function syncSearchVisibilityAudit(actorId: string | null): Promise
       news: sources.news.length,
       newsCategories: sources.newsCategories.length,
       managedPages: sources.managedPages.length,
+      localityRows: sources.locality?.rows.length ?? 0,
     };
 
     const candidates = buildSearchVisibilityCandidates(sources);
     validateSearchVisibilityCandidates(candidates);
     const summary = summarizeSearchVisibility(candidates);
-    const existingRegistry = await client.from('search_visibility_urls')
-      .select('source_key,canonical_url')
-      .not('canonical_url', 'is', null)
-      .limit(5000);
-    if (existingRegistry.error) throw new SearchVisibilitySyncError('SOURCE_READ', 'Không đọc được registry canonical hiện tại để kiểm tra xung đột.');
-    const canonicalConflicts = findCanonicalConflicts(candidates, existingRegistry.data ?? []);
-    if (canonicalConflicts.length) {
-      const details = canonicalConflicts.slice(0, 5)
-        .map(conflict => `${conflict.canonicalUrl} <- ${conflict.sourceKeys.join(', ')}`)
-        .join('; ');
-      throw new SearchVisibilitySyncError('CANONICAL_POLICY', `Phát hiện canonical URL trùng trước khi ghi registry: ${details}`);
+    let registry: Awaited<ReturnType<typeof readRegistryVersion>>;
+    try { registry = await readRegistryVersion(client); }
+    catch { throw new SearchVisibilitySyncError('SOURCE_READ', 'Không đọc được snapshot registry đầy đủ; không reconcile hoặc retire.'); }
+    if (!client.rpc) throw new SearchVisibilitySyncError('RECONCILE_REQUIRED', 'Chưa có RPC reconcile registry; không dùng đường ghi cũ.');
+    const rows = candidates.map(toRow);
+    const snapshotFingerprint = fingerprint(JSON.stringify({ candidates: rows, registry }));
+    const reconcile = await client.rpc('reconcile_search_visibility_snapshot', {
+      p_run_id: runResult.data.id,
+      p_candidates: rows,
+      p_registry: registry,
+      p_snapshot_fingerprint: snapshotFingerprint,
+      p_summary: { summary, debugSourceCounts },
+    });
+    if (reconcile.error) throw classifySearchVisibilityPersistenceError(reconcile.error);
+    const result = reconcile.data as { runId?: unknown; status?: unknown; candidateCount?: unknown } | null;
+    if (!result || result.runId !== runResult.data.id || result.status !== 'succeeded' || result.candidateCount !== rows.length) {
+      throw new SearchVisibilitySyncError('RUN_FINALIZE', 'Phản hồi reconcile không hợp lệ. Cần kiểm tra audit run trước khi chạy lại.');
     }
-    const upsert = await client.from('search_visibility_urls').upsert(candidates.map(toRow), { onConflict: 'source_key' });
-    if (upsert.error) throw classifySearchVisibilityPersistenceError(upsert.error);
-    const finish = await client.from('search_visibility_runs').update({
-      status: 'succeeded',
-      requested_count: candidates.length,
-      processed_count: candidates.length,
-      succeeded_count: candidates.length,
-      finished_at: new Date().toISOString(),
-      metadata: { summary, debugSourceCounts },
-    }).eq('id', runResult.data.id);
-    if (finish.error) throw new SearchVisibilitySyncError('RUN_FINALIZE', 'Đã lưu audit URL nhưng không hoàn tất được lượt đồng bộ.');
     return { runId: runResult.data.id, summary };
   } catch (error) {
     const primaryError = error instanceof Error ? error : new Error('Lỗi không xác định.');
@@ -470,8 +484,8 @@ export async function syncSearchVisibilityAudit(actorId: string | null): Promise
       status: 'failed',
       error_summary: primaryError.message.slice(0, 500),
       finished_at: new Date().toISOString(),
-    }).eq('id', runResult.data.id);
-    if (failure.error) console.error('[search-visibility] không ghi được trạng thái failed:', failure.error.message);
+    }).eq('id', runResult.data.id).eq('status', 'running');
+    if (failure.error) console.error('[search-visibility] không ghi được trạng thái failed');
     throw primaryError;
   }
 }

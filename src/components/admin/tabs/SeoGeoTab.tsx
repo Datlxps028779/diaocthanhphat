@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle, Globe2, MapPin, RefreshCw, Save, Search, ShieldCheck, Wand2, X } from 'lucide-react';
 import type { Area, NewsArticle, Property, SeoRouteOverride, SiteSetting } from '../../../lib/supabase';
 import type { AdminTab } from '../types';
-import { supabase } from '../../../lib/supabase';
 import { adminGetAllSiteSettings, adminGetSeoAudit, adminGetSeoRouteOverrides, adminUpsertSeoRouteOverride, diagnoseSearchConsoleAccess, getAreas, getSearchVisibilityAudit, getSeoFreshnessStatus, inspectSearchVisibilityBatch, SEO_ROUTE_PATHS, SearchVisibilityApiError, SeoFreshnessApiError, submitSearchVisibilitySitemap, syncSearchVisibilityAudit, updateArea, upsertSiteSetting } from '../../../lib/api';
-import { areaSummaryFromData, evaluateAreaSeo, getAreaDetails } from '../../../lib/areaSeo';
+import { areaSummaryFromData, getAreaDetails } from '../../../lib/areaSeo';
+import { describeAreaVisibility, formatAuditTimestamp, findAreaVisibilityRow, type AreaVisibilityDescription } from '../../../lib/areaVisibilityRow';
+import { areaSeoDraftFromArea, buildAreaPatch, emptyAreaSeoDraft, hasAreaChanges, type AreaSeoDraft } from '../../../lib/adminAreaSeoDraft';
 import { SeoFields, type SeoFieldsValue } from '../shared/SeoFields';
 import { PublicUrlPreview } from '../shared/PublicUrlPreview';
 import { ImageOptimizerCard } from '../shared/ImageOptimizerCard';
@@ -130,9 +131,10 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
   const [auditModal, setAuditModal] = useState<'properties' | 'news' | 'areas' | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeAreaId, setActiveAreaId] = useState('');
-  const [areaSeo, setAreaSeo] = useState<SeoFieldsValue>({ meta_title: '', meta_description: '', focus_keywords: '' });
+  const [areaSeo, setAreaSeo] = useState<AreaSeoDraft>(emptyAreaSeoDraft());
   const [areaIndexable, setAreaIndexable] = useState<boolean | null>(null);
   const [areaGateReasons, setAreaGateReasons] = useState<string[]>([]);
+  const [areaVisibility, setAreaVisibility] = useState<AreaVisibilityDescription>(() => describeAreaVisibility(null));
   const [visibility, setVisibility] = useState<SearchVisibilityAuditResponse | null>(null);
   const [visibilityLoading, setVisibilityLoading] = useState(false);
   const [visibilitySyncing, setVisibilitySyncing] = useState(false);
@@ -246,39 +248,21 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
 
   useEffect(() => {
     const area = areas.find(a => a.id === activeAreaId);
-    setAreaSeo({
-      meta_title: area?.meta_title ?? '',
-      meta_description: area?.meta_description ?? '',
-      focus_keywords: area?.focus_keywords ?? '',
-    });
+    setAreaSeo(areaSeoDraftFromArea(area));
   }, [activeAreaId, areas]);
 
-  // Nạp listings thật của khu vực để quality gate khớp public page
-  // (/khu-vuc/[slug]). Thiếu dữ liệu → evaluateAreaSeo ra noindex, admin thấy ngay.
+  // Trạng thái index của khu vực lấy từ audit Search Visibility thật (cùng registry mà
+  // trang public đọc), KHÔNG tự tính lại từ properties limit 50 rồi tuyên bố khớp public.
+  // Không có dòng audit → 'unknown', không phải pass.
   useEffect(() => {
-    let cancelled = false;
-    if (!activeAreaId) { setAreaIndexable(null); setAreaGateReasons([]); return; }
-    (async () => {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('id,title,slug,district,property_type_id')
-        .eq('is_active', true)
-        .eq('area_id', activeAreaId)
-        .limit(50);
-      if (cancelled) return;
-      if (error) { setAreaIndexable(null); setAreaGateReasons([]); return; }
-      const listings = (data ?? []) as Pick<Property, 'id' | 'title' | 'slug' | 'district' | 'property_type_id'>[];
-      const area = areas.find(a => a.id === activeAreaId);
-      if (area) {
-        const districts = Array.from(new Set(listings.map(l => l.district).filter(Boolean))) as string[];
-        const propertyTypes = Array.from(new Set(listings.map(l => l.property_type_id).filter(Boolean))) as string[];
-        const ev = evaluateAreaSeo({ area, activeListings: listings, districts, propertyTypes, hasDescription: !!area.description?.trim() });
-        setAreaIndexable(ev.indexable);
-        setAreaGateReasons(ev.reasons);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [activeAreaId, areas]);
+    const row = findAreaVisibilityRow(visibility?.urls, activeAreaId);
+    const described = describeAreaVisibility(row);
+    setAreaVisibility(described);
+    setAreaIndexable(described.state === 'unknown' ? null : described.state === 'eligible');
+    setAreaGateReasons(row && !row.eligible && row.reason_detail
+      ? row.reason_detail.split(',').map(item => item.trim()).filter(Boolean)
+      : []);
+  }, [visibility, activeAreaId]);
 
   const activeArea = areas.find(a => a.id === activeAreaId);
 
@@ -287,18 +271,23 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
     const detail = getAreaDetails(activeArea.slug);
     const summary = areaSummaryFromData(activeArea, detail);
     const fallbackDescription = summary.length > 155 ? `${summary.slice(0, 152).trim()}...` : summary;
-    setAreaSeo({
+    setAreaSeo(prev => ({
+      ...prev,
       meta_title: activeArea.meta_title?.trim() || `Bất động sản ${activeArea.name}`,
       meta_description: activeArea.meta_description?.trim() || fallbackDescription,
       focus_keywords: activeArea.focus_keywords?.trim() || `${activeArea.name}, bất động sản ${activeArea.name}`,
-    });
+    }));
+    // KHÔNG gán lại description/admin_note: đây là nội dung biên tập công khai.
+    // Ghi đè bằng dữ liệu DB sẽ xoá bản nháp admin đang gõ dở ở hai ô dưới.
     if (areaIndexable !== null) {
       setRobotsIndex(areaIndexable);
       setRobotsFollow(true);
     }
     setMessage(areaIndexable === false
-      ? `Đã điền mẫu. Lưu ý: khu vực CHƯA qua quality gate (${areaGateReasons.join(', ')}) — nên giữ noindex cho đến khi đủ dữ liệu thật.`
-      : 'Đã điền mẫu SEO/GEO từ dữ liệu khu vực.');
+      ? `Đã điền mẫu. Lưu ý: audit đang loại trừ khu vực này (${areaGateReasons.join(', ')}) — nên giữ noindex cho đến khi đủ dữ liệu thật.`
+      : areaIndexable === null
+        ? 'Đã điền mẫu SEO/GEO từ dữ liệu khu vực. Chưa có dòng audit cho khu vực này — chưa kết luận được trạng thái index.'
+        : 'Đã điền mẫu SEO/GEO từ dữ liệu khu vực.');
   };
 
   const activeGuide = ROUTE_GUIDE[activePath];
@@ -343,20 +332,36 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
 
   const saveArea = async () => {
     if (!activeAreaId) { setMessage('Chọn khu vực trước khi lưu.'); return; }
+    const patch = buildAreaPatch(activeArea, areaSeo);
+    // Không có field nào đổi: không gọi API, không báo "đã lưu" giả.
+    if (Object.keys(patch).length === 0) { setMessage('Không có thay đổi nào để lưu.'); return; }
     setSaving(true);
     setMessage('');
     try {
-      await updateArea(activeAreaId, {
-        meta_title: areaSeo.meta_title.trim() || null,
-        meta_description: areaSeo.meta_description.trim() || null,
-        focus_keywords: areaSeo.focus_keywords.trim() || null,
-      });
-      setMessage(`Đã lưu SEO cho khu vực ${activeArea?.name ?? ''}.`);
-      const nextAreas = await getAreas().catch(() => areas);
-      setAreas(nextAreas);
+      const saved = await updateArea(activeAreaId, patch);
+      const savedFields = Object.keys(saved);
+      const publicFields = savedFields.filter(field => field === 'description' || field === 'admin_note');
+      setMessage(
+        `Đã lưu ${savedFields.length} trường cho khu vực ${activeArea?.name ?? ''} (đã đọc lại xác nhận)`
+        + (publicFields.length ? ` — trong đó ${publicFields.join(', ')} hiển thị CÔNG KHAI trên trang khu vực.` : '.'),
+      );
+      const nextAreas = await getAreas().catch(() => null);
+      if (nextAreas) {
+        setAreas(nextAreas);
+      } else {
+        // Làm mới danh sách lỗi: giữ nguyên dữ liệu đang có và áp giá trị ĐÃ đọc lại
+        // xác nhận, thay vì rơi về `areas` cũ và xoá mất bản nháp vừa lưu.
+        setAreas(prev => prev.map(area => (area.id === activeAreaId ? { ...area, ...saved } : area)));
+        setMessage((prev) => `${prev} Chưa tải lại được danh sách khu vực — đang hiển thị giá trị đã lưu.`);
+      }
     } catch (e) {
       console.error(e);
-      setMessage('Lưu SEO khu vực thất bại. Kiểm tra migration/RLS.');
+      // AreaUpdateError phân biệt rõ: dữ liệu đã vào DB hay chưa. Không được nói
+      // "chưa lưu gì" khi update đã persisted mà chỉ cache lỗi.
+      const failure = e as Error & { persisted?: boolean };
+      setMessage(failure?.persisted
+        ? `${failure.message}`
+        : `Lưu SEO khu vực thất bại: ${failure?.message ?? 'không rõ lỗi'}`);
     } finally { setSaving(false); }
   };
 
@@ -497,13 +502,79 @@ export function SeoGeoTab({ onEditEntity }: { onEditEntity?: (tab: AdminTab, id:
                   </div>
                   {areaIndexable === false && (
                     <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                      Khu vực chưa qua quality gate: {areaGateReasons.join(', ')}. Nên giữ noindex cho đến khi đủ {5} tin đăng thật + mô tả riêng.
+                      Khu vực bị audit loại trừ: {areaGateReasons.join(', ')}. Nên giữ noindex cho đến khi đủ dữ liệu thật + mô tả riêng.
                     </p>
                   )}
+                  <div className="mt-3 space-y-1 text-[11px] text-blue-800">
+                    <p className="font-semibold">URL liên quan (mở để kiểm tra nội dung thật):</p>
+                    <PublicUrlPreview path={`/khu-vuc/${activeArea?.slug ?? ''}`} />
+                    <PublicUrlPreview path={activeArea?.slug ? `/khu-vuc/${activeArea.slug}/thong-tin` : ''} label="Trang phân tích dữ liệu khu vực" />
+                    <p className="text-blue-700">Số liệu trên hai trang này hệ thống tự sinh từ tin đăng thật — không có ô nhập đè. Trạng thái index do quality gate quyết định, không có nút ép index.</p>
+                  </div>
+
+                  <div
+                    data-testid="area-audit-status"
+                    data-audit-state={areaVisibility.state}
+                    className={`mt-3 rounded-lg px-3 py-2 text-[11px] ${areaVisibility.state === 'eligible' ? 'bg-emerald-50 text-emerald-800' : areaVisibility.state === 'excluded' ? 'bg-amber-50 text-amber-800' : 'bg-gray-100 text-gray-700'}`}
+                  >
+                    <p className="font-bold">Quality gate theo audit: {areaVisibility.label}</p>
+                    {areaVisibility.state === 'excluded' && areaGateReasons.length > 0 && (
+                      <p className="mt-0.5">Lý do từ audit: {areaGateReasons.join(', ')}.</p>
+                    )}
+                    {areaVisibility.state === 'unknown' && (
+                      <p className="mt-0.5">Không có dòng audit nghĩa là CHƯA xác minh được — không mặc định là đạt. Bấm “Làm mới audit” ở đầu trang hoặc đồng bộ registry.</p>
+                    )}
+                    {areaVisibility.state !== 'unknown' && (
+                      <p className="mt-0.5">
+                        Mốc audit: {formatAuditTimestamp(areaVisibility.evaluatedAt) ?? 'không rõ thời điểm'}.
+                        {' '}Audit chỉ phản ánh trạng thái registry, không phải lệnh index lên Google.
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <SeoFields value={areaSeo} onChange={setAreaSeo} basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} />
-                <div className="mt-4 flex justify-end">
-                  <button onClick={saveArea} disabled={saving}
+                <SeoFields value={areaSeo} onChange={next => setAreaSeo(prev => ({ ...prev, ...next }))} basePath={`/khu-vuc/${activeArea?.slug ?? ''}`} />
+
+                <div className="mt-4 space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Nội dung công khai của trang khu vực</h3>
+                    <p className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+                      <Globe2 className="h-3.5 w-3.5" />Các ô dưới đây hiển thị CÔNG KHAI cho khách trên trang khu vực — không phải ghi chú nội bộ.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">Mô tả khu vực (công khai)</label>
+                    <textarea
+                      value={areaSeo.description}
+                      onChange={e => setAreaSeo(prev => ({ ...prev, description: e.target.value }))}
+                      rows={4}
+                      className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      placeholder="Giới thiệu ngắn về khu vực, viết từ dữ liệu thật."
+                    />
+                    <p className="mt-1 text-[10px] text-emerald-700">Dùng cho phần giới thiệu trang <code>/khu-vuc/{activeArea?.slug ?? '[slug]'}</code> và fallback mô tả SEO. Để trống thì hệ thống dùng dữ liệu khu vực.</p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Ghi chú công khai <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">HIỂN THỊ CÔNG KHAI</span>
+                    </label>
+                    <textarea
+                      data-testid="area-admin-note"
+                      value={areaSeo.admin_note}
+                      onChange={e => setAreaSeo(prev => ({ ...prev, admin_note: e.target.value }))}
+                      rows={3}
+                      className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      placeholder="Ví dụ: hiện trạng hành chính sau sáp nhập."
+                    />
+                    <p className="mt-1 text-[10px] font-semibold text-emerald-700">
+                      Khách đọc được ô này trên trang khu vực. KHÔNG nhập ghi chú nội bộ, thông tin liên hệ riêng hoặc dữ liệu chưa xác minh ở đây.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-3">
+                  <span className="text-[11px] text-gray-400">Lưu thủ công — không tự động lưu.</span>
+                  <button onClick={saveArea} disabled={saving || !hasAreaChanges(activeArea, areaSeo)}
                     className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
                     <Save className="h-4 w-4" /> Lưu SEO khu vực
                   </button>

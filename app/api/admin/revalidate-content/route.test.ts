@@ -6,7 +6,8 @@ const callerClientMock = vi.hoisted(() => vi.fn());
 const adminClientMock = vi.hoisted(() => vi.fn());
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 
-vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
+vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock, revalidateTag: vi.fn() }));
+vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
 vi.mock('@/lib/server/requireAdmin', () => ({
   adminClient: adminClientMock,
   callerClient: callerClientMock,
@@ -14,6 +15,7 @@ vi.mock('@/lib/server/requireAdmin', () => ({
 }));
 
 import { POST } from './route';
+
 
 function request(body: unknown, token = 'editor-token'): NextRequest {
   return new NextRequest('http://localhost/api/admin/revalidate-content', {
@@ -27,7 +29,7 @@ function request(body: unknown, token = 'editor-token'): NextRequest {
 }
 
 function makeClient(options: {
-  areas?: Array<{ id: string; slug: string }>;
+  areas?: Array<{ id: string; slug: string; name?: string | null }>;
   categories?: Array<{ label: string; slug: string }>;
   districts?: Array<{ id: string; area_id: string; slug: string }>;
   propertyTypes?: Array<{ id: string; slug: string }>;
@@ -38,7 +40,7 @@ function makeClient(options: {
     from: vi.fn((table: string) => ({
       select: vi.fn(async () => {
         if (table === 'areas') {
-          return { data: options.areas ?? [{ id: 'area-1', slug: 'binh-duong' }], error: options.areasError ?? null };
+          return { data: options.areas ?? [{ id: 'area-1', slug: 'binh-duong', name: 'Bình Dương' }], error: options.areasError ?? null };
         }
         if (table === 'news_categories') {
           return { data: options.categories ?? [{ label: 'Thị trường', slug: 'thi-truong' }], error: options.categoriesError ?? null };
@@ -149,6 +151,39 @@ describe('POST /api/admin/revalidate-content', () => {
     expect(upsert).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ event_kind: 'property', event_action: 'publish', path: '/sitemap.xml' }),
     ]), { onConflict: 'dedupe_key', ignoreDuplicates: true });
+  });
+
+  it('khớp tên khu vực đã chuẩn hoá để purge cụm khu vực cho bài narrative', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'editor-token', userId: 'u1' });
+    callerClientMock.mockReturnValue(makeClient());
+
+    const response = await POST(request({
+      entity: 'news',
+      action: 'update',
+      targets: [{
+        current: { id: 'n1', slug: 'bai-viet', category: 'Thị trường', is_published: true, area_id: null, geo_area: '  Bình   Dương ' },
+      }],
+    }));
+
+    expect(response.status).toBe(200);
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toContain('/khu-vuc/binh-duong/tin-tuc');
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toContain('/khu-vuc/binh-duong/thong-tin');
+  });
+
+  it('không purge cụm khu vực khi geo_area chỉ khớp một phần tên', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: true, token: 'editor-token', userId: 'u1' });
+    callerClientMock.mockReturnValue(makeClient());
+
+    const response = await POST(request({
+      entity: 'news',
+      action: 'update',
+      targets: [{
+        current: { id: 'n1', slug: 'bai-viet', category: 'Thị trường', is_published: true, area_id: null, geo_area: 'Bình Dương và Đồng Nai' },
+      }],
+    }));
+
+    expect(response.status).toBe(200);
+    expect(revalidatePathMock.mock.calls.map(([path]) => path).some(path => path.startsWith('/khu-vuc/'))).toBe(false);
   });
 
   it('trả 503 khi không tải được lookup URL public', async () => {

@@ -1,5 +1,35 @@
 # Tiến độ hiện tại
 
+## Phase địa phương / FAQ / báo cáo tự sinh — 2026-09-16
+
+## Cập nhật verify phase địa phương — 2026-09-16
+
+- [x] Tích hợp bộ lọc: query `typeId/minPrice/maxPrice` chỉ được mang theo khi route không sở hữu chiều đó; khoảng giá tự do sống qua refresh/đổi phạm vi; reset landing về URL nền sạch; đổi bán/thuê bỏ khoảng giá khác đơn vị. Không đọc/sửa `src/lib/queryKeys.ts`.
+- [x] Full Vitest/typecheck/diff-check sau tích hợp: 234 file, 2001 test đạt, 1 test bỏ qua; graphify update đạt.
+- [x] Production build cô lập tại `/tmp/chonhaviet-locality-preview-fduqXe`, không đè root `.next`; Chrome thật cổng 3104 đạt hành trình URL/SEO/FAQ/schema/responsive 7 viewport/back-forward/product/reset/menu/drawer; pageErrors=0, blockedWrites=5.
+- [x] Parity review read-only: middleware report, legacy exact-type report, sitemap/audit và source keys không có lỗi đúng-sai xác nhận.
+- [ ] Resource errors local còn do preview không có service-role cho proxy ảnh và route Vercel analytics; chưa dùng chúng để kết luận production UI.
+- [ ] Chưa commit/push/deploy phase mới; cần phê duyệt riêng.
+
+
+**ĐÃ ĐƯỢC NGƯỜI DÙNG DUYỆT TRIỂN KHAI.** Yêu cầu: “lập todo để bám sát làm… bắt tay vào làm luôn”. Baseline UI đã commit `13f996d` trên `feat/locality-report-phase`, chưa push. Kế hoạch: `/Users/macbucdatle/.claude/plans/delightful-crafting-island.md`.
+
+- [x] Chốt phạm vi: tỉnh, loại hình cấp tỉnh, 4 khoảng giá bán, phường/xã, FAQ và report cùng context; không nhân mọi tổ hợp lọc.
+- [x] Baseline read-only: 57 tin public (BD28, BP29, HCM0, DN0), 53 mẫu bán đủ giá/diện tích; 3 tin BP thiếu ward, không tự sửa.
+- [x] Kiểm namespace GET public 07:20 UTC: 4 tỉnh, 53 huyện, 682 xã, 9 loại; không va chạm `loai/gia/phuong-xa/thong-tin`. Bằng chứng `/tmp/chonhaviet-locality-namespaces.json`.
+- [ ] Hợp đồng URL cũ/mới; TDD resolver/context và chống sai cha/con.
+- [ ] Snapshot public đầy đủ có giới hạn, sale/rent đúng đơn vị, median/mean/mẫu, unknown ward; cache dùng chung, không partial stats.
+- [ ] Gate/FAQ/metadata theo context, phân biệt 3 mẫu giá với 5 tin/index; report không trùng landing.
+- [ ] Mốc A: landing tỉnh + FAQ 2/1 cột + CTA/report riêng; homepage CTA tỉnh vào landing, giữ tabs/config/tìm tin.
+- [ ] Mốc B: loại hình/giá/phường và report scope tương ứng; giữ product URL, query filters và back/forward.
+- [ ] Đồng bộ sitemap, Search Visibility và revalidation trước/sau thay đổi; giải quyết input sample500 trong các gate bị tác động.
+- [ ] Mốc C: admin description/ghi chú công khai, partial save/readback/error đúng quyền; không ghi production để thử.
+- [ ] Chrome thật 7 viewport + direct links/SSR/schema + regression menu/timeline/drawer/news/product; fixtures không thay bằng chứng production.
+- [ ] Typecheck/full Vitest/build snapshot riêng, graphify update, diff-check, verify receipt mới.
+- [ ] Bàn giao kết quả và giới hạn. Commit phase mới/push/deploy cần phê duyệt riêng; không đụng preview3102/3103 đang dùng trước khi bản mới đạt.
+
+Rào chắn: không SQL production, không service-role/session/admin credentials, không chỉnh taxonomy/constraints/RLS/CRM/RAG; không đọc/sửa `src/lib/queryKeys.ts`; không stage các file dirty ngoài phạm vi.
+
 ## Phê duyệt commit UI — 2026-09-16
 
 Người dùng đã cho phép commit local toàn bộ chỉnh sửa UI vừa hoàn tất (menu/search, timeline, drawer, khối địa phương, editor CMS và khoảng cách bài viết lớn). Các ghi chú “chưa được phê duyệt commit” bên dưới là trạng thái của vòng kiểm chứng trước đó. Chưa được push/deploy; dự kiến bàn giao cùng phase trang địa phương/FAQ/báo cáo tự sinh sau khi phase mới được duyệt và kiểm chứng. Không đưa các file cấu hình cá nhân hoặc audit ngoài phạm vi vào commit UI.

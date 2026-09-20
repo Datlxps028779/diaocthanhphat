@@ -123,8 +123,8 @@ export function LocationDiscovery({ settings }: { settings: Record<string, unkno
                           </p>
                           {item.subtitle && <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{item.subtitle}</p>}
                           <div className="flex-1" />
-                          <Link href={pageToHref({ name: 'listings', areaId: province.id })} aria-label={`Xem ngay bất động sản tại ${province.name}`} className="mt-5 flex min-h-11 items-center justify-center gap-3 rounded-lg border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-[0_2px_10px_rgba(15,23,42,0.06)] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600">
-                            Xem ngay<ChevronRight aria-hidden="true" className="h-4 w-4 text-slate-400" />
+                          <Link href={`/khu-vuc/${province.slug}`} aria-label={`Khám phá ${province.name}`} className="mt-5 flex min-h-11 items-center justify-center gap-3 rounded-lg border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-[0_2px_10px_rgba(15,23,42,0.06)] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600">
+                            Khám phá {province.name}<ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
                           </Link>
                         </div>
                       </article>;

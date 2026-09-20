@@ -33,3 +33,37 @@ export function buildNewsSections(
   }
   return sections;
 }
+export type EditorialNewsLayout = {
+  lead: NewsListItem | null;
+  support: NewsListItem[];
+  sections: NewsSection[];
+  unusedIds: Set<string>;
+};
+
+/**
+ * Splits a loaded news collection into one lead, supporting stories and
+ * category streams without reusing an article in two editorial blocks.
+ */
+export function buildEditorialNewsLayout(
+  articles: NewsListItem[],
+  magazine: boolean,
+  supportLimit = 2,
+): EditorialNewsLayout {
+  const lead = articles[0] ?? null;
+  const support = articles.slice(1, magazine ? 1 + supportLimit : undefined);
+  const usedIds = new Set([lead?.id, ...support.map(article => article.id)].filter((id): id is string => Boolean(id)));
+  const unused = articles.filter(article => !usedIds.has(article.id));
+  const byCategory = new Map<string, NewsListItem[]>();
+  for (const article of unused) {
+    const category = article.category?.trim() || 'Tin khác';
+    const list = byCategory.get(category);
+    if (list) list.push(article);
+    else byCategory.set(category, [article]);
+  }
+  return {
+    lead,
+    support,
+    sections: magazine ? [...byCategory.entries()].map(([category, items]) => ({ category, items })) : [],
+    unusedIds: new Set(unused.map(article => article.id)),
+  };
+}

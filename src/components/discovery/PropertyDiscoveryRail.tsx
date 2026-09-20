@@ -1,16 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import Link from 'next/link';
-import { MapPin } from 'lucide-react';
 import { buildPropertyPath } from '../../lib/api/properties';
-import { FALLBACK_PROPERTY_IMAGE } from '../../lib/propertyImages';
-import { SafeImage } from '../SafeImage';
 import { track, EVENTS } from '../../lib/analytics';
 import { buildDiscoveryEventProps, type DiscoveryModule, type DiscoverySurface } from '../../lib/discoveryJourney';
-import { formatPropertyPrice } from '../../lib/listingPrice';
 import { DiscoverySectionHeader } from './DiscoverySectionHeader';
-import { normalizeListingTitle } from '../../lib/listingTitle';
+import { PropertyCard } from '../property/PropertyCard';
 
 // Một article render cả desktop/mobile variant trong HTML để tránh layout shift. Khóa
 // theo tập tin hiển thị để đổi breakpoint không bắn thêm module-view cho cùng dữ liệu.
@@ -90,49 +85,31 @@ export function PropertyDiscoveryRail({
       <DiscoverySectionHeader title={title} subtitle={subtitle} headingId={resolvedHeadingId} />
       <div className={sidebar
         ? 'space-y-3'
-        : '-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 xl:grid-cols-4'}>
-        {properties.map((property, index) => (
-          <Link
-            key={property.id}
-            href={buildPropertyPath(property)}
-            onClick={() => track(EVENTS.DISCOVERY_MODULE_CLICK, buildDiscoveryEventProps({
-              surface,
-              module,
-              position: index + 1,
-              itemCount: properties.length,
-              source,
-              listingType: property.listing_type === 'mua_ban' || property.listing_type === 'cho_thue'
-                ? property.listing_type
-                : undefined,
-            }))}
-            className={sidebar
-              ? 'group flex gap-3 overflow-hidden rounded-xl border border-gray-100 bg-white p-2 shadow-sm transition-all duration-300 hover:shadow-lg'
-              : 'group flex w-64 shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:shadow-lg sm:w-auto'}
-          >
-            <div className={sidebar ? 'relative h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100' : 'relative aspect-[4/3] overflow-hidden bg-gray-100'}>
-              <SafeImage
-                src={property.image_url}
-                fallbackSrc={FALLBACK_PROPERTY_IMAGE}
-                alt={property.title}
-                fill
-                sizes={sidebar ? '96px' : '(max-width: 640px) 256px, (max-width: 768px) 50vw, 25vw'}
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              {property.listing_type === 'cho_thue' && (
-                <span className="absolute left-1.5 top-1.5 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Cho thuê</span>
-              )}
-            </div>
-            <div className={`flex min-w-0 flex-1 flex-col justify-center ${sidebar ? 'p-2' : 'p-3'}`}>
-              <h3 className={`mb-1 line-clamp-2 text-gray-900 transition-colors group-hover:text-red-600 ${sidebar ? 'text-sm font-medium leading-snug' : 'cnv-property-title'}`}>{normalizeListingTitle(property.title, [property.city, property.district ?? '']).value}</h3>
-              <p className={sidebar ? 'text-sm font-black text-red-600' : 'cnv-property-price text-red-600'}>{formatPropertyPrice(property)}</p>
-              <div className="cnv-property-meta mt-1 flex items-center gap-1 text-gray-400">
-                <MapPin className="h-3 w-3 shrink-0 text-red-400" />
-                <span className="truncate">{property.district ? `${property.district}, ` : ''}{property.city}</span>
-              </div>
-              {itemNote?.(property) && <p className="cnv-property-meta mt-1 line-clamp-1 font-medium text-red-500">{itemNote(property)}</p>}
-            </div>
-          </Link>
-        ))}
+        : '-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [contain:layout] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 xl:grid-cols-4'}>
+        {properties.map((property, index) => {
+          const note = itemNote?.(property);
+          const card = (
+            <PropertyCard
+              property={property}
+              href={buildPropertyPath(property)}
+              variant={sidebar ? 'compact' : 'grid'}
+              onResultClick={() => track(EVENTS.DISCOVERY_MODULE_CLICK, buildDiscoveryEventProps({
+                surface,
+                module,
+                position: index + 1,
+                itemCount: properties.length,
+                source,
+                listingType: property.listing_type === 'mua_ban' || property.listing_type === 'cho_thue'
+                  ? property.listing_type
+                  : undefined,
+              }))}
+              note={note ? <span className="cnv-property-meta font-medium text-red-500">{note}</span> : undefined}
+            />
+          );
+          return sidebar
+            ? <div key={property.id}>{card}</div>
+            : <div key={property.id} className="w-64 shrink-0 snap-start sm:w-auto">{card}</div>;
+        })}
       </div>
     </section>
   );

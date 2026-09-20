@@ -7,6 +7,14 @@ import { LISTINGS_PER_PAGE } from './router';
 import { pickRelated } from './relatedNews';
 import type { LocationTaxonomy } from './neighborhoodLocation';
 import { rankNewsProperties, type RankedNewsProperty } from './newsPropertyDiscovery';
+import { evaluateLocalityNews } from './localityNewsEvaluation';
+import { getLocalityNewsSnapshot } from './server/localityNewsSnapshot';
+import { enrichPublicCardPosters, type PublicCardData } from './publicCardPosters';
+
+async function enrichServerCardPosters<T extends { id: string }>(sb: SupabaseClient, rows: readonly T[]) {
+  noStore();
+  return enrichPublicCardPosters(sb, rows);
+}
 
 // Client Supabase dùng phía SERVER (RSC / generateMetadata / route handler).
 // Tạo MỚI mỗi lần gọi, KHÔNG singleton và KHÔNG persist session — tránh chia sẻ
@@ -27,11 +35,25 @@ export async function serverGetPublicAgentProfile(slug: string): Promise<PublicA
   }
 }
 
-export async function serverGetPublicAgentProfileListings(slug: string): Promise<PublicAgentListing[]> {
+export async function serverGetPublicAgentProfileListings(slug: string): Promise<PublicCardData<PublicAgentListing>[]> {
   try {
-    const { data, error } = await serverClient().rpc('public_get_agent_profile_listings', { p_slug: slug });
+    const sb = serverClient();
+    const { data, error } = await sb.rpc('public_get_agent_profile_listings', { p_slug: slug });
     if (error || !Array.isArray(data)) return [];
-    return data as PublicAgentListing[];
+    const listings = data as PublicAgentListing[];
+    const ids = [...new Set(listings.map(listing => listing.id))];
+    const byId = new Map<string, Partial<Property>>();
+    // Enrich only the profile's approved IDs; keep its membership and ordering on read failure.
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      try {
+        const { data: properties, error: readError } = await sb.from('public_properties')
+          .select(PROPERTY_SELECT).eq('is_active', true).in('id', ids.slice(offset, offset + 100));
+        if (!readError) for (const property of (properties ?? []) as unknown as Partial<Property>[]) {
+          if (property.id) byId.set(property.id, property);
+        }
+      } catch { /* The public profile projection remains the fallback. */ }
+    }
+    return enrichServerCardPosters(sb, listings.map(listing => ({ ...listing, ...byId.get(listing.id) })));
   } catch {
     return [];
   }
@@ -108,7 +130,7 @@ export async function serverGetPublicPropertyPanoramas(propertyId: string): Prom
     return [];
   }
 }
-export async function serverGetFeaturedProperties(): Promise<Property[]> {
+export async function serverGetFeaturedProperties(): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
@@ -116,13 +138,13 @@ export async function serverGetFeaturedProperties(): Promise<Property[]> {
       .select(PROPERTY_SELECT)
       .eq('is_active', true).eq('is_featured', true)
       .order('created_at', { ascending: false }).limit(12);
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
 }
 
-export async function serverGetHotProperties(): Promise<Property[]> {
+export async function serverGetHotProperties(): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
@@ -130,13 +152,13 @@ export async function serverGetHotProperties(): Promise<Property[]> {
       .select(PROPERTY_SELECT)
       .eq('is_active', true).eq('is_hot', true)
       .order('views', { ascending: false }).limit(8);
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
 }
 
-export async function serverGetRecentProperties(limit = 8): Promise<Property[]> {
+export async function serverGetRecentProperties(limit = 8): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
@@ -144,7 +166,7 @@ export async function serverGetRecentProperties(limit = 8): Promise<Property[]> 
       .select(PROPERTY_SELECT)
       .eq('is_active', true)
       .order('created_at', { ascending: false }).limit(limit);
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
@@ -209,8 +231,10 @@ export async function serverGetNewsContextualProperties(
       { areaId, districtId: article.district_id, wardName: ward?.name, neighborhoodSlug: neighborhood?.slug },
       limit,
     );
+    const enriched = await enrichServerCardPosters(sb, properties.map(item => item.property));
+    const byId = new Map(enriched.map(property => [property.id, property]));
     return {
-      properties,
+      properties: properties.map(item => ({ ...item, property: byId.get(item.property.id) ?? item.property })),
       locationLabel: neighborhood?.name ?? district?.name ?? area?.name ?? null,
     };
   } catch {
@@ -222,7 +246,7 @@ export async function serverGetNewsContextualProperties(
 // Đây là tồn kho sống: không để Next Data Cache giữ response PostgREST cũ giữa các
 // lần build/deploy. Ba route gọi helper này vì thế được render động để số lượng và
 // trang đầu phản ánh DB tại request hiện tại.
-export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', limit = LISTINGS_PER_PAGE): Promise<{ data: Property[]; total: number }> {
+export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', limit = LISTINGS_PER_PAGE): Promise<{ data: PublicCardData<Property>[]; total: number }> {
   noStore();
   try {
     const sb = serverClient();
@@ -235,7 +259,7 @@ export async function serverGetListings(listingType?: 'mua_ban' | 'cho_thue', li
       .limit(limit);
     if (listingType) q = q.eq('listing_type', listingType);
     const { data, count } = await q;
-    return { data: (data ?? []) as unknown as Property[], total: count ?? 0 };
+    return { data: await enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]), total: count ?? 0 };
   } catch {
     return { data: [], total: 0 };
   }
@@ -267,7 +291,7 @@ export interface ServerAreaListingScope {
   propertyTypeIds?: string[];
 }
 
-export async function serverGetAreaListings(areaId: string, limit = 12, scope: ServerAreaListingScope = {}): Promise<Property[]> {
+export async function serverGetAreaListings(areaId: string, limit = 12, scope: ServerAreaListingScope = {}): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     let q = sb
@@ -282,7 +306,7 @@ export async function serverGetAreaListings(areaId: string, limit = 12, scope: S
     if (scope.district) q = q.eq('district', scope.district);
     if (scope.propertyTypeIds?.length) q = q.in('property_type_id', scope.propertyTypeIds);
     const { data } = await q;
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
@@ -392,7 +416,7 @@ export async function serverGetPropertyTypeListings(
   propertyTypeId: string,
   limit = 12,
   scope: { listingType?: 'mua_ban' | 'cho_thue'; areaId?: string } = {}
-): Promise<Property[]> {
+): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     let q = sb
@@ -406,7 +430,7 @@ export async function serverGetPropertyTypeListings(
     if (scope.listingType) q = q.eq('listing_type', scope.listingType);
     if (scope.areaId) q = q.eq('area_id', scope.areaId);
     const { data } = await q;
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
@@ -514,7 +538,7 @@ export async function serverGetNeighborhoodBySlug(slug: string): Promise<Neighbo
   }
 }
 
-export async function serverGetNeighborhoodListings(slug: string, limit = 12): Promise<Property[]> {
+export async function serverGetNeighborhoodListings(slug: string, limit = 12): Promise<PublicCardData<Property>[]> {
   try {
     const sb = serverClient();
     const { data } = await sb
@@ -524,7 +548,7 @@ export async function serverGetNeighborhoodListings(slug: string, limit = 12): P
       .eq('neighborhood_slug', slug)
       .order('created_at', { ascending: false })
       .limit(limit);
-    return (data ?? []) as unknown as Property[];
+    return enrichServerCardPosters(sb, (data ?? []) as unknown as Property[]);
   } catch {
     return [];
   }
@@ -710,7 +734,33 @@ export async function serverGetNews(limit = 20, category?: string): Promise<News
   }
 }
 
-const NEWS_LIST_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,created_at,updated_at';
+const NEWS_LIST_SELECT = 'id,title,slug,excerpt,image_url,category,author,views,focus_keywords,geo_area,area_id,district_id,ward_id,created_at,updated_at';
+
+export type LocalityNewsResult = {
+  data: NewsListItem[];
+  total: number;
+  indexable: boolean;
+  available: boolean;
+  latestUpdatedAt: string | null;
+};
+
+export async function serverGetLocalityNews({
+  areaId,
+  geoAreaAllowlist,
+  limit = 12,
+}: {
+  areaId: string;
+  geoAreaAllowlist: ReadonlySet<string>;
+  limit?: number;
+}): Promise<LocalityNewsResult> {
+  if (!areaId || limit <= 0) return { data: [], total: 0, indexable: false, available: false, latestUpdatedAt: null };
+  try {
+    return { ...evaluateLocalityNews(await getLocalityNewsSnapshot(), areaId, geoAreaAllowlist, limit), available: true };
+  } catch {
+    return { data: [], total: 0, indexable: false, available: false, latestUpdatedAt: null };
+  }
+}
+
 
 export async function serverGetNewsPage({
   category,

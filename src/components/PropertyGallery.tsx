@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import { Heart, Image as ImageIcon } from 'lucide-react';
 import { buildPropertyGallery, buildPropertyImageAlt, getPropertyGalleryMeta } from '../lib/propertyImages';
 import type { Property } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
+import { normalizePublicHref, normalizePublicImageUrl } from '../lib/siteUrl';
 
 const PROPERTY_TYPE_FALLBACK = 'Bất động sản';
 
@@ -23,6 +24,7 @@ export function PropertyGallery({
   onToggleFavorite,
   onLinkClick,
   mobileList = false,
+  publicCard = false,
   className = '',
 }: {
   property: GalleryProperty;
@@ -34,24 +36,30 @@ export function PropertyGallery({
   showTotalPriceLabel?: boolean;
   isFavorited?: boolean;
   onToggleFavorite?: () => void;
-  onLinkClick?: () => void;
+  onLinkClick?: MouseEventHandler<HTMLAnchorElement>;
   mobileList?: boolean;
+  publicCard?: boolean;
   className?: string;
 }) {
-  const gallery = buildPropertyGallery(property.image_url, property.images);
-  const { imageCount, extraImageCount } = getPropertyGalleryMeta(property.image_url, property.images);
+  const publicImages = publicCard ? [...new Set([property.image_url, ...(property.images ?? [])]
+    .map(src => normalizePublicHref(normalizePublicImageUrl(src))).filter(Boolean))] : [];
+  const gallery = publicCard ? publicImages : buildPropertyGallery(property.image_url, property.images);
+  const { imageCount, extraImageCount } = publicCard
+    ? { imageCount: gallery.length, extraImageCount: Math.max(0, gallery.length - 3) }
+    : getPropertyGalleryMeta(property.image_url, property.images);
   const propertyType = property.property_types?.name?.trim() || (property.listing_type === 'cho_thue' ? 'Cho thuê' : PROPERTY_TYPE_FALLBACK);
   const hasMultipleImages = imageCount > 1;
   const visibleImages = gallery.slice(0, 3);
 
   const renderImage = (src: string, index: number, wrapperClassName: string, overlay?: ReactNode) => (
-    <div className={`relative min-h-0 overflow-hidden bg-gray-100 ${wrapperClassName}`}>
+    <div className={`relative isolate min-h-0 overflow-hidden bg-gray-100 ${wrapperClassName}`}>
+      {publicCard && <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-sm text-gray-600">Ảnh chưa có sẵn</span>}
       <SafeImage
         src={src}
         alt={buildPropertyImageAlt(property, index)}
         fill
         sizes={sizes}
-        className="object-cover transition-transform duration-500 group-hover:scale-105"
+        className={publicCard ? 'z-10 object-cover' : 'object-cover transition-transform duration-500 group-hover:scale-105'}
       />
       {overlay}
     </div>
@@ -67,7 +75,9 @@ export function PropertyGallery({
       />
       {mobileList && <div className="h-full sm:hidden">{renderImage(visibleImages[0], 0, 'h-full w-full')}</div>}
       <div className={mobileList ? 'hidden h-full sm:block' : 'h-full'}>
-      {visibleImages.length === 1 ? (
+      {visibleImages.length === 0 ? (
+        <div className="flex h-full items-center justify-center text-sm text-gray-600">Ảnh chưa có sẵn</div>
+      ) : visibleImages.length === 1 ? (
         renderImage(visibleImages[0], 0, 'h-full w-full')
       ) : visibleImages.length === 2 ? (
         <div className="grid h-full grid-cols-5 gap-1">
@@ -100,23 +110,30 @@ export function PropertyGallery({
       )}
       <div className="absolute right-2 top-2 z-[3] flex items-center gap-1.5">
         {mobileList ? <span className="hidden sm:contents">{topRight}</span> : topRight}
-        {hasMultipleImages && (
-          <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} items-center gap-1 rounded-full bg-gray-900/70 px-2.5 py-1 text-[10px] font-bold text-white`}>
+        {!publicCard && hasMultipleImages && (
+          <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 ${publicCard ? 'text-xs' : 'text-[10px]'} font-bold text-white`}>
             <ImageIcon className="h-3 w-3" />{imageCount} ẢNH
           </span>
         )}
-        {onToggleFavorite && (
+        {!publicCard && onToggleFavorite && (
           <button
             type="button"
             onClick={event => { event.preventDefault(); event.stopPropagation(); onToggleFavorite(); }}
             aria-label={isFavorited ? 'Bỏ lưu tin đăng' : 'Lưu tin đăng'}
             aria-pressed={isFavorited}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-500 shadow-md transition hover:scale-105 hover:text-red-500"
+            className="flex h-8 w-8 text-gray-500 hover:scale-105 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:text-red-700"
           >
             <Heart className={`h-4 w-4 ${isFavorited ? 'fill-red-500 text-red-500' : ''}`} />
           </button>
         )}
       </div>
+      {publicCard && imageCount > 0 && <span className="absolute bottom-2 left-2 z-[2] inline-flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-xs font-bold text-white"><ImageIcon className="h-3 w-3" />{imageCount} ẢNH</span>}
+      {publicCard && onToggleFavorite && <button type="button"
+        onClick={event => { event.preventDefault(); event.stopPropagation(); onToggleFavorite(); }}
+        aria-label={isFavorited ? 'Bỏ lưu tin đăng' : 'Lưu tin đăng'} aria-pressed={isFavorited}
+        className="absolute bottom-2 right-2 z-[3] flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-gray-700 shadow-md hover:text-red-700">
+        <Heart className={`h-4 w-4 ${isFavorited ? 'fill-red-500 text-red-500' : ''}`} />
+      </button>}
       {bottomLeft}
       {showTotalPriceLabel && (
         <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} absolute bottom-2 right-2 z-[2] rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white`}>

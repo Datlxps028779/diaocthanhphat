@@ -50,4 +50,41 @@ describe('listingInitialDataScopeMatches', () => {
       { listingType: 'mua_ban' },
     )).toBe(true);
   });
+
+  it('accepts an exact locality scope seed resolved by route IDs', () => {
+    const scope = {
+      listingType: 'mua_ban' as const,
+      areaId: 'area-1',
+      districtId: 'district-1',
+      wardId: 'ward-1',
+      typeIds: ['type-1'],
+      salePriceBand: 'tu-1-den-duoi-2-ty' as const,
+    };
+    expect(listingInitialDataScopeMatches(scope, { ...scope })).toBe(true);
+  });
+
+  it.each([
+    { districtId: 'district-2' },
+    { wardId: 'ward-2' },
+    { salePriceBand: 'tu-5-ty' as const },
+    { districtId: undefined },
+    { salePriceBand: undefined },
+  ])('rejects a locality seed whose ID/band dimension drifted: %o', patch => {
+    const scope = {
+      listingType: 'mua_ban' as const,
+      areaId: 'area-1',
+      districtId: 'district-1',
+      wardId: 'ward-1',
+      salePriceBand: 'tu-1-den-duoi-2-ty' as const,
+    };
+    expect(listingInitialDataScopeMatches(scope, { ...scope, ...patch })).toBe(false);
+  });
+
+  it('does not let a name-only seed claim an ID-scoped view', () => {
+    // Route địa phương truy vấn theo ward_id; seed chỉ có tên ward KHÔNG được dùng lại.
+    expect(listingInitialDataScopeMatches(
+      { listingType: 'mua_ban', areaId: 'area-1', ward: 'An Phú' },
+      { listingType: 'mua_ban', areaId: 'area-1', ward: 'An Phú', wardId: 'ward-1' },
+    )).toBe(false);
+  });
 });

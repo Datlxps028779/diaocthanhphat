@@ -52,7 +52,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteSub = useSetting('site_logo_sub', 'Nền tảng bất động sản uy tín');
   const logoUrl = useSetting('site_logo_url', '');
   const hotline = useSetting('phone_hotline', '');
-  const address = useSetting('address', '');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -84,21 +83,17 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       const trigger = (event.target as HTMLElement).closest('[data-desktop-menu]')?.querySelector<HTMLButtonElement>('button[aria-expanded]');
       closeMenus();
       if (mobileOpen) mobileTrigger.current?.focus(); else trigger?.focus();
-    }} className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${scrolled ? 'bg-white shadow-md' : 'bg-white shadow-sm'}`}>
+    }} className={`fixed top-0 inset-x-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xl transition-all duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
       <div ref={barsRef}>
-      {/* Top bar */}
-      <div className="bg-red-600 text-white text-xs py-1 px-4 hidden md:flex items-center justify-between">
+      <div className="bg-white text-gray-900 text-xs px-4 hidden md:flex h-[37px] items-center justify-between border-b border-orange-600">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{hotline ? `Hotline: ${hotline}` : 'Liên hệ qua biểu mẫu'}</span>
-          <span className="opacity-60">|</span>
-          <span>{address || 'Thông tin liên hệ đang được cập nhật'}</span>
+          <span>Đăng tin miễn phí — tiếp cận hàng nghìn người mua mỗi ngày</span>
+          <Link href="/dang-tin" className="font-semibold text-orange-600 hover:underline">Đăng ngay →</Link>
         </div>
-        <div className="flex items-center gap-3 text-red-100">
-          <span>{useSetting('support_hours', 'Hỗ trợ 7:00 – 21:00')}</span>
-        </div>
+        <span>{hotline || 'Liên hệ qua biểu mẫu'}</span>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 py-4 h-[96px] flex items-center justify-between gap-3">
         <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
           {logoUrl && !logoError ? (
             <img
@@ -567,11 +562,11 @@ export function Footer({ areas, districts = [], propertyTypes = [], onNavigate }
   );
 }
 
-export function FloatingButtons({ onNavigate, profilePage = false }: { onNavigate?: (p: Page) => void; profilePage?: boolean }) {
+export function FloatingButtons({ onNavigate, profilePage = false, localityActionsTarget = null }: { onNavigate?: (p: Page) => void; profilePage?: boolean; localityActionsTarget?: HTMLElement | null }) {
   return (
     <>
-      <RecentlyViewedDrawer />
-      <AiSearchChat onNavigate={onNavigate} profilePage={profilePage} />
+      <RecentlyViewedDrawer localityActionsTarget={localityActionsTarget} />
+      <AiSearchChat onNavigate={onNavigate} profilePage={profilePage} localityActionsTarget={localityActionsTarget} />
     </>
   );
 }

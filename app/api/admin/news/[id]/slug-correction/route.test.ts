@@ -3,13 +3,17 @@ import { NextRequest } from 'next/server';
 
 const requireOwnerMock = vi.hoisted(() => vi.fn());
 const adminClientMock = vi.hoisted(() => vi.fn());
-const revalidatePathMock = vi.hoisted(() => vi.fn());
+const callerClientMock = vi.hoisted(() => vi.fn());
+const propagateMock = vi.hoisted(() => vi.fn());
+const collectPathsMock = vi.hoisted(() => vi.fn(() => ['/khu-vuc/binh-duong', '/khu-vuc/binh-duong/tin-tuc']));
 
 vi.mock('@/lib/server/requireAdmin', () => ({
   requireOwner: requireOwnerMock,
   adminClient: adminClientMock,
+  callerClient: callerClientMock,
 }));
-vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
+vi.mock('@/lib/server/contentRevalidation', () => ({ collectContentRevalidationPaths: collectPathsMock }));
+vi.mock('@/lib/server/publicIndexing', () => ({ propagatePublicIndexing: propagateMock }));
 
 import { POST } from './route';
 
@@ -25,10 +29,31 @@ function request(body: unknown, token = 'owner-token') {
   });
 }
 
+function mockCaller() {
+  const beforeQuery: Record<string, unknown> = {};
+  beforeQuery.select = vi.fn(() => beforeQuery);
+  beforeQuery.eq = vi.fn(() => beforeQuery);
+  beforeQuery.maybeSingle = vi.fn().mockResolvedValue({ data: { id: ARTICLE_ID, slug: OLD_SLUG, category: 'Thị trường', is_published: true, area_id: 'area-1', geo_area: 'Bình Dương' }, error: null });
+  callerClientMock.mockReturnValue({
+    from: vi.fn((table: string) => table === 'news'
+      ? beforeQuery
+      : { select: vi.fn(async () => ({ data: table === 'areas' ? [{ id: 'area-1', slug: 'binh-duong', name: 'Bình Dương' }] : [{ label: 'Thị trường', slug: 'thi-truong' }], error: null })) }),
+  });
+}
 beforeEach(() => {
   requireOwnerMock.mockReset();
   adminClientMock.mockReset();
-  revalidatePathMock.mockReset();
+  callerClientMock.mockReset();
+  propagateMock.mockReset().mockResolvedValue({
+    paths: ['/tin-tuc/old', '/tin-tuc/new'],
+    freshness: { status: 'succeeded', queuedCount: 4, error: null },
+    searchVisibility: { status: 'succeeded', runId: 'run-1', summary: null, error: null },
+  });
+  collectPathsMock.mockReset().mockReturnValue([
+    '/khu-vuc/binh-duong',
+    '/khu-vuc/binh-duong/tin-tuc',
+    '/tin-tuc/danh-muc/thi-truong',
+  ]);
 });
 
 describe('POST /api/admin/news/[id]/slug-correction', () => {
@@ -52,6 +77,7 @@ describe('POST /api/admin/news/[id]/slug-correction', () => {
 
   it('gọi RPC server boundary và chỉ revalidate public paths, không gọi AI/RAG', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, userId: 'owner-1', token: 'owner-token' });
+    mockCaller();
     const rpc = vi.fn().mockResolvedValue({
       data: [{
         id: ARTICLE_ID,
@@ -78,21 +104,43 @@ describe('POST /api/admin/news/[id]/slug-correction', () => {
       p_new_slug: NEW_SLUG,
       p_actor_id: 'owner-1',
     });
-    expect(revalidatePathMock).toHaveBeenCalledWith(`/tin-tuc/${OLD_SLUG}`);
-    expect(revalidatePathMock).toHaveBeenCalledWith(`/tin-tuc/${NEW_SLUG}`);
-    expect(revalidatePathMock).toHaveBeenCalledWith('/tin-tuc');
-    expect(revalidatePathMock).toHaveBeenCalledWith('/tin-tuc/danh-muc/thi-truong');
-    expect(json.propagation).toEqual({ searchVisibility: 'not_started', freshness: 'not_started', aiRag: 'not_called' });
+    expect(propagateMock).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: 'owner-1',
+      paths: expect.arrayContaining([
+        `/tin-tuc/${OLD_SLUG}`,
+        `/tin-tuc/${NEW_SLUG}`,
+        '/tin-tuc',
+        '/tin-tuc/danh-muc/thi-truong',
+        '/khu-vuc/binh-duong',
+        '/khu-vuc/binh-duong/tin-tuc',
+      ]),
+      content: expect.objectContaining({
+        entity: 'news',
+        action: 'update',
+        targets: [expect.objectContaining({
+          current: expect.objectContaining({
+            area_id: 'area-1',
+            geo_area: 'Bình Dương',
+            slug: NEW_SLUG,
+          }),
+        })],
+      }),
+    }));
+    expect(json.propagation).toMatchObject({
+      freshness: { status: 'succeeded' },
+      searchVisibility: { status: 'succeeded' },
+    });
   });
 
   it('trả conflict rõ ràng khi RPC báo slug trùng', async () => {
     requireOwnerMock.mockResolvedValue({ ok: true, userId: 'owner-1', token: 'owner-token' });
+    mockCaller();
     adminClientMock.mockReturnValue({ rpc: vi.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate' } }) });
 
     const response = await POST(request({ expectedOldSlug: OLD_SLUG, newSlug: NEW_SLUG }), { params: { id: ARTICLE_ID } });
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: 'Slug mới đã được bài viết khác sử dụng.', code: 'SLUG_CONFLICT' });
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+    expect(propagateMock).not.toHaveBeenCalled();
   });
 });

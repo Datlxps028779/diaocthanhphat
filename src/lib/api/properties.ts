@@ -4,13 +4,20 @@ import { buildProductPath } from '../productPath';
 import { normalizeAdvisorMatchReasons, type AdvisorMatchReasonCode } from '../rankingPolicy';
 import { mergeRelatedPropertyCandidates, rankRelatedProperties, type RelatedProperty } from '../relatedProperties';
 import { normalizeListingTitle } from '../listingTitle';
+import { localityPriceBandRange, requireSalePriceBandFilter, salePriceBandPostgrestFilter, type LocalityPriceBand } from '../localityListingScope';
 import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
+import { enrichPublicCardPosters, type PublicCardData } from '../publicCardPosters';
 import { propertyPanoramaUrl, deletePanoramaObject, uploadPanoramaObject } from './media';
 
 export type PropertySort = 'newest' | 'price_asc' | 'price_desc' | 'views' | 'relevance';
 export interface PropertyFilters {
   listingType?: string; areaId?: string; typeId?: string; typeIds?: string[]; typePathSlug?: string; city?: string; keyword?: string;
   district?: string; ward?: string;
+  // Định danh phạm vi địa phương do ROUTE quyết định (không phải tên). Có ID thì
+  // query theo ID; `district`/`ward` theo tên vẫn giữ cho luồng tìm kiếm thường.
+  districtId?: string; wardId?: string;
+  // Khoảng giá bán allowlist của landing địa phương (VND, cận trên độc quyền).
+  salePriceBand?: LocalityPriceBand;
   minPrice?: number; maxPrice?: number; minArea?: number; maxArea?: number;
   bedrooms?: string; direction?: string; legal?: string; loan?: boolean;
   isFeatured?: boolean; isHot?: boolean;
@@ -22,7 +29,11 @@ export const PUBLIC_PROPERTY_SELECT = 'id, title, description, price, price_unit
 
 export type PropertyWrite = Omit<Property, 'id' | 'created_at' | 'updated_at' | 'views' | 'areas' | 'property_types' | 'schema_markup'>;
 
-export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, city, district, legal_status, image_url, slug, public_code, neighborhood_slug, views, areas(id,name,slug), property_types(id,name,slug)';
+// Projection công khai cho luồng AI Advisor / thẻ card. Chỉ gồm field công khai (đều nằm
+// trong PUBLIC_PROPERTY_SELECT, không có field nào thuộc ADVISOR_PRIVATE_PROPERTY_FIELDS):
+// đủ để buildPropertyCardModel dựng đủ thông tin thẻ (giá, đơn giá/m², loại giao dịch,
+// diện tích, phòng ngủ/tắm, pháp lý, địa chỉ, ảnh, ngày đăng) mà KHÔNG lộ liên hệ riêng tư.
+export const ADVISOR_PROPERTY_SELECT = 'id, title, price, price_unit, price_label, price_per_month, listing_type, area_sqm, bedrooms, bathrooms, address, city, district, ward, legal_status, image_url, images, created_at, slug, public_code, neighborhood_slug, views, areas(id,name,slug), property_types(id,name,slug)';
 
 export const ADVISOR_PRIVATE_PROPERTY_FIELDS = [
   'contact_name',
@@ -59,15 +70,32 @@ export interface PublicPropertyFilterOperation {
   value: unknown;
 }
 
+// Biểu thức .or() cho khoảng giá bán của landing địa phương. Biên khoảng sống ở
+// localityListingScope (một nguồn chân lý cho cả client lẫn SSR) và ở đây chỉ được
+// dịch sang cú pháp PostgREST. Cột `price` lưu NHIỀU đơn vị (tỷ/triệu) nên biểu thức
+// phải chuẩn hóa `price_unit` — xem salePriceBandPostgrestFilter.
+// Mã khoảng lạ → null (bỏ điều kiện). Nơi gọi phải coi null là phạm vi không hợp lệ
+// và 404, tuyệt đối không được hiểu thành "mọi mức giá".
+export function salePriceBandOrExpression(band: LocalityPriceBand | undefined): string | null {
+  return salePriceBandPostgrestFilter(band);
+}
+
 export function publicPropertyFilterOperations(filters?: PropertyFilters): PublicPropertyFilterOperation[] {
   const operations: PublicPropertyFilterOperation[] = [];
   if (filters?.listingType && filters.listingType !== 'all') operations.push({ method: 'eq', column: 'listing_type', value: filters.listingType });
   if (filters?.areaId) operations.push({ method: 'eq', column: 'area_id', value: filters.areaId });
   if (filters?.typeId) operations.push({ method: 'eq', column: 'property_type_id', value: filters.typeId });
-  if (filters?.typeIds?.length) operations.push({ method: 'in', column: 'property_type_id', value: filters.typeIds });
+  // `typeIds` RỖNG nhưng CÓ MẶT (mảng rỗng) nghĩa là nhóm loại không có thành viên nào
+  // ⇒ phải khớp 0 dòng. Bỏ qua mảng rỗng sẽ biến phạm vi nhóm rỗng thành cả tỉnh.
+  if (filters?.typeIds !== undefined) operations.push({ method: 'in', column: 'property_type_id', value: filters.typeIds });
+  // Định danh hành chính theo ID (phạm vi landing địa phương). Không thay thế nhánh
+  // theo tên bên dưới — hai hợp đồng khác nhau, một cái là phạm vi route, một cái
+  // là ô lọc tìm kiếm của người dùng.
+  if (filters?.districtId) operations.push({ method: 'eq', column: 'district_id', value: filters.districtId });
+  if (filters?.wardId) operations.push({ method: 'eq', column: 'ward_id', value: filters.wardId });
   if (filters?.city) operations.push({ method: 'eq', column: 'city', value: filters.city });
-  if (filters?.district) operations.push({ method: 'eq', column: 'district', value: filters.district });
-  if (filters?.ward) operations.push({ method: 'eq', column: 'ward', value: filters.ward });
+  if (filters?.district && !filters.districtId) operations.push({ method: 'eq', column: 'district', value: filters.district });
+  if (filters?.ward && !filters.wardId) operations.push({ method: 'eq', column: 'ward', value: filters.ward });
   if (filters?.keyword) {
     // Sanitize: loại ký tự cấu trúc của PostgREST filter (, ( ) \) để keyword không
     // phá cú pháp .or() và chèn điều kiện lạ (vd lộ tin is_active=false).
@@ -77,6 +105,13 @@ export function publicPropertyFilterOperations(filters?: PropertyFilters): Publi
       value: `title.ilike.%${kw}%,address.ilike.%${kw}%,city.ilike.%${kw}%,district.ilike.%${kw}%`,
     });
   }
+  // Khoảng giá của landing địa phương. PHẢI là một .or() duy nhất trên cột `price`
+  // (bán): dữ liệu giá bán lưu bằng nhiều đơn vị (tỷ/triệu) nên không được so
+  // `price` thô với VND. Cận trên ĐỘC QUYỀN để bốn khoảng không chồng lấn.
+  // Có khai band mà mã không dịch được ⇒ NÉM LỖI, không bỏ điều kiện: bỏ đi sẽ trả về
+  // toàn bộ danh sách cho một URL khai một khoảng giá cụ thể.
+  const bandExpression = requireSalePriceBandFilter(filters?.salePriceBand);
+  if (bandExpression) operations.push({ method: 'or', value: bandExpression });
   const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
   if (filters?.minPrice !== undefined) operations.push({ method: 'gte', column: priceColumn, value: filters.minPrice });
   if (filters?.maxPrice !== undefined) operations.push({ method: 'lte', column: priceColumn, value: filters.maxPrice });
@@ -99,26 +134,25 @@ function applyPublicPropertyFilters(query: any, filters?: PropertyFilters): any 
   return query;
 }
 
+function applyPublicPropertyOrder(q: any, filters?: PropertyFilters): any {
+  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
+  if (filters?.sort === 'price_asc') return q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
+  if (filters?.sort === 'price_desc') return q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
+  if (filters?.sort === 'views') return q.order('views', { ascending: false }).order('id', { ascending: false });
+  return q.order('created_at', { ascending: false }).order('id', { ascending: false });
+}
+
 function buildPropertyQuery(filters?: PropertyFilters) {
-  let q = applyPublicPropertyFilters(
+  return applyPublicPropertyOrder(applyPublicPropertyFilters(
     supabase
       .from('public_properties')
       .select(PUBLIC_PROPERTY_SELECT, { count: 'exact' })
       .eq('is_active', true),
     filters,
-  );
-
-  const priceColumn = filters?.listingType === 'cho_thue' ? 'price_per_month' : 'price';
-  // nếu không đổi trang có thể lặp hoặc bỏ sót tin.
-  if (filters?.sort === 'price_asc') q = q.order(priceColumn, { ascending: true }).order('id', { ascending: true });
-  else if (filters?.sort === 'price_desc') q = q.order(priceColumn, { ascending: false }).order('id', { ascending: false });
-  else if (filters?.sort === 'views') q = q.order('views', { ascending: false }).order('id', { ascending: false });
-  else q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
-
-  return q;
+  ), filters);
 }
 
-export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+export async function getAllProperties(filters?: PropertyFilters): Promise<{ data: PublicCardData<Property>[]; total: number }> {
   if (filters?.keyword || filters?.sort === 'relevance') {
     return getRankedPropertyMatches(filters);
   }
@@ -136,10 +170,10 @@ export async function getAllProperties(filters?: PropertyFilters): Promise<{ dat
     }
     throw error;
   }
-  return { data: (data ?? []) as Property[], total: count ?? 0 };
+  return { data: await enrichPublicCardPosters(supabase, (data ?? []) as Property[]), total: count ?? 0 };
 }
 
-export async function getPublicPropertiesByIds(ids: string[]): Promise<Property[]> {
+export async function getPublicPropertiesByIds(ids: string[]): Promise<PublicCardData<Property>[]> {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   if (uniqueIds.length === 0) return [];
   const { data, error } = await supabase
@@ -149,10 +183,10 @@ export async function getPublicPropertiesByIds(ids: string[]): Promise<Property[
     .in('id', uniqueIds);
   if (error) throw error;
   const byId = new Map((data ?? []).map(row => [row.id, row as unknown as Property]));
-  return uniqueIds.flatMap(id => {
+  return enrichPublicCardPosters(supabase, uniqueIds.flatMap(id => {
     const property = byId.get(id);
     return property ? [property] : [];
-  });
+  }));
 }
 
 interface RankedMatch { id: string; rank: number; total_count: number }
@@ -167,21 +201,11 @@ interface AdvisorMatch {
 async function getRankedPropertyMatches(
   filters: PropertyFilters,
   propertySelect = PUBLIC_PROPERTY_SELECT,
-): Promise<{ data: Property[]; total: number }> {
+): Promise<{ data: PublicCardData<Property>[]; total: number }> {
   const limit = filters.limit ?? 20;
   const page = filters.page ?? 1;
-  if (filters?.typeIds?.length) {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 20;
-    const { data, error, count } = await applyPublicPropertyFilters(
-      supabase.from('public_properties').select(propertySelect, { count: 'exact' }).eq('is_active', true),
-      filters,
-    ).order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
-    if (error) throw new PropertySearchUnavailableError();
-    return { data: (data ?? []) as Property[], total: count ?? 0 };
-  }
-
+  requireSalePriceBandFilter(filters.salePriceBand);
+  const saleBand = localityPriceBandRange(filters.salePriceBand);
   const bedrooms = filters.bedrooms && filters.bedrooms !== 'all' ? Number(filters.bedrooms) : undefined;
   const { data: matches, error } = await supabase.rpc('search_property_matches', {
     kw: filters.keyword ?? null,
@@ -189,8 +213,8 @@ async function getRankedPropertyMatches(
     f_area_id: filters.areaId ?? null,
     f_type_id: filters.typeId ?? null,
     f_city: filters.city ?? null,
-    f_district: filters.district ?? null,
-    f_ward: filters.ward ?? null,
+    f_district: filters.districtId ? null : filters.district ?? null,
+    f_ward: filters.wardId ? null : filters.ward ?? null,
     f_min_price: filters.minPrice ?? null,
     f_max_price: filters.maxPrice ?? null,
     f_min_area: filters.minArea ?? null,
@@ -203,6 +227,11 @@ async function getRankedPropertyMatches(
     f_sort: filters.sort ?? (filters.keyword ? 'relevance' : 'newest'),
     f_limit: limit,
     f_offset: (page - 1) * limit,
+    f_district_id: filters.districtId ?? null,
+    f_ward_id: filters.wardId ?? null,
+    f_type_ids: filters.typeIds ?? null,
+    f_sale_min_vnd: saleBand?.min ?? null,
+    f_sale_max_vnd: saleBand?.max ?? null,
   });
   if (error) throw new PropertySearchUnavailableError();
   const rows = (matches ?? []) as RankedMatch[];
@@ -218,14 +247,14 @@ async function getRankedPropertyMatches(
     const property = p as unknown as Property;
     return [property.id, property];
   }));
-  return { data: ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p)), total: rows[0]?.total_count ?? rows.length };
+  return { data: await enrichPublicCardPosters(supabase, ids.map(id => byId.get(id)).filter((p): p is Property => Boolean(p))), total: rows[0]?.total_count ?? rows.length };
 }
 
-export async function getAdvisorCatalogueMatches(filters: PropertyFilters): Promise<{ data: Property[]; total: number }> {
+export async function getAdvisorCatalogueMatches(filters: PropertyFilters): Promise<{ data: PublicCardData<Property>[]; total: number }> {
   return getRankedPropertyMatches(filters, ADVISOR_PROPERTY_SELECT);
 }
 
-export type AdvisorMatchedProperty = Property & {
+export type AdvisorMatchedProperty = PublicCardData<Property> & {
   matchScore: number;
   matchIntentScore: number;
   matchReasons: AdvisorMatchReasonCode[];
@@ -240,7 +269,7 @@ export function mapAdvisorMatchMetadata(row: AdvisorMatch): Pick<AdvisorMatchedP
 }
 
 export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ data: AdvisorMatchedProperty[]; total: number }> {
-  if (filters.typeIds?.length) {
+  if (filters.typeIds !== undefined || filters.districtId || filters.wardId || filters.salePriceBand) {
     const result = await getRankedPropertyMatches(filters, ADVISOR_PROPERTY_SELECT);
     return {
       data: result.data.map(property => ({
@@ -282,22 +311,22 @@ export async function getAdvisorMatches(filters: PropertyFilters): Promise<{ dat
     return [property.id, property];
   }));
   return {
-    data: ids
+    data: await enrichPublicCardPosters(supabase, ids
       .map(id => byId.get(id))
       .filter((p): p is Property => Boolean(p))
       .map(p => ({
         ...p,
         ...(metadata.get(p.id) ?? { matchScore: 0, matchIntentScore: 0, matchReasons: [] }),
-      })),
+      }))),
     total: rows[0]?.total_count ?? rows.length,
   };
 }
 
-export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise<Property[]> {
+export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise<PublicCardData<Property>[]> {
   const q = applyPublicPropertyFilters(
     supabase
       .from('public_properties')
-      .select('id, title, price, price_per_month, price_label, price_unit, city, district, ward, area_sqm, bedrooms, direction, legal_status, latitude, longitude, image_url, is_featured, is_hot, area_id, property_type_id, listing_type')
+      .select(PUBLIC_PROPERTY_SELECT)
       .eq('is_active', true)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null),
@@ -305,7 +334,7 @@ export async function getAllPropertiesForMap(filters?: PropertyFilters): Promise
   );
   const { data, error } = await q.limit(1000);
   if (error) throw error;
-  return (data ?? []) as Property[];
+  return enrichPublicCardPosters(supabase, (data ?? []) as Property[]);
 }
 
 // Mẫu tham chiếu cho định giá: BĐS cùng khu vực/loại, chỉ lấy field giá + diện tích.
@@ -338,31 +367,31 @@ export async function getPropertyOptions(limit = 300): Promise<
   return (data ?? []) as { id: string; title: string; price: number; price_unit: string; price_label: string | null; area_sqm: number | null }[];
 }
 
-export async function getFeaturedProperties(): Promise<Property[]> {
+export async function getFeaturedProperties(): Promise<PublicCardData<Property>[]> {
   const { data } = await supabase
     .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_featured', true)
     .order('created_at', { ascending: false }).limit(12);
-  return (data ?? []) as unknown as Property[];
+  return enrichPublicCardPosters(supabase, (data ?? []) as unknown as Property[]);
 }
 
-export async function getHotProperties(): Promise<Property[]> {
+export async function getHotProperties(): Promise<PublicCardData<Property>[]> {
   const { data } = await supabase
     .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true).eq('is_hot', true)
     .order('views', { ascending: false }).limit(8);
-  return (data ?? []) as unknown as Property[];
+  return enrichPublicCardPosters(supabase, (data ?? []) as unknown as Property[]);
 }
 
-export async function getRecentProperties(limit = 8): Promise<Property[]> {
+export async function getRecentProperties(limit = 8): Promise<PublicCardData<Property>[]> {
   const { data } = await supabase
     .from('public_properties')
     .select(PUBLIC_PROPERTY_SELECT)
     .eq('is_active', true)
     .order('created_at', { ascending: false }).limit(limit);
-  return (data ?? []) as unknown as Property[];
+  return enrichPublicCardPosters(supabase, (data ?? []) as unknown as Property[]);
 }
 
 export async function getPropertyById(id: string): Promise<Property | null> {
@@ -547,7 +576,7 @@ export async function adminGetPropertyEngagement(propertyIds?: string[]): Promis
 // Lấy các tầng liên quan riêng trước khi xếp hạng, để cửa sổ "mới nhất toàn kho"
 // không làm rơi tin cũ hơn nhưng cùng quận/loại. Mỗi query vẫn bị chặn payload;
 // rankRelatedProperties là nguồn chân lý cuối cùng cho thứ tự hiển thị.
-export async function getRelatedProperties(property: Property, limit = 6): Promise<RelatedProperty[]> {
+export async function getRelatedProperties(property: Property, limit = 6): Promise<PublicCardData<RelatedProperty>[]> {
   const candidateLimit = Math.max(24, Math.min(60, limit * 8));
   const select = PUBLIC_PROPERTY_SELECT;
   const baseQuery = () => supabase
@@ -579,7 +608,7 @@ export async function getRelatedProperties(property: Property, limit = 6): Promi
   const candidates = mergeRelatedPropertyCandidates(
     ...results.map(result => (result.data ?? []) as Property[]),
   );
-  return rankRelatedProperties(property, candidates, limit);
+  return enrichPublicCardPosters(supabase, rankRelatedProperties(property, candidates, limit));
 }
 
 // ─── Properties (admin) ───────────────────────────────────────────────────────
@@ -719,7 +748,7 @@ export function buildPropertyPath(p: {
 export async function createProperty(p: PropertyWrite): Promise<Property> {
   const title = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   const slug = (p.slug && p.slug.trim()) || buildUniquePropertySlug(title);
-  const { schema_markup: _schemaMarkup, ...safePayload } = p as PropertyWrite & { schema_markup?: unknown };
+  const { schema_markup: _schemaMarkup, cardPoster: _cardPoster, ...safePayload } = p as PropertyWrite & { schema_markup?: unknown; cardPoster?: unknown };
   const { data, error } = await supabase.from('properties').insert({ ...safePayload, title, slug }).select().single();
   if (error) throw error;
   const property = data as Property;
@@ -736,7 +765,7 @@ export async function updateProperty(id: string, p: Partial<Omit<Property, 'sche
   const patch = typeof p.title === 'string'
     ? { ...p, title: normalizeListingTitle(p.title, [p.city ?? '', p.district ?? '', p.ward ?? '']).value }
     : p;
-  const { schema_markup: _schemaMarkup, ...safePatch } = patch as typeof patch & { schema_markup?: unknown };
+  const { schema_markup: _schemaMarkup, cardPoster: _cardPoster, ...safePatch } = patch as typeof patch & { schema_markup?: unknown; cardPoster?: unknown };
   const { data, error } = await supabase
     .from('properties')
     .update({ ...safePatch, updated_at: new Date().toISOString() })

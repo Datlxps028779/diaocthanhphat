@@ -13,13 +13,24 @@ import { CompareBar } from './CompareBar';
 
 // Shell dùng chung cho mọi trang nội dung (trừ home có shell riêng, và admin).
 // Tái tạo phần Header/Footer/FloatingButtons + auth modal của App.tsx cũ.
-export function SiteChrome({ currentPage, children, profilePage = false }: { currentPage: Page; children: React.ReactNode; profilePage?: boolean }) {
+export function SiteChrome({ currentPage, children, profilePage = false, localityActions = false, localitySubnav }: { currentPage: Page; children: React.ReactNode; profilePage?: boolean; localityActions?: boolean; localitySubnav?: React.ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [areas, setAreas] = useState<Area[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
   const [authModal, setAuthModal] = useState<{ mode: 'login' | 'register' } | null>(null);
+  const [actionsRail, setActionsRail] = useState<HTMLDivElement | null>(null);
+  const [mobileActions, setMobileActions] = useState(false);
+
+  useEffect(() => {
+    if (!localityActions) return;
+    const media = window.matchMedia('(max-width: 639px)');
+    const update = () => setMobileActions(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [localityActions]);
 
   useEffect(() => { getAreas().then(setAreas).catch(() => {}); }, []);
   // Footer liệt kê quận/huyện theo tỉnh nên cần cả districts, tải rời để không chặn header.
@@ -47,9 +58,13 @@ export function SiteChrome({ currentPage, children, profilePage = false }: { cur
         onShowAuth={(mode) => setAuthModal({ mode })}
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />
-      <div className="pt-[var(--cnv-header-height)]">{children}</div>
+      <div className="pt-[var(--cnv-header-height)]">
+        {localitySubnav}
+        {localityActions && <div ref={setActionsRail} role="group" aria-label="Công cụ hỗ trợ tìm nhà" className="flex min-h-16 flex-wrap items-center justify-end gap-2 border-b border-gray-100 bg-white px-4 py-2 sm:hidden" />}
+        {children}
+      </div>
       <Footer areas={areas} districts={districts} propertyTypes={propertyTypes} onNavigate={navigate} />
-      <FloatingButtons onNavigate={navigate} profilePage={profilePage} />
+      <FloatingButtons onNavigate={navigate} profilePage={profilePage} localityActionsTarget={localityActions && mobileActions ? actionsRail : null} />
       <CompareBar />
       {authModal && (
         <UserAuthModal

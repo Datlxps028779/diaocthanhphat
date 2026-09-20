@@ -5,10 +5,9 @@ import { isHtmlContent } from '../lib/markdown';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { pickOverallStat, formatPricePerSqm, buildPriceAnswer } from '../lib/priceStatsFormat';
 import { PriceStatsBlock } from '../components/PriceStatsBlock';
-import { buildProductPath } from '../lib/productPath';
 import { districtDisplaySlug } from '../lib/areaPath';
 import { ReadableContent } from '../components/ReadableContent';
-import { formatPropertyPrice } from '../lib/listingPrice';
+import { PropertyCard } from '../components/property/PropertyCard';
 
 // Server component (KHÔNG 'use client') — render toàn bộ entity page phía server để
 // HTML tĩnh, sạch, dễ cho AI trích xuất (ưu tiên AIO). Nội dung mô tả/tiện ích/hạ
@@ -44,13 +43,6 @@ type Props = {
 
 const DEFAULT_HERO = 'https://images.pexels.com/photos/1642125/pexels-photo-1642125.jpeg?auto=compress&w=1400';
 
-function priceText(p: Pick<Property, 'price' | 'price_unit' | 'price_label' | 'price_per_month' | 'listing_type'>): string {
-  return formatPropertyPrice(p);
-}
-function propertyHref(p: Property): string {
-  return buildProductPath(p);
-}
-
 function renderContentBlock(block: PageBlock) {
   const value = block.value?.trim() ?? '';
   if (!value) return null;
@@ -68,33 +60,6 @@ function renderContentBlock(block: PageBlock) {
     return <img key={block.id} src={value} alt={block.label} className="w-full rounded-2xl object-cover shadow-sm" />;
   }
   return <ReadableContent key={block.id} className="max-w-none"><p className="whitespace-pre-line">{value}</p></ReadableContent>;
-}
-
-function PropertyCard({ property }: { property: Property }) {
-  const specs = [
-    property.area_sqm ? `${property.area_sqm} m²` : null,
-    property.bedrooms ? `${property.bedrooms} PN` : null,
-    property.legal_status || null,
-  ].filter(Boolean);
-  return (
-    <Link href={propertyHref(property)} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl">
-      <div className="relative h-44 overflow-hidden bg-gray-100">
-        <img src={property.image_url || DEFAULT_HERO} alt={property.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-        <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold text-white ${property.listing_type === 'cho_thue' ? 'bg-blue-600' : 'bg-red-600'}`}>
-          {property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán'}
-        </span>
-      </div>
-      <div className="space-y-2 p-4">
-        <h3 className="line-clamp-2 text-sm font-bold text-gray-900 transition-colors group-hover:text-red-600">{property.title}</h3>
-        <p className="text-base font-black text-red-600">{priceText(property)}</p>
-        {specs.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {specs.map(s => <span key={s} className="rounded-lg bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-600">{s}</span>)}
-          </div>
-        )}
-      </div>
-    </Link>
-  );
 }
 
 // Bảng giá cho 1 loại giao dịch — chỉ hiện khi có dữ liệu thật.
@@ -210,7 +175,7 @@ export function NeighborhoodEntityScreen(props: Props) {
             <div id="neighborhood-sale-listings">
               <h2 className="mb-4 text-2xl font-black text-gray-900">Nhà đang bán tại {n.name}</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {sale.map(p => <PropertyCard key={p.id} property={p} />)}
+                {sale.map(p => <PropertyCard key={p.id} property={p} variant="grid" />)}
               </div>
             </div>
           )}
@@ -220,7 +185,7 @@ export function NeighborhoodEntityScreen(props: Props) {
             <div id="neighborhood-rent-listings">
               <h2 className="mb-4 text-2xl font-black text-gray-900">Nhà cho thuê tại {n.name}</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {rent.map(p => <PropertyCard key={p.id} property={p} />)}
+                {rent.map(p => <PropertyCard key={p.id} property={p} variant="grid" />)}
               </div>
             </div>
           )}

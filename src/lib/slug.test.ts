@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAgentProfileSlug, buildSlug, buildUniqueSlug, isSafePublicSlugSegment, isValidSlug } from './slug';
+import { buildAgentProfileSlug, buildSlug, buildUniqueSlug, decodePublicNewsRouteSegment, isPublicNewsRouteSegment, isSafePublicSlugSegment, isValidSlug } from './slug';
 
 describe('buildSlug', () => {
   it('bỏ dấu tiếng Việt và chuyển về chữ thường có gạch nối', () => {
@@ -66,6 +66,26 @@ describe('isValidSlug', () => {
     expect(isValidSlug('tin-tuc-')).toBe(false);
     expect(isValidSlug('-tin-tuc')).toBe(false);
     expect(isValidSlug(null)).toBe(false);
+  });
+});
+
+
+describe('isPublicNewsRouteSegment', () => {
+  it('accepts canonical slugs and legacy UUID routes', () => {
+    expect(isPublicNewsRouteSegment('bai-viet-hop-le')).toBe(true);
+    expect(isPublicNewsRouteSegment('a8a2b8d1-a5a6-482b-9cd6-5c539f0140b4')).toBe(true);
+  });
+
+  it('rejects malformed public slugs instead of resolving them as articles', () => {
+    expect(isPublicNewsRouteSegment('bai-viet-')).toBe(false);
+    expect(isPublicNewsRouteSegment('bai viet')).toBe(false);
+    expect(isPublicNewsRouteSegment('bai-viet/other')).toBe(false);
+  });
+
+  it('decodes valid route segments and fails closed on malformed encoding', () => {
+    expect(decodePublicNewsRouteSegment('bai-viet-hop-le')).toBe('bai-viet-hop-le');
+    expect(decodePublicNewsRouteSegment('bai%20viet')).toBeNull();
+    expect(decodePublicNewsRouteSegment('%E0%A4%A')).toBeNull();
   });
 });
 

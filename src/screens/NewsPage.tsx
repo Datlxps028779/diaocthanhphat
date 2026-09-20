@@ -28,6 +28,7 @@ import { ReadableContent } from '../components/ReadableContent';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { RichVideo } from '../components/RichVideo';
 import { splitRichContentVideos } from '../lib/videoMedia';
+import recommendationStyles from '../components/news/newsVisual.module.css';
 
 // Danh mục là chuỗi tự do (đổ động từ news_categories). Giữ alias để đọc dễ.
 type NewsCollection = string;
@@ -145,7 +146,7 @@ function ArticleCard({
   }
 
   return (
-    <Link href={href} className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col group">
+    <Link href={href} className="group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-none transition-shadow hover:shadow-md">
       <BlurFillImage src={imgUrl} alt={buildNewsImageAlt(article)} sizes="(max-width: 768px) 100vw, 33vw" wrapperClassName="h-44" />
 
       <div className="p-4 flex flex-col flex-1">
@@ -184,24 +185,23 @@ function HorizontalCard({ article }: { article: NewsListItem }) {
       <div className="absolute inset-x-0 bottom-0 p-4 text-white">
         {cat && <span className="inline-flex rounded-md bg-red-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide">{cat}</span>}
         <h4 className="mt-2 line-clamp-2 text-base font-bold leading-snug">{article.title}</h4>
-        <span className="mt-2 flex items-center gap-1 text-xs text-gray-200">
-          <Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}
-        </span>
+        <span className="mt-2 flex items-center gap-1 text-xs text-gray-200"><Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}</span>
       </div>
     </Link>
   );
 }
 
 /* ────────────────── List Row (danh sách chuyên mục 2 cột) ────────────────── */
-function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; showExcerpt?: boolean }) {
+function NewsListRow({ article, showExcerpt = false, showCategory = false }: { article: NewsListItem; showExcerpt?: boolean; showCategory?: boolean }) {
   const imgUrl =
     (article as any).image_url ||
     'https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&w=300';
   const readMin = estimateReadTime((article as any).content ?? article.excerpt ?? '');
   const excerpt = stripHtml(article.excerpt ?? '');
+  const category = (article as any).category?.trim() ?? '';
   const href = articleHref(article);
   return (
-    <Link href={href} className="group flex gap-4">
+    <Link href={href} className="group flex gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-600">
       <BlurFillImage
         src={imgUrl}
         alt={buildNewsImageAlt(article)}
@@ -209,6 +209,7 @@ function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; 
         wrapperClassName={showExcerpt ? 'h-24 w-32 shrink-0 overflow-hidden rounded-xl sm:w-36' : 'h-20 w-28 shrink-0 overflow-hidden rounded-xl'}
       />
       <div className="flex min-w-0 flex-col justify-center">
+        {showCategory && category && <span className={`mb-1 self-start rounded-full px-2 py-0.5 text-[10px] font-semibold ${categoryBadge(category)}`}>{category}</span>}
         <h3 className={`${showExcerpt ? 'text-base' : 'text-sm'} line-clamp-2 font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600`}>
           {article.title}
         </h3>
@@ -218,6 +219,35 @@ function NewsListRow({ article, showExcerpt = false }: { article: NewsListItem; 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
           <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? (article as any).created_at ?? '')}</span>
           <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {readMin} phút đọc</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function NewsRecommendationCard({ article, variant = 'row' }: { article: NewsListItem; variant?: 'lead' | 'row' | 'grid' }) {
+  const imgUrl = (article as any).image_url || NEWS_FALLBACK_IMAGE;
+  const category = (article as any).category?.trim() ?? '';
+  const excerpt = stripHtml(article.excerpt ?? '');
+  const readMin = estimateReadTime((article as any).content ?? excerpt);
+  const lead = variant === 'lead';
+  const grid = variant === 'grid';
+  return (
+    <Link
+      href={articleHref(article)}
+      className={grid ? recommendationStyles.recommendationGridLink : lead ? recommendationStyles.recommendationLeadLink : recommendationStyles.recommendationRow}
+    >
+      <div className={grid ? recommendationStyles.recommendationGridMedia : lead ? recommendationStyles.recommendationLeadMedia : recommendationStyles.recommendationMedia}>
+        <BlurFillImage src={imgUrl} alt={buildNewsImageAlt(article)} sizes={grid ? '(max-width: 768px) 100vw, 33vw' : lead ? '(max-width: 1023px) 100vw, 520px' : '(max-width: 1023px) 104px, 144px'} wrapperClassName="h-full w-full" />
+      </div>
+      <div className={grid ? recommendationStyles.recommendationGridBody : lead ? recommendationStyles.recommendationLeadBody : recommendationStyles.recommendationBody}>
+        {category && <span className={recommendationStyles.recommendationCategory}>{category}</span>}
+        <h3 className={grid ? recommendationStyles.recommendationGridTitle : lead ? recommendationStyles.recommendationLeadTitle : recommendationStyles.recommendationTitle}>{article.title}</h3>
+        {excerpt && <p className={grid ? recommendationStyles.recommendationGridExcerpt : lead ? recommendationStyles.recommendationLeadExcerpt : recommendationStyles.recommendationExcerpt}>{excerpt}</p>}
+        <div className={recommendationStyles.recommendationMeta}>
+          <span><Calendar className="h-3 w-3" /> {formatDate((article as any).published_at ?? article.created_at ?? '')}</span>
+          <span><Clock className="h-3 w-3" /> {readMin} phút</span>
+          <ChevronRight className={`${recommendationStyles.recommendationArrow} h-4 w-4`} aria-hidden="true" />
         </div>
       </div>
     </Link>
@@ -496,7 +526,7 @@ function ArticleDetail({
             </div>
           )}
 
-          {/* Chỉ mount một rail theo breakpoint để không tạo 2 observer/analytics cho cùng tập tin. */}
+          {/* Chỉ hiển thị một rail theo breakpoint để không tạo hai bề mặt đọc cùng lúc. */}
           <NewsContextualProperties
             articleId={article.id}
             properties={contextualProperties}
@@ -504,90 +534,21 @@ function ArticleDetail({
             visibleOn="mobile"
           />
 
-          {/* Nội dung đọc tiếp: desktop tránh lặp sidebar, mobile nhận lại toàn bộ bài
-              liên quan/đọc nhiều vì sidebar bị ẩn dưới lg. */}
           {(continuation.length > 0 || mobileContinuation.length > 0) && (
-            <section className="mt-10 border-t border-gray-200 pt-6" aria-labelledby="related-articles-heading">
-              <div className="mb-5 flex items-center justify-between gap-4">
+            <section className={`${recommendationStyles.section} ${recommendationStyles.recommendationSection}`} aria-labelledby="related-articles-heading">
+              <div className={recommendationStyles.header}>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Đọc tiếp</p>
-                  <h2 id="related-articles-heading" className="mt-1 text-xl font-bold text-gray-900">Bài viết khác dành cho bạn</h2>
-                  <p className="mt-1 text-sm text-gray-500">Khám phá thêm các nội dung vừa xuất bản và cùng chủ đề.</p>
+                  <p className={recommendationStyles.eyebrow}>Đọc tiếp</p>
+                  <h2 id="related-articles-heading" className={recommendationStyles.heading}>Bài viết liên quan</h2>
+                  <p className={recommendationStyles.subtitle}>Khám phá thêm các nội dung cùng chủ đề và vừa được cập nhật.</p>
                 </div>
-                <Link href="/tin-tuc" className="text-sm font-semibold text-red-700 hover:text-red-800 hover:underline">
-                  Xem tất cả tin tức
-                </Link>
+                <Link href="/tin-tuc" className={recommendationStyles.viewAll}>Xem tất cả <span aria-hidden="true">↗</span></Link>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 lg:hidden">
-                {mobileContinuation.map((item) => {
-                  const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
-                  const itemCategory = (item as any).category ?? '';
-                  return (
-                    <Link
-                      key={item.id}
-                      href={relatedHref(item)}
-                      className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
-                    >
-                      <BlurFillImage
-                        src={itemImage}
-                        alt={buildNewsImageAlt(item)}
-                        sizes="(max-width: 640px) 100vw, 50vw"
-                        wrapperClassName="h-36"
-                      />
-                      <div className="p-4">
-                        {itemCategory && (
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${categoryBadge(itemCategory)}`}>
-                            {itemCategory}
-                          </span>
-                        )}
-                        <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
-                          {item.title}
-                        </h3>
-                        {item.excerpt && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-500">{stripHtml(item.excerpt)}</p>}
-                        <p className="mt-3 flex items-center gap-1 text-xs text-gray-400">
-                          <Calendar className="h-3 w-3" /> {formatDate((item as any).published_at ?? item.created_at)}
-                        </p>
-                      </div>
-                    </Link>
-                  );
-                })}
+              <div className={recommendationStyles.recommendationGrid} data-layout="recommendation-grid">
+                {(continuation.length > 0 ? continuation : mobileContinuation).slice(0, 3).map(item => (
+                  <NewsRecommendationCard key={item.id} article={item} variant="grid" />
+                ))}
               </div>
-              {continuation.length > 0 && (
-                <div className="hidden gap-4 sm:grid-cols-2 xl:grid-cols-3 lg:grid">
-                  {continuation.map((item) => {
-                    const itemImage = (item as any).image_url || NEWS_FALLBACK_IMAGE;
-                    const itemCategory = (item as any).category ?? '';
-                    return (
-                      <Link
-                        key={item.id}
-                        href={relatedHref(item)}
-                        className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
-                      >
-                        <BlurFillImage
-                          src={itemImage}
-                          alt={buildNewsImageAlt(item)}
-                          sizes="(max-width: 1280px) 50vw, 25vw"
-                          wrapperClassName="h-36"
-                        />
-                        <div className="p-4">
-                          {itemCategory && (
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${categoryBadge(itemCategory)}`}>
-                              {itemCategory}
-                            </span>
-                          )}
-                          <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-snug text-gray-900 transition-colors group-hover:text-red-600">
-                            {item.title}
-                          </h3>
-                          {item.excerpt && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-500">{stripHtml(item.excerpt)}</p>}
-                          <p className="mt-3 flex items-center gap-1 text-xs text-gray-400">
-                            <Calendar className="h-3 w-3" /> {formatDate((item as any).published_at ?? item.created_at)}
-                          </p>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
             </section>
           )}
 
@@ -858,8 +819,8 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
     onNavigate({ name: 'news' }); // điều hướng thật → URL về /tin-tuc, không kẹt ở /tin-tuc/{slug}
   };
 
-  // Layout tạp chí: 1 bài nổi bật lớn + tối đa 4 bài phụ trong lưới 2x2. Phần còn
-  // lại KHÔNG cắt — mọi bài đã load đều xuống feed bên dưới để không rơi bài nào.
+  // Bố cục newsroom theo trang tham khảo: 1 bài dẫn + 4 bài phụ ở hero.
+  // Phần còn lại xuống các block chuyên mục và feed bên dưới.
   const featured = articles[0];
   const heroSide = articles.slice(1, 5);
   const restArticles = articles.slice(5);
@@ -925,7 +886,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
   const sidebar = (
     <aside className="w-full min-w-0 lg:w-72">
       <div className="space-y-5 lg:sticky lg:top-24">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-none">
           <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
             <span className="h-7 w-1 rounded-full bg-red-600" /> Đọc nhiều nhất
           </h4>
@@ -949,7 +910,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-none">
           <h4 className="mb-4 flex items-center gap-2 text-lg font-black text-gray-900">
             <span className="h-7 w-1 rounded-full bg-red-600" /> Chủ đề nổi bật
           </h4>
@@ -962,7 +923,7 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
           </div>
         </div>
 
-        <div className="rounded-2xl bg-red-50 p-5">
+        <div className="rounded-xl border border-red-100 bg-red-50 p-5">
           <h5 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-800"><Mail className="h-4 w-4 text-red-500" />{g('newsletter','title','Nhận tin tức mới nhất')}</h5>
           <p className="mb-3 text-xs text-gray-500">{g('newsletter','subtitle','Đăng ký để nhận cập nhật thị trường hàng tuần')}</p>
           {newsletterSent ? (

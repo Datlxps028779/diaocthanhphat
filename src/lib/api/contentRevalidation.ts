@@ -10,11 +10,13 @@ import type {
   RevalidationTarget,
 } from '../server/contentRevalidation';
 
-export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published'> & Partial<Pick<NewsArticle, 'updated_at'>>): NewsRevalidationSnapshot {
+export function newsRevalidationSnapshot(article: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published'> & Partial<Pick<NewsArticle, 'area_id' | 'geo_area' | 'updated_at'>>): NewsRevalidationSnapshot {
   return {
     id: article.id,
     slug: article.slug,
     category: article.category,
+    area_id: article.area_id ?? null,
+    geo_area: article.geo_area ?? null,
     is_published: article.is_published,
     updated_at: article.updated_at ?? null,
   };

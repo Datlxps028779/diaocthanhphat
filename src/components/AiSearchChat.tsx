@@ -1,11 +1,14 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Send, Sparkles, X, Phone, ExternalLink, RotateCcw } from 'lucide-react';
 import { type Page, pageToHref } from '../lib/router';
 import { useAreas, useDistricts, usePropertyTypes, useWards } from '../lib/hooks/useTaxonomy';
 import { buildAdvisorLeadPayload, buildAdvisorTurn, detectHandoffTriggers, summarizeAdvisorNeed, summarizePropertyForAdvisor, validateAdvisorLeadContact, type AdvisorMessage, type AdvisorPropertySummary, type AdvisorTurnResult } from '../lib/aiAdvisor';
 import { getAdvisorMatches, getAdvisorCatalogueMatches, type PropertyFilters } from '../lib/api/properties';
+import type { Property } from '../lib/supabase';
+import { PropertyCard } from './property/PropertyCard';
 import { submitLead } from '../lib/api/leads';
 import { getAiChatKnowledge } from '../lib/api/aiChatKnowledge';
 import { askAiChat, isSafeCitationUrl } from '../lib/api/aiChat';
@@ -45,7 +48,9 @@ function TakoMascot({ className }: { className?: string }) {
   );
 }
 
-export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?: (p: Page) => void; profilePage?: boolean }) {
+export function AiSearchChat({ onNavigate, profilePage = false, localityActionsTarget = null }: { onNavigate?: (p: Page) => void; profilePage?: boolean; localityActionsTarget?: HTMLElement | null }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AdvisorMessage[]>([GREETING]);
@@ -54,6 +59,11 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
   // SAU khi AI trả về) vì trước đây suốt lúc chờ AI màn hình trống → cảm giác đơ.
   const [thinking, setThinking] = useState(false);
   const [results, setResults] = useState<AdvisorPropertySummary[]>([]);
+  // Bản ghi Property CÔNG KHAI gốc, KHOÁ THEO ID. Mọi `results` (summary) đều sinh từ cùng
+  // một nguồn raw = res.data, nên khoá theo id đảm bảo parity bất kể thứ tự/lọc trùng. Dùng
+  // để dựng thẻ card chung (cần raw field: giá, diện tích, loại giao dịch...). Chỉ chứa field
+  // từ ADVISOR_PROPERTY_SELECT (projection công khai) — không có liên hệ riêng tư.
+  const [rawResults, setRawResults] = useState<Map<string, Property>>(() => new Map());
   const [lastTurn, setLastTurn] = useState<AdvisorTurnResult | null>(null);
   const [leadFor, setLeadFor] = useState<AdvisorPropertySummary | null>(null);
   const [showGeneralLeadForm, setShowGeneralLeadForm] = useState(false);
@@ -139,6 +149,21 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
   }, [open]);
 
   useEffect(() => {
+    if (!open || !localityActionsTarget) return;
+    panelRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      triggerRef.current?.focus({ preventScroll: true });
+    };
+  }, [open, localityActionsTarget]);
+
+  useEffect(() => {
     if (!open) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [open, messages.length, thinking, loading, results.length, leadFor, showGeneralLeadForm, leadFormExpanded, leadSent]);
@@ -182,6 +207,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
     setLoading(false);
     setThinking(false);
     setResults([]);
+    setRawResults(new Map());
     setLastTurn(null);
     setLeadFor(null);
     setShowGeneralLeadForm(false);
@@ -290,6 +316,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       };
       setLastTurn(turn);
       setResults([]);
+      setRawResults(new Map());
       const citations = ai.citations
         .filter(c => isSafeCitationUrl(c.source_url))
         .map(c => ({ title: c.title, source_url: c.source_url }));
@@ -305,6 +332,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
         if (seq !== requestSeq.current) return;
         const cards = res.data.map(summarizePropertyForAdvisor);
         setResults(cards);
+        setRawResults(new Map(res.data.map(({ matchScore: _s, matchIntentScore: _i, ...property }) => [property.id, property as Property])));
         setShowGeneralLeadForm(true);
         track(EVENTS.AI_ADVISOR_SUGGEST, {
           count: cards.length,
@@ -337,6 +365,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
     if (shouldAskContactByTurns && turn.stage !== 'showing_matches') turn.handoffRequired = true;
     setLastTurn(turn);
     setResults([]);
+    setRawResults(new Map());
     setMessages(prev => [...prev, { role: 'assistant', text: turn.reply, chips: turn.matched.map(m => m.label) }]);
     await persistOngoingMessage('assistant', turn.reply);
     if (turn.stage === 'collecting_contact' || turn.handoffRequired) setShowGeneralLeadForm(true);
@@ -349,6 +378,7 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
       if (seq !== requestSeq.current) return;
       const cards = res.data.map(summarizePropertyForAdvisor);
       setResults(cards);
+      setRawResults(new Map(res.data.map(property => [property.id, property])));
       // Luôn cho phép để lại liên hệ sau khi gợi ý, kể cả khi đã có tin.
       setShowGeneralLeadForm(true);
       track(EVENTS.AI_ADVISOR_SUGGEST, {
@@ -495,10 +525,26 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
     }
   };
 
+  const launcher = <button
+    ref={triggerRef}
+    type="button"
+    onClick={openPanel}
+    className={localityActionsTarget
+      ? 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600'
+      : `relative w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-orange-500 text-white shadow-lg hover:scale-110 transition-all items-center justify-center ${open ? 'hidden sm:flex' : 'flex'}`}
+    title="AI tìm BĐS cho bạn"
+    aria-label="Mở trợ lý AI tìm BĐS"
+    aria-expanded={open}
+  >
+    {!localityActionsTarget && <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />}
+    <TakoMascot className={localityActionsTarget ? 'h-5 w-5' : 'w-7 h-7 relative z-[1]'} />
+    {localityActionsTarget ? <span>Trợ lý AI</span> : <Sparkles className="w-3 h-3 absolute top-1.5 right-1.5 z-[1] animate-pulse" />}
+  </button>;
+
   return (
     <div className={`fixed right-4 z-[60] transition-all duration-300 ${open ? 'bottom-6 transform-none' : profilePage ? 'bottom-24 transform-none' : 'top-1/2 -translate-y-1/2'}`}>
       {open && (
-        <div className="ai-search-panel fixed sm:absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78dvh,640px)] sm:h-auto sm:max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
+        <div ref={panelRef} tabIndex={localityActionsTarget ? -1 : undefined} role={localityActionsTarget ? 'dialog' : undefined} aria-label={localityActionsTarget ? 'Trợ lý BĐS' : undefined} className="ai-search-panel fixed sm:absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:bottom-16 left-4 sm:left-auto sm:right-0 w-[calc(100vw-2rem)] sm:w-[360px] h-[min(78dvh,640px)] sm:h-auto sm:max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white p-3 sm:p-4 flex items-start justify-between gap-3 flex-shrink-0">
             <div>
               <div className="flex items-center gap-2 font-black text-sm"><TakoMascot className="w-5 h-5" />Trợ lý BĐS</div>
@@ -570,27 +616,36 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
 
             {!loading && (results.length > 0 || showMatchActions) && (
               <div className="space-y-2">
-                {results.map(p => (
-                  <div key={p.id} className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
-                    <div className="flex gap-3 p-2.5">
-                      <img src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'} alt="" className="w-20 h-16 object-cover rounded-lg flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-gray-900 text-xs line-clamp-2">{p.title}</p>
-                        <p className="text-red-600 font-black text-sm mt-0.5">{p.priceText}</p>
-                        <p className="text-[11px] text-gray-500 truncate">{p.location}</p>
-                        <div className="flex gap-1 mt-1 text-[10px] text-gray-500 flex-wrap">
+                {results.map(p => {
+                  // Bản ghi công khai gốc tra theo id; không có thì bỏ (không có nhánh
+                  // renderer dự phòng — thẻ dùng chung là đường duy nhất).
+                  const raw = rawResults.get(p.id);
+                  if (!raw) return null;
+                  return (
+                    <PropertyCard
+                      key={p.id}
+                      property={raw}
+                      // Panel AI là cột chat hẹp kể cả trên desktop; `list` sẽ bật bố cục
+                      // ngang (ảnh 32%) ở >=640px và bóp nát phần chữ. `compact` giữ đủ
+                      // metadata nhưng xếp dọc.
+                      variant="compact"
+                      onResultClick={event => {
+                        // Chỉ chặn điều hướng mặc định cho click trái thường để router nội
+                        // bộ xử lý; giữ nguyên mở tab mới / modifier click.
+                        if (event.defaultPrevented) return;
+                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                        event.preventDefault();
+                        openProperty(p);
+                      }}
+                      onContact={() => openLeadForm(p)}
+                      note={p.matchReasons.length ? (
+                        <div className="flex gap-1 text-[11px] text-gray-500 flex-wrap">
                           {p.matchReasons.map(reason => <span key={reason} className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-bold">{reason}</span>)}
-                          {p.area && <span className="bg-gray-50 px-1.5 py-0.5 rounded">{p.area}</span>}
-                          {p.legal && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">{p.legal}</span>}
                         </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 border-t border-gray-100">
-                      <button onClick={() => openProperty(p)} className="text-xs font-semibold text-gray-700 py-2 hover:bg-gray-50 flex items-center justify-center gap-1"><ExternalLink className="w-3 h-3" />Xem chi tiết</button>
-                      <button onClick={() => openLeadForm(p)} className="text-xs font-semibold text-red-600 py-2 hover:bg-red-50 flex items-center justify-center gap-1"><Phone className="w-3 h-3" />Tư vấn căn này</button>
-                    </div>
-                  </div>
-                ))}
+                      ) : undefined}
+                    />
+                  );
+                })}
                 <div className="flex flex-wrap gap-1.5">
                   <button onClick={navigateAll} className="flex-1 min-w-[120px] border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold rounded-lg py-2 transition-colors">
                     Lọc tất cả kết quả
@@ -686,21 +741,12 @@ export function AiSearchChat({ onNavigate, profilePage = false }: { onNavigate?:
           </div>
         </div>
       )}
-      {!open && (
+      {!open && !localityActionsTarget && (
         <div className="absolute bottom-14 right-0 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-xs font-black text-red-600 shadow-lg ring-1 ring-red-100 animate-pulse">
           Tư vấn AI
         </div>
       )}
-      <button
-        onClick={openPanel}
-        className={`relative w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-orange-500 text-white shadow-lg hover:scale-110 transition-all items-center justify-center ${open ? 'hidden sm:flex' : 'flex'}`}
-        title="AI tìm BĐS cho bạn"
-        aria-label="Mở trợ lý AI tìm BĐS"
-      >
-        <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-        <TakoMascot className="w-7 h-7 relative z-[1]" />
-        <Sparkles className="w-3 h-3 absolute top-1.5 right-1.5 z-[1] animate-pulse" />
-      </button>
+      {localityActionsTarget ? createPortal(launcher, localityActionsTarget) : launcher}
     </div>
   );
 }

@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  :root { --cnv-header-height: 60px; }
-  @media (min-width: 768px) { :root { --cnv-header-height: 84px; } }
+  :root { --cnv-header-height: 97px; }
+  @media (min-width: 768px) { :root { --cnv-header-height: 134px; } }
   html { scroll-behavior: smooth; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {

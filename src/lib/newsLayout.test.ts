@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NewsListItem } from './supabase';
-import { buildNewsSections, pickSectionArticles } from './newsLayout';
+import { buildEditorialNewsLayout, buildNewsSections, pickSectionArticles } from './newsLayout';
 
 function article(id: string, category: string): NewsListItem {
   return {
@@ -35,6 +35,28 @@ describe('pickSectionArticles', () => {
     expect(pickSectionArticles(rows, new Set(['hero']), 4).map(a => a.id)).toEqual(['a1']);
   });
 });
+
+describe('buildEditorialNewsLayout', () => {
+  it('separates one lead and support without duplicating category stream items', () => {
+    const rows = [article('lead', 'A'), article('support-1', 'A'), article('support-2', 'B'), article('rest-1', 'A'), article('rest-2', 'B')];
+    const result = buildEditorialNewsLayout(rows, true);
+    expect(result.lead?.id).toBe('lead');
+    expect(result.support.map(item => item.id)).toEqual(['support-1', 'support-2']);
+    expect(result.sections.map(section => section.category)).toEqual(['A', 'B']);
+    expect(result.sections.flatMap(section => section.items).map(item => item.id)).toEqual(['rest-1', 'rest-2']);
+    expect(result.unusedIds).toEqual(new Set(['rest-1', 'rest-2']));
+  });
+
+  it('keeps every teaser article in lead or support order', () => {
+    const rows = [article('0', 'A'), article('1', 'A'), article('2', 'B'), article('3', 'B')];
+    const result = buildEditorialNewsLayout(rows, false);
+    expect(result.lead?.id).toBe('0');
+    expect(result.support.map(item => item.id)).toEqual(['1', '2', '3']);
+    expect(result.sections).toEqual([]);
+    expect(result.unusedIds).toEqual(new Set());
+  });
+});
+
 
 describe('buildNewsSections', () => {
   it('giữ đúng thứ tự admin và bỏ danh mục không có bài', () => {

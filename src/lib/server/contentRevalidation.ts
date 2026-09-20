@@ -1,6 +1,7 @@
 import { buildProductPath } from '../productPath';
 import { buildAreaListingPath } from '../areaPath';
 import { propertyTypeSeoGroupFromSlug } from '../propertyTypeGroups';
+import { normalizeLocalityLabel } from '../localityNewsMatch';
 import { isSafePublicSlugSegment, isValidSlug } from '../slug';
 
 export type RevalidationEntity = 'news' | 'property' | 'area' | 'neighborhood' | 'route';
@@ -10,6 +11,8 @@ export type NewsRevalidationSnapshot = {
   id: string;
   slug: string | null;
   category: string | null;
+  area_id?: string | null;
+  geo_area?: string | null;
   is_published: boolean;
   updated_at?: string | null;
 };
@@ -51,6 +54,9 @@ export type RevalidationSnapshot =
   | RouteRevalidationSnapshot;
 export type RevalidationLookups = {
   areaSlugs: ReadonlyMap<string, string>;
+  // Tên khu vực đã chuẩn hoá -> slug, để khớp bài viết narrative chỉ có geo_area.
+  // Khi hai khu vực chuẩn hoá về cùng một tên, cả hai bị loại (không đoán bừa).
+  areaNames?: ReadonlyMap<string, string>;
   categorySlugs: ReadonlyMap<string, string>;
   districtSlugs?: ReadonlyMap<string, { areaId: string; slug: string }>;
   propertyTypeSlugs?: ReadonlyMap<string, string>;
@@ -113,6 +119,8 @@ function parseNewsSnapshot(value: unknown): NewsRevalidationSnapshot | null {
     id,
     slug: optionalSlug(record.slug),
     category: optionalText(record.category, 120),
+    area_id: optionalId(record.area_id),
+    geo_area: optionalText(record.geo_area, 200),
     is_published: isPublished,
     updated_at: optionalTimestamp(record.updated_at),
   };
@@ -150,9 +158,11 @@ const ROUTE_PATHS = new Set([
   '/du-lieu-gia', '/du-an', '/dau-tu',
 ]);
 const PUBLIC_SLUG_PATH_RE = /^\/(?:trang|tin-tuc\/danh-muc)\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LOCALITY_PATH_RE = /^\/khu-vuc\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LOCALITY_SUBPATH_RE = /^\/khu-vuc\/[a-z0-9]+(?:-[a-z0-9]+)*\/(?:thong-tin|tin-tuc)$/;
 
 function isAllowedRoutePath(path: string): boolean {
-  return ROUTE_PATHS.has(path) || PUBLIC_SLUG_PATH_RE.test(path);
+  return ROUTE_PATHS.has(path) || PUBLIC_SLUG_PATH_RE.test(path) || LOCALITY_PATH_RE.test(path) || LOCALITY_SUBPATH_RE.test(path);
 }
 
 function parseAreaSnapshot(value: unknown): AreaRevalidationSnapshot | null {
@@ -238,6 +248,26 @@ export function parseContentRevalidationInput(body: unknown): { input?: ContentR
   return { input: { entity, action: action as RevalidationAction, targets: parsed } };
 }
 
+/**
+ * Mọi khu vực mà bài viết này thuộc về, theo đúng ngữ nghĩa OR của localityNewsMatches:
+ * khớp area_id cấu trúc HOẶC khớp chính xác tên geo_area đã chuẩn hoá. Bài viết có thể
+ * đồng thời trỏ về khu vực cấu trúc và một tỉnh khác trong geo_area, nên cả hai đều phải
+ * được purge. Tên trùng sau chuẩn hoá đã bị loại khỏi areaNames từ loadLookups nên ở đây
+ * không đoán bừa.
+ */
+export function resolveNewsAreaSlugs(
+  snapshot: Pick<NewsRevalidationSnapshot, 'area_id' | 'geo_area'>,
+  lookups: RevalidationLookups,
+): string[] {
+  const slugs = new Set<string>();
+  const structured = snapshot.area_id ? lookups.areaSlugs.get(snapshot.area_id) : undefined;
+  if (structured) slugs.add(structured);
+  const label = normalizeLocalityLabel(snapshot.geo_area);
+  const narrative = label ? lookups.areaNames?.get(label) : undefined;
+  if (narrative) slugs.add(narrative);
+  return [...slugs];
+}
+
 function addNewsPaths(paths: Set<string>, snapshot: NewsRevalidationSnapshot, lookups: RevalidationLookups) {
   if (!snapshot.is_published) return;
   paths.add('/');
@@ -245,6 +275,11 @@ function addNewsPaths(paths: Set<string>, snapshot: NewsRevalidationSnapshot, lo
   paths.add('/kien-thuc');
   paths.add('/sitemap.xml');
   paths.add('/sitemap-images.xml');
+  for (const areaSlug of resolveNewsAreaSlugs(snapshot, lookups)) {
+    paths.add(`/khu-vuc/${areaSlug}`);
+    paths.add(`/khu-vuc/${areaSlug}/thong-tin`);
+    paths.add(`/khu-vuc/${areaSlug}/tin-tuc`);
+  }
   if (isSafePublicSlugSegment(snapshot.slug)) paths.add(`/tin-tuc/${snapshot.slug.trim()}`);
   const categorySlug = snapshot.category ? lookups.categorySlugs.get(snapshot.category) : undefined;
   if (categorySlug) paths.add(`/tin-tuc/danh-muc/${categorySlug}`);

@@ -73,18 +73,106 @@ export async function adminDeleteDistrict(id: string): Promise<void> {
   const { error } = await supabase.from('districts').delete().eq('id', id);
   if (error) throw error;
 }
-export async function updateArea(id: string, a: Partial<Omit<Area, 'schema_markup'>>): Promise<void> {
+// Lỗi update khu vực. Tách `persisted` để UI/admin không nói sai "chưa lưu gì":
+// khi row đã nằm trong DB mà chỉ cache/revalidate lỗi, `persisted = true` và
+// `saved` giữ đúng giá trị đã ghi để người dùng biết dữ liệu đã vào DB.
+export class AreaUpdateError extends Error {
+  readonly persisted: boolean;
+  readonly saved?: Partial<Omit<Area, 'schema_markup'>>;
+  constructor(message: string, options: { persisted: boolean; saved?: Partial<Omit<Area, 'schema_markup'>>; cause?: unknown }) {
+    super(message);
+    this.name = 'AreaUpdateError';
+    this.persisted = options.persisted;
+    this.saved = options.saved;
+    if (options.cause !== undefined) (this as { cause?: unknown }).cause = options.cause;
+  }
+}
+
+// So sánh giá trị đọc lại với giá trị đã gửi. Một giá trị text coi là rỗng khi
+// trim() ra chuỗi rỗng ('', '   '), và chuỗi rỗng đó bằng với null/undefined —
+// đúng như comment: null, undefined và '' (kể cả khoảng trắng) là cùng một giá trị rỗng.
+function sameAreaValue(a: unknown, b: unknown): boolean {
+  const normalize = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string') return value.trim() || null;
+    return String(value);
+  };
+  return normalize(a) === normalize(b);
+}
+
+// Đọc lại đúng những field vừa ghi để chứng minh giá trị đã vào DB, không select '*'.
+// Trả về null nếu row không còn (bị xoá/không có quyền đọc).
+async function readBackAreaFields(
+  id: string,
+  fields: string[],
+): Promise<Pick<Area, 'id' | 'slug'> & Partial<Record<string, unknown>> | null> {
+  const { data, error } = await supabase
+    .from('areas')
+    .select(['id', 'slug', ...fields].join(','))
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as (Pick<Area, 'id' | 'slug'> & Partial<Record<string, unknown>>) | null;
+}
+
+// Chuỗi 4 bước: đọc trước (snapshot cũ) → patch → xác nhận 0 row → đọc lại field đã ghi →
+// revalidate cả context trước/sau. Không tự mở rộng field/quyền: chỉ gửi những gì
+// admin thực sự sửa (partial patch), loại schema_markup như trước.
+export async function updateArea(id: string, a: Partial<Omit<Area, 'schema_markup'>>): Promise<Partial<Omit<Area, 'schema_markup'>>> {
   const { data: previous, error: previousError } = await supabase.from('areas').select('id,slug').eq('id', id).maybeSingle();
   if (previousError) throw previousError;
+
   const { schema_markup: _schemaMarkup, ...safePatch } = a as typeof a & { schema_markup?: unknown };
-  const { error } = await supabase.from('areas').update(safePatch).eq('id', id);
-  if (error) throw error;
-  const { data: current, error: currentError } = await supabase.from('areas').select('id,slug').eq('id', id).maybeSingle();
-  if (currentError) throw currentError;
-  await revalidateAreaContent('update', [{
-    previous: previous ? areaRevalidationSnapshot(previous) : undefined,
-    current: current ? areaRevalidationSnapshot(current) : undefined,
-  }]);
+  const changedFields = Object.keys(safePatch).filter(key => safePatch[key as keyof typeof safePatch] !== undefined);
+
+  // Không có gì thay đổi: không ghi, không revalidate — tránh báo "đã lưu" giả.
+  if (changedFields.length === 0) return {};
+
+  const { data: written, error } = await supabase.from('areas').update(safePatch).eq('id', id).select('id');
+  if (error) throw new AreaUpdateError('Không lưu được khu vực. Kiểm tra migration/RLS.', { persisted: false, cause: error });
+  // Update khớp 0 row (thiếu quyền hoặc row không tồn tại) không được coi là thành công.
+  if (!Array.isArray(written) || written.length === 0) {
+    throw new AreaUpdateError(
+      'Không có dòng khu vực nào được cập nhật (bị chặn bởi quyền hoặc khu vực không tồn tại). Chưa có thay đổi nào được lưu.',
+      { persisted: false },
+    );
+  }
+
+  // Từ đây dữ liệu đã persisted. Mọi lỗi phía sau phải nói rõ điều đó.
+  // `saved` LUÔN là giá trị đọc lại được từ DB (đã xác minh khớp), không phải
+  // safePatch — nếu không, chỗ gọi có thể tưởng giá trị mình gửi đã được lưu.
+  let saved: Partial<Omit<Area, 'schema_markup'>>;
+  let verified: Pick<Area, 'id' | 'slug'> & Partial<Record<string, unknown>>;
+  try {
+    const readBack = await readBackAreaFields(id, changedFields);
+    if (!readBack) {
+      throw new AreaUpdateError('Đã ghi thay đổi nhưng không đọc lại được khu vực để xác nhận.', { persisted: true });
+    }
+    const mismatched = changedFields.filter(field => !sameAreaValue(readBack[field], safePatch[field as keyof typeof safePatch]));
+    if (mismatched.length > 0) {
+      throw new AreaUpdateError(
+        `Đã ghi thay đổi nhưng giá trị đọc lại không khớp ở: ${mismatched.join(', ')}.`,
+        { persisted: true },
+      );
+    }
+    verified = readBack;
+    saved = Object.fromEntries(changedFields.map(field => [field, readBack[field]])) as Partial<Omit<Area, 'schema_markup'>>;
+  } catch (cause) {
+    if (cause instanceof AreaUpdateError) throw cause;
+    throw new AreaUpdateError('Đã ghi thay đổi nhưng không đọc lại được để xác nhận.', { persisted: true, cause });
+  }
+
+  // Tái dùng id/slug vừa đọc lại để revalidate — không đọc `current` thêm một lần nữa.
+  try {
+    await revalidateAreaContent('update', [{
+      previous: previous ? areaRevalidationSnapshot(previous) : undefined,
+      current: areaRevalidationSnapshot(verified),
+    }]);
+  } catch (cause) {
+    throw new AreaUpdateError('Thay đổi đã được lưu vào cơ sở dữ liệu, nhưng làm mới cache thất bại. Không cần nhập lại; hãy thử làm mới lại.', { persisted: true, saved, cause });
+  }
+
+  return saved;
 }
 
 // ─── Wards (Phường/Xã) ──────────────────────────────────────────────────────────

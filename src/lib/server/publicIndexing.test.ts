@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const revalidatePathMock = vi.hoisted(() => vi.fn());
+const revalidateTagMock = vi.hoisted(() => vi.fn());
 const adminClientMock = vi.hoisted(() => vi.fn());
 const syncSearchVisibilityAuditMock = vi.hoisted(() => vi.fn());
 
-vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
+vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock, revalidateTag: revalidateTagMock }));
 vi.mock('./requireAdmin', () => ({ adminClient: adminClientMock }));
 vi.mock('./searchVisibilityService', () => ({ syncSearchVisibilityAudit: syncSearchVisibilityAuditMock }));
 
@@ -12,6 +13,7 @@ import { propagatePublicIndexing } from './publicIndexing';
 
 const lookups = {
   areaSlugs: new Map([['area-1', 'binh-duong']]),
+  areaNames: new Map([['Bình Dương', 'binh-duong']]),
   categorySlugs: new Map([['Thị trường', 'thi-truong']]),
   districtSlugs: new Map([['district-1', { areaId: 'area-1', slug: 'di-an' }]]),
   propertyTypeSlugs: new Map([['type-1', 'dat-nen']]),
@@ -30,6 +32,7 @@ function content(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   revalidatePathMock.mockReset();
+  revalidateTagMock.mockReset();
   adminClientMock.mockReset();
   syncSearchVisibilityAuditMock.mockReset();
   adminClientMock.mockReturnValue({
@@ -90,6 +93,30 @@ describe('propagatePublicIndexing', () => {
     const result = await propagatePublicIndexing({ content: content(), lookups, actorId: 'owner-1' });
     expect(result.freshness).toMatchObject({ status: 'skipped', queuedCount: 0 });
     expect(result.freshness.error).toContain('freshness queue');
+  });
+
+  it('revalidates the shared locality news snapshot tag only on public News impact', async () => {
+    await propagatePublicIndexing({ content: content(), lookups, actorId: 'owner-1' });
+    expect(revalidateTagMock).toHaveBeenCalledWith('public-locality-news-snapshot');
+  });
+
+  it('không purge tag snapshot tin tức cho bài nháp', async () => {
+    await propagatePublicIndexing({
+      content: { entity: 'news', action: 'update', targets: [{ current: { id: 'news-1', slug: 'ban-nhap', category: 'Thị trường', is_published: false } }] },
+      lookups,
+      actorId: 'owner-1',
+    });
+    expect(revalidateTagMock).not.toHaveBeenCalledWith('public-locality-news-snapshot');
+  });
+
+  it('không purge tag snapshot tin tức khi chỉ có khu vực/sản phẩm thay đổi', async () => {
+    await propagatePublicIndexing({
+      content: { entity: 'area', action: 'update', targets: [{ current: { id: 'area-1', slug: 'binh-duong' } }] },
+      lookups,
+      actorId: 'owner-1',
+    });
+    expect(revalidateTagMock).toHaveBeenCalledWith('public-locality-snapshot');
+    expect(revalidateTagMock).not.toHaveBeenCalledWith('public-locality-news-snapshot');
   });
 
   it('trả evidence degraded thay vì giả vờ hoàn tất khi queue hoặc registry lỗi', async () => {

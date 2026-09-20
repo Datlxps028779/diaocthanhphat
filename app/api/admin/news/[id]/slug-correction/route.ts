@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
-import { categoryToSlug } from '@/lib/newsCategories';
-import { isValidSlug } from '@/lib/slug';
-import { adminClient, requireOwner } from '@/lib/server/requireAdmin';
+import { isSafePublicSlugSegment, isValidSlug } from '@/lib/slug';
+import { adminClient, callerClient, requireOwner } from '@/lib/server/requireAdmin';
+import { buildAreaNames } from '@/lib/localityNewsMatch';
+import { collectContentRevalidationPaths, type RevalidationLookups } from '@/lib/server/contentRevalidation';
+import { propagatePublicIndexing } from '@/lib/server/publicIndexing';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +25,34 @@ type CorrectedNews = {
   published_at: string | null;
   content_version: number;
   updated_at: string;
+  area_id?: string | null;
+  geo_area?: string | null;
 };
+
+async function loadNewsLookups(token: string): Promise<RevalidationLookups> {
+  const client = callerClient(token);
+  const [areasResult, categoriesResult] = await Promise.all([
+    client.from('areas').select('id,slug,name'),
+    client.from('news_categories').select('label,slug'),
+  ]);
+  if (areasResult.error || categoriesResult.error) throw new Error('Không tải được dữ liệu URL công khai.');
+  return {
+    areaSlugs: new Map((areasResult.data ?? []).filter(row => row.id && row.slug).map(row => [row.id, row.slug])),
+    areaNames: buildAreaNames(areasResult.data ?? []),
+    categorySlugs: new Map((categoriesResult.data ?? []).filter(row => row.label && row.slug).map(row => [row.label, row.slug])),
+  };
+}
+
+function newsSnapshot(article: CorrectedNews) {
+  return {
+    id: article.id,
+    slug: article.slug,
+    category: article.category,
+    area_id: article.area_id ?? null,
+    geo_area: article.geo_area ?? null,
+    is_published: article.is_published,
+  };
+}
 
 function parseBody(value: unknown): { expectedOldSlug: string; newSlug: string } | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -69,6 +97,11 @@ export async function POST(
     return NextResponse.json({ error: 'Server chưa cấu hình service role cho slug correction.', code: 'SERVER_CONFIGURATION' }, { status: 503 });
   }
 
+  const caller = callerClient(auth.token);
+  const { data: before, error: beforeError } = await caller.from('news').select('id,slug,category,is_published,area_id,geo_area').eq('id', newsId).maybeSingle();
+  if (beforeError) return NextResponse.json({ error: 'Không đọc được bài viết trước khi sửa slug.', code: 'READ_FAILED' }, { status: 503 });
+  if (!before) return NextResponse.json({ error: 'Không tìm thấy bài viết.', code: 'NOT_FOUND' }, { status: 404 });
+
   const { data, error } = await admin.rpc('correct_news_slug_server', {
     p_news_id: newsId,
     p_expected_old_slug: payload.expectedOldSlug,
@@ -83,22 +116,38 @@ export async function POST(
   }
 
   const paths = new Set([
-    `/tin-tuc/${row.old_slug}`,
+    `/tin-tuc/${isSafePublicSlugSegment(row.old_slug) ? row.old_slug : payload.expectedOldSlug}`,
     `/tin-tuc/${row.slug}`,
     '/tin-tuc',
   ]);
-  const categorySlug = row.category ? categoryToSlug(row.category) : undefined;
-  if (categorySlug && isValidSlug(categorySlug)) paths.add(`/tin-tuc/danh-muc/${categorySlug}`);
-  for (const path of paths) revalidatePath(path);
+  let lookups: RevalidationLookups;
+  try {
+    lookups = await loadNewsLookups(auth.token);
+  } catch {
+    return NextResponse.json({ error: 'Không tải được dữ liệu URL công khai.', code: 'LOOKUP_FAILED' }, { status: 503 });
+  }
+  const content = {
+    entity: 'news' as const,
+    action: 'update' as const,
+    targets: [{
+      previous: { ...before, slug: before.slug ?? payload.expectedOldSlug } as CorrectedNews,
+      current: newsSnapshot({
+        ...before,
+        ...row,
+        area_id: row.area_id ?? before.area_id ?? null,
+        geo_area: row.geo_area ?? before.geo_area ?? null,
+      }),
+    }],
+  };
+  for (const path of collectContentRevalidationPaths(content, lookups)) paths.add(path);
+  const propagation = row.is_published
+    ? await propagatePublicIndexing({ content, lookups, actorId: auth.userId, paths: [...paths] })
+    : { paths: [...paths], freshness: { status: 'skipped' as const, queuedCount: 0, error: null }, searchVisibility: { status: 'skipped' as const, runId: null, summary: null, error: null } };
 
   return NextResponse.json({
     ok: true,
     result: row,
-    revalidatedPaths: [...paths],
-    propagation: {
-      searchVisibility: 'not_started',
-      freshness: 'not_started',
-      aiRag: 'not_called',
-    },
+    revalidatedPaths: propagation.paths,
+    propagation,
   });
 }

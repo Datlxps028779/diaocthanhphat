@@ -24,5 +24,14 @@ verify_jwt = false
 [functions.seo-freshness-worker]
 verify_jwt = false
 
+# sync-search-visibility được gọi bởi DB cron qua pg_net (chỉ gửi header
+# x-search-visibility-cron-secret, không có JWT) nên phải tắt cổng JWT của
+# Supabase — nếu bật, mọi lượt gọi cron sẽ bị chặn 401 trước khi chạm code.
+#
+# Cổng vào (DB → Edge) dùng secret riêng, KHÔNG dùng anon/service-role key:
+#   - Vault (DB):  secret tên `search_visibility_cron_secret`
+#   - Edge env:    SEARCH_VISIBILITY_CRON_SECRET = đúng giá trị đó
+# Cổng ra (Edge → Next) dùng SEARCH_VISIBILITY_SYNC_SECRET qua Authorization Bearer
+# và chỉ áp dụng cho action `sync`.
 [functions.sync-search-visibility]
 verify_jwt = false

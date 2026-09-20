@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Property } from '../lib/supabase';
 import type { Page } from '../lib/router';
 import type { Map as LeafletMap } from 'leaflet';
 import { formatCompactPropertyPrice, getEffectiveListingPrice } from '../lib/listingPrice';
+import { buildPropertyCardModel } from '../lib/propertyCardModel';
+import { serializePropertyCardPopup } from './property/propertyCardPopup';
 
 export interface MapBounds {
   north: number; south: number; east: number; west: number;
@@ -20,6 +22,10 @@ interface PropertyMapProps {
   // Tự thu bản đồ khít vào các marker đang hiển thị. Khi lọc theo khu vực/quận/xã,
   // bản đồ tự zoom về đúng vùng có tin — càng lọc cụ thể càng zoom sát.
   fitToMarkers?: boolean;
+  getGroupKey?: (property: Property) => string;
+  selectedGroupKey?: string | null;
+  focusGroupKey?: string | null;
+  onGroupSelect?: (groupKey: string) => void;
 }
 
 function priceTierForProperty(property: Property): { color: string; bg: string; label: string } {
@@ -35,7 +41,7 @@ function priceLabel(p: Property): string {
   return formatCompactPropertyPrice(p);
 }
 
-function markerHtml(p: Property): string {
+function markerHtml(p: Property, selected = false): string {
   const tier = priceTierForProperty(p);
   const isRent = p.listing_type === 'cho_thue';
   const badgeBg = isRent ? '#1d4ed8' : tier.color;
@@ -48,6 +54,7 @@ function markerHtml(p: Property): string {
       flex-direction:column;
       align-items:center;
       filter:drop-shadow(0 3px 8px rgba(0,0,0,0.28));
+      ${selected ? 'transform:scale(1.12);' : ''}
       cursor:pointer;
     ">
       <!-- Pill badge -->
@@ -85,83 +92,15 @@ function markerHtml(p: Property): string {
   `;
 }
 
+// Nội dung popup lấy từ MODEL DÙNG CHUNG (buildPropertyCardModel) rồi qua serializer escape —
+// không tự định dạng lại giá/diện tích/ngày để popup và card React không lệch nhau, đồng thời
+// chống XSS (popup cũ nội suy thẳng title/ảnh/địa điểm vào HTML).
+//
+// Poster: bản đồ chưa có nguồn poster theo lô (batch RPC) nên KHÔNG truyền poster — model trả
+// nhãn trung tính UNKNOWN_CARD_POSTER và `identified: false`. Không bịa tên người đăng, không
+// gọi RPC theo từng thẻ.
 function popupHtml(p: Property): string {
-  const tier = priceTierForProperty(p);
-  const isRent = p.listing_type === 'cho_thue';
-  const badgeBg = isRent ? '#1d4ed8' : tier.color;
-  const badgeLabel = isRent ? 'Cho thuê' : 'Mua bán';
-  const label = priceLabel(p);
-  const location = [p.district, p.city].filter(Boolean).join(', ') || 'Bình Dương';
-
-  const specs = [
-    p.area_sqm  ? `<div style="display:flex;align-items:center;gap:3px;">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        <span>${p.area_sqm} m²</span></div>` : '',
-    p.bedrooms  ? `<div style="display:flex;align-items:center;gap:3px;">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M3 22V12M21 22V12M1 12h22M3 12V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5"/><path d="M10 12V7H6v5"/></svg>
-        <span>${p.bedrooms} PN</span></div>` : '',
-    p.bathrooms ? `<div style="display:flex;align-items:center;gap:3px;">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-4z"/><path d="M4 12V6a2 2 0 0 1 2-2h2v4"/></svg>
-        <span>${p.bathrooms} WC</span></div>` : '',
-  ].filter(Boolean);
-
-  return `
-    <div style="width:252px;font-family:Inter,system-ui,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.16);">
-      <!-- Image -->
-      <div style="position:relative;height:140px;overflow:hidden;background:#f3f4f6;">
-        ${p.image_url
-          ? `<img src="${p.image_url}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.3s" />`
-          : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${tier.bg},#e5e7eb);display:flex;align-items:center;justify-content:center;">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="${tier.color}" stroke-width="1.5" opacity="0.6"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>`
-        }
-        <!-- Listing type badge over image -->
-        <div style="position:absolute;top:8px;left:8px;background:${badgeBg};color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:0.4px;text-transform:uppercase;">${badgeLabel}</div>
-        <!-- Hot badge -->
-        ${p.is_hot ? `<div style="position:absolute;top:8px;right:8px;background:#f97316;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:0.3px;">🔥 HOT</div>` : ''}
-      </div>
-
-      <!-- Body -->
-      <div style="padding:10px 12px 12px;background:#fff;">
-        <!-- Title -->
-        <div style="font-size:12px;font-weight:700;color:#111827;line-height:1.45;margin-bottom:7px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${p.title}</div>
-
-        <!-- Price row -->
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:7px;">
-          <span style="font-size:20px;font-weight:900;color:${badgeBg};line-height:1;">${label}</span>
-        </div>
-
-        <!-- Location -->
-        <div style="display:flex;align-items:center;gap:4px;margin-bottom:${specs.length ? '7px' : '10px'};">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          <span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${location}</span>
-        </div>
-
-        <!-- Specs strip -->
-        ${specs.length ? `
-        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:#4b5563;background:#f9fafb;border-radius:7px;padding:5px 8px;margin-bottom:10px;">
-          ${specs.join('')}
-        </div>` : ''}
-
-        <!-- CTA -->
-        <button
-          data-nav-id="${p.id}"
-          data-nav-slug="${p.slug ?? ''}"
-          style="
-            width:100%;background:${badgeBg};color:#fff;border:none;
-            border-radius:8px;padding:9px;font-size:12px;font-weight:700;
-            cursor:pointer;letter-spacing:0.3px;display:flex;align-items:center;
-            justify-content:center;gap:5px;
-          "
-          onmouseover="this.style.opacity='0.88'"
-          onmouseout="this.style.opacity='1'"
-        >
-          Xem chi tiết
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </button>
-      </div>
-    </div>
-  `;
+  return serializePropertyCardPopup(buildPropertyCardModel(p));
 }
 
 export function PropertyMap({
@@ -174,9 +113,14 @@ export function PropertyMap({
   onBoundsChange,
   showCountBadge = true,
   fitToMarkers = false,
+  getGroupKey,
+  selectedGroupKey,
+  focusGroupKey,
+  onGroupSelect,
 }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -199,6 +143,7 @@ export function PropertyMap({
         attributionControl: false,
       });
       mapRef.current = nextMap;
+      setMapReady(true);
 
       // Cleaner map tile
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -218,7 +163,7 @@ export function PropertyMap({
       nextMap.on('zoomend', emitBounds);
       boundsTimer = setTimeout(emitBounds, 300);
 
-      addMarkers(L, nextMap, properties, onNavigate);
+      addMarkers(L, nextMap, properties, onNavigate, getGroupKey, selectedGroupKey, onGroupSelect);
     });
 
     return () => {
@@ -228,6 +173,7 @@ export function PropertyMap({
         mapRef.current.off();
         mapRef.current.remove();
         mapRef.current = null;
+        setMapReady(false);
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -242,12 +188,12 @@ export function PropertyMap({
       map.eachLayer(layer => {
         if ((layer as { _isMarker?: boolean })._isMarker) map.removeLayer(layer);
       });
-      addMarkers(L, map, properties, onNavigate);
+      addMarkers(L, map, properties, onNavigate, getGroupKey, selectedGroupKey, onGroupSelect);
 
       // Tự thu bản đồ khít các marker đang hiển thị: lọc khu vực/quận/xã càng cụ
       // thể thì vùng nhìn càng sát. Một điểm → panTo + zoom gần; nhiều điểm →
       // fitBounds có padding. Không marker thì giữ nguyên view.
-      if (fitToMarkers) {
+      if (fitToMarkers && !focusGroupKey) {
         const pts = properties
           .filter(p => p.latitude != null && p.longitude != null)
           .map(p => [p.latitude!, p.longitude!] as [number, number]);
@@ -259,8 +205,34 @@ export function PropertyMap({
       }
     });
     return () => { cancelled = true; };
-  }, [properties, onNavigate, fitToMarkers]);
+  }, [properties, onNavigate, fitToMarkers, getGroupKey, onGroupSelect, mapReady]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusGroupKey || !getGroupKey) return;
+    const points = properties
+      .filter(property => getGroupKey(property) === focusGroupKey && property.latitude != null && property.longitude != null)
+      .map(property => [property.latitude!, property.longitude!] as [number, number]);
+    if (!points.length) return;
+    map.invalidateSize({ pan: false, animate: false });
+    import('leaflet').then(module => {
+      if (!mapRef.current) return;
+      const L = module.default;
+      if (points.length === 1) map.setView(points[0], 15, { animate: true });
+      else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16, animate: true });
+    });
+  }, [properties, focusGroupKey, getGroupKey, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.eachLayer(layer => {
+      const marker = layer as unknown as { _isMarker?: boolean; _groupKey?: string; getElement?: () => HTMLElement | null };
+      if (!marker._isMarker) return;
+      const content = marker.getElement?.()?.firstElementChild as HTMLElement | null;
+      if (content) content.style.transform = marker._groupKey === selectedGroupKey ? 'scale(1.12)' : '';
+    });
+  }, [selectedGroupKey, mapReady]);
   const visibleCount = properties.filter(p => p.latitude && p.longitude).length;
 
   return (
@@ -303,20 +275,36 @@ export function PropertyMap({
         }
         .leaflet-popup-content {
           margin: 0 !important;
-          width: auto !important;
         }
         .leaflet-popup-tip {
           display: none !important;
         }
         .leaflet-popup-close-button {
+          /* Vùng chạm 44x44 tối thiểu (WCAG 2.5.8) trên nền tối để tương phản với
+             badge giao dịch/gallery phía sau; trước đây chỉ 18px nên rất khó bấm. */
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          width: 44px !important;
+          height: 44px !important;
+          padding: 0 !important;
+          top: 0 !important;
+          right: 0 !important;
+          border-radius: 0 12px 0 12px !important;
+          background: rgba(17,24,39,0.55) !important;
           color: #fff !important;
-          font-size: 18px !important;
-          line-height: 18px !important;
-          top: 6px !important;
-          right: 8px !important;
+          font-size: 24px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
           z-index: 10 !important;
-          text-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+          text-shadow: none !important;
+          opacity: 1 !important;
         }
+        .leaflet-popup-close-button:hover,
+        .leaflet-popup-close-button:focus-visible {
+          background: rgba(17,24,39,0.78) !important;
+        }
+        .pcpopup-cta:hover { opacity: 0.88; }
       `}</style>
     </div>
   );
@@ -327,11 +315,15 @@ function addMarkers(
   map: import('leaflet').Map,
   properties: Property[],
   onNavigate: (p: Page) => void,
+  getGroupKey?: (property: Property) => string,
+  selectedGroupKey?: string | null,
+  onGroupSelect?: (groupKey: string) => void,
 ) {
   const valid = properties.filter(p => p.latitude && p.longitude);
 
   valid.forEach(p => {
-    const html = markerHtml(p);
+    const groupKey = getGroupKey?.(p);
+    const html = markerHtml(p, Boolean(groupKey && groupKey === selectedGroupKey));
     const icon = L.divIcon({
       className: '',
       html,
@@ -340,13 +332,20 @@ function addMarkers(
     });
 
     const marker = L.marker([p.latitude!, p.longitude!], { icon });
-    (marker as unknown as { _isMarker: boolean })._isMarker = true;
+    (marker as unknown as { _isMarker: boolean; _groupKey?: string })._isMarker = true;
+    (marker as unknown as { _groupKey?: string })._groupKey = groupKey;
 
     marker.bindPopup(popupHtml(p), {
-      maxWidth: 260,
+      // Khớp đúng bề rộng serializer phát ra (max-width:280px). Lệch nhau khiến Leaflet
+      // tự thêm/bớt ~10px và nội dung bị nhảy giữa các popup.
+      maxWidth: 280,
       minWidth: 252,
       className: 'property-popup',
       offset: [6, 0],
+    });
+
+    marker.on('click', () => {
+      if (groupKey) onGroupSelect?.(groupKey);
     });
 
     // Hover opens popup
@@ -358,6 +357,16 @@ function addMarkers(
       if (!popup) return;
       const el = popup.getElement();
       if (!el) return;
+      const image = el.querySelector<HTMLImageElement>('[data-card-image]');
+      if (image) {
+        const showFallback = () => {
+          image.hidden = true;
+          const fallback = el.querySelector<HTMLElement>('[data-card-fallback]');
+          if (fallback) fallback.hidden = false;
+        };
+        image.onerror = showFallback;
+        if (image.complete && !image.naturalWidth) showFallback();
+      }
       const btn = el.querySelector<HTMLElement>('[data-nav-id]');
       if (btn) {
         btn.onclick = () => onNavigate({ name: 'property', id: btn.dataset.navId!, slug: btn.dataset.navSlug || undefined });

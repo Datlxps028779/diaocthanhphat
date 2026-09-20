@@ -552,7 +552,11 @@ export async function getUserFavorites(): Promise<UserFavorite[]> {
     .select('*, properties(*, areas(id,name,slug), property_types(id,name,slug))')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
-  return (data ?? []) as UserFavorite[];
+  const favorites = (data ?? []) as UserFavorite[];
+  const { enrichPublicCardPosters } = await import('../publicCardPosters');
+  const properties = await enrichPublicCardPosters(supabase, favorites.flatMap(item => item.properties ? [item.properties] : []));
+  const byId = new Map(properties.map(property => [property.id, property]));
+  return favorites.map(item => ({ ...item, properties: item.properties ? byId.get(item.properties.id) ?? item.properties : item.properties }));
 }
 
 export async function toggleUserFavorite(propertyId: string): Promise<boolean> {
@@ -590,7 +594,8 @@ export async function getFavoriteProperties(): Promise<Property[]> {
     .from('property_favorites')
     .select('properties(*, areas(id,name,slug), property_types(id,name,slug))')
     .order('created_at', { ascending: false });
-  return ((data ?? []) as unknown as PropertyFavorite[]).map(r => r.properties).filter((p): p is Property => p != null);
+  const { enrichPublicCardPosters } = await import('../publicCardPosters');
+  return enrichPublicCardPosters(supabase, ((data ?? []) as unknown as PropertyFavorite[]).map(r => r.properties).filter((p): p is Property => p != null));
 }
 
 export async function toggleFavorite(propertyId: string): Promise<boolean> {

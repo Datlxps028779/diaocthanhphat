@@ -382,7 +382,8 @@ export type NewsArticle = {
 export type NewsListItem = Pick<
   NewsArticle,
   'id' | 'title' | 'slug' | 'excerpt' | 'image_url' | 'category' | 'author' |
-  'views' | 'focus_keywords' | 'geo_area' | 'created_at' | 'updated_at'
+  'views' | 'focus_keywords' | 'geo_area' | 'area_id' | 'district_id' | 'ward_id' |
+  'created_at' | 'updated_at'
 >;
 
 export type NewsPageResult = {

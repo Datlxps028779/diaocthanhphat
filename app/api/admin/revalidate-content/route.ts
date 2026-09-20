@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
 import { parseContentRevalidationInput, type RevalidationLookups } from '@/lib/server/contentRevalidation';
 import { propagatePublicIndexing } from '@/lib/server/publicIndexing';
+import { buildAreaNames } from '@/lib/localityNewsMatch';
 
 export const runtime = 'nodejs';
 
 async function loadLookups(token: string): Promise<RevalidationLookups> {
   const client = callerClient(token);
   const [areasResult, categoriesResult, districtsResult, propertyTypesResult] = await Promise.all([
-    client.from('areas').select('id,slug'),
+    client.from('areas').select('id,slug,name'),
     client.from('news_categories').select('label,slug'),
     client.from('districts').select('id,area_id,slug'),
     client.from('property_types').select('id,slug'),
@@ -20,6 +21,7 @@ async function loadLookups(token: string): Promise<RevalidationLookups> {
     areaSlugs: new Map((areasResult.data ?? [])
       .filter(row => row.id && row.slug)
       .map(row => [row.id, row.slug])),
+    areaNames: buildAreaNames(areasResult.data ?? []),
     categorySlugs: new Map((categoriesResult.data ?? [])
       .filter(row => row.label && row.slug)
       .map(row => [row.label, row.slug])),

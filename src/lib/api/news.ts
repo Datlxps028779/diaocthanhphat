@@ -91,13 +91,11 @@ export async function getNewsByIds(ids: string[]): Promise<NewsArticle[]> {
   return (data ?? []) as NewsArticle[];
 }
 
-// Tăng view atomic; fallback read-modify-write nếu RPC chưa có trên DB.
+// Tăng view atomic qua RPC có quyền riêng; không fallback sang UPDATE public vì anon không có quyền ghi news.
 export async function incrementNewsView(id: string): Promise<void> {
-  const { error: rpcErr } = await supabase.rpc('increment_news_views', { row_id: id });
-  if (rpcErr) {
-    const { data } = await supabase.from('news').select('views').eq('id', id).maybeSingle();
-    await supabase.from('news').update({ views: (data?.views ?? 0) + 1 }).eq('id', id);
-  }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  await supabase.rpc('increment_news_views', { row_id: id });
 }
 export async function adminGetAllNews(): Promise<NewsArticle[]> {
   const { data } = await supabase
@@ -231,7 +229,7 @@ export async function createNews(n: NewsWrite): Promise<NewsArticle> {
 export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schema_markup' | 'content_version'>>): Promise<NewsArticle> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
-    .select('id,slug,category,is_published,published_at,updated_at')
+    .select('id,slug,category,is_published,area_id,geo_area,published_at,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -257,7 +255,7 @@ export async function updateNews(id: string, n: Partial<Omit<NewsArticle, 'schem
 export async function deleteNews(id: string): Promise<void> {
   const { data: previousData, error: previousError } = await supabase
     .from('news')
-    .select('id,slug,category,is_published,updated_at')
+    .select('id,slug,category,is_published,area_id,geo_area,updated_at')
     .eq('id', id)
     .maybeSingle();
   if (previousError) throw previousError;
@@ -269,8 +267,8 @@ export async function deleteNews(id: string): Promise<void> {
 }
 
 // ─── Bulk operations ──────────────────────────────────────────────────────────
-const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published,published_at,updated_at';
-type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'published_at' | 'updated_at'>;
+const NEWS_REVALIDATION_SELECT = 'id,slug,category,is_published,area_id,geo_area,published_at,updated_at';
+type NewsRevalidationSnapshotRow = Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'area_id' | 'geo_area' | 'published_at' | 'updated_at'>;
 
 async function getNewsRevalidationRows(ids: string[]): Promise<NewsRevalidationSnapshotRow[]> {
   if (ids.length === 0) return [];

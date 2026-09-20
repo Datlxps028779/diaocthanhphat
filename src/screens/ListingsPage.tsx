@@ -4,18 +4,17 @@ import dynamic from 'next/dynamic';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, Filter, SlidersHorizontal, MapPin, Building2,
-  CheckCircle, Phone, X, ChevronDown, ArrowUpDown, Grid3X3,
-  List, Map as MapIcon, Eye, Sparkles, Flame, Home, Tag
+  X, ChevronDown, ArrowUpDown, Grid3X3,
+  List, Map as MapIcon, Sparkles, Home, Tag
 } from 'lucide-react';
 import Link from 'next/link';
-import { SafeImage } from '../components/SafeImage';
 import { type Property } from '../lib/supabase';
 import { captureSignal, captureSignalFromProperty } from '../lib/captureSignal';
 import { getAllProperties, getAllPropertiesForMap, getBanners, getFavoriteIds, toggleFavorite } from '../lib/api';
 import { buildPropertyPath, PropertySearchUnavailableError, type ListingInitialFilters, type PropertySort } from '../lib/api/properties';
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
-import { VerifiedBadge } from '../components/VerifiedBadge';
+import { PropertyCard as UnifiedPropertyCard } from '../components/property/PropertyCard';
 import { useAreas, usePropertyTypes, useDistricts, useWards } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
@@ -25,26 +24,37 @@ import { ForYou } from '../components/ForYou';
 import { RecentlyViewed } from '../components/RecentlyViewed';
 import { LEGAL_OPTIONS } from '../lib/legalOptions';
 import { PRICE_RANGES_SALE, PRICE_RANGES_RENT, AREA_RANGES, findRangeIndex } from '../lib/priceRange';
-import { formatPropertyPrice } from '../lib/listingPrice';
 import { Breadcrumb } from '../components/Layout';
 import { ContactModal } from '../components/ContactModal';
 import type { MapBounds } from '../components/PropertyMap';
-import { buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
 import { listingInitialDataScopeMatches } from '../lib/listingInitialData';
 import { track, EVENTS } from '../lib/analytics';
 import { RANKING_POLICY_VERSION } from '../lib/rankingPolicy';
-import { BlurFillImage } from '../components/BlurFillImage';
-import { PropertyGallery } from '../components/PropertyGallery';
 import { buildListingResultLabel, listingEmptyStateGuidance } from '../lib/listingDecision';
 import { DiscoverySectionHeader } from '../components/discovery/DiscoverySectionHeader';
-import { normalizeListingTitle } from '../lib/listingTitle';
 import { shouldClearInferredLocation } from '../lib/listingSearchState';
+import { localityPriceBandRange, type LocalityListingScope } from '../lib/localityListingScope';
+import { confineIntentFilters, localityQueryPriceRange, localityScopeEditPatch, localityScopeEditNeedsNavigation, localityScopeFilterPatch, localityScopeOwnedDimensions, type LocalityGeographyEdit, type LocalityScopeFacts } from '../lib/localityScopeEditing';
+import { isSameListingUrl, preserveLocalityPath } from '../lib/localityUrlState';
+import localityStyles from '../components/area/localityVisual.module.css';
+import { buildLocalityGroups, getLocalityGroupKey, type LocalityGroup } from '../lib/localityGroupModel';
+
+// Phạm vi landing địa phương do ROUTE quyết định, không phải query. Toàn bộ chiều ở
+// đây là bất biến trong lúc đang ở landing: sửa chúng nghĩa là rời phạm vi, và phải
+// điều hướng tới URL nền thay vì âm thầm giữ path cũ với nội dung khác.
+// Type nằm ở lib/localityListingScope để server (localityPageContext) và client dùng
+// chung một khai báo — re-export ở đây cho nơi gọi cũ.
+export type { LocalityListingScope };
+
 interface ListingsPageProps {
   initialFilters?: ListingInitialFilters;
   // Dữ liệu SSR seed sẵn cho view mà server thực sự đã truy vấn. Scope tách riêng
   // để không dùng nhầm seed chưa lọc cho URL/filter khác.
   initialData?: { data: Property[]; total: number };
   initialDataScope?: ListingInitialFilters;
+  // Có mặt ⇔ đang render một landing địa phương (phạm vi do route sở hữu).
+  localityScope?: LocalityListingScope;
+  localityTransactionPaths?: { sale: string; rent: string };
   hasEditorialHeader?: boolean;
   onNavigate: (p: Page) => void;
 }
@@ -79,7 +89,13 @@ function filterByBounds(props: Property[], bounds: MapBounds | null): Property[]
 // re-render vô hạn khi dùng làm default cho useQuery bị disable.
 const EMPTY_PROPS: Property[] = [];
 
-export function ListingsPage({ initialFilters, initialData, initialDataScope, hasEditorialHeader = false, onNavigate }: ListingsPageProps) {
+// Nhóm loại RỖNG (route có segment loại nhưng nhóm không có thành viên nào). Không thể
+// diễn đạt "khớp 0 dòng" bằng cách BỎ điều kiện — làm vậy sẽ trả về cả tỉnh. Gửi một
+// UUID không tồn tại để mệnh đề `in` chắc chắn không khớp dòng nào, thay vì âm thầm nới
+// rộng phạm vi.
+const EMPTY_TYPE_MATCH: string[] = ['00000000-0000-0000-0000-000000000000'];
+
+export function ListingsPage({ initialFilters, initialData, initialDataScope, localityScope, localityTransactionPaths, hasEditorialHeader = false, onNavigate }: ListingsPageProps) {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [district, setDistrict] = useState(initialFilters?.district ?? '');
   const [ward, setWard] = useState(initialFilters?.ward ?? '');
@@ -90,10 +106,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const initialKeywordRef = useRef(keyword);
   const inferredLocationRef = useRef(initialFilters?.locationSource === 'inferred');
   const [areaId, setAreaId] = useState(initialFilters?.areaId ?? '');
-  const [typeId, setTypeId] = useState(initialFilters?.typeId ?? '');
+  const [typeId, setTypeId] = useState(initialFilters?.typeId ?? (localityScope?.typeIds?.length === 1 ? localityScope.typeIds[0] : ''));
   const [typeIds] = useState<string[]>(() => initialFilters?.typeIds ?? []);
+  // Query có thể chứa khoảng giá không trùng bất kỳ preset nào.
+  const [queryPriceRange, setQueryPriceRange] = useState(() =>
+    localityQueryPriceRange(initialFilters, { routeOwnsPrice: Boolean(localityScope?.priceBand) }),
+  );
   const [priceIdx, setPriceIdx] = useState(() =>
-    findRangeIndex(
+    localityScope?.priceBand ? 0 : findRangeIndex(
       initialFilters?.listingType === 'cho_thue' ? PRICE_RANGES_RENT : PRICE_RANGES_SALE,
       initialFilters?.minPrice, initialFilters?.maxPrice,
     ),
@@ -108,6 +128,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const [isHot, setIsHot] = useState(initialFilters?.isHot ?? false);
   const [sort, setSort] = useState<PropertySort>((initialFilters?.sort as PropertySort) ?? 'newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [page, setPage] = useState(initialFilters?.page ?? 1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
@@ -163,9 +184,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   // đã seed từ URL khu vực (/mua-ban/binh-duong/thuan-an).
   const prevAreaId = useRef<string | undefined>(undefined);
   useEffect(() => {
+    // Landing địa phương: area/district/ward do route sở hữu, cascade reset sẽ phá
+    // phạm vi đã chọn. Việc rời phạm vi do handleScopeEdit lo, không phải effect này.
+    if (localityScope) return;
     if (shouldResetChild(prevAreaId.current, areaId)) setDistrict('');
     prevAreaId.current = areaId;
-  }, [areaId]);
+  }, [areaId, localityScope]);
 
   // Phường/xã theo quận/huyện đã chọn. district lưu dạng TÊN nên map ra id để fetch.
   const selectedDistrictId = districts.find(d => d.name === district)?.id;
@@ -175,9 +199,10 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   // Reset ward khi user đổi quận/huyện — cùng lý do như district ở trên.
   const prevDistrict = useRef<string | undefined>(undefined);
   useEffect(() => {
+    if (localityScope) return;
     if (shouldResetChild(prevDistrict.current, district)) setWard('');
     prevDistrict.current = district;
-  }, [district]);
+  }, [district, localityScope]);
 
   const { data: sidebarBanners = [] } = useQuery({ queryKey: qk.banners('sidebar'), queryFn: () => getBanners('sidebar') });
   const { data: topBanners = [] } = useQuery({ queryKey: qk.banners('listings_top'), queryFn: () => getBanners('listings_top') });
@@ -199,15 +224,30 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   });
 
   // Query danh sách chính — key encode toàn bộ filter đã resolve (min/max)
-  const pr = PRICE_RANGES[priceIdx] ?? PRICE_RANGES[0];
+  const pr = { min: queryPriceRange.minPrice, max: queryPriceRange.maxPrice };
   const ar = AREA_RANGES[areaIdx] ?? AREA_RANGES[0];
+  // Khi có phạm vi landing, khoảng giá đến từ path và phải ghi đè khoảng của dropdown
+  // (đang là "tất cả" ở đó) — nếu không, query sẽ chạy rộng hơn URL đang hiển thị.
+  // Cận trên của hợp đồng band là ĐỘC QUYỀN (price.lt) nên KHÔNG dùng maxPrice/lte.
+  // Đẩy bằng salePriceBand để lib/api/properties là nơi duy nhất dịch mã → cú pháp.
   const explicitFilters = useMemo(() => ({
     listingType: listingType || undefined,
     areaId: areaId || undefined,
-    typeId: typeId || undefined,
-    typeIds: typeIds.length ? typeIds : undefined,
-    district: district || undefined,
-    ward: ward || undefined,
+    typeIds: localityScope
+      // Nhóm loại RỖNG nhưng route CÓ segment loại = nhóm không có thành viên ⇒ phải
+      // khớp 0 dòng. Không được bỏ điều kiện rồi trả về cả tỉnh.
+      ? (localityScope.typePathSlug && !localityScope.typeIds?.length
+          ? EMPTY_TYPE_MATCH
+          : (localityScope.typeIds?.length ? localityScope.typeIds : undefined))
+      : (typeIds.length ? typeIds : undefined),
+    // ID là hợp đồng route; TÊN chỉ là bản sao denormalized. Có ID thì bỏ điều kiện
+    // theo tên, nếu không bản ghi mang nhãn cũ (quận đổi tên/sáp nhập) sẽ bị loại oan.
+    // Chưa có ID (route chưa chốt cấp đó) thì vẫn lọc theo tên như trước.
+    districtId: localityScope?.districtId,
+    wardId: localityScope?.wardId,
+    salePriceBand: localityScope?.priceBand,
+    district: localityScope?.districtId ? undefined : (district || undefined),
+    ward: localityScope?.wardId ? undefined : (ward || undefined),
     minPrice: pr.min,
     maxPrice: pr.max,
     minArea: ar.min,
@@ -215,24 +255,36 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     bedrooms: bedrooms || undefined,
     direction: direction || undefined,
     legal: legal || undefined,
-  }), [listingType, areaId, typeId, typeIds, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal]);
+    ...localityScopeFilterPatch({
+      typeId: typeId || undefined,
+      hasRouteTypeIds: Boolean(localityScope?.typeIds?.length) || Boolean(localityScope?.typePathSlug),
+    }),
+  }), [listingType, areaId, typeId, typeIds, district, ward, pr.min, pr.max, ar.min, ar.max, bedrooms, direction, legal, localityScope]);
+  // Nhãn "đang lọc giá" ở UI phải phản ánh cả khoảng giá của route, không chỉ dropdown.
+  const priceFilterActive = pr.min !== undefined || pr.max !== undefined || Boolean(localityScope?.priceBand);
   const searchIntent = useMemo(() => parseSearchIntent(debouncedKeyword, { areas, districts, wards, propertyTypes: types }, explicitFilters), [debouncedKeyword, areas, districts, wards, types, explicitFilters]);
   const effectiveSort: PropertySort = debouncedKeyword && sort === 'newest' ? 'relevance' : sort;
   const filters = useMemo(() => ({
     ...explicitFilters,
-    ...searchIntent.filters,
+    // searchIntent suy ra từ TỪ KHÓA nên không được ghi đè các chiều route sở hữu: gõ
+    // "Hà Nội" ở landing Bình Dương không có nghĩa là đổi phạm vi. Muốn đổi phải điều
+    // hướng. Các filter ngoài phạm vi (diện tích, phòng, hướng, pháp lý) vẫn được nhận.
+    ...confineIntentFilters(searchIntent.filters, { hasRouteIds: Boolean(localityScope) }),
     keyword: searchIntent.residualKeyword.trim() || undefined,
     isFeatured: isFeatured || undefined, isHot: isHot || undefined,
     sort: effectiveSort, page, limit: PER_PAGE,
-  }), [explicitFilters, searchIntent.filters, searchIntent.residualKeyword, isFeatured, isHot, effectiveSort, page]);
+  }), [explicitFilters, searchIntent.filters, searchIntent.residualKeyword, isFeatured, isHot, effectiveSort, page, localityScope]);
   // Chỉ seed dữ liệu SSR khi state hiện tại khớp chính xác scope server đã truy vấn.
   // Base route chỉ seed theo listingType; route khu vực seed thêm area/district. Các
   // filter query phụ (loại/giá/phường/...) luôn phải fetch lại thay vì hiện sai tin.
   const initialScopeMatches = listingInitialDataScopeMatches(initialDataScope, {
     listingType: listingType || undefined,
     areaId: areaId || undefined,
-    typeId: typeId || undefined,
-    typeIds: typeIds.length ? typeIds : undefined,
+    typeId: localityScope?.typePathSlug ? undefined : (typeId || undefined),
+    typeIds: localityScope?.typeIds?.length ? localityScope.typeIds : (typeIds.length ? typeIds : undefined),
+    districtId: localityScope?.districtId,
+    wardId: localityScope?.wardId,
+    salePriceBand: localityScope?.priceBand,
     district: district || undefined,
     ward: ward || undefined,
     keyword: debouncedKeyword || undefined,
@@ -322,6 +374,15 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   // Đồng bộ bộ lọc → URL một chiều qua replaceState (KHÔNG router.push → không refetch
   // route/scroll). F5 hoặc chia sẻ link giữ nguyên trạng thái lọc. Dùng debouncedKeyword
   // để không đổi URL mỗi lần gõ phím. price/area lưu dạng index nên phát ra min/max thật.
+  //
+  // Landing địa phương: pageToHref KHÔNG biết namespace /loai/, /gia/, /phuong-xa/ nên
+  // href nó trả về trỏ cây route cũ. Giữ nguyên pathname của route, chỉ ghép query phụ
+  // (preserveLocalityPath) — chiều phạm vi đã bị chặn bởi handleScopeEdit từ trước.
+  // Chiều mà route thực sự sở hữu (theo PATH, không phải theo việc có prop scope).
+  const owned = localityScope
+    ? localityScopeOwnedDimensions(localityScope)
+    : { area: false, district: false, ward: false, type: false, price: false, listingType: false };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     // Chờ taxonomy về mới ghi URL: thiếu nó pageToHref sinh dạng ?area=<uuid> rồi
@@ -329,16 +390,18 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
     if (areaId && areas.length === 0) return;
     const href = pageToHref({
       name: 'listings',
-      listingType: listingType || undefined,
-      areaId: areaId || undefined,
-      typeId: typeId || undefined,
-      typePathSlug: initialFilters?.typePathSlug,
-      district: district || undefined,
-      ward: ward || undefined,
+      // Route chỉ sở hữu chiều NÓ khai trên path. Chiều còn lại là query của người dùng
+      // và phải được giữ nguyên trong URL, nếu không bộ lọc sẽ biến mất khi refresh.
+      listingType: localityScope ? undefined : (listingType || undefined),
+      areaId: localityScope?.areaId ? undefined : (areaId || undefined),
+      typeId: owned.type ? undefined : (typeId || undefined),
+      typePathSlug: localityScope?.typePathSlug || initialFilters?.typePathSlug,
+      district: owned.district ? undefined : (district || undefined),
+      ward: owned.ward ? undefined : (ward || undefined),
       locationSource: inferredLocationRef.current ? 'inferred' : undefined,
       keyword: debouncedKeyword.trim() || undefined,
-      minPrice: priceIdx > 0 ? pr.min : undefined,
-      maxPrice: priceIdx > 0 ? pr.max : undefined,
+      minPrice: owned.price ? undefined : pr.min,
+      maxPrice: owned.price ? undefined : pr.max,
       minArea: areaIdx > 0 ? ar.min : undefined,
       maxArea: areaIdx > 0 ? ar.max : undefined,
       bedrooms: bedrooms || undefined,
@@ -349,10 +412,11 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       isHot: isHot || undefined,
       page: page > 1 ? page : undefined,
     }, { areas, districts, propertyTypes: types });
-    const current = window.location.pathname + window.location.search;
-    if (current !== href) window.history.replaceState(null, '', href);
+    const current = { pathname: window.location.pathname, search: window.location.search };
+    const next = localityScope ? preserveLocalityPath(current, href) : href;
+    if (!isSameListingUrl(current, next)) window.history.replaceState(null, '', next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingType, areaId, typeId, initialFilters?.typePathSlug, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, isFeatured, isHot]);
+  }, [listingType, areaId, typeId, initialFilters?.typePathSlug, district, ward, debouncedKeyword, priceIdx, areaIdx, bedrooms, direction, legal, sort, page, pr.min, pr.max, ar.min, ar.max, areas, districts, types, isFeatured, isHot, localityScope]);
 
   // Map view dùng CHÍNH filter hiệu lực của list (kể cả semantic intent), chỉ bỏ
   // paging/sort vì marker là một tập kết quả chứ không phải một trang xếp hạng.
@@ -370,37 +434,65 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   } = useQuery({
     queryKey: qk.propertiesMap(mapFilters),
     queryFn: () => getAllPropertiesForMap(mapFilters),
-    enabled: viewMode === 'map',
+    enabled: viewMode === 'map' || Boolean(localityScope),
   });
   // Leaflet keeps the first handler, so keep data filtering outside its closure.
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
+    if (typeof window !== 'undefined' && viewMode !== 'map' && !window.matchMedia('(min-width: 1280px)').matches) return;
     setMapBounds(bounds);
-  }, []);
+  }, [viewMode]);
 
   const viewportProps = useMemo(
     () => filterByBounds(mapProperties, mapBounds),
     [mapProperties, mapBounds],
   );
+  const localityGroupKey = useCallback(
+    (property: Property) => getLocalityGroupKey(property, localityScope?.areaId),
+    [localityScope?.areaId],
+  );
+  const localityGroups = useMemo(
+    () => localityScope ? buildLocalityGroups(mapProperties, localityScope.areaId) : [],
+    [mapProperties, localityScope],
+  );
+  const visibleLocalityGroups = localityGroups;
+  useEffect(() => {
+    setSelectedGroupKey(null);
+    setMapBounds(null);
+  }, [filters, localityScope?.path]);
 
   // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
   // so giá trị trước, không dùng cờ boolean (cờ bị StrictMode double-invoke reset
   // nhầm priceIdx đã seed từ URL ?minPrice/?maxPrice ngay khi mount).
+  // Ở landing địa phương, đổi listingType là rời phạm vi (đã điều hướng) nên effect
+  // này không được đụng vào khoảng giá của route.
   const prevListingType = useRef(listingType);
   useEffect(() => {
+    if (localityScope) return;
     if (prevListingType.current !== listingType) {
       prevListingType.current = listingType;
       setPriceIdx(0);
+      setQueryPriceRange({});
     }
-  }, [listingType]);
+  }, [listingType, localityScope]);
 
   const resetFilters = () => {
+    // Ở landing địa phương, "xóa bộ lọc" phải đưa về URL nền — xóa state tại chỗ sẽ
+    // để path cũ hiển thị nội dung không còn khớp phạm vi.
+    if (localityScope) {
+      onNavigate({ name: 'listings', localityPath: localityScope.path, listingType: localityScope.listingType });
+      return;
+    }
     inferredLocationRef.current = false;
     setKeyword(''); setAreaId(''); setTypeId(''); setDistrict(''); setWard('');
-    setPriceIdx(0); setAreaIdx(0); setBedrooms('');
-    setDirection(''); setLegal(''); setIsFeatured(false); setIsHot(false); setPage(1);
+    setPriceIdx(0); setQueryPriceRange({}); setAreaIdx(0); setBedrooms('');
+    setDirection(''); setLegal(''); setIsFeatured(false); setIsHot(false); setSort('newest'); setPage(1);
   };
 
   const clearSearchAndFilters = () => {
+    if (localityScope) {
+      onNavigate({ name: 'listings', localityPath: localityScope.path, listingType: localityScope.listingType });
+      return;
+    }
     resetFilters();
     if (listingType) setListingType('');
   };
@@ -421,8 +513,13 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   useEffect(() => {
     if (totalPages > 0 && page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
-  const hasActiveFilters = !!(keyword || areaId || typeId || district || ward || priceIdx || areaIdx || bedrooms || direction || legal || isFeatured || isHot);
-  const activeFilterCount = [listingType, areaId, typeId, district, ward, priceIdx > 0, areaIdx > 0, bedrooms, direction, legal, isFeatured, isHot]
+  const activeOwned = localityScope ? localityScopeOwnedDimensions(localityScope) : null;
+  const hasActiveFilters = localityScope
+    ? !!(keyword || (!activeOwned?.type && typeId) || (!activeOwned?.district && district) || (!activeOwned?.ward && ward) || (priceFilterActive && !activeOwned?.price) || areaIdx || bedrooms || direction || legal || isFeatured || isHot)
+    : !!(keyword || areaId || typeId || district || ward || priceFilterActive || areaIdx || bedrooms || direction || legal || isFeatured || isHot);
+  const activeFilterCount = (localityScope
+    ? [keyword, !activeOwned?.type && typeId, !activeOwned?.district && district, !activeOwned?.ward && ward, priceFilterActive && !activeOwned?.price, areaIdx > 0, bedrooms, direction, legal, isFeatured, isHot]
+    : [listingType, areaId, typeId, district, ward, priceFilterActive, areaIdx > 0, bedrooms, direction, legal, isFeatured, isHot])
     .filter(Boolean).length;
   const trackResultClick = (position: number, source: 'grid' | 'list' | 'map') => {
     track(EVENTS.LISTING_RESULT_CLICK, {
@@ -438,6 +535,67 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   const setLocationFilter = (fn: () => void) => {
     inferredLocationRef.current = false;
     setFilter(fn);
+  };
+  const selectLocalityGroup = useCallback((groupKey: string | null) => {
+    setSelectedGroupKey(groupKey);
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1279px)').matches && groupKey) setViewMode('map');
+  }, []);
+
+  // Sự thật của phạm vi hiện tại + bộ lọc ngoài phạm vi người dùng đã chọn. Mọi quyết
+  // định điều hướng dưới đây dựng từ đây qua builder thuần (lib/localityScopeEditing),
+  // không tự ghép patch tại chỗ — đó là nguồn của các lỗi "rơi mất tỉnh/quận" và
+  // "so sánh lệch vì điền ''".
+  const scopeFacts = useMemo<LocalityScopeFacts>(() => ({
+    areaId: localityScope?.areaId ?? initialFilters?.areaId ?? '',
+    districtId: localityScope?.districtId,
+    wardId: localityScope?.wardId,
+    districtName: district || initialFilters?.district || undefined,
+    wardName: ward || initialFilters?.ward || undefined,
+    areaName: areas.find(a => a.id === (localityScope?.areaId ?? initialFilters?.areaId))?.name,
+    typeIds: localityScope?.typeIds,
+    typePathSlug: localityScope?.typePathSlug,
+    listingType: (listingType || undefined) as 'mua_ban' | 'cho_thue' | undefined,
+    priceBand: localityScope?.priceBand,
+    copy: {
+      keyword: debouncedKeyword.trim() || undefined,
+      typeId: owned.type ? undefined : (typeId || undefined),
+      minPrice: owned.price ? undefined : pr.min,
+      maxPrice: owned.price ? undefined : pr.max,
+      minArea: areaIdx > 0 ? ar.min : undefined,
+      maxArea: areaIdx > 0 ? ar.max : undefined,
+      bedrooms: bedrooms || undefined,
+      direction: direction || undefined,
+      legal: legal || undefined,
+      sort: sort !== 'newest' ? (sort as string) : undefined,
+      isFeatured: isFeatured || undefined,
+      isHot: isHot || undefined,
+      page: page > 1 ? page : undefined,
+    },
+  }), [localityScope, initialFilters?.areaId, initialFilters?.district, initialFilters?.ward, areas, district, ward, listingType, debouncedKeyword, areaIdx, ar.min, ar.max, bedrooms, direction, legal, sort, isFeatured, isHot, page, owned.type, owned.price, typeId, pr.min, pr.max]);
+
+  // Rời phạm vi landing: điều hướng tới URL NỀN, bỏ mọi chiều route đang sở hữu nhưng
+  // GIỮ bộ lọc ngoài phạm vi để không mất ngữ cảnh người dùng đã chọn.
+  const leaveLocalityScope = useCallback((edit: LocalityGeographyEdit) => {
+    if (!localityScope) return;
+    inferredLocationRef.current = false;
+    onNavigate({ name: 'listings', ...localityScopeEditPatch(scopeFacts, edit) });
+  }, [localityScope, onNavigate, scopeFacts]);
+
+  // Bọc mọi thao tác có thể chạm vào chiều phạm vi: nếu thao tác đó thực sự đổi phạm vi
+  // thì rời landing; nếu không (chọn lại đúng khu vực đang xem) thì giữ nguyên.
+  // `alwaysNavigate` = true khi thao tác chỉ có nghĩa ngoài phạm vi (vd đổi hình thức
+  // giao dịch), nên rời landing ngay cả khi giá trị trùng.
+  const editScopeDimension = (
+    edit: LocalityGeographyEdit,
+    apply: () => void,
+    navigateOptions?: { alwaysNavigate?: boolean },
+  ) => {
+    if (localityScope && (navigateOptions?.alwaysNavigate || localityScopeEditNeedsNavigation(owned, scopeFacts, edit))) {
+      leaveLocalityScope(edit);
+      return;
+    }
+    if (edit.kind === 'district') setWard('');
+    setLocationFilter(apply);
   };
 
   const pageTitle = isFeatured ? 'BĐS Nổi bật'
@@ -468,12 +626,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       <div>
         <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Khu vực</label>
         <div className="flex flex-wrap gap-1.5">
-          <button onClick={() => setLocationFilter(() => setAreaId(''))}
+          <button onClick={() => editScopeDimension({ kind: 'area', id: '' }, () => setAreaId(''))}
             className={`px-3 py-1 text-xs rounded-full border transition-colors ${!areaId ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:border-red-400'}`}>
             Tất cả
           </button>
           {areas.map(a => (
-            <button key={a.id} onClick={() => setLocationFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
+            <button key={a.id} onClick={() => editScopeDimension({ kind: 'area', id: areaId === a.id ? '' : a.id, name: a.name }, () => setAreaId(areaId === a.id ? '' : a.id))}
               className={`px-3 py-1 text-xs rounded-full border transition-colors ${areaId === a.id ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:border-red-400'}`}>
               {a.name}
             </button>
@@ -486,7 +644,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         <div>
           <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Quận/Huyện</label>
           <div className="relative">
-            <select value={district} onChange={e => setLocationFilter(() => setDistrict(e.target.value))}
+            <select value={district} onChange={e => editScopeDimension({ kind: 'district', id: e.target.value, name: e.target.value }, () => setDistrict(e.target.value))}
               className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
               <option value="">Tất cả quận/huyện</option>
               {districts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -501,7 +659,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         <div>
           <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Phường/Xã</label>
           <div className="relative">
-            <select value={ward} onChange={e => setLocationFilter(() => setWard(e.target.value))}
+            <select value={ward} onChange={e => editScopeDimension({ kind: 'ward', id: e.target.value, name: e.target.value }, () => setWard(e.target.value))}
               className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
               <option value="">Tất cả phường/xã</option>
               {wards.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
@@ -515,7 +673,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
       <div>
         <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-2">Loại BĐS</label>
         <div className="relative">
-          <select value={typeId} onChange={e => setFilter(() => setTypeId(e.target.value))}
+          <select value={typeId} onChange={e => editScopeDimension({ kind: 'type', id: e.target.value }, () => setTypeId(e.target.value))}
             className="w-full border border-gray-200 rounded-lg px-3 pr-8 py-2.5 text-sm appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400">
             <option value="">Tất cả loại</option>
             {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -532,7 +690,11 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
         <div className="space-y-1">
           {PRICE_RANGES.map((r, i) => (
             <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 group">
-              <input type="radio" name="price" checked={priceIdx === i} onChange={() => setFilter(() => setPriceIdx(i))} className="accent-red-500 flex-shrink-0" />
+              <input type="radio" name="price" checked={priceIdx === i && !(i === 0 && priceFilterActive)} onChange={() => editScopeDimension({ kind: 'price', priceRange: PRICE_RANGES[i] }, () => {
+                setPriceIdx(i);
+                setQueryPriceRange(localityQueryPriceRange({ minPrice: r.min, maxPrice: r.max }));
+              })}
+                className="accent-red-500 flex-shrink-0" />
               <span className={`text-xs transition-colors ${priceIdx === i ? 'text-red-600 font-semibold' : 'text-gray-600 group-hover:text-red-500'}`}>{r.label}</span>
             </label>
           ))}
@@ -600,42 +762,101 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={localityScope ? `${localityStyles.scope} min-h-screen bg-white` : 'min-h-screen bg-stone-50'} data-testid="listings-surface">
       {/* Header bar with tabs */}
-      <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <Breadcrumb items={[
+      <div className="border-b border-stone-200 bg-white">
+        <div className={`mx-auto px-4 py-3 ${localityScope ? 'max-w-[1360px] sm:px-8' : 'max-w-7xl'}`}>
+          {!hasEditorialHeader && <Breadcrumb items={[
             { label: 'Trang chủ', onClick: () => onNavigate({ name: 'home' }) },
             { label: pageTitle },
-          ]} />
+          ]} />}
 
           {!hasEditorialHeader && <h1 className="mt-1 mb-3 text-lg font-black text-gray-900 md:text-2xl">{heading}</h1>}
 
-          {/* Listing type tabs */}
-          <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-            {LISTING_TYPES.map(lt => (
-              <button key={lt.key} onClick={() => { setListingType(lt.key); setPage(1); }}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg flex-shrink-0 transition-colors ${listingType === lt.key ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {lt.icon}{lt.label}
-              </button>
-            ))}
-          </div>
+          {localityScope && (
+            <div className={localityStyles.localityToolbar} data-testid="locality-toolbar">
+              <nav className={localityStyles.transactionTabs} aria-label="Loại giao dịch">
+                {localityTransactionPaths && <>
+                  <Link href={localityTransactionPaths.sale} className={listingType === 'mua_ban' ? localityStyles.transactionActive : localityStyles.transactionLink}>Mua bán</Link>
+                  <Link href={localityTransactionPaths.rent} className={listingType === 'cho_thue' ? localityStyles.transactionActive : localityStyles.transactionLink}>Cho thuê</Link>
+                </>}
+              </nav>
+              <div className={localityStyles.searchRow}>
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input value={keyword} onChange={e => { setKeyword(e.target.value); setPage(1); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { setDebouncedKeyword(keyword); setPage(1); } }}
+                    placeholder="Tìm theo khu vực, tên tin, địa chỉ..."
+                    className="h-11 w-full rounded-full border border-slate-200 bg-white pl-9 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                  {keyword && <button onClick={() => { setKeyword(''); setPage(1); }} aria-label="Xóa tìm kiếm" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="h-3.5 w-3.5" /></button>}
+                </div>
+                <button type="button" onClick={() => setDebouncedKeyword(keyword)} className={localityStyles.searchButton}>Tìm</button>
+              </div>
+              <div className={localityStyles.quickFilters}>
+                <label className={localityStyles.quickFilter}>
+                  <span>Loại nhà đất</span>
+                  <select value={typeId} onChange={e => editScopeDimension({ kind: 'type', id: e.target.value }, () => setTypeId(e.target.value))}>
+                    <option value="">Tất cả</option>
+                    {types.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                  </select>
+                </label>
+                <label className={localityStyles.quickFilter}>
+                  <span>{isRent ? 'Giá thuê' : 'Khoảng giá'}</span>
+                  <select value={priceIdx} onChange={e => { const index = Number(e.target.value); const range = PRICE_RANGES[index]; editScopeDimension({ kind: 'price', priceRange: range }, () => { setPriceIdx(index); setQueryPriceRange(localityQueryPriceRange({ minPrice: range.min, maxPrice: range.max })); }); }}>
+                    {PRICE_RANGES.map((range, index) => <option key={range.label} value={index}>{range.label}</option>)}
+                  </select>
+                </label>
+                <label className={localityStyles.quickFilter}>
+                  <span>Diện tích</span>
+                  <select value={areaIdx} onChange={e => setFilter(() => setAreaIdx(Number(e.target.value)))}>
+                    {AREA_RANGES.map((range, index) => <option key={range.label} value={index}>{range.label}</option>)}
+                  </select>
+                </label>
+                {districts.length > 0 && <label className={localityStyles.quickFilter}>
+                  <span>Quận / huyện</span>
+                  <select value={district} onChange={e => editScopeDimension({ kind: 'district', id: e.target.value, name: e.target.value }, () => setDistrict(e.target.value))}>
+                    <option value="">Tất cả</option>
+                    {districts.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                  </select>
+                </label>}
+                <button type="button" className={localityStyles.mapButton} onClick={() => setViewMode(viewMode === 'map' ? 'grid' : 'map')} aria-label={viewMode === 'map' ? 'Danh sách' : 'Bản đồ'}>{viewMode === 'map' ? 'Danh sách' : 'Bản đồ'}</button>
+                <button type="button" className={localityStyles.advancedButton} onClick={() => { if (window.matchMedia('(max-width: 1023px)').matches) setMobileFilter(true); else document.getElementById('locality-filter-sidebar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Nâng cao</button>
+                {hasActiveFilters && <button type="button" className={localityStyles.resetButton} onClick={resetFilters}>Xóa tất cả</button>}
+              </div>
+              <p className="text-xs text-slate-500" aria-live="polite">{loading ? 'Đang cập nhật kết quả...' : <>Hiện có <strong className="text-slate-800">{total.toLocaleString('vi-VN')}</strong> tin trong phạm vi này</>}</p>
+            </div>
+          )}
 
-          {/* Area quick tabs */}
-          <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-            <button onClick={() => setLocationFilter(() => setAreaId(''))}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 transition-colors ${!areaId ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              Tất cả khu vực
-            </button>
-            {areas.map(a => (
-              <button key={a.id} onClick={() => setLocationFilter(() => setAreaId(areaId === a.id ? '' : a.id))}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 transition-colors ${areaId === a.id ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {a.name}
-              </button>
-            ))}
-          </div>
+          {!localityScope && <>
+            {/* Listing type tabs — đổi giao dịch ở landing là đổi phạm vi: luôn điều
+                hướng tới URL nền của loại mới thay vì đổi ngầm trên path cũ. */}
+            <div className="mb-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide">
+              {LISTING_TYPES.map(lt => (
+                <button key={lt.key} onClick={() => {
+                  setListingType(lt.key); setPage(1);
+                }}
+                  className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${listingType === lt.key ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {lt.icon}{lt.label}
+                </button>
+              ))}
+            </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-3">
+            {/* Area quick tabs */}
+            <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <button onClick={() => editScopeDimension({ kind: 'area', id: '' }, () => setAreaId(''))}
+                className={`flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${!areaId ? 'border border-red-200 bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                Tất cả khu vực
+              </button>
+              {areas.map(a => (
+                <button key={a.id} onClick={() => editScopeDimension({ kind: 'area', id: areaId === a.id ? '' : a.id, name: a.name }, () => setAreaId(areaId === a.id ? '' : a.id))}
+                  className={`flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${areaId === a.id ? 'border border-red-200 bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          </>}
+
+          {!localityScope && <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-gray-500 text-xs" aria-live="polite">
               {loading ? (
                 'Đang cập nhật kết quả...'
@@ -655,27 +876,20 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                 {keyword && <button onClick={() => { setKeyword(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="w-3.5 h-3.5" /></button>}
               </div>
-              <button
-                type="button"
-                onClick={() => setMobileFilter(true)}
-                aria-label="Mở bộ lọc nâng cao"
-                aria-expanded={mobileFilter}
-                aria-controls="mobile-listing-filters"
-                className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 lg:hidden"
-              >
+              <button type="button" onClick={() => setMobileFilter(true)} aria-label="Mở bộ lọc nâng cao" aria-expanded={mobileFilter} aria-controls="mobile-listing-filters" className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 lg:hidden">
                 <Filter className="h-4 w-4" />Bộ lọc
                 {activeFilterCount > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{activeFilterCount}</span>}
               </button>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-5">
-        <div className="flex gap-5">
+      <div className={`mx-auto px-4 py-5 ${localityScope ? 'max-w-[1440px] sm:px-8' : 'max-w-7xl'}`}>
+        <div className={localityScope ? 'grid items-start gap-6 xl:grid-cols-[266px_minmax(0,1fr)_minmax(340px,.85fr)]' : 'flex gap-5'}>
           {/* Sidebar filter */}
-          <aside className="hidden lg:block w-60 flex-shrink-0">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sticky top-28">
+          <aside className={`hidden flex-shrink-0 lg:block ${localityScope ? 'w-auto' : 'w-60'}`}>
+            <div id="locality-filter-sidebar" className={`sticky top-28 ${localityScope ? localityStyles.sidebar : 'border-l border-stone-200 pl-4'}`}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="w-4 h-4 text-red-500" />
@@ -685,7 +899,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </div>
               <FilterPanel />
             </div>
-            {sidebarBanners.map(b => (
+            {!localityScope && sidebarBanners.map(b => (
               <a key={b.id} href={b.cta_link ?? '#'} target="_blank" rel="noopener noreferrer"
                 className="mt-4 block rounded-xl overflow-hidden shadow-sm border border-gray-100 group">
                 {b.image_url
@@ -705,7 +919,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
           {/* Main content */}
           <div className="flex-1 min-w-0">
             {/* Top banner */}
-            {topBanners[0] && (
+            {!localityScope && topBanners[0] && (
               <a href={topBanners[0].cta_link ?? '#'} target="_blank" rel="noopener noreferrer"
                 className="block mb-4 rounded-xl overflow-hidden shadow-sm border border-gray-100 group">
                 {topBanners[0].image_url
@@ -723,7 +937,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </a>
             )}
             {/* Sort + view mode bar */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm sm:px-4">
+            {!localityScope && <div className={localityScope ? `${localityStyles.listingSurface} mb-5 flex flex-wrap items-center justify-between gap-2 px-4 py-3` : 'mb-4 flex flex-wrap items-center justify-between gap-2 border-y border-stone-200 bg-white px-1 py-2.5 sm:px-2'}>
               <div className="flex items-center gap-2">
                 <ArrowUpDown className="w-4 h-4 text-gray-400" />
                 <select value={effectiveSort} onChange={e => setFilter(() => setSort(e.target.value as PropertySort))}
@@ -750,7 +964,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   ))}
                 </div>
               </div>
-            </div>
+            </div>}
 
             {/* Active filter chips */}
             {hasActiveFilters && (
@@ -761,14 +975,21 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   </span>
                 )}
                 {areaId && selectedArea && (
-                  <FilterChip label={`📍 ${selectedArea.name}`} onRemove={() => setLocationFilter(() => setAreaId(''))} />
+                  <FilterChip label={`📍 ${selectedArea.name}`} onRemove={() => editScopeDimension({ kind: 'area', id: '' }, () => setAreaId(''))} />
                 )}
-                {district && <FilterChip label={district} onRemove={() => setLocationFilter(() => setDistrict(''))} />}
-                {ward && <FilterChip label={ward} onRemove={() => setLocationFilter(() => setWard(''))} />}
+                {district && <FilterChip label={district} onRemove={() => editScopeDimension({ kind: 'district', id: '' }, () => setDistrict(''))} />}
+                {ward && <FilterChip label={ward} onRemove={() => editScopeDimension({ kind: 'ward', id: '' }, () => setWard(''))} />}
                 {typeId && types.find(t => t.id === typeId) && (
-                  <FilterChip label={types.find(t => t.id === typeId)!.name} onRemove={() => setFilter(() => setTypeId(''))} />
+                  <FilterChip label={types.find(t => t.id === typeId)!.name} onRemove={() => editScopeDimension({ kind: 'type', id: '' }, () => setTypeId(''))} />
                 )}
-                {priceIdx > 0 && <FilterChip label={PRICE_RANGES[priceIdx]?.label ?? ''} onRemove={() => setFilter(() => setPriceIdx(0))} />}
+                {priceFilterActive && (
+                  <FilterChip
+                    label={localityScope?.priceBand
+                      ? (localityPriceBandRange(localityScope.priceBand)?.label ?? PRICE_RANGES[priceIdx]?.label ?? '')
+                      : (priceIdx > 0 ? PRICE_RANGES[priceIdx]?.label : `${pr.min ?? 0}–${pr.max ?? '∞'} ${isRent ? 'triệu/tháng' : 'tỷ'}`)}
+                    onRemove={() => editScopeDimension({ kind: 'price', priceRange: undefined }, () => { setPriceIdx(0); setQueryPriceRange({}); })}
+                  />
+                )}
                 {areaIdx > 0 && <FilterChip label={AREA_RANGES[areaIdx]?.label ?? ''} onRemove={() => setFilter(() => setAreaIdx(0))} />}
                 {legal && <FilterChip label={legal} onRemove={() => setFilter(() => setLegal(''))} />}
                 {direction && <FilterChip label={`Hướng ${direction}`} onRemove={() => setFilter(() => setDirection(''))} />}
@@ -805,7 +1026,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               ) : (
                 <>
                   {/* Khung bản đồ chiều cao responsive — panel sản phẩm phủ góc phải (desktop) */}
-                  <div className="relative h-[70vh] min-h-[420px] max-h-[680px]" data-testid="property-map-ready">
+                  <div className="relative isolate h-[70vh] min-h-[420px] max-h-[680px]" data-testid="property-map-ready">
                     <PropertyMap
                       properties={mapProperties}
                       onNavigate={onNavigate}
@@ -813,10 +1034,14 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                       onBoundsChange={handleBoundsChange}
                       showCountBadge={false}
                       fitToMarkers
+                      getGroupKey={localityScope ? localityGroupKey : undefined}
+                      selectedGroupKey={localityScope ? selectedGroupKey : undefined}
+                      focusGroupKey={localityScope ? selectedGroupKey : undefined}
+                      onGroupSelect={localityScope ? setSelectedGroupKey : undefined}
                     />
 
                     {/* Panel overlay góc phải — chỉ desktop, luôn hiển thị */}
-                    <div className="hidden lg:flex absolute top-3 right-3 bottom-3 w-72 z-[1000] flex-col rounded-2xl bg-white/95 backdrop-blur-sm shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="hidden lg:flex absolute top-3 right-3 bottom-3 w-72 z-10 flex-col rounded-2xl bg-white/95 backdrop-blur-sm shadow-xl border border-gray-100 overflow-hidden">
                       <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
                         <p className="text-xs font-bold text-gray-900">Tin trong khung nhìn</p>
                         <p className="text-[11px] text-gray-500 mt-0.5">{viewportProps.length} tin đăng đang hiển thị</p>
@@ -824,17 +1049,9 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                       {viewportProps.length > 0 ? (
                         <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
                           {viewportProps.map((p, index) => (
-                            <button key={p.id}
-                              onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                              className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
-                              <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                                <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
-                                <p className="text-red-600 text-xs font-black mt-0.5">{formatPropertyPrice(p)}</p>
-                              </div>
-                            </button>
+                            <MapResultCard key={p.id} property={p}
+                              onResultClick={() => trackResultClick(index + 1, 'map')}
+                              onNavigate={onNavigate} />
                           ))}
                         </div>
                       ) : (
@@ -855,17 +1072,9 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                     {viewportProps.length > 0 ? (
                       <div className="space-y-2">
                         {viewportProps.map((p, index) => (
-                          <button key={p.id}
-                            onClick={() => { trackResultClick(index + 1, 'map'); onNavigate({ name: 'property', id: p.id, slug: p.slug ?? undefined }); scrollTop(); }}
-                            className="flex gap-2.5 w-full text-left bg-white border border-gray-100 rounded-xl p-2.5 hover:border-red-300 hover:shadow-sm transition-all group">
-                            <span className="relative w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                              <SafeImage src={p.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt={buildPropertyImageAlt(p)} fill sizes="64px" className="object-cover" />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-gray-900 line-clamp-2 group-hover:text-red-600 transition-colors">{p.title}</p>
-                              <p className="text-red-600 text-xs font-black mt-0.5">{formatPropertyPrice(p)}</p>
-                            </div>
-                          </button>
+                          <MapResultCard key={p.id} property={p}
+                            onResultClick={() => trackResultClick(index + 1, 'map')}
+                            onNavigate={onNavigate} />
                         ))}
                       </div>
                     ) : (
@@ -879,13 +1088,19 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               )
             )}
 
+            {localityScope && viewMode === 'map' && (
+              <div className="mt-4 xl:hidden">
+                <LocalityGroupResults groups={visibleLocalityGroups} loading={mapLoading} error={mapError} total={visibleLocalityGroups.reduce((sum, group) => sum + group.count, 0)} selectedGroupKey={selectedGroupKey} onSelectGroup={selectLocalityGroup} />
+              </div>
+            )}
+
             {/* H2 mô tả tập kết quả — sr-only vì số lượng đã hiện ở thanh trên,
                 nhưng crawler cần một heading cấp 2 cho khối danh sách. */}
             {viewMode !== 'map' && (
               <h2 className="sr-only">Danh sách {heading.toLocaleLowerCase('vi-VN')}</h2>
             )}
 
-            {viewMode !== 'map' && listingsError ? (
+            {viewMode !== 'map' && listingsError && !localityScope ? (
               <div className="rounded-2xl border border-red-100 bg-white px-6 py-10 text-center shadow-sm" role="alert">
                 <p className="font-bold text-gray-900">Không thể tải danh sách bất động sản</p>
                 <p className="mt-2 text-sm text-gray-500">
@@ -902,8 +1117,9 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                 </button>
               </div>
             ) : viewMode === 'grid' && (
+              localityScope ? <LocalityGroupResults groups={visibleLocalityGroups} loading={mapLoading} error={mapError} total={visibleLocalityGroups.reduce((sum, group) => sum + group.count, 0)} selectedGroupKey={selectedGroupKey} onSelectGroup={selectLocalityGroup} /> : (
               loading ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4">
+                <div className={localityScope ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3' : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4'}>
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-72 rounded-xl border border-gray-100 bg-white animate-pulse" />)}
                 </div>
               ) : properties.length === 0 ? (
@@ -914,7 +1130,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   resultSummary={resultSummary}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4">
+                <div className={localityScope ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3' : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,300px))] lg:justify-center md:gap-4'} data-testid="listings-grid">
                   {properties.map((p, index) => (
                     <GridCard key={p.id} property={p}
                       onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'grid')}
@@ -924,34 +1140,37 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
                   ))}
                 </div>
               )
+              )
             )}
 
             {!listingsError && viewMode === 'list' && (
-              loading ? (
-                <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-28 animate-pulse border border-gray-100" />)}</div>
-              ) : properties.length === 0 ? (
-                <EmptyState
-                  onReset={clearSearchAndFilters}
-                  listingType={listingType}
-                  hasKeyword={Boolean(debouncedKeyword.trim())}
-                  resultSummary={resultSummary}
-                />
-              ) : (
-                <div className="space-y-3">
-                  {properties.map((p, index) => (
-                    <ListCard key={p.id} property={p}
-                      onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'list')}
-                      isFavorited={favoriteIds.has(p.id)}
-                      onToggleFavorite={() => favMutation.mutate(p)}
-                      onContact={() => setContactProp(p)} />
-                  ))}
-                </div>
+              localityScope ? <LocalityGroupResults groups={visibleLocalityGroups} loading={mapLoading} error={mapError} total={visibleLocalityGroups.reduce((sum, group) => sum + group.count, 0)} selectedGroupKey={selectedGroupKey} onSelectGroup={selectLocalityGroup} /> : (
+                loading ? (
+                  <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="bg-white rounded-xl h-28 animate-pulse border border-gray-100" />)}</div>
+                ) : properties.length === 0 ? (
+                  <EmptyState
+                    onReset={clearSearchAndFilters}
+                    listingType={listingType}
+                    hasKeyword={Boolean(debouncedKeyword.trim())}
+                    resultSummary={resultSummary}
+                  />
+                ) : (
+                  <div className="space-y-3" data-testid="listings-list">
+                    {properties.map((p, index) => (
+                      <ListCard key={p.id} property={p}
+                        onResultClick={() => trackResultClick((page - 1) * PER_PAGE + index + 1, 'list')}
+                        isFavorited={favoriteIds.has(p.id)}
+                        onToggleFavorite={() => favMutation.mutate(p)}
+                        onContact={() => setContactProp(p)} />
+                    ))}
+                  </div>
+                )
               )
             )}
 
             {/* Tải thêm: nối trang kế vào danh sách. Nút luôn hiển thị (fallback khi
                 IntersectionObserver không chạy/JS chậm); sentinel chỉ tự bấm hộ. */}
-            {!listingsError && viewMode !== 'map' && hasNextPage && (
+            {!listingsError && !localityScope && viewMode !== 'map' && hasNextPage && (
               <div className="mt-8 flex flex-col items-center gap-2">
                 <div ref={loadMoreRef} aria-hidden className="h-px w-full" />
                 <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}
@@ -963,7 +1182,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
             )}
 
             {/* Pagination */}
-            {!listingsError && viewMode !== 'map' && totalPages > 1 && (
+            {!listingsError && !localityScope && viewMode !== 'map' && totalPages > 1 && (
               <div className="flex items-center justify-center gap-1 mt-8">
                 <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
                   className="px-3 py-2 text-sm border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors bg-white">
@@ -985,7 +1204,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </div>
             )}
 
-            {viewMode !== 'map' && properties.length > 0 && (
+            {!localityScope && viewMode !== 'map' && properties.length > 0 && (
               <section className="mt-10 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="continue-discovery-heading">
                 <DiscoverySectionHeader
                   headingId="continue-discovery-heading"
@@ -1010,10 +1229,10 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               </section>
             )}
 
-            {viewMode !== 'map' && (
+            {!localityScope && viewMode !== 'map' && (
               <ForYou surface="listings" source="listings_after_results" />
             )}
-            {viewMode !== 'map' && (
+            {!localityScope && viewMode !== 'map' && (
               <RecentlyViewed
                 title="Xem lại tin đã quan tâm"
                 subtitle="Tiếp tục từ những bất động sản bạn đã mở gần đây."
@@ -1022,6 +1241,21 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, ha
               />
             )}
           </div>
+          {localityScope && viewMode !== 'map' && (
+            <aside className="hidden min-w-0 xl:sticky xl:top-[calc(var(--cnv-header-height)+5.5rem)] xl:block" aria-label="Bản đồ tin đăng">
+              <div className={`${localityStyles.listingSurface} isolate overflow-hidden`} data-testid="locality-map-rail">
+                <div className="border-b border-stone-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-700">Bản đồ khu vực</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">Vị trí tin đăng</p>
+                </div>
+                {mapLoading ? <div className="h-[calc(100vh-13rem)] min-h-[32rem] max-h-[45rem] animate-pulse bg-slate-100" aria-label="Đang tải dữ liệu bản đồ" />
+                  : mapError ? <div className="flex min-h-[32rem] items-center justify-center px-5 text-center text-sm text-slate-500">Không thể tải bản đồ bất động sản.</div>
+                    : <div className="relative isolate h-[calc(100vh-13rem)] min-h-[32rem] max-h-[45rem]">
+                      <PropertyMap properties={mapProperties} onNavigate={onNavigate} height="100%" onBoundsChange={handleBoundsChange} showCountBadge={false} fitToMarkers getGroupKey={localityGroupKey} selectedGroupKey={selectedGroupKey} focusGroupKey={selectedGroupKey} onGroupSelect={setSelectedGroupKey} />
+                    </div>}
+              </div>
+            </aside>
+          )}
         </div>
       </div>
 
@@ -1073,7 +1307,7 @@ function EmptyState({
 }) {
   const resetLabel = hasKeyword ? 'Xóa từ khóa và bộ lọc' : 'Xóa tất cả bộ lọc';
   return (
-    <div className="text-center py-20 bg-white rounded-xl border border-gray-100">
+    <div className="border-y border-stone-200 bg-white px-4 py-20 text-center" data-testid="listings-empty-state">
       <Building2 className="w-14 h-14 text-gray-200 mx-auto mb-3" />
       <p className="text-gray-600 font-semibold">Chưa tìm thấy {resultSummary} phù hợp</p>
       <p className="text-gray-400 text-sm mt-1">{listingEmptyStateGuidance(listingType)}</p>
@@ -1082,115 +1316,65 @@ function EmptyState({
   );
 }
 
-function GridCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
-  const pricePerSqm = p.area_sqm && p.price
-    ? ((p.price_unit === 'triệu' ? p.price / 1000 : p.price) * 1000 / p.area_sqm).toFixed(0)
-    : null;
-  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
-  return (
-    <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-row sm:flex-col">
-      <PropertyGallery
-        property={p}
-        href={buildPropertyPath(p)}
-        onLinkClick={onResultClick}
-        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
-        topLeft={p.badge ? (
-          <span className={`absolute left-2 top-2 z-[2] rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
-        ) : p.is_hot ? (
-          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Flame className="h-2.5 w-2.5" />HOT</span>
-        ) : p.is_featured ? (
-          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Sparkles className="h-2.5 w-2.5" />Nổi bật</span>
-        ) : undefined}
-        topRight={(
-          <>
-            <CompareButton property={p} variant="overlay" />
-            {p.listing_type === 'cho_thue' && <span className="rounded-md bg-blue-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Cho thuê</span>}
-            <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-[10px] font-semibold text-white"><Eye className="h-3 w-3" />{p.views ?? 0}</span>
-          </>
-        )}
-        bottomLeft={<span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>}
-        showTotalPriceLabel={p.listing_type !== 'cho_thue'}
-        isFavorited={isFavorited}
-        onToggleFavorite={onToggleFavorite}
-        mobileList
-      />
-      <div className="min-w-0 p-3.5 flex flex-col flex-1">
-        <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">{displayTitle}</Link></h3>
-        <p className="cnv-property-price text-red-600">{formatPropertyPrice(p)}</p>
-        <div className="cnv-property-meta flex items-center gap-2 text-gray-500 my-1 flex-wrap">
-          {p.area_sqm && <span>{p.area_sqm} m²</span>}
-          {pricePerSqm && p.listing_type !== 'cho_thue' && <span className="text-gray-400">{pricePerSqm} tr/m²</span>}
-          {p.bedrooms && <span>{p.bedrooms} PN</span>}
-          {p.legal_status && <span className="flex items-center gap-0.5 text-emerald-600 ml-auto"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
-        </div>
-        <div className="cnv-property-meta flex items-center gap-1 text-gray-400 mb-3">
-          <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
-          <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
-        </div>
-        <div className="flex gap-2 mt-auto">
-          <Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-control-type flex-1 text-center border border-red-400 text-red-600 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-          <button onClick={onContact} className="cnv-control-type flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
-            <Phone className="w-3 h-3" />Liên hệ
-          </button>
-        </div>
-      </div>
+// Wrapper giữ nguyên callback/tracking của trang danh sách, phần hiển thị dùng chung
+// PropertyCard. CompareButton đặt đúng chỗ theo từng variant: overlay trên ảnh (grid),
+// inline ở footer (list) — nhờ mediaActions/extraActions của component dùng chung.
+function LocalityGroupResults({ groups, loading, error, total, selectedGroupKey, onSelectGroup }: { groups: LocalityGroup[]; loading: boolean; error: boolean; total: number; selectedGroupKey: string | null; onSelectGroup: (groupKey: string | null) => void }) {
+  if (loading) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><div className="h-8 animate-pulse rounded bg-slate-100" /><div className="mt-3 space-y-2">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-slate-100" />)}</div></div>;
+  if (error) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><p className="py-12 text-center text-sm text-red-600">Không thể tải nhóm tin trên bản đồ.</p></div>;
+  if (!groups.length) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><p className="py-12 text-center text-sm text-slate-500">Chưa có tin có tọa độ trong phạm vi này.</p></div>;
+  return <section className={localityStyles.groupResults} data-testid="locality-group-results" aria-labelledby="locality-group-results-title">
+    <div className={localityStyles.groupHeader}>
+      <div><h3 id="locality-group-results-title">Nhóm ({groups.length})</h3><p>{total.toLocaleString('vi-VN')} tin trên bản đồ</p></div>
+      <button type="button" aria-label="Bỏ chọn nhóm" className={localityStyles.groupRefresh} onClick={() => onSelectGroup(null)}><span aria-hidden="true">↻</span></button>
     </div>
+    <p className={localityStyles.groupHint}>Chọn một nhóm để thu bản đồ về đúng khu vực và làm nổi bật các tin cùng nhóm.</p>
+    <div className={localityStyles.groupList}>
+      {groups.map(group => <button key={group.key} type="button" onClick={() => onSelectGroup(group.key)} className={`${localityStyles.groupRow} ${selectedGroupKey === group.key ? localityStyles.groupRowSelected : ''}`} aria-pressed={selectedGroupKey === group.key}>
+        <span className={localityStyles.groupCount}>{group.count}</span>
+        <span className="min-w-0 text-left"><strong>{group.label}</strong><small>{group.count} tin trong nhóm</small></span>
+      </button>)}
+    </div>
+  </section>;
+}
+
+function GridCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
+  return (
+    <UnifiedPropertyCard
+      property={p}
+      href={buildPropertyPath(p)}
+      variant="grid"
+      onResultClick={onResultClick}
+      onContact={onContact}
+      isFavorited={isFavorited}
+      onToggleFavorite={onToggleFavorite}
+      mediaActions={<CompareButton property={p} variant="overlay" />}
+    />
   );
 }
 
+function MapResultCard({ property, onResultClick, onNavigate }: { property: Property; onResultClick: () => void; onNavigate: (page: Page) => void }) {
+  return <UnifiedPropertyCard property={property} variant="compact"
+    onResultClick={event => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      onResultClick();
+      onNavigate({ name: 'property', id: property.id, slug: property.slug ?? undefined });
+      scrollTop();
+    }} />;
+}
+
 function ListCard({ property: p, onContact, onResultClick, isFavorited = false, onToggleFavorite }: { property: Property; onContact: () => void; onResultClick: () => void; isFavorited?: boolean; onToggleFavorite?: () => void }) {
-  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   return (
-    <div className="group flex overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md">
-      <div className="relative w-28 shrink-0 overflow-hidden sm:w-48">
-        <Link href={buildPropertyPath(p)} onClick={onResultClick} aria-label={p.title} className="absolute inset-0 z-[1]" />
-        <BlurFillImage
-          src={p.image_url ?? 'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg'}
-          alt={buildPropertyImageAlt(p)}
-          sizes="192px"
-          wrapperClassName="h-full"
-        />
-        {p.listing_type === 'cho_thue' && (
-          <span className="absolute top-2 left-2 z-[2] bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Cho thuê</span>
-        )}
-        {p.badge && <span className="absolute top-2 left-2 z-[2] bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-sm">{p.badge}</span>}
-      </div>
-      <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
-        <div>
-          <VerifiedBadge property={p} />
-          <h3 className="mb-1.5"><Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">{displayTitle}</Link></h3>
-          <p className="cnv-property-price text-red-600 mb-1">{formatPropertyPrice(p)}</p>
-          <div className="cnv-property-meta flex items-center gap-3 text-gray-500 mb-1.5 flex-wrap">
-            {p.area_sqm && <span className="flex items-center gap-0.5"><Building2 className="w-3 h-3" />{p.area_sqm} m²</span>}
-            {p.bedrooms && <span>{p.bedrooms} PN</span>}
-            {p.bathrooms && <span>{p.bathrooms} WC</span>}
-            {p.direction && <span>Hướng {p.direction}</span>}
-            {p.legal_status && <span className="text-emerald-600 flex items-center gap-0.5"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
-          </div>
-          <p className="cnv-property-meta text-gray-400 flex items-center gap-1">
-            <MapPin className="w-3 h-3 text-red-400" />{[p.address, p.district, p.city].filter(Boolean).join(', ')}
-          </p>
-        </div>
-          <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 text-xs text-gray-400">
-              <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.views}</span>
-              <span>{new Date(p.created_at).toLocaleDateString('vi-VN')}</span>
-            </div>
-            <div className="flex flex-wrap gap-2 sm:justify-end">
-            <CompareButton property={p} variant="inline" />
-            <button onClick={e => { e.stopPropagation(); e.preventDefault(); onToggleFavorite?.(); }}
-              className="w-8 h-8 border border-gray-200 rounded-lg flex items-center justify-center hover:border-red-400 transition-colors">
-              <svg className={`w-3.5 h-3.5 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill="none">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-            </button>
-            <Link href={buildPropertyPath(p)} onClick={onResultClick} className="cnv-control-type inline-flex items-center border border-red-400 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-            <button onClick={onContact} className="cnv-control-type bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-              <Phone className="w-3 h-3" />Liên hệ
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <UnifiedPropertyCard
+      property={p}
+      href={buildPropertyPath(p)}
+      variant="list"
+      onResultClick={onResultClick}
+      onContact={onContact}
+      isFavorited={isFavorited}
+      onToggleFavorite={onToggleFavorite}
+      extraActions={<CompareButton property={p} variant="inline" />}
+    />
   );
 }

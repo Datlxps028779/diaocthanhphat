@@ -1,12 +1,26 @@
 // ─── Slug SEO dùng chung ───────────────────────────────────────────────────────
 
 const FALLBACK = 'bat-dong-san';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Canonical public slugs are intentionally lower-case ASCII segments. Keep this
 // predicate shared by sitemap and Search Visibility so invalid source rows are
 // excluded consistently instead of being emitted with an ID/raw-slug fallback.
 export function isValidSlug(value: string | null | undefined): value is string {
   return Boolean(value?.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.trim()));
+}
+
+export function isPublicNewsRouteSegment(value: string | null | undefined): value is string {
+  return Boolean(value && value === value.trim() && (isValidSlug(value) || UUID_RE.test(value)));
+}
+
+export function decodePublicNewsRouteSegment(raw: string): string | null {
+  try {
+    const value = decodeURIComponent(raw);
+    return isPublicNewsRouteSegment(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 // Safe legacy segment used only for purging an old cached public URL. This is

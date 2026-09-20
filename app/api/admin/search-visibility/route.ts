@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { callerClient, requireOwner } from '@/lib/server/requireAdmin';
 import {
@@ -10,6 +11,20 @@ import {
 import { getSearchConsoleConfigurationState } from '@/lib/server/googleSearchConsole';
 
 export const runtime = 'nodejs';
+
+/**
+ * So sánh secret cổng sync nội bộ theo thời gian hằng định (house pattern của
+ * route seo-freshness). Chỉ dùng cho action `sync`; mọi action privileged khác
+ * vẫn bắt buộc owner-MFA.
+ */
+function matchesSyncSecret(expected: string, authorization: string | null): boolean {
+  if (!authorization) return false;
+  const provided = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (!provided) return false;
+  const left = Buffer.from(expected);
+  const right = Buffer.from(provided);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
 
 type VisibilityRow = {
   source_key: string;
@@ -104,11 +119,10 @@ export async function POST(req: NextRequest) {
   const action = actionFromRequest(body);
   if (!action) return NextResponse.json({ error: 'Thao tác Search Visibility không hợp lệ.', code: 'UNKNOWN' }, { status: 400 });
 
-  const syncSecret = process.env.SEARCH_VISIBILITY_SYNC_SECRET;
-  const authorization = req.headers.get('authorization');
+  const syncSecret = process.env.SEARCH_VISIBILITY_SYNC_SECRET?.trim();
   const isInternalSync = action === 'sync'
     && Boolean(syncSecret)
-    && authorization === `Bearer ${syncSecret}`;
+    && matchesSyncSecret(syncSecret!, req.headers.get('authorization'));
   const auth = isInternalSync
     ? { ok: true as const, userId: null, token: syncSecret! }
     : await requireOwner(req);

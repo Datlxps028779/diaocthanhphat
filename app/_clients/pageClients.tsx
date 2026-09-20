@@ -4,6 +4,7 @@ import { SiteChrome } from '@/components/SiteChrome';
 import { useNavigate } from '@/lib/useNavigate';
 import type { ReactNode } from 'react';
 import type { ListingInitialFilters } from '@/lib/api/properties';
+import type { LocalityListingScope } from '@/lib/localityListingScope';
 import type { Property, NewsPageResult, ManagedPage, PageBlock } from '@/lib/supabase';
 
 function ScreenLoading() {
@@ -45,25 +46,33 @@ export function ListingsClient({ listingType, filters, initialData }: {
 // Trang khu vực theo listing-type (/cho-thue/binh-duong/di-an): khối nội dung tĩnh
 // (server-render, truyền qua children) hiển thị TRÊN danh sách tin. Một SiteChrome
 // duy nhất bọc cả hai — tránh lồng chrome khi tái dùng ListingsPage.
-export function AreaListingClient({ listingType, filters, initialData, initialDataScope, header }: {
-  listingType: 'mua_ban' | 'cho_thue';
+export function AreaListingClient({ listingType, filters, initialData, initialDataScope, header, footer, localityScope, localitySubnav, localityTransactionPaths }: {
+  listingType?: 'mua_ban' | 'cho_thue';
   filters?: ListingInitialFilters;
   initialData?: { data: Property[]; total: number };
   initialDataScope?: ListingInitialFilters;
   header?: ReactNode;
+  footer?: ReactNode;
+  localityScope?: LocalityListingScope;
+  localitySubnav?: ReactNode;
+  localityTransactionPaths?: { sale: string; rent: string };
 }) {
   const navigate = useNavigate();
   return (
-    <SiteChrome currentPage={{ name: 'listings', listingType }}>
+    <SiteChrome currentPage={{ name: 'listings', listingType }} localityActions={Boolean(localityScope)} localitySubnav={localitySubnav}>
       <main id="main-content">
         {header}
         <ListingsPage
+          key={`${localityScope?.path ?? ''}:${JSON.stringify(filters ?? {})}`}
           initialFilters={{ listingType, ...filters }}
           initialData={initialData}
           initialDataScope={initialDataScope}
           hasEditorialHeader={Boolean(header)}
+          localityScope={localityScope}
+          localityTransactionPaths={localityTransactionPaths}
           onNavigate={navigate}
         />
+        {footer}
       </main>
     </SiteChrome>
   );

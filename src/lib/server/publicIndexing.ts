@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { adminClient } from './requireAdmin';
 import {
   collectContentRevalidationPaths,
@@ -10,6 +10,17 @@ import {
   syncSearchVisibilityAudit,
   type SearchVisibilitySyncResult,
 } from './searchVisibilityService';
+
+// Tag snapshot địa phương KHÔNG nhận input từ client. Giữ literal ở đây (module thuần,
+// không kéo React/next-cache của loader) và có test chốt khớp với
+// localitySnapshot.LOCALITY_SNAPSHOT_CACHE_TAG. Một tag bao phủ mọi landing/report/
+// ward/price phái sinh nên không cần liệt kê từng URL.
+export const LOCALITY_SNAPSHOT_TAG = 'public-locality-snapshot';
+
+// Snapshot tin tức khu vực (src/lib/server/localityNewsSnapshot.ts) giữ nguyên giá trị
+// literal này. Chỉ purge khi có bài viết công khai thay đổi — khu vực/sản phẩm không
+// đụng tới nó.
+export const LOCALITY_NEWS_SNAPSHOT_TAG = 'public-locality-news-snapshot';
 
 type PropagationLayerStatus = 'succeeded' | 'skipped' | 'degraded';
 
@@ -75,6 +86,13 @@ export async function propagatePublicIndexing(input: {
 }): Promise<PublicIndexingPropagation> {
   const paths = input.paths ?? collectContentRevalidationPaths(input.content, input.lookups);
   for (const path of paths) revalidatePath(path);
+
+  if ((input.content.entity === 'area' || input.content.entity === 'property') && publicImpact(input.content)) {
+    revalidateTag(LOCALITY_SNAPSHOT_TAG);
+  }
+  if (input.content.entity === 'news' && publicImpact(input.content)) {
+    revalidateTag(LOCALITY_NEWS_SNAPSHOT_TAG);
+  }
 
   let freshness: PublicIndexingPropagation['freshness'] = {
     status: paths.length ? 'succeeded' : 'skipped',

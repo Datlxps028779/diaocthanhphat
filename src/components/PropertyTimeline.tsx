@@ -129,10 +129,10 @@ export function PropertyTimeline() {
     initialPageParam: 0,
     getNextPageParam: page => page.nextPage,
     enabled: Boolean(day),
-    refetchInterval: 30_000,
+    refetchInterval: isToday ? 30_000 : false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: 'always',
-    staleTime: 0,
+    refetchOnWindowFocus: isToday ? 'always' : false,
+    staleTime: isToday ? 0 : 5 * 60_000,
     retry: 1,
   });
   const buckets = groupTimelineProperties(query.data?.pages.flatMap(page => page.data) ?? [], day);
@@ -210,7 +210,7 @@ export function PropertyTimeline() {
         </div>
         <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[10px] leading-relaxed text-slate-500">
           <p>Giờ Việt Nam (UTC+7) · Theo mốc tạo bản ghi · Chỉ gồm tin đang công khai.</p>
-          <p>{query.isFetching ? 'Đang cập nhật…' : 'Tự động cập nhật mỗi 30s'} · {query.dataUpdatedAt ? `Lần thành công: ${displayTime(query.dataUpdatedAt)}` : 'Chưa cập nhật'}</p>
+          <p>{query.isFetching ? 'Đang cập nhật…' : isToday ? 'Tự động cập nhật mỗi 30s' : 'Lịch sử không tự động cập nhật'} · {query.dataUpdatedAt ? `Lần thành công: ${displayTime(query.dataUpdatedAt)}` : 'Chưa cập nhật'}</p>
         </div>
       </div>
     </section>

@@ -12,6 +12,9 @@
       "Bash(git commit --no-verify:*)",
       "Bash(git push --no-verify:*)",
       "Bash(supabase db reset:*)"
+    ],
+    "allow": [
+      "Bash(supabase secrets *)"
     ]
   },
   "hooks": {

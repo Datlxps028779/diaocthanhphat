@@ -7,7 +7,8 @@ import {
 } from '@/lib/server/newsPublishing';
 import type { NewsArticle } from '@/lib/supabase';
 import { propagatePublicIndexing } from '@/lib/server/publicIndexing';
-import { isSafePublicSlugSegment } from '@/lib/slug';
+import { collectContentRevalidationPaths, type RevalidationLookups } from '@/lib/server/contentRevalidation';
+import { buildAreaNames } from '@/lib/localityNewsMatch';
 
 export const runtime = 'nodejs';
 
@@ -44,13 +45,49 @@ function errorCode(error: { code?: string; message?: string } | null | undefined
   return 'PUBLISH_FAILED';
 }
 
-async function affectedPaths(article: Pick<NewsArticle, 'slug' | 'category'>, token: string) {
-  const paths = new Set(['/','/tin-tuc','/kien-thuc','/sitemap.xml','/sitemap-images.xml']);
-  if (isSafePublicSlugSegment(article.slug)) paths.add(`/tin-tuc/${article.slug.trim()}`);
+/**
+ * Dùng chung contract collectContentRevalidationPaths với các entrypoint Tin tức khác,
+ * để cụm khu vực (/khu-vuc/{slug}, /thong-tin, /tin-tuc) cũng được purge và bài
+ * narrative chỉ có geo_area vẫn khớp đúng khu vực.
+ */
+async function loadNewsLookups(token: string): Promise<RevalidationLookups> {
   const client = callerClient(token);
-  const { data } = await client.from('news_categories').select('slug').eq('label', article.category).maybeSingle();
-  if (data?.slug) paths.add(`/tin-tuc/danh-muc/${data.slug}`);
-  return [...paths].sort();
+  const [areasResult, categoriesResult] = await Promise.all([
+    client.from('areas').select('id,slug,name'),
+    client.from('news_categories').select('label,slug'),
+  ]);
+  if (areasResult.error || categoriesResult.error) {
+    throw new Error('Không tải được dữ liệu URL công khai.');
+  }
+  return {
+    areaSlugs: new Map((areasResult.data ?? []).filter(row => row.id && row.slug).map(row => [row.id, row.slug])),
+    areaNames: buildAreaNames(areasResult.data ?? []),
+    categorySlugs: new Map((categoriesResult.data ?? []).filter(row => row.label && row.slug).map(row => [row.label, row.slug])),
+  };
+}
+
+function newsSnapshot(article: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'area_id' | 'geo_area'>) {
+  return {
+    id: article.id,
+    slug: article.slug,
+    category: article.category,
+    area_id: article.area_id ?? null,
+    geo_area: article.geo_area ?? null,
+    is_published: article.is_published,
+  };
+}
+
+async function newsAffectedPaths(
+  before: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'area_id' | 'geo_area'>,
+  after: Pick<NewsArticle, 'id' | 'slug' | 'category' | 'is_published' | 'area_id' | 'geo_area'>,
+  lookups: RevalidationLookups,
+  action: 'publish' | 'unpublish',
+): Promise<string[]> {
+  return collectContentRevalidationPaths({
+    entity: 'news',
+    action,
+    targets: [{ previous: newsSnapshot(before), current: newsSnapshot(after) }],
+  }, lookups);
 }
 
 async function observeLegacyPublish({
@@ -59,7 +96,7 @@ async function observeLegacyPublish({
   publish,
   mode,
   report,
-  paths,
+  lookups,
   actorId,
 }: {
   client: ReturnType<typeof callerClient>;
@@ -67,7 +104,7 @@ async function observeLegacyPublish({
   publish: boolean;
   mode: ReturnType<typeof newsPublishBoundaryMode>;
   report: ReturnType<typeof buildNewsPublicationQualityReport>;
-  paths: string[];
+  lookups: RevalidationLookups;
   actorId: string;
 }) {
   const previousPublished = Boolean(article.is_published);
@@ -89,7 +126,7 @@ async function observeLegacyPublish({
         changed: false,
       },
       quality_gate: report,
-      paths,
+      paths: [],
     });
   }
 
@@ -118,26 +155,22 @@ async function observeLegacyPublish({
     event_id: null,
     changed: true,
   };
+  const paths = await newsAffectedPaths(
+    { ...article, is_published: previousPublished },
+    { ...article, is_published: updated.is_published, slug: updated.slug, category: updated.category },
+    lookups,
+    publish ? 'publish' : 'unpublish',
+  );
   const propagation = await propagatePublicIndexing({
     content: {
       entity: 'news',
       action: publish ? 'publish' : 'unpublish',
       targets: [{
-        previous: {
-          id: article.id,
-          slug: article.slug,
-          category: article.category,
-          is_published: previousPublished,
-        },
-        current: {
-          id: updated.id,
-          slug: updated.slug,
-          category: updated.category,
-          is_published: updated.is_published,
-        },
+        previous: newsSnapshot({ ...article, is_published: previousPublished }),
+        current: newsSnapshot({ ...article, is_published: updated.is_published, slug: updated.slug, category: updated.category }),
       }],
     },
-    lookups: { areaSlugs: new Map(), categorySlugs: new Map() },
+    lookups,
     actorId,
     paths,
   });
@@ -176,7 +209,12 @@ export async function POST(
   }
 
   const hasContentVersion = Number.isSafeInteger(typedArticle.content_version) && (typedArticle.content_version ?? 0) >= 1;
-  const paths = await affectedPaths({ slug: typedArticle.slug, category: typedArticle.category }, auth.token);
+  let lookups: RevalidationLookups;
+  try {
+    lookups = await loadNewsLookups(auth.token);
+  } catch {
+    return NextResponse.json({ error: 'Không tải được dữ liệu URL công khai.', code: 'LOOKUP_FAILED' }, { status: 503 });
+  }
 
   if (!hasContentVersion) {
     if (mode === 'enforce') {
@@ -188,7 +226,7 @@ export async function POST(
       publish: body.publish,
       mode,
       report,
-      paths,
+      lookups,
       actorId: auth.userId,
     });
   }
@@ -200,6 +238,9 @@ export async function POST(
       { status: 503 },
     );
   }
+
+  const afterArticle = { ...typedArticle, is_published: body.publish };
+  const paths = await newsAffectedPaths(typedArticle, afterArticle, lookups, body.publish ? 'publish' : 'unpublish');
 
   const { data, error } = await boundaryClient.rpc('publish_news_article_server', {
     p_news_id: id,
@@ -217,22 +258,18 @@ export async function POST(
 
   const result = (Array.isArray(data) ? data[0] : data) as PublicationResult | null;
   if (!result) return NextResponse.json({ error: 'Boundary không trả kết quả hợp lệ.', code: 'INVALID_RESULT' }, { status: 503 });
-  if (!result.changed) return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths });
+  if (!result.changed) return NextResponse.json({ ok: true, mode, result, quality_gate: report, paths: [] });
 
   const propagation = await propagatePublicIndexing({
     content: {
       entity: 'news',
       action: body.publish ? 'publish' : 'unpublish',
       targets: [{
-        current: {
-          id: result.id,
-          slug: result.slug,
-          category: result.category,
-          is_published: result.is_published,
-        },
+        previous: newsSnapshot(typedArticle),
+        current: newsSnapshot({ ...typedArticle, is_published: result.is_published, slug: result.slug, category: result.category }),
       }],
     },
-    lookups: { areaSlugs: new Map(), categorySlugs: new Map() },
+    lookups,
     actorId: auth.userId,
     paths,
     eventKey: result.event_id,

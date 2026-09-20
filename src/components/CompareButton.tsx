@@ -31,14 +31,14 @@ export function CompareButton({ property, variant = 'overlay', className = '' }:
   };
 
   const base = variant === 'overlay'
-    ? 'w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform'
-    : 'w-8 h-8 border rounded-lg flex items-center justify-center transition-colors';
+    ? 'w-11 h-11 bg-white/95 rounded-full flex items-center justify-center shadow transition-colors'
+    : 'w-11 h-11 border rounded-lg flex items-center justify-center transition-colors';
   const state = active
     ? 'text-red-600' + (variant === 'inline' ? ' border-red-400 bg-red-50' : '')
-    : 'text-gray-400' + (variant === 'inline' ? ' border-gray-200 hover:border-red-400' : '');
+    : 'text-gray-600' + (variant === 'inline' ? ' border-gray-200 hover:border-red-400' : '');
 
   return (
-    <button onClick={handle} title={active ? 'Bỏ khỏi so sánh' : 'Thêm vào so sánh'}
+    <button type="button" aria-pressed={active} onClick={handle} title={active ? 'Bỏ khỏi so sánh' : 'Thêm vào so sánh'}
       aria-label={active ? 'Bỏ khỏi so sánh' : 'Thêm vào so sánh'}
       className={`${base} ${state} ${className}`}>
       <Scale className="w-3.5 h-3.5" />

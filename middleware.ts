@@ -3,6 +3,11 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { buildLegacyAreaRedirectPath } from '@/lib/areaRedirect';
 import { buildProductPath, parseProductCode } from '@/lib/productPath';
+import { checkLocalityRequest } from '@/lib/localityRequest';
+import { buildLocalityGeoAreaAllowlist, LOCALITY_NEWS_MINIMUM } from '@/lib/localityNewsMatch';
+import { decodePublicNewsRouteSegment } from '@/lib/slug';
+import { evaluateLocalityNews } from '@/lib/localityNewsEvaluation';
+import { loadLocalityNewsSnapshot } from '@/lib/server/localityNewsSnapshotTransport';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -30,6 +35,55 @@ function redirectTo(req: NextRequest, path: string, preserveRequestSearch = fals
 // tại để giữ UI not-found thương hiệu + HTTP status 404 thật cho crawler.
 function productNotFound(req: NextRequest): NextResponse {
   return NextResponse.rewrite(new URL('/_product-not-found', req.url), { status: 404 });
+}
+
+function newsNotFound(req: NextRequest): NextResponse {
+  return NextResponse.rewrite(new URL('/_news-not-found', req.url), { status: 404 });
+}
+
+function localityUnavailable(): NextResponse {
+  return new NextResponse(
+    '<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Dữ liệu tạm thời chưa sẵn sàng</title><body style="font-family:system-ui;padding:24px;max-width:640px;margin:auto"><h1>Chưa tải được dữ liệu địa phương</h1><p>Nguồn dữ liệu tạm thời chưa phản hồi đầy đủ. Vui lòng tải lại trang sau ít phút. Không có số liệu được công bố từ dữ liệu chưa hoàn tất.</p><a href="/khu-vuc">Về danh sách khu vực</a></body></html>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '60', 'X-Robots-Tag': 'noindex', 'Cache-Control': 'no-store' } },
+  );
+}
+
+async function localityResponse(req: NextRequest): Promise<NextResponse> {
+  const result = await checkLocalityRequest(req.nextUrl.pathname, { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
+  if (result.status === 'not-found') return NextResponse.rewrite(new URL('/_locality-not-found', req.url), { status: 404 });
+  if (result.status === 'unavailable') return localityUnavailable();
+  return result.path !== req.nextUrl.pathname ? redirectTo(req, result.path, true) : NextResponse.next();
+}
+
+async function localityNewsResponse(req: NextRequest, areaSlug: string): Promise<NextResponse> {
+  const localityPath = `/khu-vuc/${areaSlug}`;
+  const locality = await checkLocalityRequest(localityPath, { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
+  if (locality.status === 'not-found') return NextResponse.rewrite(new URL('/_locality-not-found', req.url), { status: 404 });
+  if (locality.status === 'unavailable') return localityUnavailable();
+
+  try {
+    const client = sbClient();
+    const { data: area, error: areaError } = await client
+      .from('areas')
+      .select('id,name,slug')
+      .eq('slug', areaSlug)
+      .maybeSingle();
+    if (areaError || !area?.id || !area.name || area.slug !== areaSlug) return localityUnavailable();
+
+    const snapshot = await loadLocalityNewsSnapshot({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
+    const evaluation = evaluateLocalityNews(
+      snapshot,
+      area.id,
+      buildLocalityGeoAreaAllowlist(area.name),
+      1,
+    );
+    if (evaluation.total < LOCALITY_NEWS_MINIMUM) {
+      return NextResponse.rewrite(new URL('/_locality-not-found', req.url), { status: 404 });
+    }
+    return NextResponse.next();
+  } catch {
+    return localityUnavailable();
+  }
 }
 
 function privateNotFound(req: NextRequest): NextResponse {
@@ -60,6 +114,12 @@ async function checkPrivateAccess(req: NextRequest, res: NextResponse): Promise<
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
   const privatePath = pathname.startsWith('/quantrihethong') || pathname.startsWith('/noi-bo') || pathname.startsWith('/xac-thuc-chu-he-thong');
+  const newsSegments = pathname.split('/').filter(Boolean);
+  if (newsSegments[0] === 'tin-tuc') {
+    return newsSegments.length === 2 && !decodePublicNewsRouteSegment(newsSegments[1])
+      ? newsNotFound(req)
+      : NextResponse.next();
+  }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return privatePath ? privateNotFound(req) : NextResponse.next();
   }
@@ -74,6 +134,14 @@ export async function middleware(req: NextRequest) {
           ? access.staff
           : access.owner;
       return allowed ? res : privateNotFound(req);
+    }
+
+    if (pathname.startsWith('/khu-vuc/')) {
+      const segments = pathname.split('/').filter(Boolean);
+      if (segments.length === 3 && segments[0] === 'khu-vuc' && segments[2] === 'tin-tuc') {
+        return localityNewsResponse(req, segments[1]);
+      }
+      return localityResponse(req);
     }
 
     const sb = sbClient();
@@ -93,9 +161,11 @@ export async function middleware(req: NextRequest) {
     // thật → hard 308 về canonical. Cần middleware vì root loading.tsx khiến redirect
     // từ server page soft-200. Listing khu vực không có đuôi -pr{số} → đi qua bình thường.
     if (pathname.startsWith('/mua-ban/') || pathname.startsWith('/cho-thue/')) {
-      const lastSegment = decodeURIComponent(pathname.split('/').filter(Boolean).pop() ?? '');
+      let lastSegment: string;
+      try { lastSegment = decodeURIComponent(pathname.split('/').filter(Boolean).pop() ?? ''); }
+      catch { return NextResponse.rewrite(new URL('/_locality-not-found', req.url), { status: 404 }); }
       const parsed = parseProductCode(lastSegment);
-      if (!parsed) return NextResponse.next();
+      if (!parsed) return localityResponse(req);
       const { data: p, error } = await sb
         .from('properties')
         .select('id,slug,public_code,listing_type,district,areas(slug)')
@@ -134,7 +204,8 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/mua-ban', '/mua-ban/:path*', '/cho-thue', '/cho-thue/:path*', '/bat-dong-san/:slug*',
+    '/mua-ban', '/mua-ban/:path*', '/cho-thue', '/cho-thue/:path*', '/bat-dong-san/:slug*', '/khu-vuc/:path*',
+    '/tin-tuc/:path*',
     '/quantrihethong', '/quantrihethong/:path*', '/noi-bo', '/noi-bo/:path*',
     '/xac-thuc-chu-he-thong',
   ],

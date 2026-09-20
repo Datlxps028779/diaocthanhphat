@@ -24,6 +24,11 @@ export function listingInitialDataScopeMatches(
     && text(scope.city) === text(current.city)
     && text(scope.district) === text(current.district)
     && text(scope.ward) === text(current.ward)
+    // Phạm vi địa phương do route quyết định: seed chỉ hợp lệ khi ID hành chính và
+    // khoảng giá bán khớp CHÍNH XÁC. Thiếu sót ở đây là hiện tin ngoài phạm vi đã chọn.
+    && text(scope.districtId) === text(current.districtId)
+    && text(scope.wardId) === text(current.wardId)
+    && text(scope.salePriceBand) === text(current.salePriceBand)
     && text(scope.keyword) === text(current.keyword)
     && scope.minPrice === current.minPrice
     && scope.maxPrice === current.maxPrice

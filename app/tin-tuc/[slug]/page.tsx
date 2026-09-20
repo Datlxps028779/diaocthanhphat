@@ -4,18 +4,24 @@ import { serverGetNewsByIdOrSlug, serverGetNewsContextualProperties, serverGetRe
 import { buildNewsMetadata, buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/seo';
 import { buildFaqJsonLd } from '@/lib/propertyFaq';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
+import { decodePublicNewsRouteSegment } from '@/lib/slug';
 import { NewsDetailClient } from './NewsDetailClient';
 
 type Params = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
-  const article = await serverGetNewsByIdOrSlug(decodeURIComponent(params.slug));
+  const segment = decodePublicNewsRouteSegment(params.slug);
+  if (!segment) return { title: 'Không tìm thấy bài viết' };
+  const article = await serverGetNewsByIdOrSlug(segment);
   if (!article) return { title: 'Không tìm thấy bài viết' };
   return buildNewsMetadata(article);
 }
 
 export default async function NewsArticlePage({ params }: Params) {
-  const article = await serverGetNewsByIdOrSlug(decodeURIComponent(params.slug));
+  const segment = decodePublicNewsRouteSegment(params.slug);
+  if (!segment) notFound();
+
+  const article = await serverGetNewsByIdOrSlug(segment);
   if (!article) notFound();
 
   const [settings, related, mostViewed, latest, contextualProperties] = await Promise.all([

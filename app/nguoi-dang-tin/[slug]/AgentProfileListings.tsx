@@ -1,10 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { SafeImage } from '@/components/SafeImage';
-import { buildProductPath } from '@/lib/productPath';
-import { formatPropertyPrice } from '@/lib/listingPrice';
+import { PropertyCard } from '@/components/property/PropertyCard';
 import type { ListingType, PublicAgentListing } from '@/lib/supabase';
 
 type CategoryKey = 'all' | `listing:${ListingType}` | `property:${string}`;
@@ -17,76 +14,8 @@ function listingTypeLabel(type: ListingType): string {
   return type === 'cho_thue' ? 'Cho thuê' : 'Mua bán';
 }
 
-function listingLocation(listing: PublicAgentListing): string {
-  return [listing.district, listing.city].filter(Boolean).join(', ');
-}
-
-function dateLabel(value: string): string {
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(value));
-}
-
 function categoryKeyForProperty(listing: PublicAgentListing): CategoryKey {
   return `property:${listing.property_type_slug || listing.property_type_name || 'uncategorized'}`;
-}
-
-function AgentListingRow({ listing }: { listing: PublicAgentListing }) {
-  const href = buildProductPath({
-    id: listing.id,
-    slug: listing.slug,
-    public_code: listing.public_code,
-    listing_type: listing.listing_type,
-    district: listing.district,
-    areas: { slug: listing.area_slug ?? undefined },
-  });
-  const image = listing.image_url || listing.images?.[0] || null;
-  const location = listingLocation(listing);
-
-  return (
-    <Link
-      href={href}
-      className="group min-w-0 max-w-full grid gap-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-red-200 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 sm:grid-cols-[190px_minmax(0,1fr)] sm:p-4"
-    >
-      <div className="relative h-44 overflow-hidden rounded-xl bg-gray-100 sm:h-36">
-        {image ? (
-          <SafeImage
-            src={image}
-            alt={listing.title}
-            width={640}
-            height={384}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-            fallbackSrc="/placeholder-property.svg"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm font-semibold text-gray-400">Chưa có ảnh</div>
-        )}
-        <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold text-white ${listing.listing_type === 'cho_thue' ? 'bg-blue-600' : 'bg-red-600'}`}>
-          {listingTypeLabel(listing.listing_type)}
-        </span>
-      </div>
-      <div className="flex min-w-0 flex-col justify-between gap-3 py-1">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-            <span>{listing.property_type_name || 'Chưa phân loại'}</span>
-            <span className="text-gray-300">•</span>
-            <span>Đăng {dateLabel(listing.created_at)}</span>
-          </div>
-          <h3 className="line-clamp-2 text-base font-black leading-6 text-gray-900 group-hover:text-red-600 sm:text-lg">{listing.title}</h3>
-        </div>
-        <div className="grid gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <div className="min-w-0 space-y-1 text-gray-500">
-            <p className="truncate">{location || 'Đang cập nhật vị trí'}</p>
-            {listing.area_sqm ? <p>{listing.area_sqm} m²</p> : null}
-            {listing.legal_status ? <p className="truncate">{listing.legal_status}</p> : null}
-          </div>
-          <p className="text-lg font-black text-red-600 sm:text-right">{formatPropertyPrice(listing)}</p>
-        </div>
-      </div>
-    </Link>
-  );
 }
 
 export function AgentProfileListings({ listings }: Props) {
@@ -169,7 +98,7 @@ export function AgentProfileListings({ listings }: Props) {
           <span className="text-sm font-semibold text-gray-500">{filteredListings.length} / {listings.length} tin</span>
         </div>
         {filteredListings.length > 0 ? (
-          filteredListings.map(listing => <AgentListingRow key={listing.id} listing={listing} />)
+          filteredListings.map(listing => <PropertyCard key={listing.id} property={listing} variant="list" />)
         ) : (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center text-sm text-gray-500">
             Không có tin đăng trong danh mục này.

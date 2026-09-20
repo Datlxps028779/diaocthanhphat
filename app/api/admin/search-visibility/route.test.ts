@@ -34,6 +34,18 @@ function request(method: 'GET' | 'POST', token = 'owner-token'): NextRequest {
   });
 }
 
+function syncRequest(
+  token: string,
+  body: Record<string, unknown> = {},
+  method: 'POST' | 'GET' | 'OPTIONS' = 'POST',
+): NextRequest {
+  return new NextRequest('http://localhost/api/admin/search-visibility', {
+    method,
+    headers: token ? { authorization: `Bearer ${token}`, 'content-type': 'application/json' } : { 'content-type': 'application/json' },
+    body: method === 'POST' ? JSON.stringify(body) : undefined,
+  });
+}
+
 function query(data: unknown, error: { message: string } | null = null) {
   const state = { data, error };
   return {
@@ -165,5 +177,85 @@ describe('/api/admin/search-visibility', () => {
 
     expect(response.status).toBe(503);
     expect(json).toEqual({ error: 'Constraint canonical trong production chưa khớp chính sách.', code: 'CANONICAL_CONSTRAINT' });
+  });
+});
+
+describe('/api/admin/search-visibility — cổng sync nội bộ', () => {
+  const SYNC_SECRET = 'sync-secret-value';
+
+  beforeEach(() => {
+    process.env.SEARCH_VISIBILITY_SYNC_SECRET = SYNC_SECRET;
+  });
+
+  it('sync hợp lệ bằng Bearer sync chỉ chạy đúng một lượt downstream và không cần owner', async () => {
+    syncMock.mockResolvedValue({ runId: 'run-sync', summary: { total: 2, eligible: 2, excluded: 0, byReason: {}, byEntity: {} } });
+
+    const response = await POST(syncRequest(SYNC_SECRET, { action: 'sync' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(syncMock).toHaveBeenCalledTimes(1);
+    expect(json).toMatchObject({ ok: true, action: 'sync', runId: 'run-sync' });
+    expect(requireOwnerMock).not.toHaveBeenCalled();
+  });
+
+  it('sync hợp lệ không truyền userId giả vào audit', async () => {
+    syncMock.mockResolvedValue({ runId: 'run-sync' });
+
+    await POST(syncRequest(SYNC_SECRET, {}));
+
+    expect(syncMock).toHaveBeenCalledWith(null);
+  });
+
+  it('từ chối khi thiếu cấu hình secret và không chạy downstream', async () => {
+    delete process.env.SEARCH_VISIBILITY_SYNC_SECRET;
+    requireOwnerMock.mockResolvedValue({ ok: false, status: 401, msg: 'Phiên đăng nhập không hợp lệ.' });
+
+    const response = await POST(syncRequest(SYNC_SECRET, { action: 'sync' }));
+
+    expect(response.status).toBe(401);
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it('từ chối Bearer rỗng và anon key trước khi chạm downstream', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: false, status: 401, msg: 'Phiên đăng nhập không hợp lệ.' });
+
+    const empty = await POST(syncRequest('', { action: 'sync' }));
+    const anon = await POST(syncRequest('anon-public-key', { action: 'sync' }));
+
+    expect(empty.status).toBe(401);
+    expect(anon.status).toBe(401);
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it('secret sync không thể vượt owner cho các action privileged', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: false, status: 403, msg: 'Tài khoản không có quyền truy cập.' });
+
+    const diagnose = await POST(syncRequest(SYNC_SECRET, { action: 'diagnose_access' }));
+    const sitemap = await POST(syncRequest(SYNC_SECRET, { action: 'submit_sitemap' }));
+    const inspect = await POST(syncRequest(SYNC_SECRET, { action: 'inspect_batch' }));
+
+    expect(diagnose.status).toBe(403);
+    expect(sitemap.status).toBe(403);
+    expect(inspect.status).toBe(403);
+    expect(diagnoseAccessMock).not.toHaveBeenCalled();
+    expect(submitSitemapMock).not.toHaveBeenCalled();
+    expect(inspectBatchMock).not.toHaveBeenCalled();
+  });
+
+  it('secret sync không mở được đọc GET', async () => {
+    requireOwnerMock.mockResolvedValue({ ok: false, status: 403, msg: 'Tài khoản không có quyền truy cập.' });
+
+    const response = await GET(request('GET', SYNC_SECRET));
+
+    expect(response.status).toBe(403);
+    expect(callerClientMock).not.toHaveBeenCalled();
+  });
+
+  it('action sai hoặc method sai bị chặn mà không gọi downstream', async () => {
+    const badAction = await POST(syncRequest(SYNC_SECRET, { action: 'delete_all' }));
+
+    expect(badAction.status).toBe(400);
+    expect(syncMock).not.toHaveBeenCalled();
   });
 });

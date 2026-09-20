@@ -5,11 +5,10 @@ import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, MapPin, TrendingUp, Shield, Phone,
-  Eye, Flame, Sparkles, Star, ArrowRight, ChevronRight, ChevronDown,
+  Eye, Star, ArrowRight, ChevronRight, ChevronDown,
   CheckCircle, Users
 } from 'lucide-react';
 import { type Property } from './lib/supabase';
-import { formatPropertyPrice } from './lib/listingPrice';
 import {
   getTestimonials, getNews, getBanners,
   getFeaturedSections, getPropertiesForSection, getFavoriteIds, toggleFavorite,
@@ -31,19 +30,17 @@ import { quickCategoryToPage } from './lib/quickCategory';
 import { CategoryIcon } from './lib/categoryIcons';
 import { useSetting } from './lib/cms';
 import { ContactModal } from './components/ContactModal';
-import { VerifiedBadge } from './components/VerifiedBadge';
 import { ForYou } from './components/ForYou';
 import { PropertyTimeline } from './components/PropertyTimeline';
 import { LocationDiscovery } from './components/home/LocationDiscovery';
 import { getHomepageSectionOrder } from './lib/homeSectionOrder';
 import { Header, Footer, FloatingButtons } from './components/Layout';
 import { BlurFillImage } from './components/BlurFillImage';
-import { PropertyGallery } from './components/PropertyGallery';
+import { PropertyCard as UnifiedPropertyCard } from './components/property/PropertyCard';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
 import { buildNewsImageAlt } from './lib/propertyImages';
 import { dedupeFeaturedSectionProperties } from './lib/featuredSectionDedupe';
 import { getHomeDiscoveryOrder, type HomeDiscoveryAvailability } from './lib/discoveryJourney';
-import { normalizeListingTitle } from './lib/listingTitle';
 import { buildTruthfulHeroSubtitle } from './lib/homeTruthfulCopy';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 export function Breadcrumb({ items }: { items: { label: string; href?: string; onClick?: () => void }[] }) {
@@ -818,60 +815,20 @@ export function SectionTitle({ title, subtitle }: { title: string; subtitle?: st
   );
 }
 
+// Giữ nguyên chữ ký export cũ cho AccountPage và các caller hiện tại; phần hiển thị
+// chuyển sang PropertyCard dùng chung (alias để tránh trùng tên với hàm này).
 export function PropertyCard({ property: p, onContact, isFavorited = false, onToggleFavorite }: {
   property: Property; onContact: () => void;
   isFavorited?: boolean; onToggleFavorite?: () => void;
 }) {
-  const displayTitle = normalizeListingTitle(p.title, [p.city, p.district ?? '', p.ward ?? '']).value;
   return (
-    <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg border border-gray-100 transition-all duration-300 group flex flex-row sm:flex-col">
-      <PropertyGallery
-        property={p}
-        href={buildPropertyPath(p)}
-        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
-        topLeft={p.badge ? (
-          <span className={`absolute left-2 top-2 z-[2] rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white ${p.badge_color === 'green' ? 'bg-emerald-500' : p.badge_color === 'blue' ? 'bg-blue-500' : 'bg-red-500'}`}>{p.badge}</span>
-        ) : p.is_hot ? (
-          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Flame className="h-2.5 w-2.5" />HOT</span>
-        ) : p.is_featured ? (
-          <span className="absolute left-2 top-2 z-[2] flex items-center gap-0.5 rounded-md bg-amber-500 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white"><Sparkles className="h-2.5 w-2.5" />Nổi bật</span>
-        ) : undefined}
-        bottomLeft={<span className="absolute bottom-2 left-2 z-[2] shadow-sm"><VerifiedBadge property={p} /></span>}
-        topRight={(
-          <>
-            {p.listing_type === 'cho_thue' && <span className="rounded-md bg-blue-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Cho thuê</span>}
-            <span className="inline-flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-[10px] font-semibold text-white"><Eye className="h-3 w-3" />{p.views ?? 0}</span>
-          </>
-        )}
-        showTotalPriceLabel={p.listing_type !== 'cho_thue'}
-        isFavorited={isFavorited}
-        onToggleFavorite={onToggleFavorite}
-        mobileList
-      />
-      <div className="min-w-0 p-3.5 flex flex-col flex-1">
-        <h3 className="mb-1.5">
-          <Link href={buildPropertyPath(p)}
-            className="cnv-property-title line-clamp-2 block text-gray-900 hover:text-red-600 transition-colors">
-            {displayTitle}
-          </Link>
-        </h3>
-        <p className="cnv-property-price text-red-600">{formatPropertyPrice(p)}</p>
-        <div className="cnv-property-meta flex items-center gap-2 text-gray-500 my-1 flex-wrap">
-          {p.area_sqm && <span>{p.area_sqm} m²</span>}
-          {p.bedrooms && <span>{p.bedrooms} PN</span>}
-          {p.legal_status && <span className="flex items-center gap-0.5 text-emerald-600 ml-auto"><CheckCircle className="w-3 h-3" />{p.legal_status}</span>}
-        </div>
-        <div className="cnv-property-meta flex items-center gap-1 text-gray-400 mb-3">
-          <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
-          <span className="truncate">{p.district ? `${p.district}, ` : ''}{p.city}</span>
-        </div>
-        <div className="flex gap-2 mt-auto">
-          <Link href={buildPropertyPath(p)} className="cnv-control-type flex-1 text-center border border-red-400 text-red-600 py-1.5 rounded-lg hover:bg-red-50 transition-colors">Chi tiết</Link>
-          <button onClick={onContact} className="cnv-control-type flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
-            <Phone className="w-3 h-3" />Liên hệ
-          </button>
-        </div>
-      </div>
-    </div>
+    <UnifiedPropertyCard
+      property={p}
+      href={buildPropertyPath(p)}
+      variant="grid"
+      onContact={onContact}
+      isFavorited={isFavorited}
+      onToggleFavorite={onToggleFavorite}
+    />
   );
 }

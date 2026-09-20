@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
-import { Clock, MapPin, X } from 'lucide-react';
-import { buildPropertyPath, getPublicPropertiesByIds } from '../lib/api/properties';
+import { Clock, X } from 'lucide-react';
+import { getPublicPropertiesByIds } from '../lib/api/properties';
 import type { Property } from '../lib/supabase';
-import { formatPropertyPrice } from '../lib/listingPrice';
 import { getRecentlyViewed, pruneRecentlyViewedUnavailable, subscribeRecentlyViewedChanged } from '../lib/recentlyViewed';
-import { SafeImage } from './SafeImage';
-import { FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
+import { PropertyCard } from './property/PropertyCard';
 
-export function RecentlyViewedDrawer() {
+export function RecentlyViewedDrawer({ localityActionsTarget = null }: { localityActionsTarget?: HTMLElement | null }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('ready');
   const [items, setItems] = useState<Property[]>([]);
@@ -55,11 +53,15 @@ export function RecentlyViewedDrawer() {
     return () => { active = false; };
   }, [open, revision]);
 
+  const launcher = <button ref={trigger} type="button" aria-label="Đã xem gần đây" aria-haspopup="dialog" aria-expanded={open} data-testid="recently-viewed-trigger" onClick={() => setOpen(true)}
+    className={localityActionsTarget
+      ? 'inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600'
+      : 'fixed right-0 top-[calc(50%+4rem)] z-40 flex flex-col items-center gap-1 rounded-l-xl border border-r-0 border-slate-200 bg-white px-2 py-3 text-[11px] font-semibold text-slate-600 shadow-md hover:text-red-600 focus-visible:outline-red-600'}>
+    <Clock aria-hidden="true" className="h-5 w-5 text-red-600" /><span className={localityActionsTarget ? '' : '[writing-mode:vertical-rl]'}>Đã xem</span>
+  </button>;
+
   return <>
-    <button ref={trigger} type="button" aria-label="Đã xem gần đây" aria-haspopup="dialog" aria-expanded={open} data-testid="recently-viewed-trigger" onClick={() => setOpen(true)}
-      className="fixed right-0 top-[calc(50%+4rem)] z-40 flex flex-col items-center gap-1 rounded-l-xl border border-r-0 border-slate-200 bg-white px-2 py-3 text-[11px] font-semibold text-slate-600 shadow-md hover:text-red-600 focus-visible:outline-red-600">
-      <Clock className="h-5 w-5 text-red-600" /><span className="[writing-mode:vertical-rl]">Đã xem</span>
-    </button>
+    {localityActionsTarget ? createPortal(launcher, localityActionsTarget) : launcher}
     <dialog ref={dialog} aria-label="Đã xem gần đây" data-testid="recently-viewed-drawer" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}
       onKeyDown={event => {
         if (event.key !== 'Tab') return;
@@ -92,13 +94,7 @@ export function RecentlyViewedDrawer() {
           </div>}
           {state === 'ready' && !items.length && <p className="py-6 text-sm text-slate-500">Chưa có tin công khai nào trong lịch sử xem gần đây.</p>}
           {state === 'ready' && !!items.length && <ul className="space-y-3">{items.map(property => <li key={property.id}>
-            <Link href={buildPropertyPath(property)} onClick={() => setOpen(false)} className="group flex gap-3 rounded-xl border border-slate-200 p-2 hover:border-red-300">
-              <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100"><SafeImage src={property.image_url} fallbackSrc={FALLBACK_PROPERTY_IMAGE} alt="" fill sizes="96px" className="object-cover" /></div>
-              <div className="min-w-0 flex-1"><h3 className="line-clamp-2 text-sm font-semibold leading-5 group-hover:text-red-700">{property.title}</h3>
-                <p className="mt-1 text-sm font-bold text-red-600">{formatPropertyPrice(property)}</p>
-                <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{[property.district, property.city].filter(Boolean).join(', ')}</span></p>
-              </div>
-            </Link>
+            <PropertyCard property={property} variant="compact" onResultClick={() => setOpen(false)} />
           </li>)}</ul>}
         </div>
       </div>

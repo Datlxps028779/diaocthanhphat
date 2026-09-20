@@ -1,4 +1,5 @@
 import { supabase, type Property, type FeaturedSection, type FeaturedSectionItem, type PageSection, type ManagedPage, type PageBlock } from '../supabase';
+import { enrichPublicCardPosters, type PublicCardData } from '../publicCardPosters';
 import { revalidateHomeContent, revalidateNeighborhoodContent, revalidateRouteContent, routeRevalidationSnapshot, neighborhoodRevalidationSnapshot } from './contentRevalidation';
 
 async function revalidatePageBlockContent(pageSlug: string): Promise<void> {
@@ -28,26 +29,27 @@ export async function getFeaturedSections(): Promise<FeaturedSection[]> {
   return (data ?? []) as FeaturedSection[];
 }
 
-export async function getPropertiesForSection(section: FeaturedSection): Promise<Property[]> {
+export async function getPropertiesForSection(section: FeaturedSection): Promise<PublicCardData<Property>[]> {
   if (section.mode === 'manual') {
     const { data } = await supabase
       .from('featured_section_items')
-      .select('order_index, properties!inner(*, areas(id,name,slug), property_types(id,name,slug))')
+      .select('property_id')
       .eq('section_id', section.id)
-      .eq('properties.is_active', true)
       .order('order_index');
-    return ((data ?? []) as unknown as FeaturedSectionItem[])
-      .map(item => item.properties)
-      .filter((p): p is Property => p != null && p.is_active === true);
+    const ids = [...new Set(((data ?? []) as { property_id: string }[]).map(item => item.property_id))];
+    if (!ids.length) return [];
+    const { data: properties } = await supabase.from('public_properties')
+      .select('*, areas(id,name,slug), property_types(id,name,slug)')
+      .eq('is_active', true).in('id', ids);
+    const byId = new Map(((properties ?? []) as Property[]).map(property => [property.id, property]));
+    return enrichPublicCardPosters(supabase, ids.flatMap(id => {
+      const property = byId.get(id);
+      return property ? [property] : [];
+    }));
   }
 
-  // NOTE: Tạm đọc trực tiếp bảng `properties` (join areas + property_types).
-  // MV mv_active_properties đã tạo trong DB (8 dòng, quyền anon OK) nhưng PostgREST
-  // schema cache không nhận diện được (404 PGRST205) dù đã NOTIFY / restart / COMMENT.
-  // Rollback về base table để trang chủ chạy ổn định; sẽ bật lại MV sau qua RPC
-  // (function luôn được PostgREST expose ổn định, tránh lỗi cache view).
   let q = supabase
-    .from('properties')
+    .from('public_properties')
     .select('*, areas(id,name,slug), property_types(id,name,slug)')
     .eq('is_active', true);
 
@@ -67,7 +69,7 @@ export async function getPropertiesForSection(section: FeaturedSection): Promise
 
   q = q.limit(section.display_count);
   const { data } = await q;
-  return (data ?? []) as Property[];
+  return enrichPublicCardPosters(supabase, (data ?? []) as Property[]);
 }
 
 // ─── Featured Sections (admin) ────────────────────────────────────────────────
