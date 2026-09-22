@@ -85,35 +85,45 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       if (mobileOpen) mobileTrigger.current?.focus(); else trigger?.focus();
     }} className={`fixed top-0 inset-x-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xl transition-all duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
       <div ref={barsRef}>
-      <div className="bg-white text-gray-900 text-xs px-4 hidden md:flex h-[37px] items-center justify-between border-b border-orange-600">
-        <div className="flex items-center gap-4">
-          <span>Đăng tin miễn phí — tiếp cận hàng nghìn người mua mỗi ngày</span>
-          <Link href="/dang-tin" className="font-semibold text-orange-600 hover:underline">Đăng ngay →</Link>
+      <div className="hidden border-b border-red-950/20 bg-gradient-to-r from-slate-950 via-red-950 to-slate-950 text-white md:block">
+        <div className="mx-auto flex h-[42px] max-w-[1440px] items-center justify-between gap-4 px-5 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-white ring-1 ring-inset ring-white/15">
+              <Tag className="h-3.5 w-3.5 text-red-300" />Đăng tin miễn phí
+            </span>
+            <span className="hidden truncate text-[13px] font-medium text-white/75 lg:inline">Tiếp cận hàng nghìn người mua mỗi ngày</span>
+            <Link href="/dang-tin" className="group inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-700 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-md">
+              Đăng ngay <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
+            </Link>
+          </div>
+          <a href={hotline ? `tel:${hotline.replace(/\D/g, '')}` : '/lien-he'} className="inline-flex flex-shrink-0 items-center gap-2 text-xs font-semibold text-white/85 transition-colors hover:text-white">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 ring-1 ring-inset ring-white/15"><Phone className="h-3.5 w-3.5" /></span>
+            <span>{hotline || 'Liên hệ qua biểu mẫu'}</span>
+          </a>
         </div>
-        <span>{hotline || 'Liên hệ qua biểu mẫu'}</span>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-4 h-[96px] flex items-center justify-between gap-3">
-        <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="flex items-center gap-2.5 flex-shrink-0">
+      <div className="mx-auto flex h-[96px] max-w-[1440px] items-center gap-3 px-5 py-3 lg:px-8">
+        <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="mr-auto flex min-w-0 flex-shrink-0 items-center gap-3">
           {logoUrl && !logoError ? (
             <img
               src={logoUrl}
               alt={siteName}
               onError={() => setLogoError(true)}
-              className="h-9 w-auto max-w-[160px] rounded-lg object-contain"
+              className="h-14 max-h-[58px] w-auto max-w-[190px] flex-shrink-0 object-contain object-left"
             />
           ) : (
-            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
-              <Home className="w-5 h-5 text-white" />
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-red-600 shadow-sm">
+              <Home className="h-6 w-6 text-white" />
             </div>
           )}
-          <div className="hidden sm:block xl:hidden 2xl:block leading-tight">
-            <div className="text-red-600 font-black text-base tracking-tight">{siteName}</div>
-            <div className="text-gray-400 text-[10px] font-medium tracking-wide">{siteSub}</div>
+          <div className="hidden leading-tight 2xl:block">
+            <div className="text-base font-black tracking-tight text-red-600">{siteName}</div>
+            <div className="text-[10px] font-medium tracking-wide text-gray-400">{siteSub}</div>
           </div>
         </Link>
 
-        <nav aria-label="Điều hướng chính" className="hidden xl:flex items-center gap-1 flex-1 justify-center">
+        <nav aria-label="Điều hướng chính" className="ml-auto hidden items-center justify-end gap-0.5 xl:flex">
           {navItems.map(item => item.children ? (
             <div key={item.key} data-desktop-menu className="relative" onMouseEnter={() => setDesktopMenuOpen(item.key)} onMouseLeave={() => setDesktopMenuOpen(null)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDesktopMenuOpen(null); }}>
               <div className="flex items-center rounded-md">
@@ -162,7 +172,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+        <div className="ml-2 hidden flex-shrink-0 items-center gap-2 border-l border-gray-200 pl-3 md:flex">
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
