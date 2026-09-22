@@ -54,41 +54,47 @@ Deno.serve(async (req: Request) => {
   if (jobs.length === 0) return Response.json({ ok: true, count: 0 } satisfies WorkerResult);
 
   const paths = [...new Set(jobs.map((job) => job.path))];
-  let succeeded = true;
-  let failure = "";
-  try {
-    const response = await fetch(revalidationUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-seo-freshness-secret": env("SEO_FRESHNESS_INTERNAL_SECRET"),
-      },
-      body: JSON.stringify({ paths }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) {
-      succeeded = false;
-      failure = `Revalidation HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`;
-    }
-  } catch (error) {
-    succeeded = false;
-    failure = errorText(error);
-  }
+  const outcomes = new Map<string, { succeeded: boolean; failure: string }>();
 
-  const completions = await Promise.all(jobs.map((job) => supabase.rpc("complete_seo_freshness_job", {
-    p_job_id: job.id,
-    p_worker_id: workerId,
-    p_succeeded: succeeded,
-    p_error: succeeded ? null : failure,
-  })));
+  await Promise.all(paths.map(async (path) => {
+    try {
+      const response = await fetch(revalidationUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-seo-freshness-secret": env("SEO_FRESHNESS_INTERNAL_SECRET"),
+        },
+        body: JSON.stringify({ paths: [path] }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      outcomes.set(path, response.ok
+        ? { succeeded: true, failure: "" }
+        : { succeeded: false, failure: `Revalidation HTTP ${response.status}: ${(await response.text()).slice(0, 500)}` });
+    } catch (error) {
+      outcomes.set(path, { succeeded: false, failure: errorText(error) });
+    }
+  }));
+
+  const completions = await Promise.all(jobs.map((job) => {
+    const outcome = outcomes.get(job.path) ?? { succeeded: false, failure: "Worker không có kết quả cho path." };
+    return supabase.rpc("complete_seo_freshness_job", {
+      p_job_id: job.id,
+      p_worker_id: workerId,
+      p_succeeded: outcome.succeeded,
+      p_error: outcome.succeeded ? null : outcome.failure,
+    });
+  }));
   const completionError = completions.find((result) => result.error)?.error;
   if (completionError) {
     console.error("[seo-freshness-worker] completion failed", completionError.message);
     return Response.json({ ok: false, error: "Revalidation xong nhưng không ghi được trạng thái job" } satisfies WorkerResult, { status: 503 });
   }
 
+  const failedCount = jobs.filter((job) => !outcomes.get(job.path)?.succeeded).length;
   return Response.json(
-    succeeded ? { ok: true, count: jobs.length } satisfies WorkerResult : { ok: false, count: jobs.length, error: failure } satisfies WorkerResult,
-    { status: succeeded ? 200 : 503 },
+    failedCount === 0
+      ? { ok: true, count: jobs.length } satisfies WorkerResult
+      : { ok: false, count: jobs.length, error: `${failedCount} freshness job thất bại` } satisfies WorkerResult,
+    { status: failedCount === 0 ? 200 : 503 },
   );
 });

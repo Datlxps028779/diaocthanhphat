@@ -51,6 +51,14 @@ describe('SEO freshness queue contract', () => {
     expect(worker).not.toMatch(/indexing\.googleapis\.com|URL_UPDATED|URL_DELETED/);
   });
 
+  it('isolates revalidation outcomes by path so one invalid path cannot poison the batch', () => {
+    expect(worker).toContain('new Map<string, { succeeded: boolean; failure: string }>()');
+    expect(worker).toContain('Promise.all(paths.map(async (path) =>');
+    expect(worker).toContain('body: JSON.stringify({ paths: [path] })');
+    expect(worker).toContain('const outcome = outcomes.get(job.path)');
+    expect(worker).not.toContain('body: JSON.stringify({ paths })');
+  });
+
   it('configures the worker without JWT because it authenticates with its own secret', () => {
     expect(supabaseConfig).toContain('[functions.seo-freshness-worker]');
     expect(supabaseConfig).toContain('[functions.ai-chat]');

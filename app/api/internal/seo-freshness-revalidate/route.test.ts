@@ -35,6 +35,28 @@ describe('POST /api/internal/seo-freshness-revalidate', () => {
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
+  it('accepts public area hub subpages but rejects unknown nested area paths', async () => {
+    const response = await POST(request({
+      paths: [
+        '/khu-vuc/binh-duong',
+        '/khu-vuc/binh-duong/thong-tin',
+        '/khu-vuc/binh-duong/tin-tuc',
+      ],
+    }, 'test-secret'));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, count: 3 });
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual([
+      '/khu-vuc/binh-duong',
+      '/khu-vuc/binh-duong/thong-tin',
+      '/khu-vuc/binh-duong/tin-tuc',
+    ]);
+
+    revalidatePathMock.mockReset();
+    expect((await POST(request({ paths: ['/khu-vuc/binh-duong/khong-ton-tai'] }, 'test-secret'))).status).toBe(400);
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
   it('deduplicates and revalidates only allowlisted public paths', async () => {
     const response = await POST(request({ paths: ['/sitemap.xml', '/sitemap.xml', '/mua-ban/binh-duong/thuan-an/dat'] }, 'test-secret'));
     expect(response.status).toBe(200);

@@ -13,6 +13,7 @@ const DYNAMIC_PATHS = [
   /^\/(?:mua-ban|cho-thue)\/[a-z0-9-]+(?:\/[a-z0-9-]+){0,3}$/,
   /^\/bat-dong-san\/[a-z0-9-]+$/,
   /^\/khu-vuc\/[a-z0-9-]+$/,
+  /^\/khu-vuc\/[a-z0-9-]+\/(?:thong-tin|tin-tuc)$/,
   /^\/khu-dan-cu\/[a-z0-9-]+$/,
   /^\/tin-tuc\/[a-z0-9-]+$/,
   /^\/tin-tuc\/danh-muc\/[a-z0-9-]+$/,
