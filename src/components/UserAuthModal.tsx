@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { signIn, signUp, requestPasswordReset, resendConfirmation, getCurrentRole } from '../lib/api';
-import { interpretSignUpResult, isEmailNotConfirmedError } from '../lib/authFlow';
+import { friendlyIdentityConflictError, interpretSignUpResult, isEmailNotConfirmedError } from '../lib/authFlow';
 import { privateWorkspacePath } from '../lib/authGuard';
 import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
 
@@ -73,13 +73,14 @@ export function UserAuthModal({ mode, onClose, onSuccess, onSwitchMode }: UserAu
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Có lỗi xảy ra';
+      const identityConflict = friendlyIdentityConflictError(err);
       if (isEmailNotConfirmedError(msg)) {
         // Tài khoản có thật nhưng chưa bấm link xác nhận → cho gửi lại email.
         setUnconfirmed(true);
         setResendState('idle');
         setError('Tài khoản chưa được xác nhận. Vui lòng kiểm tra email và bấm liên kết kích hoạt.');
-      } else if (msg.includes('already registered') || msg.includes('already been registered')) {
-        setError('Email này đã được đăng ký. Vui lòng đăng nhập.');
+      } else if (identityConflict) {
+        setError(identityConflict);
       } else if (msg.includes('Invalid login credentials')) {
         setError('Email hoặc mật khẩu không đúng.');
       } else {

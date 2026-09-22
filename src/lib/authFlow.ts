@@ -45,3 +45,26 @@ export function isEmailNotConfirmedError(raw: string | undefined | null): boolea
   if (!raw) return false;
   return raw.toLowerCase().includes('email not confirmed');
 }
+
+export function friendlyIdentityConflictError(error: unknown): string | null {
+  const record = error && typeof error === 'object' ? error as Record<string, unknown> : null;
+  const parts = [
+    error instanceof Error ? error.message : typeof error === 'string' ? error : '',
+    typeof record?.code === 'string' ? record.code : '',
+    typeof record?.message === 'string' ? record.message : '',
+    typeof record?.details === 'string' ? record.details : '',
+    typeof record?.hint === 'string' ? record.hint : '',
+  ];
+  const text = parts.join(' ').toLowerCase();
+
+  if (text.includes('already registered') || text.includes('already been registered')) {
+    return 'Email này đã được đăng ký. Vui lòng đăng nhập.';
+  }
+  if (text.includes('profiles_normalized_phone_unique') || (text.includes('23505') && text.includes('phone'))) {
+    return 'Số điện thoại này đã được sử dụng cho một tài khoản khác.';
+  }
+  if (text.includes('database error saving new user')) {
+    return 'Không thể tạo tài khoản. Email hoặc số điện thoại có thể đã được sử dụng.';
+  }
+  return null;
+}

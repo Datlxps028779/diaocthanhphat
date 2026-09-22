@@ -15,6 +15,7 @@ import {
 import { type UserMedia, type Profile } from '../lib/supabase';
 import { buildAgentProfileSlug } from '../lib/slug';
 import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
+import { friendlyIdentityConflictError } from '../lib/authFlow';
 
 export type AccountHubTab = 'listings' | 'leads' | 'media' | 'favorites' | 'profile';
 
@@ -269,7 +270,10 @@ function ProfileTab() {
       setConfirmSlugChange(false);
       setTimeout(() => setSaved(false), 2000);
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'Không lưu được hồ sơ.'),
+    onError: (e) => setError(
+      friendlyIdentityConflictError(e)
+        ?? (e instanceof Error ? e.message : 'Không lưu được hồ sơ.')
+    ),
   });
 
   if (profileLoading || agentLoading) {
