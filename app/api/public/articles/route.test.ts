@@ -66,7 +66,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     ],
     citations: [
       { title: 'Cổng dữ liệu địa phương', url: 'https://example.gov.vn/du-lieu' },
-      { title: 'Dữ liệu Chọn Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
+      { title: 'Dữ liệu Chợ Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
     ],
     ...overrides,
   };

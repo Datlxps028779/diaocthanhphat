@@ -5,7 +5,7 @@ function article(overrides: { citations?: unknown; faq?: unknown } = {}) {
   return {
     citations: [
       { title: 'Cổng thông tin địa phương', url: 'https://example.gov.vn/data' },
-      { title: 'Dữ liệu Chọn Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
+      { title: 'Dữ liệu Chợ Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
     ],
     faq: [{ question: 'Dữ liệu này có giới hạn gì?', answer: 'Người đọc cần đối chiếu thời điểm, phạm vi và nguồn của từng thông tin.' }],
     ...overrides,

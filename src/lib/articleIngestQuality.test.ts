@@ -45,7 +45,7 @@ function validRow(overrides: Partial<ArticleRow> = {}): ArticleRow {
     ],
     citations: [
       { title: 'Cổng thông tin dữ liệu địa phương', url: 'https://example.gov.vn/du-lieu' },
-      { title: 'Dữ liệu tin đăng Chọn Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
+      { title: 'Dữ liệu tin đăng Chợ Nhà Việt', url: 'https://chonhaviet.com/du-lieu-gia' },
     ],
     is_published: false,
     ...overrides,

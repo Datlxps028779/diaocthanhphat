@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueries, useMutation, useInfiniteQuery } from '@tanstack/react-query';
-import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Eye, Mail, CheckCircle, LayoutGrid, List } from 'lucide-react';
+import { Calendar, Clock, Tag, ChevronRight, ArrowRight, Mail, CheckCircle, LayoutGrid, List } from 'lucide-react';
 import { type NewsArticle, type NewsListItem, type NewsPageResult } from '../lib/supabase';
 import type { RankedNewsProperty } from '../lib/newsPropertyDiscovery';
 import { newsPropertyReasonLabel } from '../lib/newsPropertyDiscovery';
@@ -441,9 +441,6 @@ function ArticleDetail({
             <span className="flex items-center gap-1">
               <Clock className="w-4 h-4" /> {readMin} phút đọc
             </span>
-            <span className="flex items-center gap-1">
-              <Eye className="w-4 h-4" /> {article.views ?? 0} lượt xem
-            </span>
           </div>
 
           {/* Excerpt */}
@@ -625,7 +622,7 @@ function ArticleDetail({
                       <span className="w-5 shrink-0 pt-0.5 text-center text-lg font-black leading-none text-gray-300">{index + 1}</span>
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{item.title}</p>
-                        <p className="mt-1 text-xs text-gray-400">{item.views.toLocaleString('vi-VN')} lượt xem</p>
+                        <p className="mt-1 text-xs text-gray-400">{item.category || 'Tin tức'}</p>
                       </div>
                     </Link>
                   ))}
@@ -893,14 +890,13 @@ export function NewsPage({ onNavigate, articleId: initialArticleId, initialArtic
           <div className="space-y-4">
             {mostViewed.map((a, i) => {
               const img = (a as any).image_url || NEWS_FALLBACK_IMAGE;
-              const views = (a as any).views ?? 0;
               return (
                 <Link key={a.id} href={articleHref(a)} className="group flex w-full gap-3 text-left transition-opacity hover:opacity-80">
                   <span className="w-5 shrink-0 pt-0.5 text-center text-lg font-black leading-none text-gray-300">{i + 1}</span>
                   <img src={img} alt={buildNewsImageAlt(a)} onError={useFallbackNewsImage} className="h-14 w-14 shrink-0 rounded-lg object-cover" />
                   <div className="min-w-0">
                     <p className="line-clamp-2 text-sm font-medium leading-snug text-gray-700 transition-colors group-hover:text-red-600">{a.title}</p>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-400"><Eye className="h-3 w-3" /> {views.toLocaleString('vi-VN')} lượt xem</p>
+                    <p className="mt-1 text-xs text-gray-400">{a.category || 'Tin tức'}</p>
                   </div>
                 </Link>
               );

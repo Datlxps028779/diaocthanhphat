@@ -180,8 +180,14 @@ describe('serializePropertyCardPopup', () => {
 
   it('khung nội dung cuộn chặn theo % chiều cao khung nhìn', () => {
     const html = serializePropertyCardPopup(baseModel({}));
-    expect(html).toContain('max-height:min(320px,42vh)');
+    expect(html).toContain('max-height:min(160px,25vh)');
     expect(html).not.toContain('max-height:320px;');
+  });
+
+  it('giữ CTA bên ngoài vùng thông tin cuộn để luôn thao tác được', () => {
+    const html = serializePropertyCardPopup(baseModel({}));
+    expect(html.indexOf('overflow-y:auto')).toBeLessThan(html.indexOf('</div>\n\n      <div style="padding:8px 12px 12px'));
+    expect(html.indexOf('padding:8px 12px 12px')).toBeLessThan(html.indexOf('data-nav-id'));
   });
 
   it('ẩn dải specs khi không có diện tích lẫn phòng', () => {
@@ -206,13 +212,18 @@ describe('serializePropertyCardPopup', () => {
 describe('popup khớp bề rộng với bindPopup của PropertyMap', () => {
   const mapSource = readFileSync(resolve(process.cwd(), 'src/components/PropertyMap.tsx'), 'utf8');
 
-  it('serializer dùng bề rộng co giãn thay vì cố định 280px', () => {
+  it('serializer dùng bề rộng co giãn thay vì cố định 240px', () => {
     const html = serializePropertyCardPopup(baseModel({}));
-    expect(html).toContain('width:100%;max-width:280px');
-    // Không được quay lại bề rộng cứng: 280px cứng sẽ tràn khung popup trên màn hẹp.
-    expect(html).not.toMatch(/style="width:280px/);
+    expect(html).toContain('width:100%;max-width:240px');
+    expect(html).not.toMatch(/style="width:240px/);
     // ...nhưng vẫn phải chừa chỗ cho nút đóng 44x44 ở góc trên-phải.
     expect(html).toContain('top:8px;right:44px');
+  });
+
+  it('bật auto-pan và keep-in-view để popup không che hoặc tràn map rail', () => {
+    expect(mapSource).toContain('autoPan: true');
+    expect(mapSource).toContain('keepInView: true');
+    expect(mapSource).toContain('autoPanPaddingBottomRight: [72, 72]');
   });
 
   it('preserves the inline content width measured by Leaflet', () => {
@@ -221,10 +232,10 @@ describe('popup khớp bề rộng với bindPopup của PropertyMap', () => {
     expect(contentRule).not.toMatch(/\bwidth\s*:/);
   });
 
-  it('bindPopup khai báo maxWidth bằng đúng 280px của serializer', () => {
+  it('bindPopup khai báo maxWidth bằng đúng 240px của serializer', () => {
     const serializerMax = serializePropertyCardPopup(baseModel({})).match(/max-width:(\d+)px/)?.[1];
     const bindMax = mapSource.match(/bindPopup\([\s\S]*?maxWidth:\s*(\d+)/)?.[1];
-    expect(serializerMax, 'serializer should declare a max width').toBe('280');
+    expect(serializerMax, 'serializer should declare a max width').toBe('240');
     expect(bindMax, 'bindPopup should declare maxWidth').toBe(serializerMax);
   });
 });

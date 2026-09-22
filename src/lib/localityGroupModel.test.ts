@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Property } from './supabase';
-import { buildLocalityGroups, getLocalityGroupKey, localityGroupIntersectsBounds } from './localityGroupModel';
+import { buildLocalityGroups, getLocalityGroupKey, localityGroupIntersectsBounds, localityGroupPropertyFilters } from './localityGroupModel';
 
 const property = (overrides: Partial<Property> = {}): Property => ({
   id: 'p1', title: 'Tin', description: null, price: 1, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
@@ -26,6 +26,18 @@ describe('locality group model', () => {
     expect(groups.map(group => [group.key, group.count])).toEqual([['ward:ward-1', 2], ['ward:ward-2', 1]]);
     expect(groups[0].propertyIds).toEqual(['p1', 'p2']);
     expect(groups[0].center).toEqual({ latitude: 10.85, longitude: 106.75 });
+  });
+
+  it('queries the entire selected ward or district by taxonomy ID without stale name filters', () => {
+    const [ward, district, area] = buildLocalityGroups([
+      property(),
+      property({ id: 'p2', ward_id: null, ward: null }),
+      property({ id: 'p3', district_id: null, district: null, ward_id: null, ward: null }),
+    ]);
+    const base = { areaId: 'area-1', listingType: 'mua_ban', district: 'Thuận An', ward: 'An Phú', minArea: 50, page: 3, limit: 16 };
+    expect(localityGroupPropertyFilters(base, ward)).toMatchObject({ areaId: 'area-1', districtId: 'district-1', wardId: 'ward-1', minArea: 50, district: undefined, ward: undefined, page: undefined, limit: undefined });
+    expect(localityGroupPropertyFilters(base, district)).toBeNull();
+    expect(localityGroupPropertyFilters(base, area)).toBeNull();
   });
 
   it('checks group bounds against map viewport', () => {

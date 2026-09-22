@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -131,7 +131,55 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   const layoutQuery = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
   const pageLayout = layoutQuery.data ?? [];
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
-  const heroBg = heroBanners[0]?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  const [heroInputFocused, setHeroInputFocused] = useState(false);
+  const [heroControlsFocused, setHeroControlsFocused] = useState(false);
+  const [heroControlsHovered, setHeroControlsHovered] = useState(false);
+  const [heroDocumentHidden, setHeroDocumentHidden] = useState(false);
+  const [heroMotionAllowed, setHeroMotionAllowed] = useState(true);
+  const heroStartedAt = useRef<number | null>(null);
+  const heroElapsed = useRef(0);
+  const previousHeroIndex = useRef(activeHeroIndex);
+  const heroPaused = heroInputFocused || heroControlsFocused || heroControlsHovered || heroDocumentHidden;
+  useEffect(() => {
+    const update = () => setHeroDocumentHidden(document.hidden);
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: no-preference)');
+    const update = () => setHeroMotionAllowed(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  const activeHero = heroBanners[activeHeroIndex] ?? heroBanners[0];
+  useEffect(() => {
+    if (heroBanners.length > 0 && activeHeroIndex >= heroBanners.length) setActiveHeroIndex(0);
+  }, [activeHeroIndex, heroBanners.length]);
+  const heroBg = activeHero?.image_url || 'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg';
+  useEffect(() => {
+    if (previousHeroIndex.current !== activeHeroIndex) {
+      previousHeroIndex.current = activeHeroIndex;
+      heroElapsed.current = 0;
+    }
+    if (!heroMotionAllowed) { heroElapsed.current = 0; return; }
+    if (heroBanners.length < 2 || heroPaused) return;
+    heroStartedAt.current = Date.now();
+    const timer = window.setTimeout(() => {
+      heroStartedAt.current = null;
+      heroElapsed.current = 0;
+      setActiveHeroIndex(index => (index + 1) % heroBanners.length);
+    }, Math.max(0, 7000 - heroElapsed.current));
+    return () => {
+      window.clearTimeout(timer);
+      if (heroStartedAt.current !== null) {
+        heroElapsed.current = Math.min(7000, heroElapsed.current + Date.now() - heroStartedAt.current);
+        heroStartedAt.current = null;
+      }
+    };
+  }, [heroBanners.length, activeHeroIndex, heroPaused, heroMotionAllowed]);
 
   const { data: featuredSections = [] } = useQuery({ queryKey: qk.featuredSections(), queryFn: getFeaturedSections });
   const { data: activeListingCount } = useQuery({
@@ -221,7 +269,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
       case 'categories': return (
         <section key="categories" className="relative isolate overflow-hidden border-b border-slate-100 bg-slate-50 py-10">
           <HomeSectionAtmosphere variant="soft" />
-          <div className="relative z-10 max-w-7xl mx-auto px-4">
+          <div className="relative z-10 mx-auto max-w-7xl rounded-3xl border border-slate-200/80 bg-white/80 px-4 py-8 shadow-sm backdrop-blur-sm">
             <div className="mb-6 flex items-end justify-between gap-4">
               <div>
                 <p className="cnv-eyebrow text-red-600">Khám phá theo nhu cầu</p>
@@ -531,7 +579,6 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
                         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-black ${index === 0 ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-400'}`}>{index + 1}</span>
                         <div className="min-w-0">
                           <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-gray-800 transition-colors group-hover:text-red-600">{article.title}</h4>
-                          <span className="mt-1 flex items-center gap-1 text-[11px] text-gray-400"><Eye className="h-3 w-3" />{article.views.toLocaleString('vi-VN')} lượt xem</span>
                         </div>
                       </Link>
                     ))}
@@ -641,7 +688,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         {/* ─── HERO (always first, not controlled by page builder) ─── */}
       <section className="relative flex min-h-[520px] items-center justify-center overflow-hidden pt-[var(--cnv-header-height)] md:min-h-[600px]">
         <div className="absolute inset-0">
-          <Image src={heroBg} alt="hero" fill priority sizes="100vw" className="object-cover animate-hero-zoom" />
+          <Image key={heroBg} src={heroBg} alt={activeHero?.title || 'Chợ Nhà Việt'} fill priority sizes="100vw" className="object-cover animate-hero-zoom motion-reduce:animate-none motion-safe:transition-transform motion-safe:duration-[7000ms]" />
           {/* Overlay mỏng để ảnh bìa sáng rõ. Ảnh do admin tải nên độ sáng không đoán
               trước — chữ dựa vào drop-shadow thay vì dựa vào nền tối. */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/15 to-black/30" />
@@ -659,7 +706,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           </p>
 
           {/* Search box */}
-          <div className="animate-fade-in-up animation-delay-300 mx-auto max-w-4xl rounded-2xl bg-white p-3 shadow-card md:p-4">
+          <div className="home-search-surface animate-fade-in-up animation-delay-300 mx-auto max-w-4xl rounded-2xl bg-white p-3 shadow-card md:p-4" onFocusCapture={() => setHeroInputFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setHeroInputFocused(false); }}>
             {/* Tabs kiểu gạch chân — nhẹ hơn khay xám, hợp tông sáng */}
             <div className="mb-3 flex items-center gap-6 border-b border-gray-100 px-1 md:mb-4">
               {LISTING_TYPE_TABS.map(tab => (
@@ -789,6 +836,11 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
               ))}
             </div>
           </div>
+          {heroBanners.length > 1 && <div className="mt-4 flex items-center justify-center gap-2" aria-label="Chuyển ảnh bìa" onMouseEnter={() => setHeroControlsHovered(true)} onMouseLeave={() => setHeroControlsHovered(false)} onFocusCapture={() => setHeroControlsFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setHeroControlsFocused(false); }}>
+            {heroBanners.map((banner, index) => <button key={banner.id} type="button" aria-label={`Ảnh bìa ${index + 1}`} aria-pressed={activeHeroIndex === index} onClick={event => { setActiveHeroIndex(index); if (event.detail > 0) event.currentTarget.blur(); }} className="group flex h-11 w-11 shrink-0 items-center justify-center">
+              <span className={`h-1.5 w-9 rounded-full ${activeHeroIndex === index ? 'bg-red-600' : 'bg-slate-300 group-hover:bg-red-300'}`}><span key={activeHeroIndex} className={activeHeroIndex === index ? 'cnv-hero-progress block h-full rounded-full bg-red-900/30' : 'hidden'} style={{ animationPlayState: heroPaused ? 'paused' : 'running' }} /></span>
+            </button>)}
+          </div>}
         </div>
       </section>
 

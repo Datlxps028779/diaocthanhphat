@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Check, ChevronDown, ChevronRight, List, MapPin } from 'lucide-react';
+import { ChevronDown, ChevronRight, List, MapPin } from 'lucide-react';
 import { useAreas, useDistricts } from '../../lib/hooks/useTaxonomy';
 import { useHomeLocationStats } from '../../lib/hooks/useHomeLocationStats';
 import { readLocationDiscovery, resolveLocationSelection } from '../../lib/homeLocationDiscovery';
@@ -89,16 +89,13 @@ export function LocationDiscovery({ settings }: { settings: Record<string, unkno
                     {items.map(item => {
                       const province = areas.find(value => value.id === item.area_id)!;
                       const image = item.image_url || province.image_url;
-                      const isSelected = item.area_id === area?.id;
                       const values = stats?.areas[item.area_id];
                       const count = stats ? values?.count ?? 0 : null;
-                      return <article key={item.id} data-testid="location-featured-card" className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white transition-shadow hover:shadow-lg">
-                        <button type="button" aria-label={`Chọn ${province.name}`} aria-pressed={isSelected} aria-controls="home-location-districts" onClick={() => chooseArea(item.area_id)}
-                          className="group relative block aspect-[16/11] w-full shrink-0 overflow-hidden bg-slate-700 text-left text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white">
+                      return <article key={item.id} data-testid="location-featured-card" className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg motion-reduce:transform-none">
+                        <Link href={`/khu-vuc/${province.slug}`} aria-label={`Khám phá ${province.name}`} className="group relative block aspect-[16/8] w-full shrink-0 overflow-hidden bg-slate-700 text-left text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white">
                           <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center"><MapPin className="h-14 w-14 text-slate-500" /></span>
                           {image && <img key={image} src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} className="absolute inset-0 h-full w-full object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-105" />}
                           <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/15 to-transparent" />
-                          {isSelected && <span aria-hidden="true" className="absolute right-3 top-3 rounded-full bg-white p-1.5 text-red-700 shadow"><Check className="h-4 w-4" /></span>}
                           <span className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
                             <span className="line-clamp-2 block text-xl font-bold leading-tight tracking-tight sm:text-2xl">{province.name}</span>
                             <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-white/95 sm:text-sm">
@@ -106,8 +103,8 @@ export function LocationDiscovery({ settings }: { settings: Record<string, unkno
                               {values?.minSalePriceVnd != null && <span className="border-l border-white/40 pl-3">Giá bán từ {formatLocationPrice(values.minSalePriceVnd)}</span>}
                             </span>
                           </span>
-                        </button>
-                        <div className="flex flex-1 flex-col p-4 sm:p-5">
+                        </Link>
+                        <div className="flex flex-1 flex-col p-3 sm:p-4">
                           <p className="text-[11px] font-semibold uppercase leading-5 text-slate-500 sm:text-xs">Giá chào bán trung bình</p>
                           <div className="mt-2 flex min-h-8 flex-wrap items-baseline gap-x-2 gap-y-1" data-testid="location-card-price">
                             {values?.avgSalePriceVnd != null ? <>

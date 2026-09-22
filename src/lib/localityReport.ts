@@ -395,7 +395,7 @@ export function buildLocalityFaq(context: LocalityPageContext, report: LocalityR
     // Nguồn + phương pháp + giới hạn, kèm con số tổng để người đọc biết quy mô thật.
     items.push({
       question: `Số liệu trong báo cáo ${place} được tổng hợp theo phương pháp nào?`,
-      answer: `Báo cáo chỉ dùng tin đăng công khai đang hoạt động trên Chọn Nhà Việt (${report.counts.total} tin trong phạm vi này), không dùng giá giao dịch thực tế hay ước lượng thị trường.${scopeNote}${updatedPart}`,
+      answer: `Báo cáo chỉ dùng tin đăng công khai đang hoạt động trên Chợ Nhà Việt (${report.counts.total} tin trong phạm vi này), không dùng giá giao dịch thực tế hay ước lượng thị trường.${scopeNote}${updatedPart}`,
     });
     items.push({
       question: `Giá trung bình và trung vị trong báo cáo ${place} khác nhau thế nào?`,
@@ -436,12 +436,12 @@ export function buildLocalityFaq(context: LocalityPageContext, report: LocalityR
   if (context.listingType === 'mua_ban') {
     items.push({
       question: `${place} hiện có bao nhiêu tin bất động sản đang bán?`,
-      answer: `Hiện có ${report.counts.sale} tin đang bán tại ${place}, tính từ tin đăng công khai trên Chọn Nhà Việt.`,
+      answer: `Hiện có ${report.counts.sale} tin đang bán tại ${place}, tính từ tin đăng công khai trên Chợ Nhà Việt.`,
     });
   } else if (context.listingType === 'cho_thue') {
     items.push({
       question: `${place} hiện có bao nhiêu tin bất động sản cho thuê?`,
-      answer: `Hiện có ${report.counts.rent} tin cho thuê tại ${place}, tính từ tin đăng công khai trên Chọn Nhà Việt.`,
+      answer: `Hiện có ${report.counts.rent} tin cho thuê tại ${place}, tính từ tin đăng công khai trên Chợ Nhà Việt.`,
     });
   } else {
     items.push({
@@ -450,7 +450,7 @@ export function buildLocalityFaq(context: LocalityPageContext, report: LocalityR
     });
   }
 
-  items[0].answer += `${updatedPart} Nguồn: tin đăng công khai trên Chọn Nhà Việt, không đại diện toàn thị trường.`;
+  items[0].answer += `${updatedPart} Nguồn: tin đăng công khai trên Chợ Nhà Việt, không đại diện toàn thị trường.`;
   if (report.counts.total === 0) items[0].answer += ' Chưa có mẫu để thống kê giá trong phạm vi này.';
 
   if (sale.sampleMet) {

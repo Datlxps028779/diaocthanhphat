@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const result = await loadNewsPageData(params.slug);
   if (!result) notFound();
   const title = `Tin tức ${result.data.area.name}`;
-  const description = `Các bài viết đã được gắn với ${result.data.area.name} từ dữ liệu tin tức công khai của Chọn Nhà Việt.`;
+  const description = `Các bài viết đã được gắn với ${result.data.area.name} từ dữ liệu tin tức công khai của Chợ Nhà Việt.`;
   return {
     title,
     description,

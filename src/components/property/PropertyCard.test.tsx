@@ -7,12 +7,19 @@ vi.stubGlobal('React', React);
 const property = { id: 'p1', title: 'Nhà có sân vườn', price: 340, price_unit: 'triệu', listing_type: 'mua_ban', area_sqm: 200, bedrooms: 3, bathrooms: 2, property_types: { name: 'Nhà phố', slug: 'nha-pho' }, legal_status: 'Sổ hồng', created_at: '2026-01-02T12:00:00Z', district: 'Dĩ An', city: 'Bình Dương' };
 
 describe('shared property card', () => {
-  it.each(['grid', 'list', 'compact'] as const)('keeps the complete information contract in %s', variant => {
+  it.each(['grid', 'list', 'compact', 'locality'] as const)('keeps the complete information contract in %s', variant => {
     const html = renderToStaticMarkup(<PropertyCard property={property} variant={variant} onContact={() => {}} />);
     for (const text of ['Nhà có sân vườn', '340 triệu', '≈ 1,7 triệu/m²', '200 m²', '3 phòng ngủ', '2 phòng tắm', 'Sổ hồng', 'Dĩ An', 'Người đăng', 'Chưa có thông tin người đăng', '02/01/2026', 'Chi tiết', 'Liên hệ']) expect(html).toContain(text);
     expect(html).not.toContain('pexels');
     expect(html).toContain('Ảnh chưa có sẵn');
     for (const anchor of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) expect(anchor[1]).not.toMatch(/<(?:a|button)\b/);
+  });
+  it('renders a compact locality row without exposing public views or a crowded image count', () => {
+    const html = renderToStaticMarkup(<PropertyCard property={{ ...property, views: 42, image_url: '/hinh-anh/property-images/a.jpg', images: ['/hinh-anh/property-images/a.jpg', '/hinh-anh/property-images/b.jpg'] }} variant="locality" onContact={() => {}} />);
+    expect(html).toContain('Nhà có sân vườn');
+    expect(html).toContain('data-testid="property-card-poster"');
+    expect(html).not.toContain('lượt xem');
+    expect(html).not.toContain('ẢNH');
   });
   it('keeps unknown poster visible and does not expose private contact fields', () => {
     const source = { ...property, contact_name: 'Private contact', contact_phone: '0900000000' };

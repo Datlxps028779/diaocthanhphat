@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { Property } from '../lib/supabase';
 import type { Page } from '../lib/router';
 import type { Map as LeafletMap } from 'leaflet';
+import type { TaxonomyGeo } from '../lib/taxonomyGeo';
+import { isValidTaxonomyBounds } from '../lib/taxonomyGeo';
 import { formatCompactPropertyPrice, getEffectiveListingPrice } from '../lib/listingPrice';
 import { buildPropertyCardModel } from '../lib/propertyCardModel';
 import { serializePropertyCardPopup } from './property/propertyCardPopup';
+import { MapInteractionGate } from './MapInteractionGate';
 
 export interface MapBounds {
   north: number; south: number; east: number; west: number;
@@ -25,7 +28,10 @@ interface PropertyMapProps {
   getGroupKey?: (property: Property) => string;
   selectedGroupKey?: string | null;
   focusGroupKey?: string | null;
+  selectedGeo?: TaxonomyGeo | null;
+  selectedGeoPending?: boolean;
   onGroupSelect?: (groupKey: string) => void;
+  onFocusComplete?: (bounds: MapBounds) => void;
 }
 
 function priceTierForProperty(property: Property): { color: string; bg: string; label: string } {
@@ -116,10 +122,15 @@ export function PropertyMap({
   getGroupKey,
   selectedGroupKey,
   focusGroupKey,
+  selectedGeo,
+  selectedGeoPending = false,
   onGroupSelect,
+  onFocusComplete,
 }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const selectedGroupKeyRef = useRef(selectedGroupKey);
+  selectedGroupKeyRef.current = selectedGroupKey;
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
@@ -179,6 +190,16 @@ export function PropertyMap({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!mapReady || !containerRef.current || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 0 && rect.height > 0) mapRef.current?.invalidateSize({ pan: false, animate: false });
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [mapReady]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     let cancelled = false;
@@ -193,7 +214,7 @@ export function PropertyMap({
       // Tự thu bản đồ khít các marker đang hiển thị: lọc khu vực/quận/xã càng cụ
       // thể thì vùng nhìn càng sát. Một điểm → panTo + zoom gần; nhiều điểm →
       // fitBounds có padding. Không marker thì giữ nguyên view.
-      if (fitToMarkers && !focusGroupKey) {
+      if (fitToMarkers && !focusGroupKey && !selectedGroupKeyRef.current) {
         const pts = properties
           .filter(p => p.latitude != null && p.longitude != null)
           .map(p => [p.latitude!, p.longitude!] as [number, number]);
@@ -209,19 +230,57 @@ export function PropertyMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !focusGroupKey || !getGroupKey) return;
+    if (!map || !getGroupKey || !focusGroupKey) return;
+    const focusAll = focusGroupKey === '__all_locality_groups__';
     const points = properties
-      .filter(property => getGroupKey(property) === focusGroupKey && property.latitude != null && property.longitude != null)
+      .filter(property => (focusAll || getGroupKey(property) === focusGroupKey) && property.latitude != null && property.longitude != null)
       .map(property => [property.latitude!, property.longitude!] as [number, number]);
-    if (!points.length) return;
+    if (!focusAll && selectedGeoPending) return;
+    if (!points.length && !isValidTaxonomyBounds(selectedGeo?.bounds)) return;
+    let cancelled = false;
+    let completionTimer: ReturnType<typeof setTimeout> | null = null;
+    const complete = () => {
+      if (cancelled) return;
+      map.off('moveend', complete);
+      if (completionTimer) clearTimeout(completionTimer);
+      completionTimer = null;
+      const bounds = map.getBounds();
+      onFocusComplete?.({ north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest() });
+    };
     map.invalidateSize({ pan: false, animate: false });
     import('leaflet').then(module => {
-      if (!mapRef.current) return;
+      if (cancelled || mapRef.current !== map) return;
       const L = module.default;
-      if (points.length === 1) map.setView(points[0], 15, { animate: true });
+      map.once('moveend', complete);
+      if (!focusAll && isValidTaxonomyBounds(selectedGeo?.bounds)) {
+        map.fitBounds([[selectedGeo.bounds.south, selectedGeo.bounds.west], [selectedGeo.bounds.north, selectedGeo.bounds.east]], { padding: [36, 36], maxZoom: 16, animate: true });
+      } else if (points.length === 1) map.setView(points[0], 15, { animate: true });
       else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16, animate: true });
+      completionTimer = setTimeout(complete, 1200);
     });
-  }, [properties, focusGroupKey, getGroupKey, mapReady]);
+    return () => {
+      cancelled = true;
+      map.off('moveend', complete);
+      if (completionTimer) clearTimeout(completionTimer);
+    };
+  }, [properties, focusGroupKey, getGroupKey, mapReady, selectedGeo, selectedGeoPending, onFocusComplete]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const geometry = selectedGeo?.geojson;
+    if (!map || !mapReady || !geometry || (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon')) return;
+    let cancelled = false;
+    let boundary: import('leaflet').GeoJSON | null = null;
+    import('leaflet').then(module => {
+      if (cancelled || mapRef.current !== map) return;
+      const L = module.default;
+      boundary = L.geoJSON(geometry as unknown as Parameters<typeof L.geoJSON>[0], {
+        style: { color: '#b91c1c', weight: 2, dashArray: '7 5', fillColor: '#ef4444', fillOpacity: .12 },
+        interactive: false,
+      }).addTo(map);
+    });
+    return () => { cancelled = true; if (boundary) map.removeLayer(boundary); };
+  }, [mapReady, selectedGeo]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -236,7 +295,8 @@ export function PropertyMap({
   const visibleCount = properties.filter(p => p.latitude && p.longitude).length;
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-gray-200 shadow-md" style={{ height }}>
+    <MapInteractionGate label="bản đồ bất động sản" className="overflow-hidden rounded-2xl border border-gray-200 shadow-md" style={{ height }}>
+      <div className="relative h-full w-full overflow-hidden rounded-2xl">
       <div ref={containerRef} className="w-full h-full" />
 
       {/* Legend — ẩn trên màn nhỏ để không đè zoom control */}
@@ -306,7 +366,8 @@ export function PropertyMap({
         }
         .pcpopup-cta:hover { opacity: 0.88; }
       `}</style>
-    </div>
+      </div>
+    </MapInteractionGate>
   );
 }
 
@@ -338,8 +399,12 @@ function addMarkers(
     marker.bindPopup(popupHtml(p), {
       // Khớp đúng bề rộng serializer phát ra (max-width:280px). Lệch nhau khiến Leaflet
       // tự thêm/bớt ~10px và nội dung bị nhảy giữa các popup.
-      maxWidth: 280,
-      minWidth: 252,
+      maxWidth: 240,
+      minWidth: 220,
+      autoPan: true,
+      keepInView: true,
+      autoPanPaddingTopLeft: [24, 72],
+      autoPanPaddingBottomRight: [72, 72],
       className: 'property-popup',
       offset: [6, 0],
     });
@@ -348,10 +413,6 @@ function addMarkers(
       if (groupKey) onGroupSelect?.(groupKey);
     });
 
-    // Hover opens popup
-    marker.on('mouseover', () => marker.openPopup());
-
-    // Click delegation on popup content via data-nav-id attribute
     marker.on('popupopen', () => {
       const popup = marker.getPopup();
       if (!popup) return;

@@ -24,6 +24,7 @@ export function PropertyGallery({
   onToggleFavorite,
   onLinkClick,
   mobileList = false,
+  singleImage = false,
   publicCard = false,
   className = '',
 }: {
@@ -38,6 +39,7 @@ export function PropertyGallery({
   onToggleFavorite?: () => void;
   onLinkClick?: MouseEventHandler<HTMLAnchorElement>;
   mobileList?: boolean;
+  singleImage?: boolean;
   publicCard?: boolean;
   className?: string;
 }) {
@@ -49,7 +51,7 @@ export function PropertyGallery({
     : getPropertyGalleryMeta(property.image_url, property.images);
   const propertyType = property.property_types?.name?.trim() || (property.listing_type === 'cho_thue' ? 'Cho thuê' : PROPERTY_TYPE_FALLBACK);
   const hasMultipleImages = imageCount > 1;
-  const visibleImages = gallery.slice(0, 3);
+  const visibleImages = gallery.slice(0, singleImage ? 1 : 3);
 
   const renderImage = (src: string, index: number, wrapperClassName: string, overlay?: ReactNode) => (
     <div className={`relative isolate min-h-0 overflow-hidden bg-gray-100 ${wrapperClassName}`}>
@@ -109,7 +111,7 @@ export function PropertyGallery({
         </span>
       )}
       <div className="absolute right-2 top-2 z-[3] flex items-center gap-1.5">
-        {mobileList ? <span className="hidden sm:contents">{topRight}</span> : topRight}
+        {topRight}
         {!publicCard && hasMultipleImages && (
           <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 ${publicCard ? 'text-xs' : 'text-[10px]'} font-bold text-white`}>
             <ImageIcon className="h-3 w-3" />{imageCount} ẢNH
@@ -127,7 +129,7 @@ export function PropertyGallery({
           </button>
         )}
       </div>
-      {publicCard && imageCount > 0 && <span className="absolute bottom-2 left-2 z-[2] inline-flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-xs font-bold text-white"><ImageIcon className="h-3 w-3" />{imageCount} ẢNH</span>}
+      {publicCard && !singleImage && imageCount > 0 && <span className={`${mobileList ? 'hidden sm:inline-flex' : 'inline-flex'} absolute bottom-2 left-2 z-[2] items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-xs font-bold text-white`}><ImageIcon className="h-3 w-3" />{imageCount} ẢNH</span>}
       {publicCard && onToggleFavorite && <button type="button"
         onClick={event => { event.preventDefault(); event.stopPropagation(); onToggleFavorite(); }}
         aria-label={isFavorited ? 'Bỏ lưu tin đăng' : 'Lưu tin đăng'} aria-pressed={isFavorited}

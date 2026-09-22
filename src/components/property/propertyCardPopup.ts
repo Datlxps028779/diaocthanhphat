@@ -157,9 +157,9 @@ export function serializePropertyCardPopup(model: PropertyCardPopupModel): strin
     : '';
 
   return `
-    <div style="width:100%;max-width:280px;min-width:0;font-family:Inter,system-ui,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.16);">
-      <div style="position:relative;height:150px;overflow:hidden;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);">
-        <span data-card-fallback ${primaryImage ? 'hidden' : ''} style="position:absolute;inset:0;padding-top:64px;text-align:center;font-size:13px;color:#4b5563;">Ảnh chưa có sẵn</span>
+    <div style="width:100%;max-width:240px;min-width:0;font-family:Inter,system-ui,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.16);">
+      <div style="position:relative;height:105px;overflow:hidden;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);">
+        <span data-card-fallback ${primaryImage ? 'hidden' : ''} style="position:absolute;inset:0;padding-top:42px;text-align:center;font-size:12px;color:#4b5563;">Ảnh chưa có sẵn</span>
         ${imageHtml}
         <div style="position:absolute;top:8px;left:8px;background:${bg};color:#fff;font-size:12px;font-weight:800;padding:3px 8px;border-radius:20px;letter-spacing:0.3px;">${escapeHtml(transactionLabel(model.transaction))}</div>
         ${typeBadge}
@@ -168,11 +168,11 @@ export function serializePropertyCardPopup(model: PropertyCardPopupModel): strin
 
       <!-- Nội dung cuộn được, chặn theo % chiều cao khung nhìn để popup không bao giờ cao
            hơn màn hình (Leaflet tự đặt maxHeight bằng px cứng, không co theo viewport). -->
-      <div style="padding:12px 14px 14px;background:#fff;max-height:min(320px,42vh);overflow-y:auto;">
-        <div style="font-size:15px;font-weight:700;color:#111827;line-height:1.4;margin-bottom:8px;">${escapeHtml(model.title)}</div>
+      <div style="padding:10px 12px 8px;background:#fff;max-height:min(160px,25vh);overflow-y:auto;">
+        <div style="font-size:14px;font-weight:700;color:#111827;line-height:1.35;margin-bottom:6px;">${escapeHtml(model.title)}</div>
 
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-          <span style="font-size:20px;font-weight:900;color:${bg};line-height:1;">${escapeHtml(model.price)}</span>
+        <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:6px;flex-wrap:wrap;">
+          <span style="font-size:18px;font-weight:900;color:${bg};line-height:1;">${escapeHtml(model.price)}</span>
           ${pricePerSqmHtml}
         </div>
 
@@ -189,7 +189,9 @@ export function serializePropertyCardPopup(model: PropertyCardPopupModel): strin
         ${metaRow}
 
         ${posterRow(model.poster)}
+      </div>
 
+      <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f3f4f6;">
         <button
           data-nav-id="${escapeHtml(model.id)}"
           data-nav-slug="${escapeHtml(model.navSlug ?? '')}"

@@ -450,7 +450,7 @@ describe('buildLocalityFaq', () => {
     const count = faq.find(item => /hiện có bao nhiêu tin/i.test(item.question));
     expect(count).toBeDefined();
     expect(count!.answer).toContain('0 tin');
-    expect(count!.answer).toContain('Chọn Nhà Việt');
+    expect(count!.answer).toContain('Chợ Nhà Việt');
     // No price question when there is nothing to price.
     expect(faq.some(item => /khoảng bao nhiêu/i.test(item.question) && /Giá/.test(item.question))).toBe(false);
   });

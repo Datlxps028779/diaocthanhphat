@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isValidTaxonomyBounds, type TaxonomyBounds, type TaxonomyGeo } from '../lib/taxonomyGeo';
 import { canConfirmTaxonomyCandidate, normalizePersistedTaxonomyPoint, validatePointForWard, type TaxonomyPointValidation } from '../lib/taxonomyPoint';
+import { MapInteractionGate } from './MapInteractionGate';
 
 export type TaxonomyLevel = 'area' | 'district' | 'ward';
 
@@ -953,28 +954,28 @@ export function LocationPicker({ lat, lng, onChange, geocodeTarget, resetNonce =
   const statusText = status === 'searching'
     ? 'Đang tìm vị trí trên bản đồ…'
     : status === 'candidate'
-      ? 'Ghim vàng là điểm tham khảo. Kiểm tra rồi bấm xác nhận hoặc kéo ghim đến đúng vị trí.'
+      ? 'Nếu bản đồ đang khóa, nhấn kích hoạt. Ghim vàng là điểm tham khảo; kiểm tra rồi xác nhận hoặc kéo ghim đến đúng vị trí.'
       : status === 'placed'
         ? 'Ghim đỏ đã được kiểm tra nằm trong polygon xã/phường và sẽ được lưu.'
         : status === 'invalid'
-          ? 'Điểm vừa chọn hoặc kéo không hợp lệ nên không được lưu. Nếu đã có ghim đỏ, hệ thống giữ nguyên vị trí hợp lệ trước đó.'
+          ? 'Nếu bản đồ đang khóa, nhấn kích hoạt rồi chọn hoặc kéo lại điểm hợp lệ. Hệ thống vẫn giữ vị trí hợp lệ trước đó.'
           : status === 'review'
-          ? 'Bạn vừa đổi khu vực hành chính. Hãy kiểm tra và kéo ghim đỏ về đúng vị trí trước khi lưu.'
+          ? 'Bạn vừa đổi khu vực hành chính. Nếu bản đồ đang khóa, nhấn kích hoạt rồi kéo ghim đỏ về đúng vị trí trước khi lưu.'
           : status === 'missing_geo'
         ? 'Chưa có ranh giới nội bộ; đang thử định vị theo đúng chuỗi tỉnh, huyện, xã.'
         : status === 'none'
-          ? 'Không tìm thấy địa chỉ. Hãy thử tên đường/phường ngắn hơn hoặc bấm trực tiếp lên bản đồ.'
+          ? 'Không tìm thấy địa chỉ. Hãy thử tên ngắn hơn, hoặc nhấn kích hoạt bản đồ rồi chọn trực tiếp vị trí.'
           : status === 'error'
-            ? 'Không tải được dịch vụ tìm kiếm. Bạn vẫn có thể bấm trực tiếp lên bản đồ để đặt ghim.'
+            ? 'Không tải được dịch vụ tìm kiếm. Nhấn kích hoạt bản đồ rồi chọn trực tiếp vị trí để đặt ghim.'
             : status === 'idle' && !geocodeTarget
-              ? 'Chọn tỉnh/thành phố để bản đồ hiển thị đúng khu vực hành chính.'
-              : 'Bấm vào đúng vị trí trên bản đồ để thả ghim. Vị trí chỉ là điểm tham khảo, không phải ranh giới pháp lý.';
+              ? 'Nhấn kích hoạt bản đồ, sau đó chọn tỉnh/thành phố để hiển thị đúng khu vực hành chính.'
+              : 'Nhấn kích hoạt bản đồ, sau đó bấm đúng vị trí để thả ghim. Vị trí chỉ là điểm tham khảo, không phải ranh giới pháp lý.';
 
   return (
     <div className="space-y-2">
-      <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm" style={{ height }}>
+      <MapInteractionGate label="bản đồ chọn vị trí" className="overflow-hidden rounded-xl border border-gray-200 shadow-sm" style={{ height }}>
         <div ref={containerRef} className="h-full w-full" />
-      </div>
+      </MapInteractionGate>
       {tileStatus === 'error' && (
         <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
           Không tải được nền bản đồ chi tiết. Ranh giới và ghim vẫn được giữ; bạn có thể nhập tọa độ thủ công hoặc tải lại trang để thử lại.

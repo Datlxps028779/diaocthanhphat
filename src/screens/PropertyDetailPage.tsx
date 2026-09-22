@@ -40,6 +40,7 @@ import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
 import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
 import { DetailShareButtons } from '../components/DetailShareButtons';
+import { MapInteractionGate } from '../components/MapInteractionGate';
 import { getProductSuggestions } from '../lib/productSuggestions';
 import { normalizeListingTitle } from '../lib/listingTitle';
 import { buildSimilarFilters } from '../lib/similarFilters';
@@ -1075,5 +1076,5 @@ function PropertyLocationMap({ lat, lng, title }: { lat: number; lng: number; ti
     };
   }, [lat, lng, title]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={containerRef} style={{ width: '100%', height: '240px' }} />;
+  return <MapInteractionGate label="bản đồ vị trí bất động sản" className="overflow-hidden rounded-xl" style={{ width: '100%', height: '240px' }}><div ref={containerRef} className="h-full w-full" /></MapInteractionGate>;
 }

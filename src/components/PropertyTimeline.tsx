@@ -93,7 +93,7 @@ function TimelineCard({ property }: { property: TimelineProperty }) {
   const location = [property.district, property.city].filter(Boolean).join(', ');
   return (
     <Link href={buildPropertyPath(property)} prefetch={false} data-testid="timeline-property" aria-label={`Xem bất động sản: ${property.title}`}
-      title={`${property.title}\n${location}\n${formatPropertyPrice(property)} · Mốc tạo ${displayTime(new Date(property.created_at).getTime())}`}
+      title={`${property.title}\n${location}\n${formatPropertyPrice(property)}`}
       className={`group relative flex h-full min-h-28 flex-col justify-between gap-2 overflow-hidden rounded-xl border p-3 pl-4 transition-colors hover:shadow-md ${rental ? 'border-violet-100 bg-violet-50 hover:border-violet-300' : 'border-emerald-100 bg-emerald-50 hover:border-emerald-300'}`}>
       <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-1 ${rental ? 'bg-violet-400' : 'bg-emerald-400'}`} />
       <p className="line-clamp-2 text-[10px] font-semibold leading-4 text-slate-800 group-hover:text-red-700">{property.title}</p>
@@ -154,7 +154,6 @@ export function PropertyTimeline() {
                 {query.isError ? 'Mất kết nối' : query.isPending ? 'Đang tải' : isToday ? 'Trực tiếp' : 'Lịch sử'}
               </span>
               {total !== undefined && <span>· {total} tin</span>}
-              {query.dataUpdatedAt > 0 && <span>· {displayTime(query.dataUpdatedAt)}</span>}
             </div>
             <h2 id={titleId} className="text-xl font-black leading-tight tracking-tight text-slate-900 sm:text-2xl">Dòng thời gian bất động sản</h2>
           </div>
@@ -208,11 +207,7 @@ export function PropertyTimeline() {
             <button type="button" disabled={query.isFetching} onClick={() => void query.fetchNextPage()} className={controlClass}>{query.isFetchingNextPage ? 'Đang tải thêm…' : `Xem thêm tin (${buckets.flat().length}/${total})`}</button>
           </div>}
         </div>
-        <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[10px] leading-relaxed text-slate-500">
-          <p>Giờ Việt Nam (UTC+7) · Theo mốc tạo bản ghi · Chỉ gồm tin đang công khai.</p>
-          <p>{query.isFetching ? 'Đang cập nhật…' : isToday ? 'Tự động cập nhật mỗi 30s' : 'Lịch sử không tự động cập nhật'} · {query.dataUpdatedAt ? `Lần thành công: ${displayTime(query.dataUpdatedAt)}` : 'Chưa cập nhật'}</p>
         </div>
-      </div>
     </section>
   );
 }

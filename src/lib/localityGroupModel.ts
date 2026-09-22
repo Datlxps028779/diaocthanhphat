@@ -1,4 +1,5 @@
 import type { Property } from './supabase';
+import type { PropertyFilters } from './api/properties';
 
 export type LocalityGroupLevel = 'ward' | 'district' | 'area';
 
@@ -64,6 +65,21 @@ export function buildLocalityGroups(properties: Property[], areaId?: string): Lo
       bounds: { north, south, east, west },
     };
   });
+}
+
+export function localityGroupPropertyFilters(filters: PropertyFilters, group: LocalityGroup): PropertyFilters | null {
+  // Chỉ group phường/xã biểu diễn một scope taxonomy đầy đủ. Group district/area là
+  // bucket fallback cho các tin thiếu ward_id; query cả huyện sẽ lẫn lại các ward đã tách nhóm.
+  if (group.level !== 'ward') return null;
+  return {
+    ...filters,
+    districtId: group.representative.district_id ?? undefined,
+    wardId: group.representative.ward_id ?? undefined,
+    district: undefined,
+    ward: undefined,
+    page: undefined,
+    limit: undefined,
+  };
 }
 
 export function localityGroupIntersectsBounds(group: LocalityGroup, bounds: { north: number; south: number; east: number; west: number }): boolean {

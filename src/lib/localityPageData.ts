@@ -102,7 +102,7 @@ export function buildLocalityPageData(path: string, snapshot: LocalityPageSnapsh
     return { label: kind === 'sale' ? 'Mua bán' : 'Cho thuê', monthly: kind === 'rent', inventory: report.counts[kind], samples: stats.count, mean: stats.meanVnd, median: stats.medianVnd, perSqm: stats.perSqmVnd, sqmSamples: stats.perSqmSampleCount };
   });
   const place = [context.wardName, context.districtName, context.areaName].filter(Boolean).join(', ');
-  const summary = `${report.counts.total} tin công khai trong phạm vi ${context.title.toLocaleLowerCase('vi-VN')}: ${report.counts.sale} tin bán và ${report.counts.rent} tin cho thuê. Dữ liệu chỉ phản ánh tin đăng trên Chọn Nhà Việt, không đại diện toàn thị trường.`;
+  const summary = `${report.counts.total} tin công khai trong phạm vi ${context.title.toLocaleLowerCase('vi-VN')}: ${report.counts.sale} tin bán và ${report.counts.rent} tin cho thuê. Dữ liệu chỉ phản ánh tin đăng trên Chợ Nhà Việt, không đại diện toàn thị trường.`;
   const breadcrumbs = [
     { name: 'Trang chủ', path: '/' },
     { name: 'Khu vực', path: '/khu-vuc' },
@@ -110,7 +110,7 @@ export function buildLocalityPageData(path: string, snapshot: LocalityPageSnapsh
     ...(context.mode === 'report' && landingPath !== `/khu-vuc/${area.slug}` ? [{ name: `Tin đăng tại ${place}`, path: landingPath }] : []),
     { name: context.title, path: context.path },
   ];
-  return { context, area, report, evaluation, reportEvaluation, summary, place, landingPath, links, distributions, priceRows, breadcrumbs, faq: buildLocalityFaq(context, report) };
+  return { context, area, areaOptions: snapshot.areas.map(item => ({ slug: item.slug, name: item.name })), report, evaluation, reportEvaluation, summary, place, landingPath, links, distributions, priceRows, breadcrumbs, faq: buildLocalityFaq(context, report) };
 }
 
 export type LocalityPageData = NonNullable<ReturnType<typeof buildLocalityPageData>>;

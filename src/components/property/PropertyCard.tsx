@@ -11,7 +11,7 @@ import styles from './PropertyCard.module.css';
 export type PropertyCardProps = {
   property: PropertyCardSource;
   href?: string;
-  variant?: 'grid' | 'list' | 'compact';
+  variant?: 'grid' | 'list' | 'compact' | 'locality';
   onResultClick?: MouseEventHandler<HTMLAnchorElement>;
   onContact?: () => void;
   isFavorited?: boolean;
@@ -33,7 +33,7 @@ export function PropertyCard({ property, href, variant = 'grid', onResultClick, 
     property_types: null,
   };
   return <article className={`${styles.card} ${styles[variant]}`} data-testid="property-card" data-property-id={model.id}>
-    <PropertyGallery property={galleryProperty} href={target} publicCard
+    <PropertyGallery property={galleryProperty} href={target} publicCard mobileList={variant === 'grid' || variant === 'locality'} singleImage={variant === 'locality'}
       className={styles.media} onLinkClick={onResultClick}
       isFavorited={isFavorited} onToggleFavorite={onToggleFavorite}
       topLeft={<div className={styles.badges}>
@@ -45,6 +45,7 @@ export function PropertyCard({ property, href, variant = 'grid', onResultClick, 
     />
     <div className={styles.body}>
       <h3 className={styles.title}><Link href={target} onClick={onResultClick} title={model.title}>{model.title}</Link></h3>
+      <div className={styles.mobileVerification}><VerifiedBadge property={{ ...property, is_verified: property.is_verified ?? false }} /></div>
       <div className={styles.prices}>
         <p className={styles.price}>{model.price}</p><p className={styles.area}>{model.areaLabel}</p>
         {model.pricePerSqm && <p className={styles.unitPrice}>{model.pricePerSqm}</p>}
@@ -64,7 +65,6 @@ export function PropertyCard({ property, href, variant = 'grid', onResultClick, 
           </div>
           <div className={styles.dateRow}>
             {model.postedAt ? <time dateTime={model.postedAt}>{model.postedLabel}</time> : <span>{model.postedLabel}</span>}
-            {Number.isFinite(property.views) && property.views! > 0 && <span>{property.views!.toLocaleString('vi-VN')} lượt xem</span>}
           </div>
         </div>
         <div className={styles.actions}>

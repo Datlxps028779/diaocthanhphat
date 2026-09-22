@@ -6,6 +6,7 @@ import type { LocalityPageData } from '@/lib/localityPageData';
 import { LocalityDirectory, LocalityFaq, LocalityPriceTable, LocalityReportCta, LocalityTimestamp, localityMoney } from './LocalitySections';
 import { LocalityNewsSection, LocalityArticleDate } from './LocalityNewsSection';
 import { LocalitySkyline } from './LocalitySkyline';
+import { LocalityAreaDropdown } from './LocalityAreaDropdown';
 import styles from './localityVisual.module.css';
 
 function LocalitySubnavItem({ label, href, active, disabled }: { label: string; href?: string; active?: boolean; disabled?: boolean }) {
@@ -29,7 +30,7 @@ export function LocalitySubnav({ data, newsPath, activePath }: { data: LocalityP
   ];
   return <nav aria-label="Điều hướng khu vực" className={styles.subnav} data-testid="locality-subnav">
     <div className="mx-auto flex max-w-[1360px] items-stretch gap-1 overflow-x-auto px-4 sm:px-8">
-      {items.map(item => <LocalitySubnavItem key={item.label} {...item} />)}
+      {items.map((item, index) => index === 0 ? <LocalityAreaDropdown key={item.label} areaName={data.area.name} areaSlug={data.area.slug} areaOptions={data.areaOptions} activePath={currentPath} active={currentPath === areaPath} /> : <LocalitySubnavItem key={item.label} {...item} />)}
     </div>
   </nav>;
 }
@@ -55,7 +56,7 @@ export function LocalityHeader({ data, newsPath, activePath, titleOverride, brea
   const isReport = !isNews && context.mode === 'report';
   const provinceOverview = !isNews && context.path === `/khu-vuc/${area.slug}`;
   const showNews = provinceOverview && Boolean(newsPath) && newsArticles.length > 0;
-  const introduction = isNews ? `Các bài viết được gắn với ${area.name} từ nguồn tin tức công khai của Chọn Nhà Việt.`
+  const introduction = isNews ? `Các bài viết được gắn với ${area.name} từ nguồn tin tức công khai của Chợ Nhà Việt.`
     : provinceOverview && area.description?.trim() ? area.description : data.summary;
   return <header className={`${styles.scope} ${styles.hero}`} data-testid="locality-header">
     <LocalitySkyline />
