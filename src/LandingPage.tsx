@@ -128,6 +128,18 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
   // Danh mục tin tức động từ DB (news_categories) — nguồn chân lý cho tab. Fallback
   // NEWS_CATEGORIES tĩnh khi chưa nạp. Xoá danh mục trong admin → tab tự biến mất.
   const { data: newsCategoryRows = [] } = useQuery({ queryKey: ['news-categories'], queryFn: () => getNewsCategories(), staleTime: 5 * 60_000 });
+  const homeNewsCategoryLabels = newsCategoryRows.length
+    ? newsCategoryRows.map(row => row.label)
+    : [...NEWS_CATEGORIES];
+  const homeNewsTabs = ['Tin tức', ...homeNewsCategoryLabels];
+  const effectiveNewsTab = homeNewsTabs.includes(activeNewsTab) ? activeNewsTab : 'Tin tức';
+  const selectedNewsCategory = effectiveNewsTab === 'Tin tức' ? undefined : effectiveNewsTab;
+  const { data: selectedCategoryNews = [] } = useQuery({
+    queryKey: qk.news(selectedNewsCategory, 20),
+    queryFn: () => getNews(selectedNewsCategory, 20),
+    enabled: Boolean(selectedNewsCategory),
+    staleTime: 5 * 60_000,
+  });
   const layoutQuery = useQuery({ queryKey: qk.pageLayout(), queryFn: getPageLayout });
   const pageLayout = layoutQuery.data ?? [];
   const { data: heroBanners = [] } = useQuery({ queryKey: qk.banners('hero'), queryFn: () => getBanners('hero') });
@@ -460,16 +472,10 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
           );
         }
 
-        // Nhãn động theo order_index (fallback tĩnh khi DB chưa nạp). Nếu tab đang chọn
-        // đã bị xoá khỏi DB thì coi như 'Tin tức' để không lọc ra danh sách rỗng.
-        const newsCategoryLabels = newsCategoryRows.length
-          ? newsCategoryRows.map(r => r.label)
-          : [...NEWS_CATEGORIES];
-        const newsTabs = ['Tin tức', ...newsCategoryLabels];
-        const effectiveNewsTab = newsTabs.includes(activeNewsTab) ? activeNewsTab : 'Tin tức';
-        const currentNews = effectiveNewsTab === 'Tin tức'
-          ? news
-          : news.filter(article => article.category === effectiveNewsTab);
+        // Tab danh mục tải query riêng theo category. Không lọc trên 20 bài mới nhất
+        // toàn site vì một danh mục nhiều bài có thể chiếm hết cửa sổ đó.
+        const newsTabs = homeNewsTabs;
+        const currentNews = selectedNewsCategory ? selectedCategoryNews : news;
         const leadNews = currentNews[0];
         const highlightNews = currentNews.slice(1, 5);
         const visibleNewsIds = new Set([leadNews, ...highlightNews].filter(Boolean).map(article => article.id));

@@ -51,7 +51,6 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteName = useSetting('site_logo_text', 'Chợ Nhà Việt');
   const siteSub = useSetting('site_logo_sub', 'Nền tảng bất động sản uy tín');
   const logoUrl = useSetting('site_logo_url', '');
-  const hotline = useSetting('phone_hotline', '');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -85,41 +84,37 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       if (mobileOpen) mobileTrigger.current?.focus(); else trigger?.focus();
     }} className={`fixed top-0 inset-x-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xl transition-all duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
       <div ref={barsRef}>
-      <div className="hidden border-b border-red-950/20 bg-gradient-to-r from-slate-950 via-red-950 to-slate-950 text-white md:block">
-        <div className="mx-auto flex h-[42px] max-w-[1440px] items-center justify-between gap-4 px-5 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-white ring-1 ring-inset ring-white/15">
-              <Tag className="h-3.5 w-3.5 text-red-300" />Đăng tin miễn phí
+      <div className="hidden border-b border-orange-200 bg-gradient-to-r from-orange-50 via-amber-50 to-rose-50 text-slate-800 md:block">
+        <div className="mx-auto flex h-[42px] max-w-[1440px] items-center justify-center px-5 lg:px-8">
+          <div className="flex min-w-0 items-center justify-center gap-3">
+            <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-orange-800 shadow-sm ring-1 ring-inset ring-orange-200">
+              <Tag className="h-3.5 w-3.5 text-orange-600" />Đăng tin miễn phí
             </span>
-            <span className="hidden truncate text-[13px] font-medium text-white/75 lg:inline">Tiếp cận hàng nghìn người mua mỗi ngày</span>
-            <Link href="/dang-tin" className="group inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-700 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-md">
+            <span className="hidden truncate text-[13px] font-medium text-slate-600 lg:inline">Tiếp cận hàng nghìn người mua mỗi ngày</span>
+            <Link href="/dang-tin" className="group inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-700 shadow-sm ring-1 ring-inset ring-red-100 transition-all hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-md">
               Đăng ngay <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
             </Link>
           </div>
-          <a href={hotline ? `tel:${hotline.replace(/\D/g, '')}` : '/lien-he'} className="inline-flex flex-shrink-0 items-center gap-2 text-xs font-semibold text-white/85 transition-colors hover:text-white">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 ring-1 ring-inset ring-white/15"><Phone className="h-3.5 w-3.5" /></span>
-            <span>{hotline || 'Liên hệ qua biểu mẫu'}</span>
-          </a>
         </div>
       </div>
 
-      <div className="mx-auto flex h-[96px] max-w-[1440px] items-center gap-3 px-5 py-3 lg:px-8">
-        <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="mr-auto flex min-w-0 flex-shrink-0 items-center gap-3">
+      <div className="mx-auto flex h-[96px] max-w-7xl items-center gap-3 px-4 py-4">
+        <Link href="/" aria-label={`${siteName} — Trang chủ`} onClick={closeMenus} className="flex min-w-0 flex-shrink-0 items-center gap-2.5">
           {logoUrl && !logoError ? (
             <img
               src={logoUrl}
               alt={siteName}
               onError={() => setLogoError(true)}
-              className="h-14 max-h-[58px] w-auto max-w-[190px] flex-shrink-0 object-contain object-left"
+              className="h-9 w-auto max-w-[160px] flex-shrink-0 rounded-lg object-contain"
             />
           ) : (
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-red-600 shadow-sm">
-              <Home className="h-6 w-6 text-white" />
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-red-600">
+              <Home className="h-5 w-5 text-white" />
             </div>
           )}
-          <div className="hidden leading-tight 2xl:block">
-            <div className="text-base font-black tracking-tight text-red-600">{siteName}</div>
-            <div className="text-[10px] font-medium tracking-wide text-gray-400">{siteSub}</div>
+          <div className="hidden min-w-[138px] leading-tight sm:block">
+            <div className="text-[17px] font-black tracking-[-0.035em] text-red-600">ChợNhàViệt<span className="text-slate-600">.com</span></div>
+            <div className="mt-0.5 text-[10px] font-medium tracking-wide text-gray-400">{siteSub}</div>
           </div>
         </Link>
 
@@ -172,7 +167,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
           ))}
         </nav>
 
-        <div className="ml-2 hidden flex-shrink-0 items-center gap-2 border-l border-gray-200 pl-3 md:flex">
+        <div className="ml-2 hidden flex-shrink-0 items-center gap-2 border-l border-gray-200 pl-3 md:ml-auto md:flex xl:ml-2">
           {user ? (
             <div className="relative">
               <button onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -225,7 +220,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
         <button
           type="button"
           ref={mobileTrigger}
-          className="xl:hidden flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200"
+          className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 md:ml-0 xl:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label={mobileOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
           aria-expanded={mobileOpen}
