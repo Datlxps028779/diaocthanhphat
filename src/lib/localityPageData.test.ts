@@ -31,6 +31,25 @@ describe('locality page data boundary', () => {
     const ward = report.distributions.find(item => item.title.includes('phường'))!.rows.find(item => item.href)!;
     expect(ward.href).toBe('/mua-ban/binh-duong/di-an/phuong-xa/tan-dong-hiep');
   });
+  it('keeps sibling ward navigation on ward landing with parent-district counts', () => {
+    const siblingSnapshot = {
+      ...snapshot,
+      wards: [
+        ...snapshot.wards,
+        { id: 'w2', district_id: 'd', slug: 'binh-duong-di-an-lai-thieu', name: 'Lái Thiêu' },
+      ],
+      rows: [
+        ...snapshot.rows,
+        { id: '6', title: 'Nhà Lái Thiêu', area_id: 'a', district_id: 'd', ward_id: 'w2', property_type_id: 't', listing_type: 'mua_ban', price: 2, price_unit: 'tỷ', price_per_month: null, area_sqm: 90 },
+      ],
+    };
+    const ward = buildLocalityPageData('/mua-ban/binh-duong/di-an/phuong-xa/tan-dong-hiep', siblingSnapshot)!;
+    expect(ward.links.wards).toEqual([
+      expect.objectContaining({ label: 'Tân Đông Hiệp', count: 5, active: true }),
+      expect.objectContaining({ label: 'Lái Thiêu', count: 1, active: false }),
+    ]);
+  });
+
   it('does not advertise empty price bands and counts exact band rows', () => {
     const data = buildLocalityPageData('/khu-vuc/binh-duong', snapshot)!;
     expect(data.links.prices.some(link => link.href.endsWith('duoi-1-ty'))).toBe(false);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Property } from './supabase';
-import { buildLocalityGroups, getLocalityGroupKey, localityGroupIntersectsBounds, localityGroupPropertyFilters } from './localityGroupModel';
+import { buildLocalityGroups, buildLocalityScopeGroup, getLocalityGroupKey, localityGroupIntersectsBounds, localityGroupPropertyFilters } from './localityGroupModel';
 
 const property = (overrides: Partial<Property> = {}): Property => ({
   id: 'p1', title: 'Tin', description: null, price: 1, price_unit: 'tỷ', price_label: null, price_per_month: null, loan_support: null,
@@ -26,6 +26,39 @@ describe('locality group model', () => {
     expect(groups.map(group => [group.key, group.count])).toEqual([['ward:ward-1', 2], ['ward:ward-2', 1]]);
     expect(groups[0].propertyIds).toEqual(['p1', 'p2']);
     expect(groups[0].center).toEqual({ latitude: 10.85, longitude: 106.75 });
+  });
+
+  it('groups at the requested child level instead of always collapsing to wards', () => {
+    const byDistrict = buildLocalityGroups([
+      property({ id: 'p1', ward_id: 'ward-1', ward: 'An Phú' }),
+      property({ id: 'p2', ward_id: 'ward-2', ward: 'Lái Thiêu' }),
+    ], 'area-1', 'district');
+    expect(byDistrict).toHaveLength(1);
+    expect(byDistrict[0]).toMatchObject({ key: 'district:district-1', level: 'district', label: 'Thuận An', count: 2 });
+
+    const byWard = buildLocalityGroups([
+      property({ id: 'p1', ward_id: 'ward-1', ward: 'An Phú' }),
+      property({ id: 'p2', ward_id: 'ward-2', ward: 'Lái Thiêu' }),
+    ], 'area-1', 'ward');
+    expect(byWard.map(group => group.key)).toEqual(['ward:ward-1', 'ward:ward-2']);
+  });
+
+  it('builds one aggregate scope group for area, district or ward landing defaults', () => {
+    const group = buildLocalityScopeGroup([
+      property({ id: 'p1', latitude: 10.8, longitude: 106.7 }),
+      property({ id: 'p2', latitude: null, longitude: null }),
+      property({ id: 'p3', latitude: 10.9, longitude: 106.8 }),
+    ], { key: 'scope:/mua-ban/binh-duong/thuan-an', level: 'district', label: 'Tất cả Thuận An', count: 12 });
+
+    expect(group).toMatchObject({
+      key: 'scope:/mua-ban/binh-duong/thuan-an',
+      level: 'district',
+      label: 'Tất cả Thuận An',
+      count: 12,
+      propertyIds: ['p1', 'p2', 'p3'],
+      center: { latitude: 10.85, longitude: 106.75 },
+    });
+    expect(buildLocalityScopeGroup([], { key: 'scope:x', level: 'ward', label: 'Tất cả' })).toBeNull();
   });
 
   it('queries the entire selected ward or district by taxonomy ID without stale name filters', () => {

@@ -252,10 +252,11 @@ export function PropertyMap({
       if (cancelled || mapRef.current !== map) return;
       const L = module.default;
       map.once('moveend', complete);
-      if (!focusAll && isValidTaxonomyBounds(selectedGeo?.bounds)) {
+      if (isValidTaxonomyBounds(selectedGeo?.bounds) && (!focusAll || points.length === 0)) {
         map.fitBounds([[selectedGeo.bounds.south, selectedGeo.bounds.west], [selectedGeo.bounds.north, selectedGeo.bounds.east]], { padding: [36, 36], maxZoom: 16, animate: true });
       } else if (points.length === 1) map.setView(points[0], 15, { animate: true });
-      else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16, animate: true });
+      else if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16, animate: true });
+      else complete();
       completionTimer = setTimeout(complete, 1200);
     });
     return () => {

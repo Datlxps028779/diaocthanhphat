@@ -21,7 +21,7 @@ export type LocalityPageSnapshot = Omit<LocalityTaxonomy, 'areas'> & {
   }>;
 };
 
-export type LocalityPageLink = { label: string; href: string; count: number };
+export type LocalityPageLink = { label: string; href: string; count: number; active?: boolean };
 export type LocalityDistribution = { title: string; rows: { label: string; count: number; href?: string }[] };
 
 export function buildLocalityPageData(path: string, snapshot: LocalityPageSnapshot) {
@@ -36,27 +36,40 @@ export function buildLocalityPageData(path: string, snapshot: LocalityPageSnapsh
   const reportEvaluation = evaluateLocalitySeo(reportContext, report, options);
   const base = `/${context.listingType === 'cho_thue' ? 'cho-thue' : 'mua-ban'}/${area.slug}`;
   const landingPath = context.mode === 'report' ? context.path.replace(/\/thong-tin$/, '') : context.path;
+  const parentDistrictContext = context.wardId && context.districtSlug
+    ? resolveLocalityPageContext(`${base}/${context.districtSlug}`, snapshot)
+    : null;
+  const directoryReport = parentDistrictContext
+    ? getLocalityReport(snapshot.rows, parentDistrictContext, snapshot.computedAt)
+    : report;
   const links: { districts: LocalityPageLink[]; wards: LocalityPageLink[]; types: LocalityPageLink[]; prices: LocalityPageLink[] } = { districts: [], wards: [], types: [], prices: [] };
-  const add = (list: LocalityPageLink[], href: string, label: string, count: number, includeEmpty = false) => {
+  const add = (list: LocalityPageLink[], href: string, label: string, count: number, includeEmpty = false, active = false) => {
     const candidate = resolveLocalityPageContext(href, snapshot);
     if (!candidate) return;
-    if (count > 0 || includeEmpty) list.push({ label, href: candidate.path, count });
+    if (count > 0 || includeEmpty) list.push({ label, href: candidate.path, count, active });
   };
   const hasFacet = Boolean(context.typePathSegment || context.priceBand);
-  if (!hasFacet && !context.wardId) {
+  if (!hasFacet) {
     if (context.districtId) {
       const district = snapshot.districts.find(item => item.id === context.districtId);
       if (!district) return null;
       for (const ward of snapshot.wards.filter(item => item.district_id === context.districtId)) {
-        add(links.wards, `${base}/${context.districtSlug}/phuong-xa/${districtDisplaySlug(district.slug, ward.slug)}`, ward.name, report.distributions.wards[ward.id] ?? 0, true);
+        add(
+          links.wards,
+          `${base}/${context.districtSlug}/phuong-xa/${districtDisplaySlug(district.slug, ward.slug)}`,
+          ward.name,
+          directoryReport.distributions.wards[ward.id] ?? 0,
+          true,
+          context.wardId === ward.id,
+        );
       }
     } else {
       for (const district of snapshot.districts.filter(item => item.area_id === area.id)) {
-        add(links.districts, `${base}/${districtDisplaySlug(area.slug, district.slug)}`, district.name, report.distributions.districts[district.id] ?? 0, true);
+        add(links.districts, `${base}/${districtDisplaySlug(area.slug, district.slug)}`, district.name, directoryReport.distributions.districts[district.id] ?? 0, true);
       }
-      for (const type of snapshot.propertyTypes) add(links.types, `${base}/loai/${type.slug}`, type.name, report.distributions.propertyTypes[type.id] ?? 0);
+      for (const type of snapshot.propertyTypes) add(links.types, `${base}/loai/${type.slug}`, type.name, directoryReport.distributions.propertyTypes[type.id] ?? 0);
       if (context.listingType !== 'cho_thue') {
-        for (const band of PRICE_BANDS) add(links.prices, `/mua-ban/${area.slug}/gia/${band.id}`, band.label, report.distributions.priceBands[band.id] ?? 0);
+        for (const band of PRICE_BANDS) add(links.prices, `/mua-ban/${area.slug}/gia/${band.id}`, band.label, directoryReport.distributions.priceBands[band.id] ?? 0);
       }
     }
   }

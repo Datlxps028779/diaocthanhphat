@@ -2,13 +2,15 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { SiteChrome } from '@/components/SiteChrome';
-import { LocalityHeader, LocalityLandingFooter, LocalityReportBody } from '@/components/area/LocalityPageContent';
+import { LocalityHeader, LocalityLandingFooter, LocalityReportBody, LocalitySubnav } from '@/components/area/LocalityPageContent';
 import { AreaListingClient } from '../../app/_clients/pageClients';
 import { listingTypeToSlug, type ListingType } from './areaPath';
 import { LISTINGS_PER_PAGE, parseListingParams } from './router';
 import { detectProductCode, renderProductDetail, productMetadataFromRest } from './productDetailPage';
 import { buildLocalityMetadata, buildLocalitySchemas, type LocalityPageData } from './localityPageData';
 import { loadLocalityPage } from './server/localityPage';
+import { buildLocalityGeoAreaAllowlist } from './localityNewsMatch';
+import { serverGetLocalityNews } from './supabase-server';
 import { loadLocalityListings } from './server/localityListings';
 
 export function loadAreaListing(listingSlug: string, rest: string[] | undefined) {
@@ -45,10 +47,16 @@ export async function renderAreaListingPage(
   if (data.context.path !== path) redirect(data.context.path);
   const dynamicQuery = Object.keys(searchParams ?? {}).length > 0;
   const { context } = data;
+  const news = await serverGetLocalityNews({
+    areaId: data.area.id,
+    geoAreaAllowlist: buildLocalityGeoAreaAllowlist(data.area.name),
+  });
+  const newsPath = news.available && news.indexable ? `/khu-vuc/${data.area.slug}/tin-tuc` : null;
+  const localitySubnav = <LocalitySubnav data={data} newsPath={newsPath} activePath={context.path} />;
   if (context.mode === 'report') return <>
     <JsonLdScripts schemas={dynamicQuery ? [] : buildLocalitySchemas(data)} />
-    <SiteChrome currentPage={{ name: 'listings', listingType }} localityActions>
-      <main id="main-content" className="bg-white"><LocalityHeader data={data} /><LocalityReportBody data={data} /></main>
+    <SiteChrome currentPage={{ name: 'listings', listingType }} localityActions localitySubnav={localitySubnav}>
+      <main id="main-content" className="bg-white"><LocalityHeader data={data} newsPath={newsPath} /><LocalityReportBody data={data} /></main>
     </SiteChrome>
   </>;
   const scope = {
@@ -78,8 +86,9 @@ export async function renderAreaListingPage(
       initialData={dynamicQuery ? undefined : { data: listings, total: data.report.counts.total }}
       initialDataScope={baseFilters}
       localityScope={{ path: context.path, listingType, areaId: context.areaId, districtId: scope.districtId, wardId: scope.wardId, typeIds: scope.typeIds, typePathSlug, priceBand: scope.salePriceBand }}
+      localitySubnav={localitySubnav}
       localityTransactionPaths={{ sale: `/mua-ban${transactionPathSuffix}`, rent: `/cho-thue${transactionPathSuffix}` }}
-      header={<><LocalityHeader data={data} />{dynamicQuery && <p className="mx-auto max-w-[1360px] px-4 pt-4 text-xs leading-6 text-gray-500 sm:px-8">Danh sách bên dưới có thêm bộ lọc. FAQ và báo cáo cuối trang mô tả phạm vi địa phương của URL, trước các bộ lọc bổ sung.</p>}</>}
+      header={<><LocalityHeader data={data} newsPath={newsPath} />{dynamicQuery && <p className="mx-auto max-w-[1360px] px-4 pt-4 text-xs leading-6 text-gray-500 sm:px-8">Danh sách bên dưới có thêm bộ lọc. FAQ và báo cáo cuối trang mô tả phạm vi địa phương của URL, trước các bộ lọc bổ sung.</p>}</>}
       footer={<LocalityLandingFooter data={data} />}
     />
   </>;

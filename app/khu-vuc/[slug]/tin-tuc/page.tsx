@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { JsonLdScripts } from '@/components/JsonLdScripts';
 import { SiteChrome } from '@/components/SiteChrome';
-import { LocalityHeader } from '@/components/area/LocalityPageContent';
+import { LocalityHeader, LocalitySubnav } from '@/components/area/LocalityPageContent';
 import { LocalityNewsSection } from '@/components/area/LocalityNewsSection';
 import { buildLocalityGeoAreaAllowlist } from '@/lib/localityNewsMatch';
 import { loadLocalityPage } from '@/lib/server/localityPage';
@@ -64,7 +64,7 @@ export default async function LocalityNewsPage({ params, searchParams }: Props) 
   }];
   return <>
     <JsonLdScripts schemas={Object.keys(searchParams ?? {}).length ? [] : schema} />
-    <SiteChrome currentPage={{ name: 'regions' }} localityActions>
+    <SiteChrome currentPage={{ name: 'regions' }} localityActions localitySubnav={<LocalitySubnav data={data} newsPath={newsPath} activePath={newsPath} />}>
       <main id="main-content" className="bg-white">
         <LocalityHeader data={data} newsPath={newsPath} activePath={newsPath} titleOverride={`Tin tức ${data.area.name}`} breadcrumbTitle={`Tin tức ${data.area.name}`} />
         <div className="mx-auto max-w-[1280px] px-4 pb-12">

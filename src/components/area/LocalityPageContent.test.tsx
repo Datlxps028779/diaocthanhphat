@@ -86,6 +86,16 @@ describe('server-rendered locality content', () => {
     expect(html).toContain('<details');
     expect(html).toContain('href="/khu-vuc/binh-duong/thong-tin"');
   });
+  it('renders sibling ward navigation on a ward landing without a self-link', () => {
+    const data = buildLocalityPageData('/cho-thue/binh-duong/di-an/phuong-xa/tan-dong-hiep', snapshot)!;
+    const html = renderToStaticMarkup(<LocalityLandingFooter data={data} />);
+    expect(html).toContain('Tin cho thuê theo phường / xã');
+    expect(html).toContain('Tân Đông Hiệp');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain('Đang xem');
+    expect(html).not.toContain('href="/cho-thue/binh-duong/di-an/phuong-xa/tan-dong-hiep"');
+  });
+
   it('renders a single locality sub-navigation outside the hero tabs', () => {
     const data = buildLocalityPageData('/khu-vuc/binh-duong', snapshot)!;
     const html = renderToStaticMarkup(<LocalitySubnav data={data} newsPath="/khu-vuc/binh-duong/tin-tuc" />);

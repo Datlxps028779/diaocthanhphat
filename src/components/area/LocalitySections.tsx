@@ -4,7 +4,7 @@ import type { FaqItem } from '@/lib/propertyFaq';
 import { ArrowRight, Building2, BarChart3, ChevronDown } from 'lucide-react';
 import styles from './localityVisual.module.css';
 
-export type LocalityLink = { label: string; href: string; count: number };
+export type LocalityLink = { label: string; href: string; count: number; active?: boolean };
 export type LocalityPriceRow = { label: string; monthly: boolean; inventory: number; samples: number; mean: number | null; median: number | null; perSqm: number | null; sqmSamples: number };
 
 export function localityMoney(value: number | null, monthly = false, perSqm = false): string {
@@ -33,12 +33,16 @@ export function LocalityFaq({ items, title = 'Câu hỏi thường gặp' }: { i
 }
 
 function DirectoryLinks({ items, summary = false, chips = false }: { items: LocalityLink[]; summary?: boolean; chips?: boolean }) {
+  const className = (active = false) => `${summary ? styles.typeCard : chips ? styles.chip : styles.directoryLink} ${active ? 'bg-red-50 text-red-800 ring-1 ring-inset ring-red-100' : ''}`;
+  const content = (item: LocalityLink) => <>
+    {summary && <span className={styles.typeIcon} aria-hidden="true"><Building2 size={21} /></span>}
+    <span className={`min-w-0 break-words ${item.active ? 'text-red-800' : 'group-hover:text-red-700'} ${summary ? 'text-lg font-medium' : chips ? '' : styles.directoryLabel}`}>{item.label}</span>
+    <span className="flex shrink-0 items-center gap-3 text-xs tabular-nums text-slate-500">{item.count} tin {item.active ? <strong className="text-red-700">Đang xem</strong> : <ArrowRight aria-hidden="true" size={14} className="text-red-700" />}</span>
+  </>;
   return <div className={summary ? styles.typeGrid : chips ? styles.chips : 'grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-3'}>
-    {items.map(item => <Link key={item.href} href={item.href} className={`group ${summary ? styles.typeCard : chips ? styles.chip : styles.directoryLink}`}>
-      {summary && <span className={styles.typeIcon} aria-hidden="true"><Building2 size={21} /></span>}
-      <span className={`min-w-0 break-words group-hover:text-red-700 ${summary ? 'text-lg font-medium' : chips ? '' : styles.directoryLabel}`}>{item.label}</span>
-      <span className="flex shrink-0 items-center gap-3 text-xs tabular-nums text-slate-500">{item.count} tin <ArrowRight aria-hidden="true" size={14} className="text-red-700" /></span>
-    </Link>)}
+    {items.map(item => item.active
+      ? <span key={item.href} aria-current="page" className={className(true)}>{content(item)}</span>
+      : <Link key={item.href} href={item.href} className={`group ${className()}`}>{content(item)}</Link>)}
   </div>;
 }
 
