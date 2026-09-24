@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MapPin } from 'lucide-react';
 import styles from './localityVisual.module.css';
 
 type AreaOption = { slug: string; name: string };
@@ -15,6 +15,7 @@ export function LocalityAreaDropdown({ areaName, areaSlug, areaOptions, activePa
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const currentPath = activePath ?? '';
+  const options = areaOptions.some(area => area.slug === areaSlug) ? areaOptions : [{ slug: areaSlug, name: areaName }, ...areaOptions];
 
   const updatePosition = () => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -67,12 +68,13 @@ export function LocalityAreaDropdown({ areaName, areaSlug, areaOptions, activePa
 
   return <>
     <div ref={rootRef} className={`${styles.subnavMenu} ${active ? styles.subnavActive : ''}`}>
-      <Link href={`/khu-vuc/${areaSlug}`} aria-current={currentPath === `/khu-vuc/${areaSlug}` ? 'page' : undefined} className={styles.subnavMenuLink} aria-label={`Trang khu vực ${areaName}`}>{areaName}</Link>
-      <button ref={triggerRef} type="button" aria-label="Chọn tỉnh hoặc thành phố" aria-haspopup="true" aria-expanded={open} onClick={() => open ? close() : openMenu()} onKeyDown={event => {
+      <button ref={triggerRef} type="button" aria-label={`Chọn khu vực, hiện tại ${areaName}`} aria-haspopup="true" aria-expanded={open} onClick={() => open ? close() : openMenu()} onKeyDown={event => {
         if (event.key === 'Escape') { event.preventDefault(); close(true); }
         if (event.key === 'ArrowDown') { event.preventDefault(); openMenu(); }
-      }} className={styles.subnavMenuTrigger}>
-        <ChevronDown aria-hidden="true" size={15} />
+      }} className={styles.subnavMenuSelect}>
+        <span className={styles.subnavAreaIcon}><MapPin aria-hidden="true" size={17} /></span>
+        <span className={styles.subnavAreaText}><small>KHU VỰC</small><strong>{areaName}</strong></span>
+        <ChevronDown aria-hidden="true" size={17} className={open ? 'rotate-180' : ''} />
       </button>
     </div>
     {open && typeof document !== 'undefined' && createPortal(
@@ -94,7 +96,7 @@ export function LocalityAreaDropdown({ areaName, areaSlug, areaOptions, activePa
           if (event.shiftKey && index === 0) { event.preventDefault(); close(true); }
         }
       }}>
-        {areaOptions.map(area => <Link key={area.slug} href={`/khu-vuc/${area.slug}`} aria-current={currentPath === `/khu-vuc/${area.slug}` ? 'page' : currentPath.startsWith(`/khu-vuc/${area.slug}/`) ? 'location' : undefined} onClick={() => setOpen(false)} className={styles.subnavMenuItem}>{area.name}</Link>)}
+        {options.map(area => <Link key={area.slug} href={`/khu-vuc/${area.slug}`} aria-current={area.slug === areaSlug ? 'location' : currentPath === `/khu-vuc/${area.slug}` ? 'page' : currentPath.startsWith(`/khu-vuc/${area.slug}/`) ? 'location' : undefined} onClick={() => setOpen(false)} className={styles.subnavMenuItem}>{area.name}</Link>)}
       </div>,
       document.body,
     )}

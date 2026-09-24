@@ -7,10 +7,10 @@ import {
   Maximize2, FileText, Clock, Eye, ChevronRight,
   Building2, ArrowLeft, Home, Bed, Bath, Compass,
   ChevronLeft, ChevronRight as ChevRight,
-  Navigation, ExternalLink, CalendarClock,
+  Navigation, ExternalLink, CalendarClock, Tag,
   ShieldCheck, FileCheck, Image as ImageIcon
 } from 'lucide-react';
-import { getPropertyByIdOrSlug, getPropertyPanoramas, getRelatedProperties, getPublicPropertyAgent, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite } from '../lib/api';
+import { getPropertyByIdOrSlug, getPropertyPanoramas, getRelatedProperties, getPublicPropertyAgent, submitLead, incrementPropertyView, buildPropertyPath, getFavoriteIds, toggleFavorite, getPriceStats } from '../lib/api';
 import { track, EVENTS } from '../lib/analytics';
 import { isValidVnPhone } from '../lib/phone';
 import type { Property } from '../lib/supabase';
@@ -26,19 +26,18 @@ import { VerifiedBadge } from '../components/VerifiedBadge';
 import { NearbyPoi } from '../components/NearbyPoi';
 import { buildTrustSignals, type TrustIcon } from '../lib/trustSignals';
 import { LoanCalculator } from '../components/LoanCalculator';
-import { RecentlyViewed } from '../components/RecentlyViewed';
 import { ForYou } from '../components/ForYou';
 import { recordRecentlyViewed } from '../lib/recentlyViewed';
 import { VrTourSection } from '../components/VrTourSection';
 import { useSetting } from '../lib/cms';
 import { buildPropertyGallery, buildPropertyImageAlt, FALLBACK_PROPERTY_IMAGE } from '../lib/propertyImages';
-import { formatUpdateDate } from '../lib/priceStatsFormat';
+import { formatPricePerSqm, formatUpdateDate, PRICE_DISCLAIMER } from '../lib/priceStatsFormat';
 import { formatPropertyPrice, formatFinancingAmount, subtractListingPriceValues } from '../lib/listingPrice';
 import { formatPropertyPricePerSqm } from '../lib/propertyCardModel';
 import { buildPropertyFaq } from '../lib/propertyFaq';
 import { sanitizeArticleHtml } from '../lib/sanitizeHtml';
 import { isHtmlContent } from '../lib/markdown';
-import { callbackFollowUpAt, callbackTimeLabel, type CallbackTimePreset } from '../lib/callbackRequest';
+import { leadActionFeedback, canUseDetailInteraction } from '../lib/propertyDetailActions';
 import { DetailShareButtons } from '../components/DetailShareButtons';
 import { MapInteractionGate } from '../components/MapInteractionGate';
 import { getProductSuggestions } from '../lib/productSuggestions';
@@ -47,12 +46,12 @@ import { buildSimilarFilters } from '../lib/similarFilters';
 import { RichVideo } from '../components/RichVideo';
 import { ReadableContent } from '../components/ReadableContent';
 import { parseLegacyPropertyVideo, splitRichContentVideos } from '../lib/videoMedia';
-import { canUseDetailInteraction, leadActionFeedback } from '../lib/propertyDetailActions';
 import { mergeDiscoveryFilters } from '../lib/discoveryJourney';
 import { buildPropertyDetailContinuationTargets } from '../lib/propertyDetailContinuation';
 import { agentProfilePath } from '../lib/agentProfileSeo';
 import type { PropertyPanorama } from '../lib/supabase';
 import { Panorama360Section } from '../components/Panorama360Section';
+import { LocalitySubnavForArea } from '../components/area/LocalityPageContent';
 
 interface PropertyDetailPageProps {
   propertyId?: string;
@@ -70,9 +69,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', message: '', budget: '' });
   const [formSent, setFormSent] = useState(false);
-  const [callbackOpen, setCallbackOpen] = useState(false);
-  const [callbackForm, setCallbackForm] = useState<{ name: string; phone: string; timePreset: CallbackTimePreset; customTime: string; note: string }>({ name: '', phone: '', timePreset: 'asap', customTime: '', note: '' });
-  const [callbackSent, setCallbackSent] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [phoneRevealOpen, setPhoneRevealOpen] = useState(false);
   const [revealedPhone, setRevealedPhone] = useState<string | null>(null);
@@ -114,6 +110,15 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
   const { data: areas = [] } = useAreas();
   const { data: districts = [] } = useDistricts();
   const { data: propertyTypes = [] } = usePropertyTypes();
+  const { data: areaPriceStats = [] } = useQuery({
+    queryKey: ['property-area-price-stats', property?.areas?.slug, property?.listing_type],
+    queryFn: () => getPriceStats('area', property!.areas!.slug!),
+    enabled: !!property?.areas?.slug && !preview,
+    staleTime: 5 * 60_000,
+  });
+  const areaPriceStat = areaPriceStats.find(stat =>
+    stat.listing_type === property?.listing_type && stat.property_type_id === null && stat.sample_count >= 3 && stat.median_price_per_sqm != null,
+  ) ?? null;
 
   // Lightbox: Esc đóng, ←/→ chuyển ảnh, khóa cuộn nền khi mở. Đặt trước early-return
   // để giữ đúng thứ tự hooks.
@@ -208,44 +213,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
     submitMutation.mutate();
   };
 
-  const callbackMutation = useMutation({
-    mutationFn: () => {
-      const followUpAt = callbackFollowUpAt(callbackForm.timePreset, callbackForm.customTime);
-      return submitLead({
-        full_name: callbackForm.name,
-        phone: callbackForm.phone,
-        property_id: property?.id,
-        property_title: property?.title,
-        message: [
-          `Khung giờ muốn gọi lại: ${callbackTimeLabel(callbackForm.timePreset, callbackForm.customTime)}`,
-          callbackForm.note,
-        ].filter(Boolean).join('\n'),
-        source: 'property_callback',
-        follow_up_at: followUpAt,
-      });
-    },
-    onSuccess: () => {
-      track(EVENTS.LEAD_SUBMIT, { listingId: property?.id ?? '', source: 'property_callback', hasMessage: !!callbackForm.note.trim(), callbackTime: callbackForm.timePreset });
-      if (property) captureSignalFromProperty('contact', property);
-      setCallbackSent(true);
-    },
-  });
-
-  const handleCallback = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canUseDetailInteraction(preview, 'callback')) return;
-    if (!callbackForm.name || !isValidVnPhone(callbackForm.phone)) return;
-    callbackMutation.mutate();
-  };
-
   const openContact = () => {
     setShowContact(true);
-  };
-
-  const openCallback = () => {
-    if (!canUseDetailInteraction(preview, 'callback')) return;
-    setCallbackSent(false);
-    setCallbackOpen(true);
   };
 
   const revealPhone = () => {
@@ -265,10 +234,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
       });
     }
   };
-
-  const callbackFeedback = leadActionFeedback(
-    callbackMutation.isError ? 'error' : callbackSent ? 'success' : callbackMutation.isPending ? 'pending' : 'idle',
-  );
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -314,7 +279,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
 
   const contactPhone = revealedPhone ?? '';
   const publicAgentProfileHref = publicAgent?.slug ? agentProfilePath(publicAgent.slug) : null;
-  const publicAgentName = publicAgent?.display_name ?? property.contact_name ?? 'Nhân viên tư vấn';
+  const publicAgentName = publicAgent?.display_name ?? property.contact_name ?? 'Người đăng tin';
   const publicAgentVisual = publicAgent?.avatar_url ? (
     <SafeImage
       src={publicAgent.avatar_url}
@@ -365,6 +330,14 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
     typeId: property.property_type_id ?? undefined,
   }, hrefTaxonomy);
 
+  const listingStatus = property.is_active
+    ? property.listing_type === 'cho_thue' ? 'Đang cho thuê' : 'Đang giao bán'
+    : 'Tạm ẩn';
+  const publicKeywords = [...new Set([
+    ...(property.tags ?? []),
+    ...(property.focus_keywords ?? '').split(','),
+  ].map(keyword => keyword.trim()).filter(Boolean))].slice(0, 12);
+
   const attrs = [
     property.area_sqm && { icon: <Maximize2 className="w-4 h-4 text-red-500" />, label: 'Diện tích', value: `${property.area_sqm} m²` },
     property.bedrooms && { icon: <Bed className="w-4 h-4 text-red-500" />, label: 'Phòng ngủ', value: `${property.bedrooms} phòng` },
@@ -380,13 +353,24 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
 
   return (
     <main id="main-content">
-      <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
+      <div className="detail-page min-h-screen bg-gray-50 pb-24 lg:pb-0">
 
       {preview && (
         <div className="bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 text-center flex items-center justify-center gap-2">
           <Eye className="w-4 h-4" />
           Bản xem trước — tin chưa công khai. Kiểm tra kỹ trước khi xuất bản.
         </div>
+      )}
+
+      {property.areas?.slug && (
+        <LocalitySubnavForArea
+          area={{ name: property.areas.name, slug: property.areas.slug }}
+          areaOptions={areas.map(area => ({ name: area.name, slug: area.slug }))}
+          currentPath={buildPropertyPath(property)}
+          listingPath={detailListingHref}
+          newsPath={`/khu-vuc/${property.areas.slug}/tin-tuc`}
+          activeSection="listings"
+        />
       )}
 
       {/* Breadcrumb */}
@@ -400,14 +384,43 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
         </div>
       </div>
 
+      <section className="detail-hero max-w-7xl mx-auto px-4 py-5" aria-labelledby="property-hero-title">
+        <div className="flex items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 id="property-hero-title" className="text-2xl font-black leading-tight tracking-tight text-gray-900 sm:text-3xl">{listingTitle}</h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+              <span className="detail-status-pill">● {listingStatus}</span>
+              <MapPin className="h-4 w-4 text-gray-400" />
+              <span>{[property.address, property.district, property.city].filter(Boolean).join(', ')}</span>
+            </div>
+          </div>
+          <div className="hidden shrink-0 items-center gap-4 sm:flex">
+            <button onClick={() => !preview && property && favMutation.mutate(property.id)} aria-label={liked ? 'Bỏ yêu thích' : 'Lưu yêu thích'} className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-red-200 hover:text-red-600">
+              <Heart className={`h-5 w-5 ${liked ? 'fill-red-500 text-red-500' : ''}`} />
+            </button>
+            <div className="text-right">
+              <p className="text-2xl font-black tracking-tight text-red-600">{formatPropertyPrice(property)}</p>
+              <p className="text-xs text-gray-500">Giá tốt nhất</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="max-w-7xl mx-auto px-4 py-5">
         <div className="flex flex-col gap-5 lg:flex-row">
           {/* Main */}
           <div className="flex-1 min-w-0 space-y-4">
+            <nav className="detail-media-tabs flex items-end gap-8 overflow-x-auto bg-white px-4 pt-5" aria-label="Điều hướng nội dung tin">
+              <a href="#property-media" className="detail-media-tabs__active">Hình ảnh<span>THƯ VIỆN ẢNH</span></a>
+              <a href="#property-summary">Thông tin<span>GIÁ & DIỆN TÍCH</span></a>
+              <a href="#property-description">Chi tiết<span>MÔ TẢ & TIỆN ÍCH</span></a>
+              <a href="#property-location">Vị trí<span>BẢN ĐỒ & LÂN CẬN</span></a>
+              <a href="#property-keywords">Từ khóa<span>TAGS LIÊN QUAN</span></a>
+            </nav>
 
             {/* Gallery */}
-            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-              <div className="relative aspect-video overflow-hidden group/gallery bg-gray-100">
+            <div className="detail-gallery bg-black">
+              <div className="detail-gallery-stage relative aspect-video overflow-hidden group/gallery bg-black">
                 {/* Track trượt ngang cho slide mượt (translateX theo activeImg) */}
                 <div className="flex h-full transition-transform duration-300 ease-out"
                   style={{ transform: `translateX(-${activeImg * 100}%)` }}>
@@ -447,12 +460,16 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                   className="absolute bottom-2 left-3 w-9 h-9 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors">
                   <Maximize2 className="w-4 h-4" />
                 </button>
-                <div className="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
-                  {activeImg + 1}/{allImages.length}
+                <button type="button" onClick={() => setLightboxOpen(true)} className="absolute right-4 top-4 hidden items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/75 sm:flex">
+                  <Maximize2 className="h-3.5 w-3.5" />Xem tất cả ảnh
+                </button>
+                <div className="absolute bottom-3 right-3 rounded bg-black/55 px-2 py-1 text-xs text-white">{activeImg + 1}/{allImages.length}</div>
+                <div className="detail-gallery-caption absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-5 pb-4 pt-12 text-center text-xs font-medium text-white sm:text-sm">
+                  {listingTitle}{[property.address, property.district, property.city].filter(Boolean).length > 0 ? ` · ${[property.address, property.district, property.city].filter(Boolean).join(', ')}` : ''}
                 </div>
               </div>
               {allImages.length > 1 && (
-                <div className="flex gap-2 p-3 overflow-x-auto">
+                <div className="detail-gallery-thumbs flex gap-2 overflow-x-auto bg-black px-3 py-3">
                   {allImages.map((img, i) => (
                     <button key={i} onClick={() => setActiveImg(i)}
                       className={`flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden border-2 transition-colors ${activeImg === i ? 'border-red-500' : 'border-transparent'}`}>
@@ -465,6 +482,39 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                 </div>
               )}
             </div>
+
+            <section className="detail-summary grid grid-cols-2 gap-6 border-y border-gray-200 bg-white px-4 py-5 sm:grid-cols-3" aria-label="Giá và diện tích">
+              <div>
+                <p className="text-sm text-gray-500">Mức giá</p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-red-600">{formatPropertyPrice(property)}</p>
+                {pricePerSqm && <p className="mt-1 text-sm text-gray-500">{pricePerSqm}</p>}
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Diện tích</p>
+                <p className="mt-1 text-2xl font-bold tracking-tight text-gray-900">{property.area_sqm ? `${property.area_sqm} m²` : '—'}</p>
+              </div>
+            </section>
+            {areaPriceStat && (
+              <section className="detail-price-context border-y border-gray-100 bg-[#fff8f8] px-4 py-4" aria-label="Giá tham khảo khu vực">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[.12em] text-red-600">Giá tham khảo khu vực {property.areas?.name ?? property.city}</p>
+                    <p className="mt-1 text-xs text-gray-500">Dựa trên {areaPriceStat.sample_count} tin đăng thực tế.</p>
+                  </div>
+                  <p className="text-sm text-gray-500">Cập nhật {formatUpdateDate(areaPriceStat.computed_at)}</p>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-white p-3"><p className="text-[11px] text-gray-500">Thấp nhất</p><p className="mt-1 text-sm font-bold text-gray-900">{formatPricePerSqm(areaPriceStat.min_price_per_sqm)}</p></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-[11px] text-gray-500">Trung vị</p><p className="mt-1 text-sm font-bold text-red-600">{formatPricePerSqm(areaPriceStat.median_price_per_sqm)}</p></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-[11px] text-gray-500">Cao nhất</p><p className="mt-1 text-sm font-bold text-gray-900">{formatPricePerSqm(areaPriceStat.max_price_per_sqm)}</p></div>
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-gray-500">{PRICE_DISCLAIMER}</p>
+              </section>
+            )}
+            <nav className="detail-inline-tabs flex items-center gap-5 border-b border-gray-100 bg-white px-4 text-sm font-semibold" aria-label="Tổng quan và tiện ích">
+              <a href="#property-description" className="border-b-2 border-red-600 py-4 text-red-600">📋 Tổng quan</a>
+              <a href="#property-amenities" className="py-4 text-gray-500 hover:text-red-600">✨ Tiện ích</a>
+            </nav>
 
             {/* Ảnh 360 nội bộ — tách khỏi gallery ảnh phẳng và tour ngoài. */}
             <Panorama360Section panoramas={panoramas} />
@@ -479,7 +529,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
             })()}
 
             {/* Title & price */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div className="detail-overview-card hidden bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <div className="mb-2"><VerifiedBadge property={property} size="md" /></div>
               <h1 className="text-xl font-black text-gray-900 leading-tight mb-3">{listingTitle}</h1>
               <DetailShareButtons title={listingTitle} canonicalPathname={buildPropertyPath(property)} className="mb-4" />
@@ -519,10 +569,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl transition-colors text-sm">
                     <Phone className="w-4 h-4" />Yêu cầu tư vấn
                   </button>
-                  <button onClick={openCallback}
-                    className="flex items-center gap-2 border border-amber-400 text-amber-700 font-bold px-5 py-2.5 rounded-xl hover:bg-amber-50 transition-colors text-sm">
-                    <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
-                  </button>
                   {phoneRevealed ? (
                     <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                       className="flex items-center gap-2 border border-red-500 text-red-600 font-bold px-5 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-sm">
@@ -555,7 +601,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
 
             {/* Description */}
             {property.description && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div id="property-description" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Mô tả chi tiết</h2>
                 <ReadableContent className="max-w-none">
                   {isHtmlContent(property.description) ? (
@@ -594,7 +640,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
 
             {/* Amenities */}
             {property.amenities && property.amenities.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div id="property-amenities" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="font-bold text-gray-900 text-base mb-3">Tiện ích</h2>
                 <div className="flex flex-wrap gap-2">
                   {property.amenities.map(a => (
@@ -606,8 +652,26 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
               </div>
             )}
 
+            {publicKeywords.length > 0 && (
+              <section id="property-keywords" className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-gray-900"><Tag className="h-4 w-4 text-red-500" />Từ khóa</h2>
+                <div className="flex flex-wrap gap-2">
+                  {publicKeywords.map(keyword => <span key={keyword} className="rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">{keyword}</span>)}
+                </div>
+              </section>
+            )}
+
+            {areaPriceStat && (
+              <section className="detail-price-analysis rounded-2xl p-6 text-white" aria-labelledby="detail-price-analysis-heading">
+                <p className="text-xs font-bold uppercase tracking-[.16em] text-red-200">Phân tích giá khu vực</p>
+                <h2 id="detail-price-analysis-heading" className="mt-2 text-2xl font-black">Lịch sử giá & xu hướng {property.property_types?.name || 'bất động sản'} tại {property.district || property.city}</h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">Dữ liệu tham khảo được tổng hợp từ {areaPriceStat.sample_count} tin đăng thực tế, cập nhật {formatUpdateDate(areaPriceStat.computed_at)}.</p>
+                <Link href="/du-lieu-gia" className="mt-5 inline-flex rounded-lg bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-400">Xem dữ liệu giá</Link>
+              </section>
+            )}
+
             {/* Map & Directions */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div id="property-location" className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <h2 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-red-500" />Vị trí & Bản đồ
               </h2>
@@ -720,8 +784,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
           </div>
 
           {/* Sticky sidebar */}
-          <aside className="w-full flex-shrink-0 lg:w-80">
-            <div className="space-y-4 lg:sticky lg:top-16">
+          <aside className="w-full flex-shrink-0 lg:w-[360px]">
+            <div className="space-y-4 lg:sticky lg:top-[calc(var(--cnv-header-height)+1rem)]">
               {/* Price box */}
               <div className="hidden rounded-xl border border-gray-100 bg-white p-5 shadow-sm lg:block">
                 <p className="text-xs text-gray-500 mb-1">Mức giá</p>
@@ -733,11 +797,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-colors mb-2">
                   Yêu cầu tư vấn ngay
                 </button>
-                <button onClick={openCallback}
-                  className="w-full border border-amber-400 text-amber-700 font-bold py-3 rounded-xl text-sm hover:bg-amber-50 transition-colors flex items-center justify-center gap-2 mb-2">
-                  <CalendarClock className="w-4 h-4" />Gọi lại cho tôi
-                </button>
-                {phoneRevealed ? (
+                  {phoneRevealed ? (
                   <a href={`tel:${contactPhone.replace(/\s/g, '')}`}
                     className="w-full border border-red-400 text-red-600 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2 mb-2">
                     <Phone className="w-4 h-4" />{contactPhone}
@@ -754,7 +814,8 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
               </div>
 
               {/* Agent */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="detail-agent-card rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div className="detail-agent-card__ribbon">MÔI GIỚI CHUYÊN NGHIỆP</div>
                 <div className="flex items-center gap-3">
                   {publicAgentProfileHref ? (
                     <Link href={publicAgentProfileHref} aria-label={`Xem hồ sơ của ${publicAgentName}`} className="flex-shrink-0 rounded-full transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
@@ -770,7 +831,7 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                     ) : (
                       <p className="whitespace-normal break-words font-bold text-sm text-gray-900">{publicAgentName}</p>
                     )}
-                    <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : publicAgent ? 'Nhân viên tư vấn' : 'Tư vấn bất động sản'}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{publicAgentProfileHref ? 'Hồ sơ công khai' : publicAgent ? 'Hồ sơ người đăng' : 'Người đăng tin'}</p>
                   </div>
                 </div>
                 {publicAgent?.bio && (
@@ -799,6 +860,18 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
                     <Phone className="h-3.5 w-3.5" />Bấm để hiện số
                   </button>
                 )}
+              </div>
+
+              <div className="detail-property-info hidden rounded-2xl border border-gray-100 bg-white p-5 shadow-sm lg:block">
+                <h3 className="text-lg font-bold text-gray-900">Thông tin bất động sản</h3>
+                <dl className="mt-4 space-y-3 text-sm">
+                  {property.public_code != null && <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Mã tin:</dt><dd className="font-semibold text-gray-900">PR{property.public_code}</dd></div>}
+                  <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Loại hình:</dt><dd className="font-semibold text-gray-900">{property.listing_type === 'cho_thue' ? 'Cho thuê' : 'Mua bán'}</dd></div>
+                  <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Hình thức giá:</dt><dd className="font-semibold text-gray-900">{property.listing_type === 'cho_thue' ? 'Theo tháng' : 'Tổng giá'}</dd></div>
+                  {property.property_types?.name && <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Danh mục:</dt><dd className="font-semibold text-gray-900">{property.property_types.name}</dd></div>}
+                  {property.district && <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Quận/Huyện:</dt><dd className="text-right font-semibold text-gray-900">{property.district}</dd></div>}
+                  {postedDate && <div className="flex items-center justify-between gap-3"><dt className="text-gray-500">Đã đăng:</dt><dd className="font-semibold text-gray-900">{postedDate}</dd></div>}
+                </dl>
               </div>
 
               {property.listing_type !== 'cho_thue' && (
@@ -889,16 +962,17 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
           </section>
         )}
 
+        <section className="detail-seo-block mt-8" aria-labelledby="detail-seo-heading">
+          <h2 id="detail-seo-heading" className="text-2xl font-black text-gray-900">{listingTitle}{property.district || property.city ? ` tại ${[property.district, property.city].filter(Boolean).join(', ')}` : ''}</h2>
+          <p className="mt-4">Cập nhật thông tin chi tiết về <strong>{listingTitle}</strong>. Tin đăng thuộc phân khúc {property.property_types?.name || 'bất động sản'} với diện tích {property.area_sqm ? `${property.area_sqm}m²` : 'đang cập nhật'} tại {[property.district, property.city].filter(Boolean).join(', ') || 'khu vực đang cập nhật'}{pricePerSqm ? `. Giá tham khảo khoảng ${pricePerSqm}` : '.'}</p>
+          <div className="mt-8 grid gap-8 border-t border-gray-100 pt-6 md:grid-cols-2">
+            <div><h3 className="text-xl font-bold">Vị trí & Quy mô</h3><p className="mt-3">Tọa lạc tại {[property.address, property.ward, property.district, property.city].filter(Boolean).join(', ') || 'khu vực đang cập nhật'}. {property.area_sqm ? `Diện tích ${property.area_sqm}m²` : 'Diện tích đang cập nhật'}.</p></div>
+            <div><h3 className="text-xl font-bold">Pháp lý & kiểm tra</h3><p className="mt-3">{property.legal_status ? `Thông tin pháp lý đang hiển thị: ${property.legal_status}.` : 'Tin đăng chưa cung cấp thông tin pháp lý công khai.'} Người mua cần kiểm tra hồ sơ, quy hoạch và hiện trạng thực tế trước khi giao dịch.</p></div>
+          </div>
+          <div className="mt-8 flex items-start gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><ShieldCheck className="mt-0.5 h-6 w-6 flex-shrink-0 text-emerald-600" /><div><h3 className="font-bold text-emerald-900">Thông tin cần kiểm tra trước giao dịch</h3><p className="mt-1 text-sm leading-6 text-emerald-800">Nội dung hiển thị dựa trên thông tin người đăng cung cấp. Hãy đối chiếu pháp lý, quy hoạch và hiện trạng trước khi đặt cọc.</p></div></div>
+        </section>
+
         {!preview && <ForYou excludeId={property.id} surface="property_detail" source="property_detail_for_you" />}
-        {!preview && (
-          <RecentlyViewed
-            excludeId={property.id}
-            title="Đã xem gần đây"
-            subtitle="Quay lại những bất động sản bạn đã mở trên thiết bị này."
-            surface="property_detail"
-            source="property_detail_recently_viewed"
-          />
-        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden">
@@ -909,10 +983,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
             <button onClick={openContact}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700">
               <Phone className="h-4 w-4" />Tư vấn
-            </button>
-            <button onClick={openCallback}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-400 px-3 py-3 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-50">
-              <CalendarClock className="h-4 w-4" />Hẹn gọi lại
             </button>
           </div>
         )}
@@ -930,60 +1000,6 @@ export function PropertyDetailPage({ propertyId = '', onNavigate, initialData, i
         onSubmitted={() => captureSignalFromProperty('contact', property)}
         preview={preview}
       />
-
-      {callbackOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setCallbackOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5">
-            <button onClick={() => setCallbackOpen(false)} aria-label="Đóng"
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-xl">×</button>
-            {callbackSent ? (
-              <div className="text-center py-8">
-                <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                <p className="font-black text-gray-900">Đã nhận yêu cầu gọi lại!</p>
-                <p className="text-gray-500 text-sm mt-1">Tư vấn viên sẽ liên hệ theo khung giờ bạn mong muốn.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleCallback} className="space-y-3">
-                <div>
-                  <h3 className="font-black text-gray-900 flex items-center gap-2">
-                    <CalendarClock className="w-4 h-4 text-amber-500" />Gọi lại cho tôi
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">Để lại SĐT, chúng tôi sẽ gọi tư vấn đúng lúc bạn tiện nghe máy.</p>
-                </div>
-                <input value={callbackForm.name} onChange={e => setCallbackForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Họ và tên *" required
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <input value={callbackForm.phone} onChange={e => setCallbackForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="Số điện thoại *" required type="tel" inputMode="tel" pattern="(\+?84|0)(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}" title="Nhập số di động Việt Nam, ví dụ 0901234567"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <select value={callbackForm.timePreset} onChange={e => setCallbackForm(f => ({ ...f, timePreset: e.target.value as CallbackTimePreset }))}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
-                  <option value="asap">Gọi ngay</option>
-                  <option value="30m">Trong 30 phút</option>
-                  <option value="tonight">Tối nay</option>
-                  <option value="tomorrow_morning">Sáng mai</option>
-                  <option value="custom">Chọn giờ khác</option>
-                </select>
-                {callbackForm.timePreset === 'custom' && (
-                  <input value={callbackForm.customTime} onChange={e => setCallbackForm(f => ({ ...f, customTime: e.target.value }))}
-                    required type="datetime-local"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                )}
-                <textarea value={callbackForm.note} onChange={e => setCallbackForm(f => ({ ...f, note: e.target.value }))}
-                  placeholder="Ghi chú thêm (ngân sách, nhu cầu, câu hỏi...)" rows={3}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
-                {callbackFeedback && <p className="text-sm text-red-600" role="alert">{callbackFeedback}</p>}
-                <button type="submit" disabled={callbackMutation.isPending}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-60">
-                  {callbackMutation.isPending ? 'Đang gửi...' : callbackMutation.isError ? 'Thử gửi lại yêu cầu gọi lại' : 'Gửi yêu cầu gọi lại'}
-                </button>
-                <p className="text-[11px] text-gray-400 text-center">Thông tin chỉ dùng để tư vấn BĐS này, không chia sẻ bên thứ ba.</p>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Lightbox phóng to ảnh — object-contain để xem đầy đủ, không méo/vỡ hình */}
       {lightboxOpen && (

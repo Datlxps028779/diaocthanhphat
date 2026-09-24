@@ -102,7 +102,7 @@ describe('server-rendered locality content', () => {
     expect(html).toContain('data-testid="locality-subnav"');
     expect(html).toContain('Bất động sản');
     expect(html).toContain('Dự án');
-    expect(html).toContain('Đăng tin');
+    expect(html).not.toContain('Đăng tin');
     expect(html).toContain('href="/khu-vuc/binh-duong/tin-tuc"');
   });
 });

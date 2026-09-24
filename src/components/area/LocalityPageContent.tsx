@@ -7,32 +7,48 @@ import { LocalityDirectory, LocalityFaq, LocalityPriceTable, LocalityReportCta, 
 import { LocalityNewsSection, LocalityArticleDate } from './LocalityNewsSection';
 import { LocalitySkyline } from './LocalitySkyline';
 import { LocalityAreaDropdown } from './LocalityAreaDropdown';
+import { Building2, MessageCircleQuestion } from 'lucide-react';
 import styles from './localityVisual.module.css';
 
-function LocalitySubnavItem({ label, href, active, disabled }: { label: string; href?: string; active?: boolean; disabled?: boolean }) {
-  const className = `${styles.subnavLink} ${active ? styles.subnavActive : ''}`;
-  if (!href || disabled) return <span className={`${className} ${styles.subnavDisabled}`} aria-disabled="true">{label}</span>;
-  return <Link href={href} aria-current={active ? 'page' : undefined} className={className}>{label}</Link>;
+type LocalitySubnavKind = 'listing' | 'project' | 'community' | 'news' | 'jobs';
+
+function LocalitySubnavItem({ label, href, active, disabled, kind, areaName }: { label: string; href?: string; active?: boolean; disabled?: boolean; kind?: LocalitySubnavKind; areaName?: string }) {
+  const className = `${styles.subnavLink} ${active ? styles.subnavActive : ''} ${kind === 'community' ? styles.subnavCommunity : ''}`;
+  const content = <>{kind === 'project' && <Building2 aria-hidden="true" size={18} />}{kind === 'community' && <MessageCircleQuestion aria-hidden="true" size={20} />}<span>{label}</span>{kind === 'community' && areaName && <span className={styles.subnavAreaBadge}>{areaName}</span>}</>;
+  if (!href || disabled) return <span className={`${className} ${styles.subnavDisabled}`} aria-disabled="true">{content}</span>;
+  return <Link href={href} aria-current={active ? 'page' : undefined} className={className}>{content}</Link>;
+}
+
+export function LocalitySubnavForArea({ area, areaOptions, currentPath, listingPath, newsPath, activeSection }: {
+  area: { name: string; slug: string };
+  areaOptions: { name: string; slug: string }[];
+  currentPath: string;
+  listingPath: string;
+  newsPath?: string | null;
+  activeSection: 'area' | 'listings' | 'news';
+}) {
+  const areaPath = `/khu-vuc/${area.slug}`;
+  const items = [
+    { label: area.name, href: areaPath, active: activeSection === 'area' },
+    { label: 'Bất động sản', href: listingPath, active: activeSection === 'listings', kind: 'listing' as const },
+    { label: 'Dự án', href: `/du-an?area=${encodeURIComponent(area.slug)}`, active: false, kind: 'project' as const },
+    { label: 'Cộng đồng', active: false, disabled: true, kind: 'community' as const, areaName: area.name },
+    { label: 'Tin tức', href: newsPath ?? undefined, active: activeSection === 'news', disabled: !newsPath, kind: 'news' as const },
+    { label: 'Tuyển dụng', active: false, disabled: true, kind: 'jobs' as const },
+  ];
+  return <nav aria-label="Điều hướng khu vực" className={styles.subnav} data-testid="locality-subnav">
+    <div className="mx-auto flex max-w-[1360px] items-stretch gap-1 overflow-x-auto px-4 sm:px-8">
+      {items.map((item, index) => index === 0 ? <LocalityAreaDropdown key={item.label} areaName={area.name} areaSlug={area.slug} areaOptions={areaOptions} activePath={currentPath} active={item.active} /> : <LocalitySubnavItem key={item.label} {...item} />)}
+    </div>
+  </nav>;
 }
 
 export function LocalitySubnav({ data, newsPath, activePath }: { data: LocalityPageData; newsPath?: string | null; activePath?: string }) {
   const currentPath = activePath ?? data.context.path;
   const areaPath = `/khu-vuc/${data.area.slug}`;
   const listingPath = data.context.listingType ? data.context.landingPath : `/mua-ban/${data.area.slug}`;
-  const items = [
-    { label: data.area.name, href: areaPath, active: currentPath === areaPath },
-    { label: 'Bất động sản', href: listingPath, active: currentPath === listingPath || currentPath.startsWith(`/mua-ban/${data.area.slug}`) || currentPath.startsWith(`/cho-thue/${data.area.slug}`) },
-    { label: 'Dự án', href: `/du-an?area=${encodeURIComponent(data.area.slug)}`, active: false },
-    { label: 'Cộng đồng', active: false, disabled: true },
-    { label: 'Tin tức', href: newsPath ?? undefined, active: Boolean(newsPath && currentPath === newsPath), disabled: !newsPath },
-    { label: 'Tuyển dụng', active: false, disabled: true },
-    { label: 'Đăng tin', href: '/dang-tin', active: false },
-  ];
-  return <nav aria-label="Điều hướng khu vực" className={styles.subnav} data-testid="locality-subnav">
-    <div className="mx-auto flex max-w-[1360px] items-stretch gap-1 overflow-x-auto px-4 sm:px-8">
-      {items.map((item, index) => index === 0 ? <LocalityAreaDropdown key={item.label} areaName={data.area.name} areaSlug={data.area.slug} areaOptions={data.areaOptions} activePath={currentPath} active={currentPath === areaPath} /> : <LocalitySubnavItem key={item.label} {...item} />)}
-    </div>
-  </nav>;
+  const activeSection = currentPath === areaPath ? 'area' : newsPath && currentPath === newsPath ? 'news' : 'listings';
+  return <LocalitySubnavForArea area={data.area} areaOptions={data.areaOptions} currentPath={currentPath} listingPath={listingPath} newsPath={newsPath} activeSection={activeSection} />;
 }
 
 function LocalityCounts({ data }: { data: LocalityPageData }) {

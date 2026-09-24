@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type MouseEventHandler } from 'react';
 import dynamic from 'next/dynamic';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import { buildPropertyPath, PropertySearchUnavailableError, type ListingInitialF
 import { parseSearchIntent } from '../lib/aiSearch';
 import { CompareButton } from '../components/CompareButton';
 import { PropertyCard as UnifiedPropertyCard } from '../components/property/PropertyCard';
+import { PropertyQuickViewDrawer } from '../components/property/PropertyQuickViewDrawer';
 import { useAreas, usePropertyTypes, useDistricts, useWards, useTaxonomyGeo } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
 import { LISTINGS_PER_PAGE, type Page, pageToHref, scrollTop } from '../lib/router';
@@ -131,15 +132,17 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
   const [isHot, setIsHot] = useState(initialFilters?.isHot ?? false);
   const [sort, setSort] = useState<PropertySort>((initialFilters?.sort as PropertySort) ?? 'newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
-  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(localityScopeGroupKey);
-  const [focusGroupKey, setFocusGroupKey] = useState<string | null>(localityScopeGroupKey ? ALL_LOCALITY_GROUPS_FOCUS : null);
-  const [mapFocusSettled, setMapFocusSettled] = useState(!localityScopeGroupKey);
+  const initialLocalityGroupKey = localityScope?.wardId ? localityScopeGroupKey : null;
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(initialLocalityGroupKey);
+  const [focusGroupKey, setFocusGroupKey] = useState<string | null>(initialLocalityGroupKey ? ALL_LOCALITY_GROUPS_FOCUS : null);
+  const [mapFocusSettled, setMapFocusSettled] = useState(!initialLocalityGroupKey);
   const groupOpenedMap = useRef(false);
   const [page, setPage] = useState(initialFilters?.page ?? 1);
   const [mobileFilter, setMobileFilter] = useState(false);
   const [showLocalityAdvanced, setShowLocalityAdvanced] = useState(false);
   const [desktopMapRail, setDesktopMapRail] = useState(false);
   const [contactProp, setContactProp] = useState<Property | null>(null);
+  const [quickViewProperty, setQuickViewProperty] = useState<Property | null>(null);
 
   const isRent = listingType === 'cho_thue';
   const PRICE_RANGES = isRent ? PRICE_RANGES_RENT : PRICE_RANGES_SALE;
@@ -456,7 +459,7 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
     (property: Property) => getLocalityGroupKey(property, localityScope?.areaId),
     [localityScope?.areaId],
   );
-  const localityChildGroupLevel: LocalityGroupLevel | null = localityScope?.wardId ? null : localityScope?.districtId ? 'ward' : 'district';
+  const localityChildGroupLevel: LocalityGroupLevel | null = localityScope?.wardId ? null : 'ward';
   const localityGroups = useMemo(
     () => localityScope && localityChildGroupLevel ? buildLocalityGroups(mapProperties, localityScope.areaId, localityChildGroupLevel) : [],
     [mapProperties, localityScope, localityChildGroupLevel],
@@ -477,8 +480,9 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
       : null,
     [localityScope, localityScopeGroupKey, localityScopeLevel, localityScopeLabel, properties, total],
   );
-  const visibleLocalityGroups = localityScopeGroup ? [localityScopeGroup, ...localityGroups] : localityGroups;
-  const selectedGroup = visibleLocalityGroups.find(group => group.key === selectedGroupKey);
+  const allLocalityGroups = localityScopeGroup ? [localityScopeGroup, ...localityGroups] : localityGroups;
+  const visibleLocalityGroups = selectedGroupKey ? allLocalityGroups : localityGroups;
+  const selectedGroup = allLocalityGroups.find(group => group.key === selectedGroupKey);
   const scopeOverviewSelected = Boolean(localityScopeGroupKey && selectedGroupKey === localityScopeGroupKey);
   const selectedGeoEntityId = selectedGroup?.level === 'ward' ? selectedGroup.representative.ward_id : null;
   const { data: selectedGeoRows = [], isPending: selectedGeoPending } = useTaxonomyGeo(selectedGeoEntityId ? [selectedGeoEntityId] : []);
@@ -532,11 +536,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
     : selectedGroup && mapBounds && mapFocusSettled ? viewportResultProperties.length : selectedGroupTotal;
   const selectionResetKey = JSON.stringify(filters);
   useEffect(() => {
-    setSelectedGroupKey(localityScopeGroupKey);
-    setFocusGroupKey(localityScopeGroupKey ? ALL_LOCALITY_GROUPS_FOCUS : null);
-    setMapFocusSettled(!localityScopeGroupKey);
+    const nextGroupKey = localityScope?.wardId ? localityScopeGroupKey : null;
+    setSelectedGroupKey(nextGroupKey);
+    setFocusGroupKey(nextGroupKey ? ALL_LOCALITY_GROUPS_FOCUS : null);
+    setMapFocusSettled(!nextGroupKey);
     setMapBounds(null);
-  }, [selectionResetKey, localityScope?.path, localityScopeGroupKey]);
+  }, [selectionResetKey, localityScope?.path, localityScope?.wardId, localityScopeGroupKey]);
 
   // Reset price index CHỈ khi listingType thực sự đổi (user bấm tab mua↔thuê) —
   // so giá trị trước, không dùng cờ boolean (cờ bị StrictMode double-invoke reset
@@ -609,6 +614,13 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
       policyVersion: RANKING_POLICY_VERSION,
     });
   };
+  const resultClickHandler = useCallback((property: Property, position: number, source: 'grid' | 'list' | 'map'): MouseEventHandler<HTMLAnchorElement> => event => {
+    trackResultClick(position, source);
+    if (!localityScope || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (typeof window === 'undefined' || !window.matchMedia('(min-width: 1024px)').matches) return;
+    event.preventDefault();
+    setQuickViewProperty(property);
+  }, [localityScope, effectiveSort, searchIntent.residualKeyword, activeFilterCount]);
   const setFilter = (fn: () => void) => { fn(); setPage(1); };
   const setLocationFilter = (fn: () => void) => {
     inferredLocationRef.current = false;
@@ -891,13 +903,13 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
         : localityPanelError ? <div role="alert" className="py-8 text-center text-sm text-red-700">Không thể tải tin trong khu vực. <button type="button" onClick={() => void (scopeOverviewSelected ? retryListings() : retrySelectedGroup())} className="font-semibold underline">Thử lại</button></div>
           : viewportResultProperties.length ? <div className={localityStyles.groupSelectedList}>
             {viewportResultProperties.map((property, index) => <UnifiedPropertyCard key={property.id} property={property} href={buildPropertyPath(property)} variant="locality"
-              onResultClick={() => trackResultClick(index + 1, 'list')}
+              onResultClick={resultClickHandler(property, index + 1, 'list')}
               isFavorited={favoriteIds.has(property.id)} onToggleFavorite={() => favMutation.mutate(property)} onContact={() => setContactProp(property)} />)}
           </div> : <p className="py-10 text-center text-sm text-slate-500">Chưa có tin phù hợp trong phạm vi này.</p>}
       {!scopeOverviewSelected && !mapBounds && selectedGroupPageError && <p role="alert" className="mt-3 text-center text-xs text-red-700">Không tải được trang kế tiếp; các tin đã tải vẫn được giữ lại. <button type="button" onClick={() => void fetchNextSelectedGroupPage()} className="font-semibold underline">Thử lại</button></p>}
       {localityPanelHasNextPage && <button type="button" onClick={() => void fetchNextLocalityPanelPage()} disabled={localityPanelFetchingNextPage} className="mt-4 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">{localityPanelFetchingNextPage ? 'Đang tải thêm…' : 'Xem thêm tin'}</button>}
     </section>
-  ) : <LocalityGroupResults groups={visibleLocalityGroups} loading={mapLoading} error={mapError} total={mapProperties.length} selectedGroupKey={selectedGroupKey} onSelectGroup={selectLocalityGroup} />;
+  ) : <LocalityGroupResults groups={visibleLocalityGroups} loading={mapLoading} error={mapError} total={mapProperties.length} selectedGroupKey={selectedGroupKey} groupLabel={localityChildGroupLevel === 'ward' ? 'Nhóm phường / xã' : 'Nhóm khu vực'} onSelectGroup={selectLocalityGroup} />;
 
   return (
     <div className={localityScope ? `${localityStyles.scope} min-h-screen bg-white` : 'min-h-screen bg-stone-50'} data-testid="listings-surface">
@@ -1428,6 +1440,11 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
         </div>
       )}
 
+      <PropertyQuickViewDrawer
+        property={quickViewProperty}
+        onClose={() => setQuickViewProperty(null)}
+        onContact={property => { setQuickViewProperty(null); setContactProp(property); }}
+      />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)}
         onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />
     </div>
@@ -1467,13 +1484,13 @@ function EmptyState({
 // Wrapper giữ nguyên callback/tracking của trang danh sách, phần hiển thị dùng chung
 // PropertyCard. CompareButton đặt đúng chỗ theo từng variant: overlay trên ảnh (grid),
 // inline ở footer (list) — nhờ mediaActions/extraActions của component dùng chung.
-function LocalityGroupResults({ groups, loading, error, total, selectedGroupKey, onSelectGroup }: { groups: LocalityGroup[]; loading: boolean; error: boolean; total: number; selectedGroupKey: string | null; onSelectGroup: (groupKey: string | null) => void }) {
+function LocalityGroupResults({ groups, loading, error, total, selectedGroupKey, groupLabel, onSelectGroup }: { groups: LocalityGroup[]; loading: boolean; error: boolean; total: number; selectedGroupKey: string | null; groupLabel: string; onSelectGroup: (groupKey: string | null) => void }) {
   if (loading) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><div className="h-8 animate-pulse rounded bg-slate-100" /><div className="mt-3 space-y-2">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-slate-100" />)}</div></div>;
   if (error) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><p className="py-12 text-center text-sm text-red-600">Không thể tải nhóm tin trên bản đồ.</p></div>;
   if (!groups.length) return <div className={localityStyles.groupResults} data-testid="locality-group-results"><p className="py-12 text-center text-sm text-slate-500">Chưa có tin có tọa độ trong phạm vi này.</p></div>;
   return <section className={localityStyles.groupResults} data-testid="locality-group-results" aria-labelledby="locality-group-results-title">
     <div className={localityStyles.groupHeader}>
-      <div><h3 id="locality-group-results-title">Nhóm ({groups.length})</h3><p>{total.toLocaleString('vi-VN')} tin trên bản đồ</p></div>
+      <div><h3 id="locality-group-results-title">{groupLabel} ({groups.length})</h3><p>{total.toLocaleString('vi-VN')} tin trên bản đồ</p></div>
     </div>
     <p className={localityStyles.groupHint}>Chọn một nhóm để thu bản đồ về đúng khu vực và làm nổi bật các tin cùng nhóm.</p>
     <div className={localityStyles.groupList}>

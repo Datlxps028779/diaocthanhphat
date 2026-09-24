@@ -72,7 +72,7 @@ describe('property engagement migration', () => {
 
   it('keeps staff identity visible without creating a user-profile link', () => {
     expect(propertyDetailPage).toContain("publicAgent?.slug ? agentProfilePath(publicAgent.slug) : null");
-    expect(propertyDetailPage).toContain("publicAgent ? 'Nhân viên tư vấn' : 'Tư vấn bất động sản'");
+    expect(propertyDetailPage).toContain("publicAgentProfileHref ? 'Hồ sơ công khai' : publicAgent ? 'Hồ sơ người đăng' : 'Người đăng tin'");
     expect(propertyDetailPage).toContain('Xem hồ sơ người đăng');
   });
 
