@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Phone, ArrowRight, CheckCircle, Home } from 'lucide-react';
-import { type Area } from '../lib/supabase';
+import { type Area, type Property } from '../lib/supabase';
 import { getAllProperties, getPageBlocks, pageBlocksToMap } from '../lib/api';
 import { useAreas } from '../lib/hooks/useTaxonomy';
 import { qk } from '../lib/queryKeys';
@@ -48,6 +48,16 @@ function ComparisonTable({ areas }: { areas: Area[] }) {
   return <div className="bg-white rounded-2xl shadow overflow-x-auto mt-10"><div className="p-5 border-b border-gray-100"><h3 className="text-lg font-bold text-gray-800">Khu vực đang có dữ liệu</h3><p className="mt-1 text-xs text-gray-500">Thông tin mô tả do quản trị viên cập nhật từ dữ liệu nguồn.</p></div><table className="w-full text-sm"><thead><tr className="bg-gray-50"><th className="text-left px-5 py-3 font-semibold text-gray-600">Khu vực</th><th className="text-left px-5 py-3 font-semibold text-gray-600">Mô tả</th></tr></thead><tbody className="divide-y divide-gray-100">{areas.map(area => <tr key={area.id} className="hover:bg-gray-50 transition-colors"><td className="px-5 py-4 font-medium text-gray-800">{area.name}</td><td className="px-5 py-4 text-gray-600">{area.description || 'Đang cập nhật dữ liệu khu vực.'}</td></tr>)}</tbody></table></div>;
 }
 
+function AreaPropertyList({ title, properties, onNavigate }: { title: string; properties: Property[]; onNavigate: (page: Page) => void }) {
+  return <section className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900"><Home className="h-4 w-4 text-red-500" />{title}</h3>
+    {properties.length > 0 ? <div className="space-y-2">{properties.map(property => <button key={property.id} onClick={() => { onNavigate({ name: 'property', id: property.id, slug: property.slug ?? undefined }); scrollTop(); }} className="group flex w-full gap-3 rounded-xl border border-transparent bg-white p-2.5 text-left shadow-sm transition-all hover:border-red-200 hover:bg-red-50">
+      <img src={property.image_url ?? ''} alt={property.title} loading="lazy" className="h-14 w-20 shrink-0 rounded-lg bg-gray-100 object-cover" />
+      <div className="min-w-0"><p className="line-clamp-2 text-xs font-semibold leading-5 text-gray-800 group-hover:text-red-700">{property.title}</p><p className="mt-1 text-xs font-bold text-red-600">{formatPropertyPrice(property)}</p></div>
+    </button>)}</div> : <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-xs text-gray-500">Chưa có tin đang hoạt động.</p>}
+  </section>;
+}
+
 export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: string; onNavigate: (p: Page) => void }) {
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
 
@@ -61,9 +71,14 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
   const { data: areas = [], isLoading: areasLoading } = useAreas();
   const loading = areasLoading;
 
-  const { data: areaProperties = [] } = useQuery({
-    queryKey: qk.areaProperties(selectedArea?.id),
-    queryFn: () => getAllProperties({ areaId: selectedArea!.id, limit: 6 }).then(r => r.data),
+  const { data: saleProperties = [] } = useQuery({
+    queryKey: ['regions-area-properties', selectedArea?.id, 'mua_ban'],
+    queryFn: () => getAllProperties({ areaId: selectedArea!.id, listingType: 'mua_ban', limit: 4 }).then(result => result.data),
+    enabled: !!selectedArea,
+  });
+  const { data: rentProperties = [] } = useQuery({
+    queryKey: ['regions-area-properties', selectedArea?.id, 'cho_thue'],
+    queryFn: () => getAllProperties({ areaId: selectedArea!.id, listingType: 'cho_thue', limit: 4 }).then(result => result.data),
     enabled: !!selectedArea,
   });
 
@@ -136,9 +151,18 @@ export function RegionsPage({ initialAreaId, onNavigate }: { initialAreaId?: str
               <div className="absolute inset-0 bg-gradient-to-r from-gray-900/85 to-gray-900/35" />
               <div className="relative z-10 max-w-2xl"><h2 className="text-3xl font-bold text-white">{detail.name}</h2>{detail.description && <p className="mt-2 text-sm leading-relaxed text-gray-200">{detail.description}</p>}</div>
             </div>
-            <div className="grid gap-8 p-6 md:grid-cols-2 md:p-8">
-              <div><h4 className="mb-3 flex items-center gap-2 font-bold text-gray-800"><Building2 className="h-4 w-4 text-red-500" />Bất động sản tại {selectedArea.name}</h4><p className="text-sm leading-relaxed text-gray-600">Các tin đăng bên cạnh được lấy trực tiếp từ dữ liệu đang hoạt động trong hệ thống.</p></div>
-              <div className="space-y-5"><div className="flex flex-col gap-3 sm:flex-row"><button onClick={() => { onNavigate({ name: 'listings', areaId: selectedArea.id }); scrollTop(); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"><Building2 className="h-4 w-4" />Xem BĐS khu vực này</button>{phone && <a href={`tel:${phone.replace(/\s/g, '')}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-red-600 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"><Phone className="h-4 w-4" />Gọi tư vấn</a>}</div>{areaProperties.length > 0 && <div><h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-800"><Home className="h-4 w-4 text-red-500" />BĐS mới nhất tại {selectedArea.name}</h4><div className="space-y-2">{areaProperties.slice(0, 4).map(property => <button key={property.id} onClick={() => { onNavigate({ name: 'property', id: property.id, slug: property.slug ?? undefined }); scrollTop(); }} className="group flex w-full gap-3 rounded-xl border border-transparent bg-gray-50 p-2.5 text-left transition-all hover:border-red-200 hover:bg-red-50"><img src={property.image_url ?? ''} alt={property.title} loading="lazy" className="h-12 w-16 shrink-0 rounded-lg object-cover" /><div className="min-w-0"><p className="line-clamp-2 text-xs font-semibold text-gray-800 group-hover:text-red-700">{property.title}</p><p className="mt-0.5 text-xs font-bold text-red-600">{formatPropertyPrice(property)}</p></div></button>)}</div></div>}</div>
+            <div className="p-6 md:p-8">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div><h3 className="flex items-center gap-2 font-bold text-gray-900"><Building2 className="h-4 w-4 text-red-500" />Bất động sản tại {selectedArea.name}</h3><p className="mt-2 text-sm leading-6 text-gray-600">Chọn giao dịch hoặc xem trực tiếp các tin mới nhất theo từng nhóm.</p></div>
+                <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
+                  <button onClick={() => { onNavigate({ name: 'listings', areaId: selectedArea.id }); scrollTop(); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700"><Building2 className="h-4 w-4" />Xem BĐS khu vực này</button>
+                  <Link href={`/khu-vuc/${selectedArea.slug}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-red-600 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50">Xem trang chuyên sâu <ArrowRight className="h-4 w-4" /></Link>
+                </div>
+              </div>
+              <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                <AreaPropertyList title={`BĐS mua bán mới nhất tại ${selectedArea.name}`} properties={saleProperties} onNavigate={onNavigate} />
+                <AreaPropertyList title={`BĐS cho thuê mới nhất tại ${selectedArea.name}`} properties={rentProperties} onNavigate={onNavigate} />
+              </div>
             </div>
           </div>
         )}
