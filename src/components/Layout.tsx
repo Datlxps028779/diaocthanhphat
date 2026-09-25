@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef } from 'react';
-import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag } from 'lucide-react';
+import { Home, Menu, X, Phone, MessageCircle, User, LogOut, ChevronDown, Plus, Tag, Heart, LayoutGrid } from 'lucide-react';
 import { type Page, pageToHref, scrollTop } from '../lib/router';
 import { buildNavigationItems, buildMenuTree, type NavigationItem } from '../lib/navigation';
 import { type Area, type District, type PropertyType } from '../lib/supabase';
@@ -51,6 +51,11 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const siteName = useSetting('site_logo_text', 'Chợ Nhà Việt');
   const siteSub = useSetting('site_logo_sub', 'Nền tảng bất động sản uy tín');
   const logoUrl = useSetting('site_logo_url', '');
+  const userDisplayName = user
+    ? String(user.user_metadata?.display_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Tài khoản')
+    : '';
+  const userAvatarUrl = user ? String(user.user_metadata?.avatar_url || '') : '';
+  const userInitial = userDisplayName.charAt(0).toLocaleUpperCase('vi-VN');
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 5);
@@ -169,33 +174,43 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
 
         <div className="ml-2 hidden flex-shrink-0 items-center gap-2 border-l border-gray-200 pl-3 md:ml-auto md:flex xl:ml-2">
           {user ? (
-            <div className="relative">
-              <button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-                <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                  <span className="text-red-600 font-bold text-xs">{user.email?.charAt(0).toUpperCase()}</span>
-                </div>
-                <span className="text-xs font-medium text-gray-700 max-w-[100px] truncate">{user.email}</span>
-                <ChevronDown className="w-3 h-3 text-gray-400" />
-              </button>
-              {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 min-w-[180px]">
-                  <Link href={pageToHref({ name: 'my-listings' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />Tin đăng của tôi
-                  </Link>
-                  <Link href={pageToHref({ name: 'post-listing' })} onClick={closeMenus}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-gray-400" />Đăng tin mới
-                  </Link>
-                  <div className="border-t border-gray-100 mt-1 pt-1">
-                    <button onClick={onLogout}
-                      className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />Đăng xuất
-                    </button>
+            <div className="flex items-center gap-2">
+              <Link href={pageToHref({ name: 'account' })} onClick={closeMenus} aria-label="Bất động sản yêu thích" className="hidden h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 lg:flex">
+                <Heart className="h-5 w-5" />
+              </Link>
+              <div className="relative">
+                <button type="button" onClick={() => setUserMenuOpen(!userMenuOpen)} aria-expanded={userMenuOpen} aria-haspopup="menu"
+                  className={`flex min-h-12 items-center gap-3 rounded-2xl border px-3 py-2 transition-all ${userMenuOpen ? 'border-red-300 bg-red-50 shadow-sm' : 'border-slate-200 bg-white hover:border-red-200 hover:bg-red-50/60'}`}>
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-100 text-sm font-black text-red-600">
+                    {userAvatarUrl ? <img src={userAvatarUrl} alt="" className="h-full w-full object-cover" /> : userInitial}
                   </div>
-                </div>
-              )}
+                  <span className="hidden max-w-[126px] truncate text-sm font-bold text-slate-800 lg:block">{userDisplayName}</span>
+                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {userMenuOpen && (
+                  <div role="menu" className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,.18)]">
+                    <div className="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-br from-red-50 to-white px-5 py-5">
+                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 text-lg font-black text-white shadow-sm">
+                        {userAvatarUrl ? <img src={userAvatarUrl} alt="" className="h-full w-full object-cover" /> : userInitial}
+                      </div>
+                      <div className="min-w-0"><p className="truncate text-base font-black text-slate-950">{userDisplayName}</p><p className="mt-0.5 truncate text-sm text-slate-500">{user.email}</p></div>
+                    </div>
+                    <div className="p-2">
+                      <Link role="menuitem" href={pageToHref({ name: 'my-listings' })} onClick={closeMenus} className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-red-700">
+                        <LayoutGrid className="h-5 w-5 text-slate-500" />Quản lý bất động sản
+                      </Link>
+                      <Link role="menuitem" href={pageToHref({ name: 'account' })} onClick={closeMenus} className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-red-700">
+                        <User className="h-5 w-5 text-slate-500" />Tài khoản của tôi
+                      </Link>
+                    </div>
+                    <div className="border-t border-slate-100 p-2">
+                      <button role="menuitem" onClick={onLogout} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold text-red-600 transition hover:bg-red-50">
+                        <LogOut className="h-5 w-5" />Đăng xuất
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <>

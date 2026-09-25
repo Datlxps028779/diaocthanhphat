@@ -7,7 +7,8 @@ import { useAuth } from '../lib/auth';
 import { getAreas, getDistricts, getPropertyTypes } from '../lib/api';
 import { SHOW_AUTH_EVENT } from '../lib/authModal';
 import { type Area, type District, type PropertyType } from '../lib/supabase';
-import { Header, Footer, FloatingButtons } from './Layout';
+import { Header, FloatingButtons } from './Layout';
+import { ReferenceFooter } from './ReferenceFooter';
 import { UserAuthModal } from './UserAuthModal';
 import { CompareBar } from './CompareBar';
 
@@ -63,7 +64,7 @@ export function SiteChrome({ currentPage, children, profilePage = false, localit
         {localityActions && <div ref={setActionsRail} role="group" aria-label="Công cụ hỗ trợ tìm nhà" className="flex min-h-16 flex-wrap items-center justify-end gap-2 border-b border-gray-100 bg-white px-4 py-2 sm:hidden" />}
         {children}
       </div>
-      <Footer areas={areas} districts={districts} propertyTypes={propertyTypes} onNavigate={navigate} />
+      <ReferenceFooter areas={areas} districts={districts} propertyTypes={propertyTypes} />
       <FloatingButtons onNavigate={navigate} profilePage={profilePage} localityActionsTarget={localityActions && mobileActions ? actionsRail : null} />
       <CompareBar />
       {authModal && (

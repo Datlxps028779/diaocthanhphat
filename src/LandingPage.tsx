@@ -34,7 +34,8 @@ import { ForYou } from './components/ForYou';
 import { PropertyTimeline } from './components/PropertyTimeline';
 import { LocationDiscovery } from './components/home/LocationDiscovery';
 import { getHomepageSectionOrder } from './lib/homeSectionOrder';
-import { Header, Footer, FloatingButtons } from './components/Layout';
+import { Header, FloatingButtons } from './components/Layout';
+import { ReferenceFooter } from './components/ReferenceFooter';
 import { BlurFillImage } from './components/BlurFillImage';
 import { PropertyCard as UnifiedPropertyCard } from './components/property/PropertyCard';
 import { HomeSectionEmpty, HomeSectionLoading, getHomeSectionDisplayConfig } from './components/HomeSectionState';
@@ -856,7 +857,7 @@ export function LandingPage({ onNavigate, user, onShowAuth }: LandingPageProps) 
         : orderedIds.map(id => renderSection(id))}
       </main>
 
-      <Footer areas={areas} districts={allDistricts} propertyTypes={types} onNavigate={onNavigate} />
+      <ReferenceFooter areas={areas} districts={allDistricts} propertyTypes={types} />
       <FloatingButtons onNavigate={onNavigate} />
       <ContactModal property={contactProp} onClose={() => setContactProp(null)}
         onSubmitted={() => { if (contactProp) captureSignalFromProperty('contact', contactProp); }} />
