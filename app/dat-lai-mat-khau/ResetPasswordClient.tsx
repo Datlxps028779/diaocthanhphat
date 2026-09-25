@@ -2,10 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, AlertCircle, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { updatePassword, getCurrentRole, signOut } from '@/lib/api';
+import {
+  hasActivePasswordResetSession,
+  updateRecoveredPassword,
+  verifyPasswordResetToken,
+} from '@/lib/api';
 import { friendlyAuthLinkError } from '@/lib/authFlow';
-import { isElevatedRole } from '@/lib/authGuard';
 
 type Status = 'processing' | 'ready' | 'saving' | 'done' | 'error';
 
@@ -19,61 +21,43 @@ export function ResetPasswordClient() {
   useEffect(() => {
     let cancelled = false;
 
-    const gate = async () => {
-      const role = await getCurrentRole().catch(() => null);
-      if (cancelled) return;
-      if (isElevatedRole(role)) {
-        await signOut();
-        if (cancelled) return;
-        setStatus('error');
-        setMessage('Liên kết không hợp lệ hoặc đã hết hạn.');
-        return;
-      }
-      setStatus('ready');
-    };
+    const run = async () => {
+      const url = new URL(window.location.href);
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const tokenHash = url.searchParams.get('token_hash') ?? hash.get('token_hash');
+      const type = url.searchParams.get('type') ?? hash.get('type');
+      const authError = url.searchParams.get('error_description')
+        ?? url.searchParams.get('error_code')
+        ?? url.searchParams.get('error')
+        ?? hash.get('error_description')
+        ?? hash.get('error_code')
+        ?? hash.get('error');
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (cancelled) return;
-      if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        gate();
-      }
-    });
-
-    (async () => {
       try {
-        const url = new URL(window.location.href);
-        const code = url.searchParams.get('code');
-        const tokenHash = url.searchParams.get('token_hash');
-        const type = url.searchParams.get('type');
-        const errDesc = url.searchParams.get('error_description');
+        if (authError) throw new Error(authError);
 
-        if (errDesc) throw new Error(errDesc);
-
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-        } else if (tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: type as 'recovery' | 'email',
-          });
-          if (error) throw error;
-        }
-        const { data: { session } } = await supabase.auth.getSession();
-        if (cancelled) return;
-        if (session) {
-          gate();
-        } else if (!window.location.hash.includes('access_token')) {
+        if (tokenHash && type === 'recovery') {
+          await verifyPasswordResetToken(tokenHash);
+        } else if (!await hasActivePasswordResetSession()) {
           throw new Error('Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu lần nữa.');
         }
+
+        if (cancelled) return;
+        url.searchParams.delete('token_hash');
+        url.searchParams.delete('type');
+        url.hash = '';
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
+        setMessage('');
+        setStatus('ready');
       } catch (e: unknown) {
         if (cancelled) return;
         setStatus('error');
         setMessage(friendlyAuthLinkError(e instanceof Error ? e.message : null));
       }
-    })();
+    };
 
-    return () => { cancelled = true; subscription.unsubscribe(); };
+    void run();
+    return () => { cancelled = true; };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -82,7 +66,7 @@ export function ResetPasswordClient() {
     setStatus('saving');
     setMessage('');
     try {
-      await updatePassword(password);
+      await updateRecoveredPassword(password);
       setStatus('done');
       setMessage('Đổi mật khẩu thành công! Đang chuyển về trang chủ...');
       setTimeout(() => router.replace('/'), 1500);

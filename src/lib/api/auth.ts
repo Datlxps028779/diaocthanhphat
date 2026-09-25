@@ -1,7 +1,30 @@
+import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, type Profile } from '../supabase';
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../env';
 import { isElevatedRole } from '../authGuard';
 import type { Role } from '../adminAccess';
 import { isValidVnPhone, normalizeVnPhone } from '../phone';
+
+const PASSWORD_RECOVERY_STORAGE_KEY = 'cnv-password-recovery';
+let passwordResetClient: SupabaseClient | null = null;
+let passwordResetVerification: { tokenHash: string; promise: Promise<Session> } | null = null;
+
+function getPasswordResetClient() {
+  if (typeof window === 'undefined') throw new Error('Luồng đặt lại mật khẩu chỉ chạy trên trình duyệt.');
+  if (!passwordResetClient) {
+    passwordResetClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        flowType: 'implicit',
+        detectSessionInUrl: false,
+        persistSession: true,
+        autoRefreshToken: true,
+        storage: window.sessionStorage,
+        storageKey: PASSWORD_RECOVERY_STORAGE_KEY,
+      },
+    });
+  }
+  return passwordResetClient;
+}
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 // Đăng ký. emailRedirectTo dựng theo origin hiện tại → link xác nhận trong mail
@@ -41,18 +64,66 @@ export async function resendConfirmation(email: string) {
   if (error) throw error;
 }
 
-// Gửi email đặt lại mật khẩu. redirectTo trỏ về /dat-lai-mat-khau (cùng cơ chế host
-// như xác nhận email) — user bấm link trong mail sẽ vào trang đó với session recovery
-// tạm, rồi gọi updatePassword. Lưu ý: Supabase bật chống dò email nên hàm này KHÔNG
-// báo lỗi khi email chưa đăng ký (tránh lộ email nào tồn tại) — UI luôn báo "đã gửi".
+// Gửi email đặt lại mật khẩu bằng client recovery cô lập. Template email đưa token_hash
+// về /dat-lai-mat-khau; trang đó xác thực và đổi mật khẩu mà không tạo phiên app chính.
 export async function requestPasswordReset(email: string) {
   const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/dat-lai-mat-khau` : undefined;
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  const { error } = await getPasswordResetClient().auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }
 
-// Đặt mật khẩu mới. Chỉ chạy được khi đã có session (recovery từ link mail hoặc đang
-// đăng nhập). Trang /dat-lai-mat-khau kiểm tra session trước khi cho nhập.
+export async function verifyPasswordResetToken(tokenHash: string) {
+  if (passwordResetVerification?.tokenHash === tokenHash) {
+    return passwordResetVerification.promise;
+  }
+
+  const promise = (async () => {
+    const { data, error } = await getPasswordResetClient().auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'recovery',
+    });
+    if (error) throw error;
+    if (!data.session) throw new Error('Không thiết lập được phiên đặt lại mật khẩu.');
+    return data.session;
+  })();
+
+  passwordResetVerification = { tokenHash, promise };
+  try {
+    return await promise;
+  } catch (error) {
+    if (passwordResetVerification?.promise === promise) passwordResetVerification = null;
+    throw error;
+  }
+}
+
+export async function hasActivePasswordResetSession() {
+  const { data: { user }, error } = await getPasswordResetClient().auth.getUser();
+  return !error && Boolean(user);
+}
+
+export async function updateRecoveredPassword(newPassword: string) {
+  const client = getPasswordResetClient();
+  const { data: { user }, error: sessionError } = await client.auth.getUser();
+  if (sessionError || !user) {
+    throw new Error('Phiên đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu gửi lại liên kết.');
+  }
+
+  const { error } = await client.auth.updateUser({ password: newPassword });
+  if (error) {
+    if (error.message.toLowerCase().includes('auth session missing')) {
+      throw new Error('Phiên đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu gửi lại liên kết.');
+    }
+    throw error;
+  }
+
+  await client.auth.signOut({ scope: 'global' }).catch(() => undefined);
+  window.sessionStorage.removeItem(PASSWORD_RECOVERY_STORAGE_KEY);
+  passwordResetClient = null;
+  passwordResetVerification = null;
+}
+
+// Đổi mật khẩu cho session đăng nhập chính. Luồng email recovery dùng
+// updateRecoveredPassword để không trộn recovery session với phiên ứng dụng.
 export async function updatePassword(newPassword: string) {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;

@@ -1,15 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { isElevatedRole, privateWorkspacePath } from './authGuard';
 
-// Chính sách bảo mật: tài khoản có quyền cao (admin) KHÔNG được phép đăng nhập hay
-// đặt lại mật khẩu qua cổng người dùng thường — chỉ được vào qua /quantrihethong.
-// Đề phòng tài khoản quản trị bị tấn công qua bề mặt công khai (modal user).
+// Tài khoản quyền cao đăng nhập thường phải được nhận diện để chuyển vào workspace riêng.
+// Recovery email dùng session cô lập nên không đi qua guard này và không tạo phiên app.
 describe('isElevatedRole', () => {
-  it('role admin → true (phải chặn ở cổng người dùng)', () => {
+  it('role admin → true (đưa về workspace quản trị)', () => {
     expect(isElevatedRole('admin')).toBe(true);
   });
 
-  it('role staff → true (nhân viên cũng là quyền cao, chặn ở cổng người dùng)', () => {
+  it('role staff → true (đưa về workspace nội bộ)', () => {
     expect(isElevatedRole('staff')).toBe(true);
     expect(isElevatedRole('STAFF')).toBe(true);
   });

@@ -1,5 +1,9 @@
 project_id = "itgxladqskdcbwsbmuyi"
 
+[auth.email.template.recovery]
+subject = "Đặt lại mật khẩu Chợ Nhà Việt"
+content_path = "./supabase/templates/recovery.html"
+
 # nurture-drip được gọi bởi DB cron qua pg_net (chỉ gửi header x-drip-secret,
 # không có JWT). Function tự bảo vệ bằng NURTURE_DRIP_SECRET nên tắt cổng JWT
 # của Supabase — nếu bật, mọi lần quét sẽ bị chặn 401 trước khi chạm code.
