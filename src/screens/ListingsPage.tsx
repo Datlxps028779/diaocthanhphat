@@ -927,8 +927,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
             <div className={localityStyles.localityToolbar} data-testid="locality-toolbar">
               <nav className={localityStyles.transactionTabs} aria-label="Loại giao dịch">
                 {localityTransactionPaths && <>
-                  <Link href={localityTransactionPaths.sale} className={listingType === 'mua_ban' ? localityStyles.transactionActive : localityStyles.transactionLink}>Mua bán</Link>
-                  <Link href={localityTransactionPaths.rent} className={listingType === 'cho_thue' ? localityStyles.transactionActive : localityStyles.transactionLink}>Cho thuê</Link>
+                  <Link href={localityTransactionPaths.sale} className={listingType === 'mua_ban' ? localityStyles.transactionActive : localityStyles.transactionLink}><Home aria-hidden="true" />Mua bán</Link>
+                  <Link href={localityTransactionPaths.rent} className={listingType === 'cho_thue' ? localityStyles.transactionActive : localityStyles.transactionLink}><Tag aria-hidden="true" />Cho thuê</Link>
                 </>}
               </nav>
               <div className={localityStyles.searchRow}>
@@ -988,12 +988,12 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
           {!localityScope && <>
             {/* Listing type tabs — đổi giao dịch ở landing là đổi phạm vi: luôn điều
                 hướng tới URL nền của loại mới thay vì đổi ngầm trên path cũ. */}
-            <div className="mb-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide">
+            <div className="listing-type-tabs mb-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide">
               {LISTING_TYPES.map(lt => (
                 <button key={lt.key} onClick={() => {
                   setListingType(lt.key); setPage(1);
                 }}
-                  className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${listingType === lt.key ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  className={`listing-type-tab flex flex-shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${listingType === lt.key ? 'listing-type-tab--active' : ''}`}>
                   {lt.icon}{lt.label}
                 </button>
               ))}
@@ -1442,6 +1442,8 @@ export function ListingsPage({ initialFilters, initialData, initialDataScope, lo
 
       <PropertyQuickViewDrawer
         property={quickViewProperty}
+        isFavorited={quickViewProperty ? favoriteIds.has(quickViewProperty.id) : false}
+        onToggleFavorite={property => favMutation.mutate(property)}
         onClose={() => setQuickViewProperty(null)}
         onContact={property => { setQuickViewProperty(null); setContactProp(property); }}
       />
