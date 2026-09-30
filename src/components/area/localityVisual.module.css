@@ -48,7 +48,7 @@
 .subnav {
   position: sticky;
   top: var(--cnv-header-height);
-  z-index: 40;
+  z-index: 1100;
   min-height: 94px;
   border-bottom: 1px solid #e5e7eb;
   background-color: #fafbfc;
@@ -56,6 +56,7 @@
   background-size: 15px 15px;
   box-shadow: 0 5px 18px rgba(15,23,42,.06);
 }
+:global(html[data-cnv-header-hidden='true']) .subnav { top: 0; }
 .subnavLink {
   position: relative;
   display: inline-flex;
@@ -95,7 +96,7 @@
   .subnav > div { position: relative; min-height: 94px; justify-content: center; }
   .subnavMenu { position: absolute; top: 15px; left: 32px; margin: 0; }
 }
-.subnavMenuPanel { position: fixed; left: 0; top: 0; z-index: 100; min-width: 270px; max-height: min(28rem, 70vh); overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 7px; box-shadow: 0 18px 38px rgba(15,23,42,.16); }
+.subnavMenuPanel { position: fixed; left: 0; top: 0; z-index: 1200; min-width: 270px; max-height: min(28rem, 70vh); overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 7px; box-shadow: 0 18px 38px rgba(15,23,42,.16); }
 .subnavMenuItem { display: block; min-height: 44px; padding: 11px 12px; border-radius: 8px; color: #475569; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .subnavMenuItem:hover, .subnavMenuItem[aria-current] { background: #fff1f2; color: #b91c1c; }
 

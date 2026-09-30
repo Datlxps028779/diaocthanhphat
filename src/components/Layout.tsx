@@ -21,10 +21,12 @@ interface HeaderProps {
   onShowAuth?: (mode: 'login' | 'register') => void;
   onLogout?: () => void;
   areas?: Area[];
+  hideOnScroll?: boolean;
 }
 
-export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, areas = [] }: HeaderProps) {
+export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, areas = [], hideOnScroll = false }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
@@ -58,10 +60,25 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
   const userInitial = userDisplayName.charAt(0).toLocaleUpperCase('vi-VN');
 
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 5);
-    window.addEventListener('scroll', fn);
+    let previousY = window.scrollY;
+    const fn = () => {
+      const nextY = window.scrollY;
+      setScrolled(nextY > 5);
+      if (nextY !== previousY) setScrollDirection(nextY > previousY ? 'down' : 'up');
+      previousY = nextY;
+    };
+    fn();
+    window.addEventListener('scroll', fn, { passive: true });
     return () => window.removeEventListener('scroll', fn);
   }, []);
+
+  const headerHidden = hideOnScroll && scrolled && scrollDirection === 'down';
+  useEffect(() => {
+    const root = document.documentElement;
+    if (headerHidden) root.dataset.cnvHeaderHidden = 'true';
+    else delete root.dataset.cnvHeaderHidden;
+    return () => { delete root.dataset.cnvHeaderHidden; };
+  }, [headerHidden]);
 
   // Menu từ DB (admin quản lý); rỗng → fallback menu hardcode để không vỡ.
   const navItems = menu.length > 0 ? buildMenuTree(menu, areas) : buildNavigationItems(nav, areas);
@@ -87,7 +104,7 @@ export function Header({ currentPage, onNavigate, user, onShowAuth, onLogout, ar
       const trigger = (event.target as HTMLElement).closest('[data-desktop-menu]')?.querySelector<HTMLButtonElement>('button[aria-expanded]');
       closeMenus();
       if (mobileOpen) mobileTrigger.current?.focus(); else trigger?.focus();
-    }} className={`fixed top-0 inset-x-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xl transition-all duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
+    }} className={`fixed top-0 inset-x-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xl transition-all duration-200 ${headerHidden ? '-translate-y-full' : 'translate-y-0'} ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
       <div ref={barsRef}>
       <div className="hidden border-b border-orange-200 bg-gradient-to-r from-orange-50 via-amber-50 to-rose-50 text-slate-800 md:block">
         <div className="mx-auto flex h-[42px] max-w-[1440px] items-center justify-center px-5 lg:px-8">

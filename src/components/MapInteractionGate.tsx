@@ -36,7 +36,7 @@ export function MapInteractionGate({ children, className = '', style, label = 'b
   return <div ref={rootRef} tabIndex={0} data-testid="map-interaction-gate" data-active={active ? 'true' : 'false'} onClick={() => { if (!active) activate(); }} onKeyDown={event => {
     if (!active && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); activate(); }
     if (active && event.key === 'Escape') { event.preventDefault(); deactivate(); }
-  }} className={`relative outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 ${className}`} style={style}>
+  }} className={`relative isolate outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 ${className}`} style={style}>
     <div className="h-full w-full" style={{ pointerEvents: active ? 'auto' : 'none' }}>{children}</div>
     {!active ? <>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[600] bg-slate-950/5 backdrop-blur-[1px]" />

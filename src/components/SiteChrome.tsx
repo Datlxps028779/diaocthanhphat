@@ -49,6 +49,8 @@ export function SiteChrome({ currentPage, children, profilePage = false, localit
     return () => window.removeEventListener(SHOW_AUTH_EVENT, onShow);
   }, []);
 
+  const hideHeaderOnScroll = currentPage.name === 'property' || Boolean(localitySubnav);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
@@ -56,6 +58,7 @@ export function SiteChrome({ currentPage, children, profilePage = false, localit
         onNavigate={navigate}
         user={user}
         areas={areas}
+        hideOnScroll={hideHeaderOnScroll}
         onShowAuth={(mode) => setAuthModal({ mode })}
         onLogout={async () => { await supabase.auth.signOut(); navigate({ name: 'home' }); }}
       />
