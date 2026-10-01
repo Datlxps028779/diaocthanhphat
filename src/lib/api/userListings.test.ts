@@ -13,6 +13,11 @@ const aiListingMigration = readFileSync(
   'utf8',
 );
 
+const userListingsSource = readFileSync(
+  resolve(process.cwd(), 'src/lib/api/userListings.ts'),
+  'utf8',
+);
+
 const identityPreservingApprovalMigration = aiListingMigration;
 
 describe('isApprovedListingProperty', () => {
@@ -61,6 +66,22 @@ describe('approval RPC result handling', () => {
   });
 });
 
+describe('commerce approval API contract', () => {
+  it('uses the explicit fee decision RPC and never falls back to legacy approval', () => {
+    expect(userListingsSource).toContain(".rpc('approve_user_listing_with_fee_decision'");
+    expect(userListingsSource).not.toContain(".rpc('approve_user_listing',");
+    expect(userListingsSource).toContain("input.feeMode === 'paid' ? input.feeProductCode ?? null : null");
+    expect(userListingsSource).toContain("input.feeMode === 'free' ? input.manualReason ?? null : null");
+  });
+
+  it('keeps bulk approval free-only with an explicit reason and per-listing key', () => {
+    expect(userListingsSource).toContain('bulkApproveUserListings(ids: string[], manualReason: string)');
+    expect(userListingsSource).toContain("feeMode: 'free'");
+    expect(userListingsSource).toContain('manualReason: reason');
+    expect(userListingsSource).toContain('crypto.randomUUID()');
+    expect(userListingsSource).not.toContain('ids.map(approveUserListingRpc)');
+  });
+});
 describe('identity-preserving user-listing reapproval migration', () => {
   it('reactivates the inactive linked property instead of replacing its identity', () => {
     expect(identityPreservingApprovalMigration).toMatch(

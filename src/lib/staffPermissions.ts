@@ -14,15 +14,17 @@ export type StaffPermissionAction =
 
 export type StaffPermissionScopeKind = 'global' | 'area' | 'district' | 'ward' | 'neighborhood';
 
+export type StaffPermissionModule = AdminTab | 'commerce-finance';
+
 export type StaffPermission = {
-  module: AdminTab;
+  module: StaffPermissionModule;
   action: StaffPermissionAction;
   scope_kind: StaffPermissionScopeKind;
   scope_id: string | null;
 };
 
 export type StaffPermissionCatalogItem = {
-  module: AdminTab;
+  module: StaffPermissionModule;
   label: string;
   actions: readonly StaffPermissionAction[];
   locationScoped?: boolean;
@@ -35,6 +37,9 @@ export const STAFF_PERMISSION_CATALOG: readonly StaffPermissionCatalogItem[] = [
   { module: 'leads', label: 'Leads / CRM', actions: ['view', 'edit'] },
   { module: 'chat-sessions', label: 'Phiên chat', actions: ['view', 'edit'] },
   { module: 'nurture', label: 'Nuôi dưỡng', actions: ['view', 'edit'] },
+  { module: 'commerce-operations', label: 'Vận hành thanh toán', actions: ['view', 'edit'] },
+  { module: 'commerce-wallet', label: 'Ví & thanh toán', actions: ['view', 'edit'] },
+  { module: 'commerce-finance', label: 'Finance Wallet', actions: ['view', 'edit'] },
   { module: 'user-listings', label: 'Duyệt tin đăng', actions: ['view', 'edit', 'approve', 'reject', 'manage_media', 'manage_seo'], locationScoped: true },
   { module: 'users', label: 'Khách hàng / CRM', actions: ['view', 'edit'] },
   { module: 'agent-profiles', label: 'Hồ sơ công khai', actions: ['view', 'edit', 'publish'] },
@@ -83,7 +88,7 @@ export const STAFF_PERMISSION_SCOPE_LABELS: Record<StaffPermissionScopeKind, str
 
 export function canUseStaffPermission(
   permissions: readonly StaffPermission[],
-  module: AdminTab,
+  module: StaffPermissionModule,
   action: StaffPermissionAction,
 ): boolean {
   return permissions.some(permission =>
@@ -93,8 +98,8 @@ export function canUseStaffPermission(
 
 export function visibleTabsFromPermissions(permissions: readonly StaffPermission[]): AdminTab[] {
   return STAFF_PERMISSION_CATALOG
-    .filter(item => canUseStaffPermission(permissions, item.module, 'view'))
-    .map(item => item.module);
+    .filter(item => item.module !== 'commerce-finance' && canUseStaffPermission(permissions, item.module, 'view'))
+    .map(item => item.module as AdminTab);
 }
 
 export function permissionKey(permission: Pick<StaffPermission, 'module' | 'action' | 'scope_kind' | 'scope_id'>): string {

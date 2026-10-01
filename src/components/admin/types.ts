@@ -1,4 +1,4 @@
-export type AdminTab = 'dashboard' | 'properties' | 'property-verification' | 'leads' | 'chat-sessions' | 'nurture' | 'user-listings' | 'users' | 'staff' | 'agent-profiles' | 'projects' | 'news' | 'news-categories' | 'testimonials' | 'cms' | 'settings' | 'footer' | 'banners' | 'featured-sections' | 'page-builder' | 'home-experience' | 'pages' | 'neighborhoods' | 'menu' | 'backup' | 'ai-analytics' | 'google-analytics' | 'ai-chat' | 'ai-rag' | 'seo-geo';
+export type AdminTab = 'dashboard' | 'properties' | 'property-verification' | 'leads' | 'chat-sessions' | 'nurture' | 'commerce-operations' | 'commerce-wallet' | 'user-listings' | 'users' | 'staff' | 'agent-profiles' | 'projects' | 'news' | 'news-categories' | 'testimonials' | 'cms' | 'settings' | 'footer' | 'banners' | 'featured-sections' | 'page-builder' | 'home-experience' | 'pages' | 'neighborhoods' | 'menu' | 'backup' | 'ai-analytics' | 'google-analytics' | 'ai-chat' | 'ai-rag' | 'seo-geo';
 
 import type { StaffPermission } from '../../lib/staffPermissions';
 

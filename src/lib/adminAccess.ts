@@ -7,7 +7,7 @@ export type Role = 'user' | 'staff' | 'admin';
 
 // Toàn bộ tab (khớp AdminTab). Giữ đồng bộ với navItems trong AdminPanel.
 export const ALL_TABS: AdminTab[] = [
-  'dashboard', 'properties', 'property-verification', 'leads', 'chat-sessions', 'nurture', 'user-listings', 'users', 'staff', 'agent-profiles', 'projects',
+  'dashboard', 'properties', 'property-verification', 'leads', 'chat-sessions', 'nurture', 'commerce-operations', 'commerce-wallet', 'user-listings', 'users', 'staff', 'agent-profiles', 'projects',
   'news', 'news-categories', 'testimonials', 'cms', 'settings', 'footer', 'banners', 'featured-sections',
   'page-builder', 'home-experience', 'pages', 'neighborhoods', 'menu', 'backup', 'ai-analytics', 'google-analytics', 'ai-chat', 'ai-rag', 'seo-geo',
 ];

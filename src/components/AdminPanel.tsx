@@ -3,15 +3,16 @@ import {
   LayoutDashboard, Building2, Users, Star, Newspaper,
   FolderOpen, LogOut, Bell, Menu, X, TrendingUp, MessagesSquare,
   CheckCircle, Settings, Type, Image as ImageIcon,
-  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, UserRound, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag, ShieldCheck, BarChart3
+  RefreshCw, FileText, Database, Layers, PanelLeft, UserCog, UserRound, Send, SearchCode, Bot, Link as LinkIcon, MapPin, BrainCircuit, Home, Tag, ShieldCheck, BarChart3, CreditCard, WalletCards
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getDashboardStats, type DashboardStats } from '../lib/api';
 import type { AdminTab, AdminPanelProps } from './admin/types';
 import { visibleTabs } from '../lib/adminAccess';
-import { visibleTabsFromPermissions } from '../lib/staffPermissions';
+import { canUseStaffPermission, visibleTabsFromPermissions } from '../lib/staffPermissions';
 import { SlaBell } from './admin/shared/SlaBell';
 import { ChatOpsBell } from './admin/shared/ChatOpsBell';
+import { CommerceOperationsBell } from './admin/shared/CommerceOperationsBell';
 
 const DashboardTab = lazy(() => import('./admin/tabs/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const PropertiesTab = lazy(() => import('./admin/tabs/PropertiesTab').then(m => ({ default: m.PropertiesTab })));
@@ -42,6 +43,8 @@ const GoogleAnalyticsTab = lazy(() => import('./admin/tabs/GoogleAnalyticsTab').
 const AiChatTab = lazy(() => import('./admin/tabs/AiChatTab').then(m => ({ default: m.AiChatTab })));
 const AiRagTab = lazy(() => import('./admin/tabs/AiRagTab').then(m => ({ default: m.AiRagTab })));
 const NurtureTab = lazy(() => import('./admin/tabs/NurtureTab').then(m => ({ default: m.NurtureTab })));
+const CommerceOperationsTab = lazy(() => import('./admin/tabs/CommerceOperationsTab').then(m => ({ default: m.CommerceOperationsTab })));
+const CommerceWalletTab = lazy(() => import('./admin/tabs/CommerceWalletTab').then(m => ({ default: m.CommerceWalletTab })));
 const SeoGeoTab = lazy(() => import('./admin/tabs/SeoGeoTab').then(m => ({ default: m.SeoGeoTab })));
 
 export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihethong', permissions = [] }: AdminPanelProps) {
@@ -52,6 +55,9 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     ? (initialTab as AdminTab)
     : (allowedTabs[0] ?? 'dashboard');
   const [tab, setTabRaw] = useState<AdminTab>(defaultTab);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const showSidebarLabels = sidebarOpen || mobileSidebarOpen;
   // Đồng bộ URL theo tab qua history API (KHÔNG router.push để tránh remount panel
   // + kiểm tra role lại). F5/chia sẻ link giữ đúng mục. mode='push' tạo mục lịch sử
   // để nút Back lùi tab-qua-tab; mode='replace' cho lần chuẩn hoá URL khi mở.
@@ -63,7 +69,12 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     else window.history.replaceState(null, '', next);
   };
   // Chặn chuyển sang tab ngoài quyền (staff gõ tay / initialTab lạ).
-  const setTab = (t: AdminTab) => { if (allowedTabs.includes(t)) { setTabRaw(t); syncTabUrl(t); } };
+  const setTab = (t: AdminTab) => {
+    if (!allowedTabs.includes(t)) return;
+    setTabRaw(t);
+    setMobileSidebarOpen(false);
+    syncTabUrl(t);
+  };
   // Điều hướng "sửa item X ở tab Y" từ nơi khác (vd Entity Audit trong SeoGeoTab).
   const [pendingEdit, setPendingEdit] = useState<{ tab: AdminTab; id: string } | null>(null);
   const editEntity = (target: AdminTab, id: string) => {
@@ -84,7 +95,6 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [allowedTabs]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0, activeProperties: 0, featuredProperties: 0, hotProperties: 0,
     saleProperties: 0, rentProperties: 0, totalLeads: 0, newLeads: 0, pendingListings: 0,
@@ -103,6 +113,8 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
     { id: 'leads', label: 'Leads/CRM', icon: <Users className="w-4 h-4" />, badge: stats.newLeads },
     { id: 'chat-sessions', label: 'Phiên chat', icon: <MessagesSquare className="w-4 h-4" /> },
     { id: 'nurture', label: 'Nuôi dưỡng', icon: <Send className="w-4 h-4" /> },
+    { id: 'commerce-operations', label: 'Vận hành thanh toán', icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'commerce-wallet', label: 'Ví & thanh toán', icon: <WalletCards className="w-4 h-4" /> },
     { id: 'user-listings', label: 'Duyệt tin đăng', icon: <CheckCircle className="w-4 h-4" />, badge: stats.pendingListings },
     { id: 'users', label: 'Khách hàng / CRM', section: 'Con người', icon: <Users className="w-4 h-4" /> },
     { id: 'staff', label: 'Nhân sự & tài khoản', section: 'Con người', icon: <UserCog className="w-4 h-4" /> },
@@ -131,10 +143,11 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
+      {mobileSidebarOpen && <button aria-label="Đóng menu quản trị" onClick={() => setMobileSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />}
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-gray-900 text-white flex-shrink-0 transition-all duration-300 flex flex-col`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-gray-900 text-white transform transition-transform duration-300 md:static md:inset-auto md:z-auto md:translate-x-0 md:flex-shrink-0 md:flex md:flex-col ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarOpen ? 'md:w-56' : 'md:w-16'}`}>
         <div className="p-4 flex items-center justify-between border-b border-gray-700">
-          {sidebarOpen && (
+          {showSidebarLabels && (
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Building2 className="w-3.5 h-3.5 text-white" />
@@ -142,15 +155,15 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
               <span className="font-black text-sm text-red-400">QUẢN TRỊ</span>
             </div>
           )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white transition-colors">
-            {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          <button onClick={() => mobileSidebarOpen ? setMobileSidebarOpen(false) : setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white transition-colors" aria-label={mobileSidebarOpen || sidebarOpen ? 'Thu gọn menu quản trị' : 'Mở rộng menu quản trị'}>
+            {showSidebarLabels ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
         </div>
 
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           {navItems.filter(item => allowedTabs.includes(item.id)).map((item, index, visibleNavItems) => (
             <Fragment key={item.id}>
-              {sidebarOpen && item.section && (index === 0 || visibleNavItems[index - 1].section !== item.section) && (
+              {showSidebarLabels && item.section && (index === 0 || visibleNavItems[index - 1].section !== item.section) && (
                 <div className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
                   {item.section}
                 </div>
@@ -158,7 +171,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
               <button onClick={() => setTab(item.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${tab === item.id ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
                 <span className="flex-shrink-0">{item.icon}</span>
-                {sidebarOpen && (
+                {showSidebarLabels && (
                   <>
                     <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
                     {item.badge !== undefined && item.badge > 0 && (
@@ -175,21 +188,27 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           <button onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-red-400 transition-colors">
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm">Đăng xuất</span>}
+            {showSidebarLabels && <span className="text-sm">Đăng xuất</span>}
           </button>
         </div>
       </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-          <div>
-            <h1 className="font-bold text-gray-900 text-base">{navItems.find(n => n.id === tab)?.label}</h1>
-            <p className="text-gray-400 text-xs">Chợ Nhà Việt – Hệ thống quản trị</p>
+        <header className="bg-white border-b border-gray-200 px-4 py-3 md:px-6 flex items-center justify-between gap-3 flex-shrink-0">
+          <div className="flex min-w-0 items-center gap-3">
+            <button onClick={() => setMobileSidebarOpen(true)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 md:hidden" aria-label="Mở menu quản trị">
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="font-bold text-gray-900 text-base truncate">{navItems.find(n => n.id === tab)?.label}</h1>
+              <p className="text-gray-400 text-xs truncate">Chợ Nhà Việt – Hệ thống quản trị</p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {allowedTabs.includes('leads') && <SlaBell onOpenLeads={() => setTab('leads')} />}
             {allowedTabs.includes('chat-sessions') && <ChatOpsBell onOpenChat={() => setTab('chat-sessions')} />}
+            {allowedTabs.includes('commerce-operations') && <CommerceOperationsBell onOpen={() => setTab('commerce-operations')} />}
             <button onClick={loadStats} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Làm mới số liệu">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -207,7 +226,7 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 min-w-0 overflow-auto p-4 md:p-6">
           <Suspense fallback={<div className="p-8 text-center text-gray-400">Đang tải...</div>}>
           {tab === 'dashboard' && <DashboardTab stats={stats} setTab={setTab} />}
           {tab === 'properties' && <PropertiesTab onStatsRefresh={loadStats} focusEditId={pendingEdit?.tab === 'properties' ? pendingEdit.id : undefined} onFocusHandled={() => setPendingEdit(null)} />}
@@ -238,6 +257,8 @@ export function AdminPanel({ onLogout, initialTab, role, basePath = '/quantrihet
           {tab === 'ai-chat' && <AiChatTab />}
           {tab === 'ai-rag' && <AiRagTab />}
           {tab === 'nurture' && <NurtureTab />}
+  {tab === 'commerce-operations' && <CommerceOperationsTab canEdit={role === 'admin' || canUseStaffPermission(permissions, 'commerce-operations', 'edit')} />}
+          {tab === 'commerce-wallet' && <CommerceWalletTab canEdit={role === 'admin' || canUseStaffPermission(permissions, 'commerce-wallet', 'edit')} />}
           {tab === 'seo-geo' && <SeoGeoTab onEditEntity={editEntity} />}
           </Suspense>
         </main>

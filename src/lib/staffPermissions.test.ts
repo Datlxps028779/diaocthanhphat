@@ -64,6 +64,25 @@ describe('staff permissions contract', () => {
     expect(permissionKey(permissions[1])).toBe('news:publish:area:area-1');
   });
 
+  it('exposes commerce operations only through explicit view permission', () => {
+    const permissions: StaffPermission[] = [
+      { module: 'commerce-operations', action: 'view', scope_kind: 'global', scope_id: null },
+      { module: 'commerce-operations', action: 'edit', scope_kind: 'global', scope_id: null },
+    ];
+    expect(canUseStaffPermission(permissions, 'commerce-operations', 'view')).toBe(true);
+    expect(canUseStaffPermission(permissions, 'commerce-operations', 'edit')).toBe(true);
+    expect(visibleTabsFromPermissions(permissions)).toEqual(['commerce-operations']);
+  });
+
+  it('keeps finance permission separate from wallet configuration access', () => {
+    const permissions: StaffPermission[] = [
+      { module: 'commerce-finance', action: 'view', scope_kind: 'global', scope_id: null },
+    ];
+    expect(canUseStaffPermission(permissions, 'commerce-finance', 'view')).toBe(true);
+    expect(canUseStaffPermission(permissions, 'commerce-wallet', 'edit')).toBe(false);
+    expect(visibleTabsFromPermissions(permissions)).toEqual([]);
+  });
+
   it('defines account-level assignments with deny-by-default constraints', () => {
     expect(migration).toContain('staff_user_id uuid NOT NULL REFERENCES public.profiles(id)');
     expect(migration).toContain("p.role = 'staff'");

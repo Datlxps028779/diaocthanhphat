@@ -31,3 +31,4 @@ export * from './api/propertyVerification';
 export * from './api/searchVisibility';
 export * from './api/seoFreshness';
 export * from './api/googleAnalytics';
+export * from './api/commerce';

@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, ClipboardList, Search, Headset, AlertTriangle, Users } from 'lucide-react';
+import { Building2, ImageIcon, Heart, User as UserIcon, Trash2, Save, ClipboardList, Search, Headset, AlertTriangle, Users, CreditCard } from 'lucide-react';
 import { type Page, scrollTop } from '../lib/router';
 import { Breadcrumb } from '../components/Layout';
 import { MyListingsPage } from './MyListingsPage';
 import { MyListingLeadsPage } from './MyListingLeadsPage';
 import { AccountPage } from './AccountPage';
+import { CommerceAccountTab } from './CommerceAccountTab';
 import {
   getUserMedia, deleteUserMedia, getUserMediaUsage,
   getProfile, getMyAgentProfile, saveMyProfileAndAgentProfile,
@@ -17,7 +18,7 @@ import { buildAgentProfileSlug } from '../lib/slug';
 import { isValidVnPhone, normalizeVnPhone } from '../lib/phone';
 import { friendlyIdentityConflictError } from '../lib/authFlow';
 
-export type AccountHubTab = 'listings' | 'leads' | 'media' | 'favorites' | 'profile';
+export type AccountHubTab = 'listings' | 'commerce' | 'leads' | 'media' | 'favorites' | 'profile';
 
 interface AccountHubPageProps {
   onNavigate: (p: Page) => void;
@@ -26,6 +27,7 @@ interface AccountHubPageProps {
 
 const TABS: { id: AccountHubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'listings', label: 'Tin đăng', icon: <Building2 className="w-4 h-4" /> },
+  { id: 'commerce', label: 'Ví & thanh toán', icon: <CreditCard className="w-4 h-4" /> },
   { id: 'leads', label: 'Khách quan tâm', icon: <Users className="w-4 h-4" /> },
   { id: 'media', label: 'Kho ảnh', icon: <ImageIcon className="w-4 h-4" /> },
   { id: 'favorites', label: 'Yêu thích', icon: <Heart className="w-4 h-4" /> },
@@ -42,8 +44,11 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const t = new URLSearchParams(window.location.search).get('tab');
-      if (t && TABS.some(x => x.id === t)) setTab(t as AccountHubTab);
+      const params = new URLSearchParams(window.location.search);
+      const payment = params.get('payment');
+      const t = params.get('tab');
+      if (payment) setTab('commerce');
+      else if (t && TABS.some(x => x.id === t)) setTab(t as AccountHubTab);
     }
     setSeeded(true);
   }, []);
@@ -66,7 +71,7 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
             { label: 'Tài khoản của tôi' },
           ]} />
           <h1 className="font-black text-xl text-gray-900">Tài khoản của tôi</h1>
-          <p className="text-gray-500 text-xs mt-0.5">Quản lý tin đăng, kho ảnh, BĐS yêu thích và hồ sơ</p>
+          <p className="text-gray-500 text-xs mt-0.5">Quản lý tin đăng, quyền lợi, thanh toán, khách quan tâm và hồ sơ</p>
           <AccountSummary />
         </div>
         <div className="max-w-5xl mx-auto px-4">
@@ -83,6 +88,7 @@ export function AccountHubPage({ onNavigate, initialTab = 'listings' }: AccountH
 
       <div className="max-w-5xl mx-auto px-4 py-5">
         {tab === 'listings' && <MyListingsPage onNavigate={onNavigate} embedded />}
+        {tab === 'commerce' && <CommerceAccountTab />}
         {tab === 'leads' && <MyListingLeadsPage />}
         {tab === 'favorites' && <AccountPage onNavigate={onNavigate} embedded />}
         {tab === 'media' && <MediaTab />}

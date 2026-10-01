@@ -1,4 +1,5 @@
 import { supabase, type UserListing, type UserListingLifecycleEvent } from '../supabase';
+import type { CommerceListingApprovalInput, CommerceListingApprovalResult } from './commerce';
 import { normalizeListingTitle } from '../listingTitle';
 import { propertyRevalidationSnapshot, revalidatePropertyContent } from './contentRevalidation';
 
@@ -198,10 +199,14 @@ export function isApprovedListingProperty(value: unknown): value is ApprovedList
     && (row.area_sqm === null || (typeof row.area_sqm === 'number' && Number.isFinite(row.area_sqm)));
 }
 
-function hasApprovedPropertyId(value: unknown): value is { property_id: string } {
+function isApprovalResult(value: unknown): value is CommerceListingApprovalResult {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
-  return typeof row.property_id === 'string' && row.property_id.length > 0;
+  return typeof row.listing_id === 'string' && row.listing_id.length > 0
+    && typeof row.property_id === 'string' && row.property_id.length > 0
+    && (row.fee_mode === 'free' || row.fee_mode === 'paid')
+    && typeof row.approval_cycle === 'number' && Number.isInteger(row.approval_cycle) && row.approval_cycle > 0
+    && typeof row.idempotency_key === 'string' && row.idempotency_key.length >= 16;
 }
 
 export async function applyUserListingSeoDraft(id: string): Promise<void> {
@@ -214,24 +219,33 @@ export async function rejectUserListingSeoDraft(id: string): Promise<void> {
   if (error) throw error;
 }
 
-async function approveUserListingRpc(id: string): Promise<string> {
+async function approveUserListingRpc(id: string, input: CommerceListingApprovalInput): Promise<CommerceListingApprovalResult> {
   const { data, error } = await supabase
-    .rpc('approve_user_listing', { p_listing_id: id })
+    .rpc('approve_user_listing_with_fee_decision', {
+      p_listing_id: id,
+      p_fee_mode: input.feeMode,
+      p_idempotency_key: input.idempotencyKey,
+      p_fee_product_code: input.feeMode === 'paid' ? input.feeProductCode ?? null : null,
+      p_manual_reason: input.feeMode === 'free' ? input.manualReason ?? null : null,
+    })
     .single();
   if (error) throw error;
-
-  if (!hasApprovedPropertyId(data)) {
-    throw new Error('Duyệt tin không trả về property_id hợp lệ.');
+  if (!isApprovalResult(data)) {
+    throw new Error('Duyệt tin không trả về kết quả hợp lệ.');
   }
-  return data.property_id;
+  return data;
 }
 
-export async function approveUserListing(id: string): Promise<void> {
-  const propertyId = await approveUserListingRpc(id);
-  const property = await getPropertyRevalidationRow(propertyId);
+export async function approveUserListing(
+  id: string,
+  input: CommerceListingApprovalInput,
+): Promise<CommerceListingApprovalResult> {
+  const result = await approveUserListingRpc(id, input);
+  const property = await getPropertyRevalidationRow(result.property_id);
   if (property) {
     await revalidatePropertyContent('publish', [{ current: propertyRevalidationSnapshot(property) }]);
   }
+  return result;
 }
 
 export async function rejectUserListing(id: string, reason: string): Promise<void> {
@@ -283,20 +297,26 @@ export async function adminSetExpiry(id: string, expiresAtISO: string | null): P
 // ─── Bulk operations ──────────────────────────────────────────────────────────
 // Duyệt hàng loạt vẫn gọi RPC riêng cho từng tin để giữ khóa và lifecycle atomic.
 // Trả số tin duyệt thành công.
-export async function bulkApproveUserListings(ids: string[]): Promise<number> {
+export async function bulkApproveUserListings(ids: string[], manualReason: string): Promise<number> {
   if (ids.length === 0) return 0;
+  const reason = manualReason.trim();
+  if (!reason) throw new Error('Duyệt hàng loạt miễn phí bắt buộc có lý do thủ công.');
+
   // The approval RPC remains one-per-listing so its lifecycle lock stays atomic,
   // but public propagation is deliberately batched once after all approvals.
   // This prevents N concurrent full Search Visibility syncs and keeps one user
   // action represented by one freshness/audit wave.
-  const results = await Promise.allSettled(ids.map(approveUserListingRpc));
-  const approvedPropertyIds = results
-    .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
-    .map(result => result.value);
-  const ok = approvedPropertyIds.length;
+  const results = await Promise.allSettled(ids.map(id => approveUserListingRpc(id, {
+    feeMode: 'free',
+    idempotencyKey: `listing_approval_bulk_${crypto.randomUUID()}`,
+    manualReason: reason,
+  })));
+  const approvedResults = results
+    .filter((result): result is PromiseFulfilledResult<CommerceListingApprovalResult> => result.status === 'fulfilled');
+  const ok = approvedResults.length;
   if (ok < ids.length) console.error(`[api] bulkApprove: ${ids.length - ok}/${ids.length} tin thất bại`);
 
-  const properties = await Promise.all(approvedPropertyIds.map(getPropertyRevalidationRow));
+  const properties = await Promise.all(approvedResults.map(result => getPropertyRevalidationRow(result.value.property_id)));
   const targets = properties
     .filter((property): property is NonNullable<typeof property> => Boolean(property))
     .map(property => ({ current: propertyRevalidationSnapshot(property) }));

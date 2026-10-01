@@ -4,7 +4,8 @@ import { UserListingPanoramaReview } from '../UserListingPanoramaReview';
 import { PostListingPage } from '../../../screens/PostListingPage';
 import type { Page } from '../../../lib/router';
 import type { UserListing, UserListingLifecycleEvent } from '../../../lib/supabase';
-import { adminGetUserListings, adminGetUserListingLifecycle, adminGetUserListingPanoramaCounts, approveUserListing, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
+import type { CommerceListingApprovalFeeOptions, CommerceListingApprovalFeeProduct } from '../../../lib/api/commerce';
+import { adminGetUserListings, adminGetUserListingLifecycle, adminGetUserListingPanoramaCounts, approveUserListing, getListingApprovalFeeOptions, rejectUserListing, bulkApproveUserListings, bulkRejectUserListings, deleteMyListing, adminSetExpiry, generateUserListingSeoDraft, applyUserListingSeoDraft, rejectUserListingSeoDraft } from '../../../lib/api';
 import { daysUntilExpiry, expiryLabel } from '../../../lib/listingExpiry';
 import { listingLifecycleActorLabel, listingLifecycleEventLabel, listingLifecycleExpiryMetadata, listingLifecycleTransition } from '../../../lib/listingLifecycle';
 import { formatPropertyPrice } from '../../../lib/listingPrice';
@@ -29,6 +30,17 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   const [panoramaReviewListing, setPanoramaReviewListing] = useState<UserListing | null>(null);
   const [panoramaCounts, setPanoramaCounts] = useState<Record<string, number>>({});
   const [seoProcessingId, setSeoProcessingId] = useState<string | null>(null);
+  const [approvalListing, setApprovalListing] = useState<UserListing | null>(null);
+  const [approvalMode, setApprovalMode] = useState<'free' | 'paid'>('free');
+  const [approvalReason, setApprovalReason] = useState('');
+  const [approvalProductCode, setApprovalProductCode] = useState('');
+  const [approvalOptions, setApprovalOptions] = useState<CommerceListingApprovalFeeOptions | null>(null);
+  const [approvalProductLoading, setApprovalProductLoading] = useState(false);
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approvalIdempotencyKey, setApprovalIdempotencyKey] = useState('');
+  const [bulkApproveModal, setBulkApproveModal] = useState(false);
+  const [bulkApprovalReason, setBulkApprovalReason] = useState('');
   const historyRequest = useRef(0);
 
   const noOpNavigate = (_page: Page) => {};
@@ -49,11 +61,61 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   // Đổi filter thì bỏ chọn để tránh giữ id không còn hiển thị.
   useEffect(() => { setSelected(new Set()); }, [statusFilter]);
 
-  const handleApprove = async (id: string) => {
-    setProcessingId(id);
-    try { await approveUserListing(id); await load(); onRefreshStats(); }
-    catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); }
+  const openApproval = async (listing: UserListing) => {
+    setApprovalListing(listing);
+    setApprovalMode('free');
+    setApprovalReason('');
+    setApprovalProductCode('');
+    setApprovalOptions(null);
+    setApprovalError(null);
+    setApprovalIdempotencyKey(`listing_approval_${crypto.randomUUID()}`);
+    setApprovalProductLoading(true);
+    try {
+      setApprovalOptions(await getListingApprovalFeeOptions(listing.id));
+    } catch (e) {
+      setApprovalError((e as { message?: string })?.message ?? 'Không tải được lựa chọn phí duyệt tin.');
+    } finally {
+      setApprovalProductLoading(false);
+    }
   };
+
+  const closeApproval = () => {
+    if (approvalSubmitting) return;
+    setApprovalListing(null);
+    setApprovalOptions(null);
+    setApprovalError(null);
+  };
+
+  const handleApprovalSubmit = async () => {
+    if (!approvalListing) return;
+    const manualReason = approvalReason.trim();
+    if (approvalMode === 'free' && !manualReason) {
+      setApprovalError('Duyệt miễn phí bắt buộc có lý do thủ công.');
+      return;
+    }
+    if (approvalMode === 'paid' && !approvalProductCode) {
+      setApprovalError('Duyệt trả phí bắt buộc chọn một sản phẩm hợp lệ.');
+      return;
+    }
+    setApprovalSubmitting(true);
+    setApprovalError(null);
+    try {
+      await approveUserListing(approvalListing.id, {
+        feeMode: approvalMode,
+        idempotencyKey: approvalIdempotencyKey,
+        feeProductCode: approvalMode === 'paid' ? approvalProductCode : undefined,
+        manualReason: approvalMode === 'free' ? manualReason : undefined,
+      });
+      setApprovalListing(null);
+      await load();
+      onRefreshStats();
+    } catch (e) {
+      setApprovalError((e as { message?: string })?.message ?? 'Duyệt tin thất bại.');
+    } finally {
+      setApprovalSubmitting(false);
+    }
+  };
+
   const handleGenerateSeo = async (id: string) => {
     setSeoProcessingId(id);
     try { await generateUserListingSeoDraft(id); await load(); }
@@ -80,10 +142,9 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
   };
 
   // Khu lưu trữ tin từ chối: khôi phục (duyệt lại) hoặc xóa vĩnh viễn.
-  const handleRestore = async (id: string) => {
-    setProcessingId(id);
-    try { await approveUserListing(id); await load(); onRefreshStats(); }
-    catch (e) { console.error("[AdminPanel]", e); } finally { setProcessingId(null); }
+  const handleRestore = (id: string) => {
+    const listing = listings.find(item => item.id === id);
+    if (listing) void openApproval(listing);
   };
   const handleDeleteForever = async () => {
     if (!deleteModal) return;
@@ -153,6 +214,13 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
       alert(`Thao tác hàng loạt thất bại: ${(e as { message?: string })?.message ?? 'Lỗi không xác định'}`);
     } finally { setBulkBusy(false); }
   };
+  const handleBulkApprove = () => {
+    const reason = bulkApprovalReason.trim();
+    if (!reason) return;
+    setBulkApproveModal(false);
+    setBulkApprovalReason('');
+    runBulk(() => bulkApproveUserListings(selectedIds(), reason), 'duyệt miễn phí');
+  };
   const handleBulkReject = () => {
     const reason = rejectReason || 'Không đáp ứng yêu cầu đăng tin';
     setBulkRejectModal(false); setRejectReason('');
@@ -165,6 +233,8 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
     rejected: { label: 'Từ chối', cls: 'bg-red-100 text-red-700' },
     expired: { label: 'Hết hạn', cls: 'bg-gray-200 text-gray-600' },
   };
+
+  const selectedApprovalProduct: CommerceListingApprovalFeeProduct | null = approvalOptions?.products.find(product => product.code === approvalProductCode) ?? null;
 
   if (editingListing) {
     return (
@@ -229,9 +299,9 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
       {selected.size > 0 && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 text-white rounded-xl px-4 py-2.5 animate-fade-in">
           <span className="text-sm font-semibold mr-1">Đã chọn {selected.size}</span>
-          <button disabled={bulkBusy} onClick={() => runBulk(() => bulkApproveUserListings(selectedIds()), 'duyệt')}
+          <button disabled={bulkBusy} onClick={() => { setBulkApprovalReason(''); setBulkApproveModal(true); }}
             className="flex items-center gap-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
-            <CheckCircle className="w-3.5 h-3.5" />{bulkBusy ? 'Đang xử lý...' : 'Duyệt'}
+            <CheckCircle className="w-3.5 h-3.5" />{bulkBusy ? 'Đang xử lý...' : 'Duyệt miễn phí'}
           </button>
           <button disabled={bulkBusy} onClick={() => { setRejectReason(''); setBulkRejectModal(true); }}
             className="flex items-center gap-1 text-xs font-medium bg-red-800 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg transition-colors">
@@ -342,7 +412,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                           className="flex items-center justify-center gap-1 border border-blue-300 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
                           <Pencil className="w-3.5 h-3.5" />Xem & chỉnh
                         </button>
-                        <button onClick={() => handleApprove(listing.id)} disabled={processingId === listing.id}
+                        <button onClick={() => void openApproval(listing)} disabled={approvalListing?.id === listing.id}
                           className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                           <CheckCircle className="w-3.5 h-3.5" />Duyệt
                         </button>
@@ -365,7 +435,7 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
                     )}
                     {(listing.status === 'rejected' || listing.status === 'expired') && (
                       <>
-                        <button onClick={() => handleRestore(listing.id)} disabled={processingId === listing.id}
+                        <button onClick={() => handleRestore(listing.id)} disabled={approvalListing?.id === listing.id}
                           className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
                           title="Duyệt lại tin này (khôi phục lên công khai với hạn mới)">
                           <RotateCcw className="w-3.5 h-3.5" />Duyệt lại
@@ -472,6 +542,85 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
         </div>
       )}
 
+      {approvalListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="listing-approval-title">
+          <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
+              <div className="min-w-0">
+                <h3 id="listing-approval-title" className="font-bold text-gray-900">Quyết định phí duyệt tin</h3>
+                <p className="mt-1 truncate text-xs text-gray-500">{approvalListing.title}</p>
+              </div>
+              <button type="button" onClick={closeApproval} disabled={approvalSubmitting} aria-label="Đóng duyệt tin" className="flex-shrink-0 text-gray-400 hover:text-gray-700 disabled:opacity-50">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="grid gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600 sm:grid-cols-2">
+                <p><b>Chủ tin:</b> {approvalListing.profiles?.display_name || approvalListing.contact_name || approvalListing.user_id}</p>
+                <p><b>Loại tin:</b> {approvalListing.listing_type}</p>
+                <p><b>Loại BĐS:</b> {approvalListing.property_types?.name || approvalListing.property_type_id || 'Chưa xác định'}</p>
+                <p><b>Số dư khả dụng:</b> {approvalOptions ? formatMinorAmount(approvalOptions.available_minor) : 'Đang tải...'}</p>
+              </div>
+
+              {approvalProductLoading && <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">Đang tải lựa chọn phí từ máy chủ...</p>}
+              {approvalError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"><b>Không thể duyệt:</b> {approvalError}</div>}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { setApprovalMode('free'); setApprovalProductCode(''); setApprovalError(null); }} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${approvalMode === 'free' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-600'}`}>Miễn phí thủ công</button>
+                <button type="button" onClick={() => { setApprovalMode('paid'); setApprovalError(null); }} disabled={!approvalOptions || approvalOptions.products.length === 0} className={`rounded-xl border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${approvalMode === 'paid' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-600'}`}>Trả phí từ ví</button>
+              </div>
+
+              {approvalMode === 'free' ? (
+                <label className="block text-sm font-medium text-gray-700">Lý do miễn phí thủ công
+                  <textarea value={approvalReason} onChange={e => { setApprovalReason(e.target.value); setApprovalError(null); }} rows={3} maxLength={1000} placeholder="Nhập lý do bắt buộc..." className="mt-1 w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </label>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">Sản phẩm phí hợp lệ
+                    <select value={approvalProductCode} onChange={e => { setApprovalProductCode(e.target.value); setApprovalError(null); }} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                      <option value="">Chọn sản phẩm</option>
+                      {(approvalOptions?.products ?? []).map(product => <option key={`${product.code}-${product.version}`} value={product.code}>{product.name} · {formatMinorAmount(product.amount_minor)} · {product.duration_days ?? '—'} ngày · v{product.version}</option>)}
+                    </select>
+                  </label>
+                  {selectedApprovalProduct && (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                      <p className="font-semibold">{selectedApprovalProduct.name}</p>
+                      {selectedApprovalProduct.description && <p className="mt-1 text-xs">{selectedApprovalProduct.description}</p>}
+                      <p className="mt-2 text-xs">Phí: <b>{formatMinorAmount(selectedApprovalProduct.amount_minor)}</b> · Thời hạn: <b>{selectedApprovalProduct.duration_days ?? '—'} ngày</b> · Điều khoản: <b>{selectedApprovalProduct.terms_version}</b></p>
+                      <p className="mt-1 text-xs">Số dư sau trừ: <b>{formatMinorAmount(Number(approvalOptions?.available_minor ?? 0) - Number(selectedApprovalProduct.amount_minor))}</b></p>
+                      {Number(approvalOptions?.available_minor ?? 0) < Number(selectedApprovalProduct.amount_minor) && <p className="mt-2 font-semibold text-red-700">Số dư ví không đủ. Không thể xác nhận duyệt trả phí.</p>}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">Không có thao tác nạp tiền trong luồng duyệt này.</p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button type="button" onClick={closeApproval} disabled={approvalSubmitting} className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm text-gray-600 disabled:opacity-50">Hủy</button>
+                <button type="button" onClick={handleApprovalSubmit} disabled={approvalSubmitting || approvalProductLoading || (approvalMode === 'paid' && (!selectedApprovalProduct || Number(approvalOptions?.available_minor ?? 0) < Number(selectedApprovalProduct?.amount_minor ?? 0)))} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {approvalSubmitting ? 'Đang xử lý...' : approvalMode === 'free' ? 'Xác nhận miễn phí' : 'Xác nhận trừ ví'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkApproveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setBulkApproveModal(false)} />
+          <div className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl mx-4">
+            <h3 className="mb-3 font-bold text-gray-900">Duyệt miễn phí {selected.size} tin đăng</h3>
+            <p className="mb-3 text-xs text-gray-500">Bulk chỉ hỗ trợ miễn phí thủ công; mỗi tin vẫn được xử lý bằng idempotency key riêng.</p>
+            <textarea value={bulkApprovalReason} onChange={e => setBulkApprovalReason(e.target.value)} maxLength={1000} rows={3} placeholder="Lý do bắt buộc cho tất cả tin đã chọn..." className="mb-4 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setBulkApproveModal(false)} className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm text-gray-600">Hủy</button>
+              <button type="button" onClick={handleBulkApprove} disabled={bulkBusy || !bulkApprovalReason.trim()} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-50">{bulkBusy ? 'Đang xử lý...' : 'Xác nhận miễn phí'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setRejectModal(null)} />
@@ -528,6 +677,10 @@ export function UserListingsApprovalTab({ onRefreshStats }: { onRefreshStats: ()
       )}
     </div>
   );
+}
+
+function formatMinorAmount(value: number | string): string {
+  return `${new Intl.NumberFormat('vi-VN').format(Number(value))} VND`;
 }
 
 function formatLifecycleDate(value: string | null): string {
