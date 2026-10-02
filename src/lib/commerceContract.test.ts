@@ -8,7 +8,13 @@ import {
   entitlementStatusAfterPayment,
   quotaReservationStatusAfterListingReview,
   subscriptionGraceUntil,
+  validateCommerceFeeRuleScopes,
+  validateCommercePricingPolicy,
+  validateCommerceValidityWindow,
+  validateCommerceTermsVersion,
   validatePackageVersion,
+  type CommerceFeeRuleScope,
+  type CommercePricingPolicy,
   type PackageVersionContract,
 } from './commerceContract';
 
@@ -157,6 +163,51 @@ describe('commerce contract', () => {
     expect(errors).toContain('benefit_quantity_invalid:listing_quota');
     expect(errors).toContain('benefit_duration_invalid:seller_analytics');
     expect(errors).toContain('benefit_quantity_invalid:sponsored_placement');
+  });
+
+  it('validates pricing policy shape without choosing business values', () => {
+    const validPolicy: CommercePricingPolicy = {
+      amountMinor: '1000',
+      taxRateBasisPoints: null,
+      termsVersion: 'approved-terms',
+      validFrom: '2026-10-01T00:00:00.000Z',
+      validUntil: '2026-11-01T00:00:00.000Z',
+      documentType: 'internal_receipt',
+    };
+    expect(validateCommercePricingPolicy(validPolicy)).toEqual([]);
+    expect(validateCommercePricingPolicy({
+      ...validPolicy,
+      amountMinor: '9007199254740992',
+      termsVersion: '',
+      validFrom: '2026-11-01T00:00:00.000Z',
+      validUntil: '2026-10-01T00:00:00.000Z',
+    })).toEqual(expect.arrayContaining(['amount_invalid', 'terms_version_required', 'validity_window_invalid']));
+    expect(validateCommercePricingPolicy({
+      ...validPolicy,
+      documentType: 'tax_invoice',
+    })).toEqual(expect.arrayContaining(['tax_invoice_provider_required', 'tax_invoice_lifecycle_required']));
+    expect(validateCommercePricingPolicy({
+      ...validPolicy,
+      taxInvoiceProvider: 'not-allowed',
+      taxInvoiceLifecycle: 'not-allowed',
+    })).toContain('tax_invoice_metadata_not_allowed');
+  });
+
+  it('keeps terms and validity boundaries aligned with database constraints', () => {
+    expect(validateCommerceTermsVersion('x'.repeat(80))).toBeNull();
+    expect(validateCommerceTermsVersion('x'.repeat(81))).toBe('terms_version_too_long');
+    expect(validateCommerceValidityWindow('2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')).toContain('validity_window_invalid');
+    expect(validateCommerceValidityWindow('not-a-date', null)).toContain('valid_from_invalid');
+  });
+
+  it('rejects duplicate active fee-rule scopes but allows inactive drafts', () => {
+    const rules: CommerceFeeRuleScope[] = [
+      { listingType: 'mua_ban', propertyTypeId: null, priority: 100, isActive: true },
+      { listingType: 'mua_ban', propertyTypeId: null, priority: 100, isActive: true },
+      { listingType: 'mua_ban', propertyTypeId: null, priority: 100, isActive: false },
+    ];
+    expect(validateCommerceFeeRuleScopes(rules)).toContain('active_scope_duplicate:mua_ban:*:100');
+    expect(validateCommerceFeeRuleScopes([{ ...rules[0], listingType: 'invalid' }])).toContain('listing_type_invalid');
   });
 
   it('rejects invalid amounts, duplicate benefits and unversioned terms', () => {

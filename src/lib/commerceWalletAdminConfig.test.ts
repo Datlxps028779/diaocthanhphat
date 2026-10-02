@@ -14,6 +14,14 @@ const verify = readFileSync(
   resolve(process.cwd(), 'supabase/manual_commerce_wallet_admin_config_verify.sql'),
   'utf8',
 );
+const closedRolloutMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20261015000000_commerce_wallet_closed_rollout.sql'),
+  'utf8',
+);
+const policyVerify = readFileSync(
+  resolve(process.cwd(), 'supabase/manual_commerce_pricing_policy_verify.sql'),
+  'utf8',
+);
 const adminTab = readFileSync(
   resolve(process.cwd(), 'src/components/admin/tabs/CommerceWalletTab.tsx'),
   'utf8',
@@ -35,7 +43,24 @@ describe('commerce wallet admin configuration', () => {
     expect(migration).toContain('p_custom_max_minor < p_custom_min_minor');
   });
 
-  it('preserves fee identity and records configuration audit events', () => {
+  it('keeps the first rollout fixed-denomination-only', () => {
+    expect(closedRolloutMigration).toContain('commerce_wallet_topup_config_fixed_only_check');
+    expect(closedRolloutMigration).toContain('Custom amount is not available in this rollout.');
+    expect(closedRolloutMigration).toContain('Top-up option sort order is invalid.');
+    expect(verify).toContain('fixed_amount_only');
+    expect(adminTab).toContain('Custom amount:');
+    expect(adminTab).not.toContain('Cho phép nhập số tiền tùy chỉnh');
+  });
+
+  it('does not invent pricing policy defaults in the fee editor', () => {
+    expect(adminTab).not.toContain('durationDays: 30');
+    expect(adminTab).not.toContain("termsVersion: 'v1'");
+    expect(adminTab).toContain('version: 0');
+    expect(adminTab).toContain("termsVersion: ''");
+  });
+
+
+  it('keeps fee product identity and terms immutable', () => {
     expect(migration).toContain('Fee identity, amount and terms are immutable; create a new version instead.');
     expect(migration).toContain('commerce_audit_events');
     expect(migration).toContain('commerce_wallet_fee_product_created');
@@ -48,12 +73,14 @@ describe('commerce wallet admin configuration', () => {
   });
 
   it('keeps manual preflight and verification scripts read-only', () => {
-    for (const sql of [dryRun, verify]) {
+    for (const sql of [dryRun, verify, policyVerify]) {
       expect(sql).not.toMatch(/^\s*(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|DO)\b/im);
     }
     expect(dryRun).toContain('commerce_wallet_admin_config_preflight_pass');
     expect(verify).toContain('commerce_wallet_admin_config_verify_pass');
     expect(verify).toContain('topup_activation_closed');
+    expect(policyVerify).toContain('wallet_receipts_internal_only');
+    expect(policyVerify).toContain('commerce_pricing_policy_verify_pass');
   });
 
   it('renders separate read/edit sections without enabling real top-up', () => {

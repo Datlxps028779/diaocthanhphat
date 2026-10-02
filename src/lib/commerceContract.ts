@@ -1,3 +1,97 @@
+export const COMMERCE_MAX_MINOR_AMOUNT = Number.MAX_SAFE_INTEGER;
+export const COMMERCE_MAX_TERMS_VERSION_LENGTH = 80;
+export const COMMERCE_LISTING_TYPES = ['mua_ban', 'cho_thue', 'can_mua', 'can_thue'] as const;
+export type CommerceDocumentType = 'internal_receipt' | 'tax_invoice';
+
+export type CommercePricingPolicy = {
+  amountMinor: number | string;
+  taxRateBasisPoints?: number | null;
+  termsVersion: string;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  documentType: CommerceDocumentType;
+  taxInvoiceProvider?: string | null;
+  taxInvoiceLifecycle?: string | null;
+};
+
+export type CommerceFeeRuleScope = {
+  listingType: string;
+  propertyTypeId?: string | null;
+  priority: number;
+  isActive: boolean;
+};
+
+export function isValidCommerceCode(value: string): boolean {
+  return /^[a-z0-9][a-z0-9_-]{2,63}$/.test(value.trim());
+}
+
+export function isSafeCommerceMinorAmount(value: number | string, allowZero = false): boolean {
+  if (typeof value === 'string' && !/^\d+$/.test(value.trim())) return false;
+  const amount = typeof value === 'number' ? value : Number(value);
+  return Number.isSafeInteger(amount) && amount <= COMMERCE_MAX_MINOR_AMOUNT && (allowZero ? amount >= 0 : amount > 0);
+}
+
+export function validateCommerceTermsVersion(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return 'terms_version_required';
+  if (normalized.length > COMMERCE_MAX_TERMS_VERSION_LENGTH) return 'terms_version_too_long';
+  return null;
+}
+
+export function validateCommerceValidityWindow(validFrom?: string | null, validUntil?: string | null): string[] {
+  const errors: string[] = [];
+  const from = validFrom ? Date.parse(validFrom) : null;
+  const until = validUntil ? Date.parse(validUntil) : null;
+  if (validFrom && !Number.isFinite(from)) errors.push('valid_from_invalid');
+  if (validUntil && !Number.isFinite(until)) errors.push('valid_until_invalid');
+  if (from !== null && until !== null && Number.isFinite(from) && Number.isFinite(until) && until <= from) {
+    errors.push('validity_window_invalid');
+  }
+  return errors;
+}
+
+export function validateCommercePricingPolicy(policy: CommercePricingPolicy): string[] {
+  const errors: string[] = [];
+  if (!isSafeCommerceMinorAmount(policy.amountMinor)) errors.push('amount_invalid');
+  if (policy.documentType !== 'internal_receipt' && policy.documentType !== 'tax_invoice') errors.push('document_type_invalid');
+  if (
+    policy.taxRateBasisPoints != null
+    && (!Number.isInteger(policy.taxRateBasisPoints) || policy.taxRateBasisPoints < 0 || policy.taxRateBasisPoints > 10_000)
+  ) {
+    errors.push('tax_rate_invalid');
+  }
+  const termsError = validateCommerceTermsVersion(policy.termsVersion);
+  if (termsError) errors.push(termsError);
+  errors.push(...validateCommerceValidityWindow(policy.validFrom, policy.validUntil));
+  if (policy.documentType === 'tax_invoice') {
+    if (!policy.taxInvoiceProvider?.trim()) errors.push('tax_invoice_provider_required');
+    if (!policy.taxInvoiceLifecycle?.trim()) errors.push('tax_invoice_lifecycle_required');
+  } else if (policy.taxInvoiceProvider?.trim() || policy.taxInvoiceLifecycle?.trim()) {
+    errors.push('tax_invoice_metadata_not_allowed');
+  }
+  return errors;
+}
+
+export function validateCommerceFeeRuleScopes(rules: CommerceFeeRuleScope[]): string[] {
+  const errors: string[] = [];
+  const activeScopes = new Set<string>();
+  for (const rule of rules) {
+    if (!(COMMERCE_LISTING_TYPES as readonly string[]).includes(rule.listingType)) {
+      errors.push('listing_type_invalid');
+    }
+    if (!Number.isInteger(rule.priority) || rule.priority < 0 || rule.priority > 1_000_000) {
+      errors.push('priority_invalid');
+    }
+    if (rule.isActive) {
+      const scope = `${rule.listingType}:${rule.propertyTypeId ?? '*'}:${rule.priority}`;
+      if (activeScopes.has(scope)) errors.push(`active_scope_duplicate:${scope}`);
+      activeScopes.add(scope);
+    }
+  }
+  return errors;
+}
+
+
 export const ORDER_STATUSES = [
   'draft', 'awaiting_payment', 'paid', 'payment_failed', 'cancelled',
   'partially_refunded', 'refunded', 'chargeback',

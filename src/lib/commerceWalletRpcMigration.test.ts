@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20261014130000_commerce_wallet_rpc.sql'),
   'utf8',
 );
+const closedRolloutMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20261015000000_commerce_wallet_closed_rollout.sql'),
+  'utf8',
+);
 
 describe('commerce wallet RPC migration', () => {
   it('creates server-priced fixed/custom top-up intents', () => {
@@ -18,7 +22,13 @@ describe('commerce wallet RPC migration', () => {
     expect(migration).toContain("p_custom_amount_minor % v_config.custom_step_minor");
   });
 
-  it('keeps provider attachment and wallet credit service-only', () => {
+  it('hides fixed options while the wallet rollout is closed', () => {
+    expect(closedRolloutMigration).toContain("ELSE '[]'::jsonb END");
+    expect(migration).toContain("WHERE c.id = true AND c.is_active = true");
+    expect(migration).toContain('Wallet top-up is not available.');
+  });
+
+  it('requires service role for payment attachment and wallet credit', () => {
     expect(migration).toContain('commerce_attach_wallet_topup_payment(');
     expect(migration).toContain('commerce_credit_wallet_topup(');
     expect((migration.match(/auth\.role\(\) IS DISTINCT FROM 'service_role'/g) ?? []).length).toBe(2);
