@@ -52,3 +52,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Worker chưa đối soát xong batch.' }, { status: 503 });
   }
 }
+
+export const GET = POST;

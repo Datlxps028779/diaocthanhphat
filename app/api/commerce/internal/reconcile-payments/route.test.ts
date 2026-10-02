@@ -19,13 +19,13 @@ vi.mock('@/lib/server/commerceWalletWebhookWorker', () => ({
   processCommerceWalletPaymentWebhooks: mocks.processCommerceWalletPaymentWebhooks,
 }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 const secret = 'commerce-worker-secret-32-characters-minimum';
 
-function request(token?: string) {
+function request(token?: string, method: 'GET' | 'POST' = 'POST') {
   return new NextRequest('http://localhost:3000/api/commerce/internal/reconcile-payments', {
-    method: 'POST',
+    method,
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
 }
@@ -63,6 +63,11 @@ describe('POST /api/commerce/internal/reconcile-payments', () => {
     expect(mocks.processCommercePaymentWebhooks.mock.invocationCallOrder[0]).toBeGreaterThan(
       mocks.reconcileCommercePayments.mock.invocationCallOrder[0],
     );
+  });
+
+  it('accepts authenticated GET requests for Vercel Cron', async () => {
+    const response = await GET(request(secret, 'GET'));
+    expect(response.status).toBe(200);
   });
 
   it('rejects missing, incorrect and byte-length-mismatched secrets', async () => {
