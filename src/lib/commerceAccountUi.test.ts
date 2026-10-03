@@ -40,7 +40,12 @@ describe('commerce account UI contract', () => {
     expect(adminPanel).toContain("id: 'commerce-operations'");
     expect(adminPanel).toContain("canUseStaffPermission(permissions, 'commerce-operations', 'edit')");
     expect(operationsTab).toContain('getCommerceOperationsAlerts');
-    expect(operationsTab).toContain('getCommerceOperationsAlertDetail');
+    expect(operationsTab).toContain('getCommerceOperationsQueueHealth');
+    expect(operationsTab).toContain('Outbox queue');
+    expect(operationsTab).toContain('Email delivery queue');
+    expect(operationsTab).toContain('oldest_actionable_at');
+    expect(operationsTab).toContain('Chỉ đọc');
+    expect(operationsTab).toContain('không retry hoặc dispatch queue');
     expect(operationsTab).toContain('Xem chuỗi');
     expect(operationsTab).toContain('Payment events');
     expect(operationsTab).toContain('Quota cycles');

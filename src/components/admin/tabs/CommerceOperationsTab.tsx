@@ -6,10 +6,12 @@ import { AlertTriangle, CheckCircle2, Clock3, RefreshCw, ShieldAlert, X } from '
 import {
   getCommerceOperationsAlertDetail,
   getCommerceOperationsAlerts,
+  getCommerceOperationsQueueHealth,
   getCommerceWalletSupportDetail,
   updateCommerceOperationsAlertStatus,
   type CommerceOperationsAlert,
   type CommerceOperationsAlertDetail,
+  type CommerceOperationsQueueSnapshot,
 } from '../../../lib/api/commerce';
 
 type AlertFilter = CommerceOperationsAlert['status'] | null;
@@ -43,6 +45,40 @@ function formatMoney(value: unknown): string {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '—';
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount);
+}
+
+function QueueHealth({
+  label,
+  snapshot,
+}: {
+  label: string;
+  snapshot: CommerceOperationsQueueSnapshot;
+}) {
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-bold text-gray-900">{label}</h3>
+        <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600">Chỉ đọc</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {[
+          ['Pending', snapshot.pending],
+          ['Processing', snapshot.processing],
+          ['Retry', snapshot.retry],
+          ['Dead-letter', snapshot.dead_letter],
+          ['Sent', snapshot.sent],
+        ].map(([status, count]) => (
+          <div key={String(status)} className="rounded-lg bg-gray-50 p-3">
+            <p className="text-[11px] text-gray-500">{status}</p>
+            <p className="mt-1 text-lg font-black text-gray-900">{String(count)}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-gray-500">
+        Oldest actionable: <span className="font-semibold text-gray-700">{snapshot.oldest_actionable_at ? formatDate(snapshot.oldest_actionable_at) : 'Không có'}</span>
+      </p>
+    </section>
+  );
 }
 
 function WalletSupportLookup() {
@@ -135,6 +171,11 @@ export function CommerceOperationsTab({ canEdit }: { canEdit: boolean }) {
     enabled: selectedAlertId !== null,
   });
 
+  const queueHealthQuery = useQuery({
+    queryKey: ['commerceOperationsQueueHealth'],
+    queryFn: getCommerceOperationsQueueHealth,
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: CommerceOperationsAlert['status'] }) =>
       updateCommerceOperationsAlertStatus(id, status),
@@ -151,7 +192,10 @@ export function CommerceOperationsTab({ canEdit }: { canEdit: boolean }) {
           <h2 className="font-bold text-gray-900">Vận hành thanh toán</h2>
           <p className="text-sm text-gray-500 mt-1">Theo dõi settlement trùng và payment failure cần đối soát thủ công.</p>
         </div>
-        <button onClick={() => refetch()} disabled={isFetching} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+        <button onClick={() => {
+          void refetch();
+          void queueHealthQuery.refetch();
+        }} disabled={isFetching || queueHealthQuery.isFetching} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />Làm mới
         </button>
       </div>
@@ -160,6 +204,20 @@ export function CommerceOperationsTab({ canEdit }: { canEdit: boolean }) {
         <ShieldAlert className="w-5 h-5 mt-0.5 flex-shrink-0" />
         <div><p className="font-bold">SLA pilot</p><p className="text-xs mt-1">Acknowledge trong 4 giờ làm việc, reconcile hoặc khắc phục trong 1 ngày làm việc. Khóa checkout nếu backlog không còn an toàn.</p></div>
       </div>
+
+      {queueHealthQuery.isLoading ? (
+        <div className="grid gap-4 lg:grid-cols-2"><div className="h-44 rounded-xl bg-white border border-gray-200 animate-pulse" /><div className="h-44 rounded-xl bg-white border border-gray-200 animate-pulse" /></div>
+      ) : queueHealthQuery.isError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Không tải được queue health hoặc tài khoản chưa có quyền operations view.</div>
+      ) : queueHealthQuery.data ? (
+        <div className="space-y-2">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <QueueHealth label="Outbox queue" snapshot={queueHealthQuery.data.outbox} />
+            <QueueHealth label="Email delivery queue" snapshot={queueHealthQuery.data.email} />
+          </div>
+          <p className="text-[11px] text-gray-500">Số liệu aggregate chỉ đọc; dead-letter cần xử lý vận hành thủ công. Màn hình này không retry hoặc dispatch queue.</p>
+        </div>
+      ) : null}
 
       <WalletSupportLookup />
 

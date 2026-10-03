@@ -3,6 +3,7 @@ import {
   normalizeCommerceAccountSnapshot,
   normalizeCommerceListingApprovalFeeOptions,
   normalizeCommerceOperationsAlertDetail,
+  normalizeCommerceOperationsQueueHealth,
   normalizeCommerceWalletCatalog,
   normalizeCommerceWalletSnapshot,
 } from './commerce';
@@ -38,6 +39,29 @@ describe('commerce account API', () => {
     expect(snapshot.quotaLedger).toEqual([]);
     expect(snapshot.notifications).toEqual([]);
     expect(snapshot.unreadNotifications).toBe(0);
+  });
+
+  it('normalizes aggregate operations queue health and drops unknown fields', () => {
+    const health = normalizeCommerceOperationsQueueHealth({
+      generatedAt: '2026-10-03T00:00:00.000Z',
+      outbox: { pending: 1, processing: 2, retry: 3, dead_letter: 4, sent: 5, oldest_actionable_at: null, provider_message_id: 'secret' },
+      email: { pending: 0, processing: 1, retry: 0, dead_letter: 1, sent: 8, oldest_actionable_at: '2026-10-03T00:00:00.000Z', recipient_email: 'hidden@example.com' },
+      payload: 'ignored',
+    });
+    expect(health.outbox).toEqual({ pending: 1, processing: 2, retry: 3, dead_letter: 4, sent: 5, oldest_actionable_at: null });
+    expect(health.email.oldest_actionable_at).toBe('2026-10-03T00:00:00.000Z');
+    expect(JSON.stringify(health)).not.toContain('provider_message_id');
+    expect(JSON.stringify(health)).not.toContain('recipient_email');
+  });
+
+  it('rejects invalid queue health counts and shape', () => {
+    expect(() => normalizeCommerceOperationsQueueHealth(null)).toThrow('Commerce operations queue health is invalid.');
+    expect(() => normalizeCommerceOperationsQueueHealth({ generatedAt: 'now', outbox: {}, email: {} })).toThrow('Commerce operations queue count is invalid.');
+    expect(() => normalizeCommerceOperationsQueueHealth({
+      generatedAt: 'now',
+      outbox: { pending: -1, processing: 0, retry: 0, dead_letter: 0, sent: 0, oldest_actionable_at: null },
+      email: { pending: 0, processing: 0, retry: 0, dead_letter: 0, sent: 0, oldest_actionable_at: null },
+    })).toThrow('Commerce operations queue count is invalid.');
   });
 
   it('normalizes a sanitized operations detail chain', () => {

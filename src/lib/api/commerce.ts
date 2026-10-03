@@ -101,6 +101,67 @@ export type CommerceAccountSnapshot = {
   generatedAt: string;
 };
 
+export type CommerceOperationsQueueSnapshot = {
+  pending: number;
+  processing: number;
+  retry: number;
+  dead_letter: number;
+  sent: number;
+  oldest_actionable_at: string | null;
+};
+
+export type CommerceOperationsQueueHealth = {
+  generatedAt: string;
+  outbox: CommerceOperationsQueueSnapshot;
+  email: CommerceOperationsQueueSnapshot;
+};
+
+function normalizeQueueSnapshot(value: unknown): CommerceOperationsQueueSnapshot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Commerce operations queue snapshot is invalid.');
+  }
+  const row = value as Record<string, unknown>;
+  const count = (key: keyof Omit<CommerceOperationsQueueSnapshot, 'oldest_actionable_at'>): number => {
+    const candidate = row[key];
+    if (!Number.isInteger(candidate) || Number(candidate) < 0) {
+      throw new Error('Commerce operations queue count is invalid.');
+    }
+    return Number(candidate);
+  };
+  const pending = count('pending');
+  const processing = count('processing');
+  const retry = count('retry');
+  const deadLetter = count('dead_letter');
+  const sent = count('sent');
+  const oldest = row.oldest_actionable_at;
+  if (oldest !== null && typeof oldest !== 'string') {
+    throw new Error('Commerce operations queue timestamp is invalid.');
+  }
+  return {
+    pending,
+    processing,
+    retry,
+    dead_letter: deadLetter,
+    sent,
+    oldest_actionable_at: oldest,
+  };
+}
+
+export function normalizeCommerceOperationsQueueHealth(value: unknown): CommerceOperationsQueueHealth {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Commerce operations queue health is invalid.');
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.generatedAt !== 'string') {
+    throw new Error('Commerce operations queue health timestamp is invalid.');
+  }
+  return {
+    generatedAt: row.generatedAt,
+    outbox: normalizeQueueSnapshot(row.outbox),
+    email: normalizeQueueSnapshot(row.email),
+  };
+}
+
 export type CommerceOperationsAlert = {
   id: string;
   outbox_id: string;
@@ -665,6 +726,12 @@ export async function markCommerceNotificationRead(notificationId: string): Prom
     p_notification_id: notificationId,
   });
   if (error) throw error;
+}
+
+export async function getCommerceOperationsQueueHealth(): Promise<CommerceOperationsQueueHealth> {
+  const { data, error } = await supabase.rpc('commerce_get_operations_queue_health');
+  if (error) throw error;
+  return normalizeCommerceOperationsQueueHealth(data);
 }
 
 export async function getCommerceOperationsAlerts(
